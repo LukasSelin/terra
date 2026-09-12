@@ -1,0 +1,150 @@
+package terra
+
+import "math/rand/v2"
+
+// Land is the world itself: the ground, the weather over it, what grows on
+// it, and the way across it. It is everything a map is before anybody stands
+// on it.
+//
+// What is here and what is not is one rule: the land may not name anything a
+// game invented. It does not know what a house is, what a market is, what
+// anybody wants, or that a settlement exists. It knows heights and rock and
+// soil and rivers, the temperature at a latitude in a season, how far a
+// stand of timber has come, and how to get from one tile to another. A game
+// names all of that freely; none of it names the game.
+//
+// It is separated because the map is worth more than the settlement on it. A
+// world made out of its own history - plates that collided, rock that dates
+// from the collision, water that has had an age to find its way down - is a
+// thing several different games would want, and a settlement of farmers is
+// only the first one asked for. See docs/architecture.md.
+//
+// World embeds it, so every reading a settlement takes of the ground - w.Grid,
+// w.Climate, w.Tick - is the same sentence it always was. The separation is
+// what may be written, not what has to be spelled out.
+type Land struct {
+	// Tick is the day. It is here rather than on the game because the
+	// ground ages whether or not anybody is watching it: the woods grow,
+	// the weather turns, and the chunks nobody is standing on are caught up
+	// against this.
+	Tick int
+	// RNG is the world's chance. Everything drawn from it is drawn on one
+	// goroutine in a fixed order, which is what makes a seed a world; see
+	// the package comment. A game's own draws come through here too, so
+	// that the land and the game share one stream and one history.
+	RNG *rand.Rand
+
+	Grid    *Grid
+	Climate Climate // the weather over the whole map this tick
+
+	// Terms are the terms this land was made on.
+	Terms Terms
+	// seed is what the world was made from, kept for the streams of chance
+	// that are drawn apart from the main one; see island.go.
+	seed uint64
+
+	// Forest0 is how much forest the world was made with, so that how much
+	// of it has been taken can be told.
+	Forest0 int
+
+	// Growing is the growing weather the world has had since it was made,
+	// in growing days, and swept is where the sweep of sleeping chunks has
+	// got to; see active.go.
+	Growing []float64 // by chunk, because the weather goes by latitude and height
+	swept   int
+	rates   []float64
+
+	// Awake says why the ground is awake, for a runner's timing line.
+	Awake AwakeCount
+
+	// routers is the working memory deciding routes on, one per goroutine.
+	routers []*Router
+}
+
+// NewLand makes a world's ground and hands it over, with nobody on it. It is
+// the whole of what a game has to do to have a country: a settlement is put
+// down on one of these by NewWith, and anything else that wants the same
+// continents - a player walking into them, a map nobody plays on at all -
+// starts here and builds its own on top.
+//
+// A globe is a whole number of chunks round: the nine chunks around a place
+// hold everything within a chunk of it only if no chunk is narrower than the
+// rest.
+func NewLand(seed uint64, t Terms) *Land {
+	if t.Wrap && t.Width%ChunkSide != 0 {
+		panic("world: a globe must be a whole number of chunks round")
+	}
+	l := &Land{
+		seed:    seed,
+		RNG:     rand.New(rand.NewPCG(seed, seed*0x9E3779B97F4A7C15+1)),
+		Climate: NewClimateOn(t),
+		Terms:   t,
+	}
+	l.Generate(t)
+	l.Growing = make([]float64, len(l.Grid.Chunks))
+	return l
+}
+
+// DefaultWidth and DefaultHeight size the map when none is given. They fit a
+// standard terminal beside a stats panel.
+const (
+	DefaultWidth  = 80
+	DefaultHeight = 36
+)
+
+// Terms are what a land is made on: how big the ground is, what shape, how
+// much of it is sea and how it came to be that shape. Nothing in them
+// changes once the land is made, and nothing in them is about a game - what
+// a game wants put on the ground once it exists it asks for separately.
+type Terms struct {
+	Width, Height int
+	// Wrap joins the east edge to the west: the map is a globe drawn as a
+	// cylinder rather than a valley with edges. See Grid.
+	Wrap bool
+	// SeaShare is how much of the ground lies under the sea. A valley has
+	// none: its water leaves at the edges. A globe has no edges but the
+	// poles, and without a sea every river on it runs to a pole and every
+	// laden walker is cut off by one.
+	SeaShare float64
+	// Epochs is how many ages of the earth to run before the land is handed
+	// over: 0 draws it, and anything else makes it out of its own history.
+	// See history.go.
+	Epochs int
+}
+
+// DefaultTerms is the valley: the default size, with edges, drawn rather
+// than run.
+func DefaultTerms() Terms {
+	return Terms{Width: DefaultWidth, Height: DefaultHeight}
+}
+
+// GlobeTerms is a cylinder sixteen chunks round and eight down, a third of
+// it sea, made out of its own history. See Globe for why a world this size
+// is run rather than drawn.
+func GlobeTerms() Terms {
+	return Terms{Width: 1024, Height: 512, Wrap: true, SeaShare: 0.3, Epochs: 16}
+}
+
+// Routers returns n routers over this land's map, made once and kept between
+// ticks so that deciding allocates nothing. Each is for one goroutine.
+func (l *Land) Routers(n int) []*Router {
+	for len(l.routers) < n {
+		l.routers = append(l.routers, l.Grid.Router())
+	}
+	return l.routers[:n]
+}
+
+// AncientTerms is the valley made out of its own history rather than drawn:
+// the same ground a DefaultTerms world has, arrived at instead of composed.
+// It is here so that the making can be run and looked at without being the
+// only kind there is. See history.go.
+func AncientTerms() Terms {
+	t := DefaultTerms()
+	t.Epochs = 16
+	return t
+}
+
+// NewLandSized makes a land of the given size on otherwise default terms.
+func NewLandSized(seed uint64, width, height int) *Land {
+	return NewLand(seed, Terms{Width: width, Height: height})
+}
