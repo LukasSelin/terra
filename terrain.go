@@ -40,6 +40,9 @@ func (w *Land) Generate(cfg Terms) {
 	// goes: incise moves the ground, so the drainage has to be taken again on
 	// the ground it left. See Incise.
 	g.incise()
+	// And the sea is levelled again on the ground the cutting left. See
+	// Grid.relevel.
+	g.relevel(cfg.SeaShare)
 	g.fill()
 	g.drain()
 	g.carve(w.RNG)

@@ -1364,6 +1364,38 @@ func (g *Grid) seaNear(reach int) []float64 {
 	return near
 }
 
+// relevel reads the sea level off the ground again, so that the share of the
+// map under it is the share asked for. flood takes it before the rivers have
+// cut their valleys, because the drainage the valleys are cut by needs a sea
+// to run to; incise then takes up to Incise metres off the ground either side
+// of every river, and where a lowland lies a few metres above the sea the
+// whole of it goes under.
+//
+// That had always happened a little. It came to matter when the plates began
+// to grow rather than be measured, because they leave broad flat lowlands, and
+// on a flat lowland the sea's quantile falls in the middle of one. Measured
+// after flood and after incise, of seeds 1 to 3:
+//
+//	                 after flood        after incise
+//	globe            .300 .300 .300     .354 .304 .304
+//	256 by 128       .300 .301 .300     .307 .429 .400
+//
+// Asked for three tenths, one small globe came out more than two fifths sea.
+// Levelled again, the sea is where the share puts it on the ground as it will
+// stand; carve then gives back to the land what is no longer under it and
+// takes what now is, as it does after every age of weather.
+func (g *Grid) relevel(share float64) {
+	if g.sea < 0 || share <= 0 {
+		return
+	}
+	heights := make([]float64, len(g.Tiles))
+	for i := range g.Tiles {
+		heights[i] = g.Tiles[i].Height
+	}
+	g.sea = quantile(heights, share)
+	g.base = g.sea
+}
+
 // flood puts the lowest share of the ground under the sea, and reads the
 // sea level off the ground so that erosion can move the coast.
 func (g *Grid) flood(share float64, rng interface{ Float64() float64 }) {
