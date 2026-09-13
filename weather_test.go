@@ -163,7 +163,7 @@ func TestWetnessScalesTheRain(t *testing.T) {
 func TestAValleyHasOneLatitude(t *testing.T) {
 	g := NewLand(1, DefaultTerms()).Grid
 	for y := 1; y < g.H; y++ {
-		if g.air.belt[y] != g.air.belt[0] || g.air.mean[y] != g.air.mean[0] {
+		if g.air.lat[y] != g.air.lat[0] || g.air.mean[y] != g.air.mean[0] || g.air.dx[y] != g.air.dx[0] {
 			t.Fatalf("row %d of a valley has different air from row 0", y)
 		}
 	}

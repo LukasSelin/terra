@@ -38,10 +38,11 @@ const secondsPerYear = 365.25 * 24 * 3600
 type Air struct {
 	lat  []float64 // degrees
 	mean []float64 // the year's mean temperature at the foot of the map
-	belt []float64 // rain on low ground by the sea, mm a year
 	dx   []float64 // kilometres of the planet one tile is, along the row
 	dy   float64   // and across the rows
-	// wetness is what the rain of every belt is multiplied by.
+	// wetness is what the rain of every belt is multiplied by; the belts
+	// themselves move with the year, so they are read where they stand on the
+	// day rather than kept here. See beltRain and weather.
 	wetness float64
 	// pet is how much water the air could take up in a year, in mm, on each
 	// row at each whole degree of the year's mean from petLo up: see petOf.
@@ -65,7 +66,7 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 	}
 	a := &Air{
 		lat: make([]float64, g.H), mean: make([]float64, g.H),
-		belt: make([]float64, g.H), dx: make([]float64, g.H), pet: make([][]float64, g.H),
+		dx: make([]float64, g.H), pet: make([][]float64, g.H),
 		wetness: wetness,
 	}
 	a.dy = HydroSpan / 1000
@@ -80,7 +81,6 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
 		}
 		a.lat[y], a.mean[y], a.dx[y] = lat, mean, dx
-		a.belt[y] = wetness * beltRain(lat)
 		a.pet[y] = petTable(lat)
 	}
 	return a
