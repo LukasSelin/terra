@@ -58,7 +58,7 @@ import (
 // a half to three fifths - the real world is seven tenths - and it is the
 // plates and not this figure that move it from one world to the next.
 const (
-	DefaultWater = 5.0
+	DefaultWater = 7.5
 	BasinDepth   = 20.0
 )
 
@@ -131,18 +131,32 @@ func (g *Grid) room() float64 {
 }
 
 // basins rescales a made world's heights the way normalise does, but in two
-// parts, so that what its plates made of it survives the rescaling. The lowest
-// tiles, as many as lie on ocean crust, are the ocean floor, and take depths
-// below the continents from the history; the rest are the continents, and take
-// the drawn map's heights, lifted to stand on the floor. Every tile keeps its
-// place in the order, so a continental margin stays a slope rather than
-// becoming a step where the crust changes hands.
-func (w *Land) basins(g *Grid, plates []Plate) {
+// parts, so that what its plates made of it survives the rescaling. Ocean
+// crust is the ocean floor, and takes depths below the continents by its
+// place in the history's order among the floor; continental crust is the
+// continents, and takes the drawn map's heights by its place among them,
+// lifted to stand on the floor.
+//
+// The two are ordered apart. Ordered as one, with as many of the lowest tiles
+// as lie on ocean crust made floor, whatever floor the history had left
+// standing high - a swell in the middle of a plate, a ridge, a hotspot's
+// cone - took a continent's heights and came up out of the open ocean as an
+// island, while as much low continent went under to make up the count. And
+// since the water does not quite fill the basins, the top of the floor stood
+// in the air too, as flat banks of basalt far out at sea. Ordered apart, the
+// floor is all below the foot of the continents, and what the sea covers
+// beyond it is continent: the shelves and the low basins of the land, which
+// is what the shallow seas of the earth are.
+//
+// A margin is still a slope: the floor beside a continent is the highest of
+// the floor, having been raised by the continent's ramp, and the continent's
+// edge the lowest of the continent, so each side meets the foot from its own.
+func (w *Land) basins(g *Grid, ocean []bool) {
 	n := len(g.Tiles)
-	ocean := 0
+	floor := 0
 	for i := range g.Tiles {
-		if int(g.Tiles[i].Plate) < len(plates) && plates[g.Tiles[i].Plate].Ocean {
-			ocean++
+		if ocean[i] {
+			floor++
 		}
 	}
 	spread := w.relief(g)
@@ -153,6 +167,12 @@ func (w *Land) basins(g *Grid, plates []Plate) {
 		order[i] = int32(i)
 	}
 	slices.SortFunc(order, func(a, b int32) int {
+		if ocean[a] != ocean[b] {
+			if ocean[a] {
+				return -1
+			}
+			return 1
+		}
 		ha, hb := g.Tiles[a].Height, g.Tiles[b].Height
 		switch {
 		case ha < hb:
@@ -162,7 +182,7 @@ func (w *Land) basins(g *Grid, plates []Plate) {
 		}
 		return int(a - b) // ties by position, so a world repeats
 	})
-	if ocean == 0 || ocean == n {
+	if floor == 0 || floor == n {
 		for rank, i := range order {
 			g.Tiles[i].Height = spread[rank]
 		}
@@ -173,15 +193,15 @@ func (w *Land) basins(g *Grid, plates []Plate) {
 	// foot. Laid as a straight line of the order; a floor that lay deeper for
 	// more of its width, at a square or a fourth power, came up steeper at the
 	// coast and left the flats on one seed of four.
-	for rank := 0; rank < ocean; rank++ {
+	for rank := 0; rank < floor; rank++ {
 		i := order[rank]
-		g.Tiles[i].Height = BasinDepth * float64(rank) / math.Max(1, float64(ocean-1))
+		g.Tiles[i].Height = BasinDepth * float64(rank) / math.Max(1, float64(floor-1))
 	}
 	// The continents, onto the drawn map's heights: the lowest of them onto the
 	// lowest the drawn map has, and so on up, over the whole of its spread.
-	land := n - ocean
+	land := n - floor
 	for k := 0; k < land; k++ {
-		i := order[ocean+k]
+		i := order[floor+k]
 		at := int(float64(k) * float64(n-1) / math.Max(1, float64(land-1)))
 		g.Tiles[i].Height = BasinDepth + spread[at]
 	}
