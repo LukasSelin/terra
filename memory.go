@@ -28,6 +28,11 @@ import (
 // heap on a 1024 by 512 globe rose by 29 per cent against the same world
 // before it, and a drawn valley's by 4; 350 grown by that is 450, over the
 // line it was rounded to.
+// The air keeps fields of its own beside the ground - the wind and the
+// pressure of each phase of the year, and what the ground under each air cell
+// is - and an air cell is several tiles, so all of it comes to some forty
+// bytes a tile. Measured on a 1024 by 512 globe, the peak heap rose by five
+// and a half per cent when the wind came in, which these figures cover.
 const (
 	bytesDrawn = 256
 	bytesRun   = 512

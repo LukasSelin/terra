@@ -198,6 +198,9 @@ type Grid struct {
 	// weather.go.
 	air          *Air
 	rain, runoff []float64
+	// winds is the climate of the wind the rain was last read from. It is
+	// never changed once made, so copies of the map share it. See wind.go.
+	winds *Winds
 	// area is how many tiles drain through each tile, and water is how much
 	// the whole map runs off, in cubic metres a second. Both are drain's.
 	area  []float64
@@ -272,7 +275,7 @@ func (g *Grid) At(p geom.Pos) *Tile {
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, tide: g.tide}
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide}
 	copy(c.Tiles, g.Tiles)
 	c.frost = append([]float64(nil), g.frost...)
 	c.tidal = append([]float32(nil), g.tidal...)

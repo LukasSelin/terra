@@ -5,20 +5,6 @@ import (
 	"testing"
 )
 
-// The winds go by the three cells of each hemisphere, the same way north and
-// south of the equator: trades toward the west, westerlies toward the east,
-// polar easterlies west again.
-func TestTheWindsBlowByBelt(t *testing.T) {
-	for _, c := range []struct {
-		lat  float64
-		want float64
-	}{{15, -1}, {-15, -1}, {45, 1}, {-45, 1}, {75, -1}, {-75, -1}} {
-		if got := windAt(c.lat); got != c.want {
-			t.Errorf("at %v degrees the wind goes %v, want %v", c.lat, got, c.want)
-		}
-	}
-}
-
 // Rain falls in belts: most under the equator, least in the horse latitudes
 // where the air sinks, and more again in the westerlies. On land, which is
 // where anyone would notice.
@@ -81,14 +67,53 @@ func TestAMountainCastsARainShadow(t *testing.T) {
 		t.Errorf("the west face gets %.0f mm and the plain upwind of it %.0f", upwind, far)
 	}
 
+	// The same valley under the polar easterlies.
 	g = ridged(300)
 	g.air = defaultAir(g)
-	for y := range g.air.wind {
-		g.air.wind[y] = -1
+	for y := range g.air.lat {
+		g.air.lat[y] = 75
 	}
 	g.weather()
 	if east, west := meanRain(g, 62, 75), meanRain(g, 45, 58); east < 1.3*west {
 		t.Errorf("under easterlies the east face gets %.0f mm and the west %.0f", east, west)
+	}
+}
+
+// The shadow is cast along the wind and not along the rows the map happens to
+// be drawn in. The westerlies blow toward the north-east as well as the east,
+// so a range running from the north-west to the south-east stands square
+// across them: wet on its south-western face, dry on its north-eastern.
+func TestARangeAtAnAngleCastsItsShadowDownwind(t *testing.T) {
+	g := NewGrid(120, 120)
+	// across is how far a place is across the range, which runs along x = y,
+	// toward its north-eastern side.
+	across := func(i int) (float64, float64) {
+		x, y := float64(i%g.W)-60, float64(i/g.W)-60
+		return (x - y) / math.Sqrt2, (x + y) / math.Sqrt2
+	}
+	for i := range g.Tiles {
+		d, _ := across(i)
+		g.Tiles[i].Height = 20 + 300*math.Exp(-d*d/(2*8*8))
+	}
+	g.weather()
+	var wet, dry, nw, nd float64
+	for i := range g.Tiles {
+		d, along := across(i)
+		if math.Abs(along) > 40 {
+			continue
+		}
+		switch {
+		case d > -14 && d < -3:
+			wet, nw = wet+g.rain[i], nw+1
+		case d > 3 && d < 14:
+			dry, nd = dry+g.rain[i], nd+1
+		}
+	}
+	wet, dry = wet/nw, dry/nd
+	if wet < 1.2*dry {
+		t.Errorf("the south-west face gets %.0f mm and the north-east %.0f", wet, dry)
+	} else {
+		t.Logf("the south-west face gets %.0f mm and the north-east %.0f", wet, dry)
 	}
 }
 
@@ -138,7 +163,7 @@ func TestWetnessScalesTheRain(t *testing.T) {
 func TestAValleyHasOneLatitude(t *testing.T) {
 	g := NewLand(1, DefaultTerms()).Grid
 	for y := 1; y < g.H; y++ {
-		if g.air.belt[y] != g.air.belt[0] || g.air.mean[y] != g.air.mean[0] || g.air.wind[y] != g.air.wind[0] {
+		if g.air.lat[y] != g.air.lat[0] || g.air.mean[y] != g.air.mean[0] || g.air.dx[y] != g.air.dx[0] {
 			t.Fatalf("row %d of a valley has different air from row 0", y)
 		}
 	}
