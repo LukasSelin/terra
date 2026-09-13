@@ -190,3 +190,85 @@ func TestWearingAMapConservesTheGround(t *testing.T) {
 		t.Errorf("the ground went from %.3f to %.3f, and %.3f went off the map", before, after, gone)
 	}
 }
+
+// An estuary's river is not cut below the tide's high water, however long the
+// age: a river runs into a sea that stands at high water half of every day.
+func TestAnEstuaryIsNotCutBelowHighWater(t *testing.T) {
+	c, _ := chain(80, Erodibility, 1e4)
+	c.floor = make([]float64, len(c.h))
+	for i := range c.floor {
+		c.floor[i] = math.Inf(-1)
+		if i < 20 {
+			c.floor[i] = 15 // high water, up the first twenty tiles
+		}
+	}
+	next := c.solve(settleIters)
+	for i := 1; i < len(next); i++ {
+		if c.h[i] > 15 && next[i] < 15-1e-9 {
+			t.Fatalf("tile %d stood at %.2f and was cut to %.2f, under the high water at 15", i, c.h[i], next[i])
+		}
+		if c.h[i] <= 15 && i < 21 && next[i] < c.h[i]-1e-9 {
+			t.Fatalf("tile %d, already under high water, was cut from %.2f to %.2f", i, c.h[i], next[i])
+		}
+	}
+}
+
+// A flat under mean sea keeps what the water brings it until it has no room
+// left, and the rest goes to the sea; nothing is lost either way.
+func TestAFlatKeepsWhatItHasRoomFor(t *testing.T) {
+	c, _ := chain(60, Erodibility, 5)
+	c.keep, c.room = make([]float64, len(c.h)), make([]float64, len(c.h))
+	c.keep[0], c.room[0] = 0.8, 0.05
+	next := c.solve(settleIters)
+	change := make([]float64, len(c.h))
+	gained := make([][Grains]float64, len(c.h))
+	exported := c.account(next, change, gained, nil)
+	var taken, laid float64
+	for i := 1; i < len(c.h); i++ {
+		cut := c.f[i] * math.Max(0, next[i]-next[c.recv[i]])
+		taken += cut
+	}
+	for i := range gained {
+		laid += gained[i][Sand] + gained[i][Silt] + gained[i][Clay]
+	}
+	gone := exported[Sand] + exported[Silt] + exported[Clay]
+	if kept := gained[0][Sand] + gained[0][Silt] + gained[0][Clay]; kept > c.room[0]+1e-12 || kept <= 0 {
+		t.Errorf("the flat kept %.4f m with room for %.4f", kept, c.room[0])
+	}
+	if math.Abs(laid+gone-taken) > 1e-9*taken {
+		t.Errorf("%.6f taken, %.6f laid and %.6f gone to sea", taken, laid, gone)
+	}
+}
+
+// On a globe, with the tide at work, the ground as a whole still loses only
+// what went to the sea, and the same seed weathers the same way.
+func TestATidalCoastConservesTheGround(t *testing.T) {
+	run := func() ([]float64, float64, float64) {
+		w := NewLand(2, smallGlobe())
+		g := w.Grid
+		before := 0.0
+		for i := range g.Tiles {
+			before += g.Tiles[i].Height
+		}
+		g.wear(3)
+		after := 0.0
+		for i := range g.Tiles {
+			after += g.Tiles[i].Height
+		}
+		gone := g.exported[Sand] + g.exported[Silt] + g.exported[Clay]
+		return heights(g), before - after, gone
+	}
+	a, lost, gone := run()
+	if gone <= 0 {
+		t.Fatal("nothing went to the sea")
+	}
+	if math.Abs(lost-gone) > 1e-6*math.Max(gone, 1) {
+		t.Errorf("the ground lost %.4f and %.4f went to the sea", lost, gone)
+	}
+	b, _, _ := run()
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("tile %d weathered to %v one time and %v the next", i, a[i], b[i])
+		}
+	}
+}

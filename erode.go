@@ -150,6 +150,7 @@ func (g *Grid) wear(by float64) {
 			}
 		}
 	})
+	g.tideWork(&c, recv)
 	next := c.solve(settleIters)
 
 	change := make([]float64, n)
@@ -195,7 +196,11 @@ func (g *Grid) wear(by float64) {
 
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Height = math.Max(0, t.Height+change[i])
+		// Nothing is cut below the foot of the map. Ground that already lies
+		// under it - a made world's sea bed can - is left where it is rather
+		// than lifted to it, which made ground out of nothing whenever the
+		// weather so much as touched a tile down there.
+		t.Height = math.Max(math.Min(0, t.Height), t.Height+change[i])
 		// Soil goes with the ground it was in. What washes off a slope is
 		// what that slope could have grown; what lands on the flat is what
 		// makes a flood plain worth farming.

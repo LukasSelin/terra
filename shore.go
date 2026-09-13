@@ -407,3 +407,69 @@ func (g *Grid) Shut(p geom.Pos) bool {
 	i := g.Index(p)
 	return g.Tiles[i].Deep() || g.covered(i, &g.Tiles[i])
 }
+
+// How the tide works the ground it covers. tidalSettle is how readily each
+// grain comes out of the water over a flat, as a share of what passes it: the
+// sand as readily as anywhere, and the silt and the clay far more readily than
+// in a river, because slack water at the turn of the tide lets them fall and
+// salt water makes clay clot into flakes that fall faster than its grains
+// would. trapRange is the spring range at which a flat takes all of that: a
+// coast whose tide hardly moves is hardly a trap for anything.
+//
+// Over twenty ages of two small globes, with the tide working the ground and
+// without it:
+//
+//	            sent to the sea        river and sea tiles
+//	seed 1     18178 m / 19409 m      8997 -> 9086 / 8997 -> 9344
+//	seed 2     16783 m / 17970 m      8710 -> 8788 / 8710 -> 8948
+//
+// A fifteenth of what the rivers carry stays on the coast, and the rivers stop
+// widening their mouths below high water - which is most of the difference in
+// how much of the map becomes water.
+//
+// What is left out is the tide's own scour: the water that fills and empties a
+// bay twice a day keeps the channel it comes through open, and deeper the more
+// of the bay there is to fill. Nothing here cuts a channel for the tide; a
+// creek is only kept open where a river already runs.
+var tidalSettle = [Grains]float64{Sand: 0.62, Silt: 0.60, Clay: 0.45}
+
+const trapRange = 4.0
+
+// tideWork sets how the tide works the ground this age into the water's step:
+// that no river is cut below the tide's high water where the tide reaches it,
+// that flats above mean sea catch the fine stuff the water brings, and that a
+// flat under mean sea keeps what reaches it until it stands at high water. On
+// a map with no tide it does nothing, and the water's step is what it was.
+func (g *Grid) tideWork(c *fluvial, recv []int32) {
+	if len(g.tidal) != len(g.Tiles) || g.sea < 0 {
+		return
+	}
+	n := len(g.Tiles)
+	c.floor = make([]float64, n)
+	c.keep = make([]float64, n)
+	c.room = make([]float64, n)
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			f := float64(g.tidal[i])
+			c.floor[i] = math.Inf(-1)
+			if f <= 0 {
+				continue
+			}
+			high := g.sea + f*MeanHigh
+			c.floor[i] = high
+			t := &g.Tiles[i]
+			if t.Terrain != Flat || t.Mark != None {
+				continue
+			}
+			trap := clamp01(2 * f * (TideM2 + TideS2) / trapRange)
+			if int(recv[i]) == i {
+				c.keep[i] = trap
+				c.room[i] = math.Max(0, high-t.Height)
+				continue
+			}
+			for gr := range tidalSettle {
+				c.settle[i][gr] = math.Max(c.settle[i][gr], math.Min(0.9, tidalSettle[gr]*trap))
+			}
+		}
+	})
+}

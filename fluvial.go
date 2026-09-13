@@ -153,6 +153,13 @@ func stackOf(recv []int32) []int32 {
 // where each tile's water goes and in what order, how hard the water cuts on
 // each (F, the implicit coefficient K·Q^m/run times the step), how readily
 // each grain settles there, and what each tile is made of.
+//
+// On a coast with a tide there are two more. floor is the least height the
+// water cuts toward at each tile: an estuary's river runs into a sea that
+// stands at high water half the day, and does not cut its bed below it. keep
+// is how much of what reaches a root the root holds, and room how much it has
+// room for: a flat under mean sea is where the tide lays its mud, and it lays
+// it until the flat stands at high water. Both are nil where there is no tide.
 type fluvial struct {
 	h      []float64
 	recv   []int32
@@ -160,6 +167,18 @@ type fluvial struct {
 	f      []float64
 	settle [][Grains]float64
 	parts  [][Grains]float64
+	floor  []float64
+	keep   []float64
+	room   []float64
+}
+
+// below is the height the water at a tile draining into r cuts toward: its
+// receiver's, or the tide's high water there if that is higher.
+func (c *fluvial) below(next []float64, r int32) float64 {
+	if c.floor == nil {
+		return next[r]
+	}
+	return math.Max(next[r], c.floor[r])
 }
 
 // solve is the heights at the end of the step, cut and filled together. With
@@ -202,8 +221,12 @@ func (c *fluvial) solve(iters int) []float64 {
 				laid += c.settle[i][gr] * load[i][gr]
 			}
 			fa := f * (1 - share)
-			next[i] = (c.h[i] + fa*next[r] + laid) / (1 + fa)
-			cut[i] = f * math.Max(0, next[i]-next[r])
+			hr := c.below(next, r)
+			if c.h[i] <= hr {
+				fa = 0 // at or under the water it runs into: nothing to cut toward
+			}
+			next[i] = (c.h[i] + fa*hr + laid) / (1 + fa)
+			cut[i] = f * math.Max(0, next[i]-hr)
 		}
 	}
 	return next
@@ -220,12 +243,29 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 		i := c.stack[k]
 		r := c.recv[i]
 		if r == i {
+			var kept [Grains]float64
+			if c.keep != nil && c.keep[i] > 0 {
+				total := load[i][Sand] + load[i][Silt] + load[i][Clay]
+				if hold := math.Min(c.keep[i]*total, c.room[i]); total > 0 && hold > 0 {
+					for gr := range kept {
+						kept[gr] = load[i][gr] * hold / total
+					}
+					if lay != nil {
+						lay(i, kept)
+					} else {
+						for gr := range kept {
+							change[i] += kept[gr]
+							gained[i][gr] += kept[gr]
+						}
+					}
+				}
+			}
 			for gr := range load[i] {
-				exported[gr] += load[i][gr]
+				exported[gr] += load[i][gr] - kept[gr]
 			}
 			continue
 		}
-		cut := c.f[i] * math.Max(0, next[i]-next[r])
+		cut := c.f[i] * math.Max(0, next[i]-c.below(next, r))
 		change[i] -= cut
 		var laid [Grains]float64
 		for gr := range load[i] {
