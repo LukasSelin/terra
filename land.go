@@ -70,9 +70,13 @@ type Land struct {
 // A globe is a whole number of chunks round: the nine chunks around a place
 // hold everything within a chunk of it only if no chunk is narrower than the
 // rest.
+//
+// It panics on terms that fail Check, and it does not ask whether the world
+// will fit in memory: terms that come from outside the program - a flag, a
+// file, a player - go through MakeLand instead.
 func NewLand(seed uint64, t Terms) *Land {
-	if t.Wrap && t.Width%ChunkSide != 0 {
-		panic("world: a globe must be a whole number of chunks round")
+	if err := t.Check(); err != nil {
+		panic(err)
 	}
 	l := &Land{
 		seed:    seed,

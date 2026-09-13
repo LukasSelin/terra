@@ -69,13 +69,13 @@ func main() {
 	if *wrap {
 		t.Wrap = true
 	}
-	if t.Wrap && t.Width%terra.ChunkSide != 0 {
-		fail(fmt.Errorf("a globe must be a whole number of chunks round: width %d is not a multiple of %d", t.Width, terra.ChunkSide))
-	}
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Wrap)
 	start := time.Now()
-	land := terra.NewLand(*seed, t)
+	land, err := terra.MakeLand(*seed, t)
+	if err != nil {
+		fail(err)
+	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
 
