@@ -231,6 +231,7 @@ func (g *Grid) wear(by float64) {
 			load[down][k] += load[i][k]
 		}
 	}
+	g.creep(by, change, gained)
 
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
@@ -245,6 +246,93 @@ func (g *Grid) wear(by float64) {
 		}
 	}
 
+}
+
+// Creep is the share of the difference in height between two neighbouring
+// tiles that an age of weather moves from the higher to the lower, on ground
+// that holds nothing back. It is the slow slumping of a hillside under its own
+// weight - frost heave, burrows, rain splash - and it is the other half of what
+// shapes a slope: the water cuts, and the ground either side of the cut falls
+// in after it.
+//
+// Without it a channel one tile wide has walls that never come down, so every
+// line of water down the flank of a range cut itself a trench of its own and
+// the mountains came out combed. With it a gully's walls go as fast as its bed
+// and only the water that gathers enough to outrun the slumping keeps a
+// valley, which is what sets how far apart a range's streams are.
+//
+// It falls hardest on the smallest shapes and hardly at all on the large: a
+// trench one tile across loses a few hundredths of its depth an age, and a
+// range twenty tiles across a hundred times less.
+//
+// Measured on the high fifth of a half globe over three seeds and sixty ages:
+// the deepest hundredth of the ground lay 17.2, 18.5 and 25.2 metres below
+// the ground either side of it without creep, and 7.7, 8.8 and 15.4 with it,
+// for ten metres off the highest summit. Half as much held the trenches at
+// the depth they started; twice as much was not tried, because at this figure
+// the great rivers' bends were already easing out as fast as they were cut
+// until their banks were left to meander.
+const Creep = 0.1
+
+// creep books what an age of creep moves onto change and gained. Each pair of
+// neighbours is taken once, and what one gives the other takes, so no ground
+// is made or lost. The rock does not slow it, for the reason given at hold;
+// what is growing does, because roots are what hold a hillside together.
+// Whatever somebody has built on stays where it is, and nothing slumps onto it.
+func (g *Grid) creep(by float64, change []float64, gained [][Grains]float64) {
+	// A river great enough to wander has banks that are its own business: see
+	// meander, which takes the outside of a bend and builds the inside, and
+	// whose bends creep would otherwise ease back out as fast as they are cut.
+	most := 0.0
+	for i := range g.Tiles {
+		most = math.Max(most, g.Tiles[i].Flow)
+	}
+	wander := meanderFlow * most
+	// Half the pairs, so that each is taken once: east, and the three below.
+	pairs := [...]struct {
+		off  geom.Pos
+		near float64
+	}{
+		{geom.Pos{X: 1, Y: 0}, 1},
+		{geom.Pos{X: -1, Y: 1}, 0.5},
+		{geom.Pos{X: 0, Y: 1}, 1},
+		{geom.Pos{X: 1, Y: 1}, 0.5},
+	}
+	for i := range g.Tiles {
+		a := &g.Tiles[i]
+		p := g.PosOf(i)
+		for _, pr := range pairs {
+			q := geom.Pos{X: p.X + pr.off.X, Y: p.Y + pr.off.Y}
+			if !g.In(q) {
+				continue
+			}
+			j := g.Index(q)
+			b := &g.Tiles[j]
+			if a.Mark != None || b.Mark != None {
+				continue
+			}
+			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {
+				continue
+			}
+			hi, lo := i, j
+			if b.Height > a.Height {
+				hi, lo = j, i
+			}
+			top := &g.Tiles[hi]
+			// An eighth each, so that a tile standing above all eight of its
+			// neighbours gives up no more than Creep of its height over them.
+			moved := by * Creep / 8 * pr.near * (top.Height - g.Tiles[lo].Height) * hold(top)
+			if moved <= 0 {
+				continue
+			}
+			change[hi] -= moved
+			change[lo] += moved
+			was := parts(top)
+			for k := range was {
+				gained[lo][k] += moved * was[k]
+			}
+		}
+	}
 }
 
 // SoilDepth is how many metres of ground make the difference between land

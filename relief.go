@@ -224,6 +224,35 @@ const (
 // would have been incoherent on a field whose A and S pointed different ways.
 const channelTheta = 1.0
 
+// channelSteep is the fall past which more fall stops helping the water cut a
+// channel and starts to hinder it, and channelHead is the least ground a
+// channel's head has to drain, in tiles' worth of rain. Both are there for
+// the flanks of a range.
+//
+// The slope-area law is a law about soil-mantled hillsides. Past about two in
+// three the ground does not gather its water into a channel: it sheds it, and
+// its soil with it, straight down the face, and a slope that steep is a scree
+// and not a stream bed. Read without a limit, A·S made every tile of a
+// history's mountain wall - falls of three and six in one, against the six in
+// ten of the valley's own upland streams - out-score a river on the plain with
+// a hundred times its water, so every line of tiles down every flank became a
+// channel of its own. Laid side by side a tile apart and cutting as channels
+// cut, they combed each range into a row of parallel trenches.
+//
+// So above channelSteep the fall counts against the reading as fast as it
+// counted for it below, and a head needs some ground above it however steep it
+// is. The valley's upland streams run below the limit and drain more than the
+// floor, and are left as they were: over three seeds the share of the valley's
+// river in its high fifth goes from 20.7, 24.3 and 13.8 per cent to 14.6, 22.9
+// and 14.2. A half globe's high fifth, after sixty ages, goes from 13.4, 11.5
+// and 11.9 per cent river to 8.4, 4.8 and 8.5. Sixteen tiles is one hectare,
+// the small end of where channel heads are found; thirty-two took the valley's
+// upland streams away altogether on two seeds of three.
+const (
+	channelSteep = 0.7
+	channelHead  = 16.0
+)
+
 // bankRise is how far above its own channel a great river's flood reaches, in
 // metres. Nothing: a river spreads onto the ground beside it that is no higher
 // than the water, and no further.
@@ -938,7 +967,11 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	cutting := make([]float64, len(g.Tiles))
 	flows := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		cutting[i] = g.Tiles[i].Flow * math.Pow(g.Slope(g.PosOf(i)), channelTheta)
+		s := g.Slope(g.PosOf(i))
+		if s > channelSteep { // a scree, not a stream bed: see channelSteep
+			s = channelSteep * channelSteep / s
+		}
+		cutting[i] = g.Tiles[i].Flow * math.Pow(s, channelTheta)
 		flows[i] = g.Tiles[i].Flow
 	}
 	cut := quantile(append([]float64(nil), cutting...), 1-waterShare)
@@ -983,6 +1016,10 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		}
 	}
 	want := int(waterShare * float64(len(g.Tiles)))
+	// The least water a head may start from, as a share of the map's rain: see
+	// channelHead. Rain is shared out over the dry ground, so a tile's worth of
+	// it is one part in land.
+	head := channelHead / float64(max(land, 1))
 	laid := 0
 	lay := func(from int) {
 		for j := from; !wet[j]; {
@@ -1020,13 +1057,16 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// the rate keeps its water whether or not it would be chosen afresh. See
 	// the remark on hysteresis below.
 	for _, nd := range order {
-		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 {
+		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.Tiles[nd.idx].Flow >= head {
 			lay(int(nd.idx))
 		}
 	}
 	for _, nd := range order {
 		if laid >= want {
 			break
+		}
+		if g.Tiles[nd.idx].Flow < head {
+			continue
 		}
 		lay(int(nd.idx))
 	}
