@@ -854,8 +854,9 @@ func (g *Grid) fill() {
 	}
 }
 
-// drain sends every tile's water to its lowest neighbour and adds up what
-// passes through, so that Flow is the share of the map draining through each
+// drain sends every tile's water downhill and adds up what passes through -
+// spread over every lower neighbour while it is a sheet on a hillside, and to
+// the lowest alone once it has gathered; see spreadUntil - so that Flow is the share of the map draining through each
 // tile. Tiles are settled from the highest down, which is the only order in
 // which a tile's own total is complete before it is passed on.
 func (g *Grid) drain() {
@@ -899,12 +900,79 @@ func (g *Grid) drain() {
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
+	gathered := spreadUntil / float64(max(1, g.landTiles()))
+	var share [8]float64
+	var to [8]int32
 	for _, nd := range order {
 		if down[nd.idx] < 0 {
 			continue
 		}
-		g.Tiles[down[nd.idx]].Flow += g.Tiles[nd.idx].Flow
+		t := &g.Tiles[nd.idx]
+		if t.Flow >= gathered {
+			g.Tiles[down[nd.idx]].Flow += t.Flow
+			continue
+		}
+		p := g.PosOf(int(nd.idx))
+		k, sum := 0, 0.0
+		for _, off := range Dirs {
+			q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if !g.In(q) {
+				continue
+			}
+			j := g.Index(q)
+			drop := t.Height - g.Tiles[j].Height
+			if drop <= 0 {
+				continue
+			}
+			if off.X != 0 && off.Y != 0 {
+				drop /= math.Sqrt2
+			}
+			share[k], to[k] = drop, int32(j)
+			sum += share[k]
+			k++
+		}
+		if sum <= 0 {
+			g.Tiles[down[nd.idx]].Flow += t.Flow
+			continue
+		}
+		for m := 0; m < k; m++ {
+			g.Tiles[to[m]].Flow += t.Flow * share[m] / sum
+		}
 	}
+}
+
+// spreadUntil is how much ground's rain, in tiles, the water running off a
+// hillside gathers before it keeps to one way down.
+//
+// Sent whole to the steepest neighbour from the first drop, the water on a
+// smooth face split into lines a tile apart that never met, and on a face
+// that fell diagonally, tiles here and there stepped sideways into the next
+// line - so neighbouring lines carried thirty tiles' water and two, turn and
+// turn about. Every other one cleared the line a river is picked by, and the
+// foot of every range was drawn as a chessboard. Water on a hillside is a
+// sheet and goes down every way that falls; it is only once it has gathered
+// that it runs in one bed.
+//
+// The share each lower neighbour takes goes as its fall, which is Quinn's
+// multiple-flow reading (Quinn and others, Hydrological Processes, 1991).
+// Freeman's power of 1.1 on the fall draws the same map and made a globe take a
+// sixth longer, all of it spent in the power. Sixty-four tiles is four hectares, past the one a channel
+// head needs - see channelHead - so a head is still picked from water that
+// has come together rather than from a sheet. Over two half globes, wet tiles
+// with water on three corners and none beside them went from 12.0 and 10.5 in
+// a thousand to 2.4 and 5.3 with this alone, and to none with the corners of
+// diagonal steps filled in as well - see carve.
+const spreadUntil = 64.0
+
+// landTiles is how many tiles stand above the sea.
+func (g *Grid) landTiles() int {
+	n := 0
+	for i := range g.Tiles {
+		if !g.underSea(i) {
+			n++
+		}
+	}
+	return n
 }
 
 // rainfall is what each tile has to send somewhere, as a share of the whole
@@ -1035,6 +1103,19 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			}
 			if !g.In(q) {
 				return // off the map, which is where a valley's water goes
+			}
+			// A diagonal step joins its two tiles at a corner only, and two
+			// rivers doing it a tile apart are the chessboard again. So the
+			// lower of the two tiles either side of the step is wet too: the
+			// bed a river cuts round a corner and not through the point of it.
+			// It is not counted against the share of river the map asks for,
+			// or the trunks' corners took the high ground's streams.
+			if a.X != 0 && a.Y != 0 {
+				side := geom.Pos{X: p.X + a.X, Y: p.Y}
+				if other := (geom.Pos{X: p.X, Y: p.Y + a.Y}); g.Height(other) < g.Height(side) {
+					side = other
+				}
+				wet[g.Index(side)] = true
 			}
 			j = g.Index(q)
 		}

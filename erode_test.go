@@ -84,12 +84,17 @@ func TestWoodsHoldAHillsideTogether(t *testing.T) {
 // tile with somewhere to send its water, and the water gathering as it goes.
 // Everything the map decides is read off these, so a hollow left behind by
 // the weather would be a hole in the world.
+//
+// Gathering is asked only of water that has come together. A sheet on a
+// hillside goes down every way that falls, so the tile below one takes only
+// its share of it and may carry less; see spreadUntil.
 func TestTheDrainageSurvivesWeathering(t *testing.T) {
 	w := NewLandSized(8, 50, 40)
 	g := w.Grid
 	for age := 0; age < 25; age++ {
 		w.Erode()
 	}
+	gathered := spreadUntil / float64(g.landTiles())
 	for y := 1; y < g.H-1; y++ {
 		for x := 1; x < g.W-1; x++ {
 			p := geom.Pos{X: x, Y: y}
@@ -98,7 +103,7 @@ func TestTheDrainageSurvivesWeathering(t *testing.T) {
 				t.Fatalf("weather left a hollow at %v with nowhere to drain", p)
 			}
 			down := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.At(down).Flow < g.At(p).Flow-1e-9 {
+			if g.At(p).Flow >= gathered && g.At(down).Flow < g.At(p).Flow-1e-9 {
 				t.Fatalf("at %v the water thins going downhill", p)
 			}
 		}

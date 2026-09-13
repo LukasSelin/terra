@@ -24,9 +24,14 @@ func TestAllGroundDrainsSomewhere(t *testing.T) {
 // Water gathers as it goes: a tile carries everything its uphill neighbours
 // sent it, so flow only ever grows downstream. That is what makes the rivers
 // come out where they do rather than where they were put.
+//
+// Once it has come together, that is. Before then it is a sheet on a hillside
+// and goes down every way that falls, so the tile below takes only a share of
+// it; see spreadUntil. What is asked of the sheet is that none of it is lost.
 func TestFlowOnlyGathers(t *testing.T) {
 	w := NewLandSized(5, 50, 40)
 	g := w.Grid
+	gathered := spreadUntil / float64(g.landTiles())
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
 			p := geom.Pos{X: x, Y: y}
@@ -35,11 +40,23 @@ func TestFlowOnlyGathers(t *testing.T) {
 				continue
 			}
 			down := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.At(down).Flow < g.At(p).Flow-1e-9 {
+			if g.At(p).Flow >= gathered && g.At(down).Flow < g.At(p).Flow-1e-9 {
 				t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
 					p, g.At(p).Flow, down, g.At(down).Flow)
 			}
 		}
+	}
+	// The whole of the map's rain leaves it: what goes off the edge is what
+	// the edge tiles carry, and none of it disappears on the way.
+	out := 0.0
+	for i := range g.Tiles {
+		p := g.PosOf(i)
+		if g.outlet(p.X, p.Y) {
+			out += g.Tiles[i].Flow
+		}
+	}
+	if out < 1-1e-6 {
+		t.Fatalf("only %.4f of the map's rain reaches the edge", out)
 	}
 }
 
