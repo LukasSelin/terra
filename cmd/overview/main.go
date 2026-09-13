@@ -500,7 +500,11 @@ h1{font-size:22px;margin:0 0 4px} .mut{color:var(--mut)}
 .tabs button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:5px 10px;cursor:pointer}
 .tabs button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
 figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}
-.map{overflow:auto} .map img{display:block;image-rendering:pixelated;max-width:none}
+.map{overflow:auto;max-height:78vh;cursor:grab;overscroll-behavior:contain} .map.drag{cursor:grabbing}
+.map img{display:block;image-rendering:pixelated;max-width:none;user-select:none;-webkit-user-drag:none}
+.zoom{display:flex;align-items:center;gap:6px;margin:0 0 8px}
+.zoom button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:3px 10px;cursor:pointer;min-width:34px}
+.zoom output{font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
 figcaption{margin-top:8px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
 .legend span{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
@@ -521,6 +525,8 @@ figcaption{margin-top:8px}
  <div class="stat"><span class="mut">Flowing water</span><b>{{pct .Stats.Rivers.Pct}}</b></div>
 </div>
 <div class="tabs" id="tabs">{{range $i, $l := .Layers}}<button data-i="{{$i}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$l.Title}}</button>{{end}}</div>
+<div class="zoom"><button id="zout" title="Zoom out (-)">−</button><output id="zlevel">100%</output><button id="zin" title="Zoom in (+)">+</button><button id="zfit" title="Fit to width (0)">Fit</button><button id="zone" title="Actual size (1)">1:1</button>
+ <span class="mut">Scroll to zoom, drag to pan.</span></div>
 {{range $i, $l := .Layers}}<figure class="big" data-i="{{$i}}"{{if ne $i 0}} hidden{{end}}>
  <div class="map"><img src="{{$l.File}}" width="{{$.Width}}" alt="{{$l.Title}}"></div>
  <figcaption><b>{{$l.Title}}</b> <span class="mut">{{$l.About}}</span>
@@ -529,15 +535,54 @@ figcaption{margin-top:8px}
 <div class="grid">{{range $i, $l := .Layers}}<figure data-i="{{$i}}"><img src="{{$l.File}}" alt="{{$l.Title}}"><figcaption>{{$l.Title}}</figcaption></figure>{{end}}</div>
 </main>
 <script>
+// Every layer is the same size, so they share one zoom and one view: switching
+// layers keeps the same spot in front of you.
+const bigs=[...document.querySelectorAll('figure.big')];
+const base=+bigs[0].querySelector('img').getAttribute('width');
+let zoom=1;
+const active=()=>bigs.find(f=>!f.hidden).querySelector('.map');
+function setZoom(z,cx,cy){
+ const m=active();
+ if(cx===undefined){cx=m.clientWidth/2;cy=m.clientHeight/2}
+ z=Math.min(64,Math.max(0.1,z));
+ const x=(m.scrollLeft+cx)/zoom, y=(m.scrollTop+cy)/zoom;
+ zoom=z;
+ bigs.forEach(f=>f.querySelector('img').style.width=(base*zoom)+'px');
+ m.scrollLeft=x*zoom-cx; m.scrollTop=y*zoom-cy;
+ document.getElementById('zlevel').value=Math.round(zoom*100)+'%';
+}
 function show(i){
- document.querySelectorAll('figure.big').forEach(f=>f.hidden=f.dataset.i!=i);
+ // Read before hiding: a hidden element has no scroll position.
+ const was=active(), l=was.scrollLeft, t=was.scrollTop;
+ bigs.forEach(f=>f.hidden=f.dataset.i!=i);
+ const m=active(); m.scrollLeft=l; m.scrollTop=t;
  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.i==i));
 }
+const fit=()=>setZoom(active().clientWidth/base);
+document.getElementById('zin').onclick=()=>setZoom(zoom*1.5);
+document.getElementById('zout').onclick=()=>setZoom(zoom/1.5);
+document.getElementById('zfit').onclick=fit;
+document.getElementById('zone').onclick=()=>setZoom(1);
+bigs.forEach(f=>{
+ const m=f.querySelector('.map');
+ m.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=m.getBoundingClientRect();
+  setZoom(zoom*Math.pow(1.0015,-e.deltaY),e.clientX-r.left,e.clientY-r.top);
+ },{passive:false});
+ let drag=null;
+ m.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,l:m.scrollLeft,t:m.scrollTop};m.setPointerCapture(e.pointerId);m.classList.add('drag')});
+ m.addEventListener('pointermove',e=>{if(drag){m.scrollLeft=drag.l-(e.clientX-drag.x);m.scrollTop=drag.t-(e.clientY-drag.y)}});
+ const end=()=>{drag=null;m.classList.remove('drag')};
+ m.addEventListener('pointerup',end); m.addEventListener('pointercancel',end);
+});
 document.querySelectorAll('#tabs button, .grid figure').forEach(e=>e.onclick=()=>{show(e.dataset.i);window.scrollTo({top:0,behavior:'smooth'})});
 document.addEventListener('keydown',e=>{
  const n=document.querySelectorAll('#tabs button').length;
  const cur=+document.querySelector('#tabs button[aria-pressed=true]').dataset.i;
  if(e.key==='ArrowRight')show((cur+1)%n); if(e.key==='ArrowLeft')show((cur+n-1)%n);
+ if(e.key==='+'||e.key==='=')setZoom(zoom*1.5); if(e.key==='-')setZoom(zoom/1.5);
+ if(e.key==='0')fit(); if(e.key==='1')setZoom(1);
 });
 </script></body></html>
 `))
