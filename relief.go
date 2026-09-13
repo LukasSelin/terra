@@ -964,6 +964,34 @@ func (g *Grid) drain() {
 // diagonal steps filled in as well - see carve.
 const spreadUntil = 64.0
 
+// crowdSpace is how near, in tiles, a small stream may start to another
+// channel it does not join, and crowdUntil is how much ground's rain, in
+// tiles, makes a stream no longer small.
+//
+// Nothing kept the streams apart, so a range whose flank fell evenly drew a
+// stream down every third or fourth line of tiles, each cut into the ground
+// beside the next: a mountain carved into ribs rather than drained. On the
+// ground a hillside between two streams sheds its water into one or the other,
+// and a third between them has no ground of its own to gather from - which is
+// what sets how far apart a range's streams stand.
+//
+// A stream that meets the other within three times the spacing is a
+// tributary, and those are left alone: a river's branches draw together
+// because they are going to the same place. And a stream that has gathered
+// crowdUntil has earned its bed wherever it is. Over two half globes, river
+// tiles with an unjoined channel within three tiles went from 41 and 34 per
+// cent of the river to 17 and 16.
+const (
+	crowdSpace = 3
+	crowdUntil = 256.0
+)
+
+// cornerWeight is what a diagonal step's corner tile counts for against the
+// share of river a map asks for; see carve. Counted whole it took the valley's
+// upland streams, a third of which are left, and counted not at all a globe
+// came out a sixth wetter than it asked. Half keeps the upland and the share.
+const cornerWeight = 0.5
+
 // landTiles is how many tiles stand above the sea.
 func (g *Grid) landTiles() int {
 	n := 0
@@ -1083,12 +1111,15 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			land++
 		}
 	}
-	want := int(waterShare * float64(len(g.Tiles)))
+	// The share is of the land. Taken of the whole map, a globe a third of
+	// which is sea laid its whole budget on the other two thirds and came out
+	// with nine tiles in a hundred of its land under water.
+	want := int(waterShare * float64(land))
 	// The least water a head may start from, as a share of the map's rain: see
 	// channelHead. Rain is shared out over the dry ground, so a tile's worth of
 	// it is one part in land.
 	head := channelHead / float64(max(land, 1))
-	laid := 0
+	laid, corners := 0, 0.0
 	lay := func(from int) {
 		for j := from; !wet[j]; {
 			wet[j], laid = true, laid+1
@@ -1108,14 +1139,19 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			// rivers doing it a tile apart are the chessboard again. So the
 			// lower of the two tiles either side of the step is wet too: the
 			// bed a river cuts round a corner and not through the point of it.
-			// It is not counted against the share of river the map asks for,
-			// or the trunks' corners took the high ground's streams.
+			// It counts for part of a tile against the share: see cornerWeight.
 			if a.X != 0 && a.Y != 0 {
 				side := geom.Pos{X: p.X + a.X, Y: p.Y}
 				if other := (geom.Pos{X: p.X, Y: p.Y + a.Y}); g.Height(other) < g.Height(side) {
 					side = other
 				}
-				wet[g.Index(side)] = true
+				if s := g.Index(side); !wet[s] {
+					wet[s] = true
+					corners += cornerWeight
+					if corners >= 1 {
+						laid, corners = laid+1, corners-1
+					}
+				}
 			}
 			j = g.Index(q)
 		}
@@ -1134,11 +1170,65 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
+	// Where each tile's water goes, for asking whether two streams meet. -1
+	// is nowhere: a hollow, or off the map.
+	down := make([]int32, len(g.Tiles))
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			p := g.PosOf(i)
+			a := g.Aspect(p)
+			q := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
+			if a == (geom.Pos{}) || !g.In(q) {
+				down[i] = -1
+				continue
+			}
+			down[i] = int32(g.Index(q))
+		}
+	})
+	// crowded says whether a small stream starting at i would run beside a
+	// channel it does not join: see crowdSpace.
+	crowdFlow := crowdUntil / float64(max(land, 1))
+	reach := crowdSpace * 3
+	path := make([]int32, 0, reach+1)
+	on := func(j int32) bool { return slices.Contains(path, j) }
+	crowded := func(i int32) bool {
+		if g.Tiles[i].Flow >= crowdFlow {
+			return false
+		}
+		path = path[:0]
+		for j, k := i, 0; j >= 0 && k <= reach; j, k = down[j], k+1 {
+			path = append(path, j)
+		}
+		p := g.PosOf(int(i))
+		for dy := -crowdSpace; dy <= crowdSpace; dy++ {
+			for dx := -crowdSpace; dx <= crowdSpace; dx++ {
+				q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
+				if !g.In(q) {
+					continue
+				}
+				w := int32(g.Index(q))
+				if !wet[w] || g.underSea(int(w)) || on(w) {
+					continue
+				}
+				joins := false
+				for j, k := w, 0; j >= 0 && k <= reach; j, k = down[j], k+1 {
+					if on(j) {
+						joins = true
+						break
+					}
+				}
+				if !joins {
+					return true
+				}
+			}
+		}
+		return false
+	}
 	// A channel does not flicker, so a bed that is still being cut at half
 	// the rate keeps its water whether or not it would be chosen afresh. See
-	// the remark on hysteresis below.
+	// the remark on hysteresis above.
 	for _, nd := range order {
-		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.Tiles[nd.idx].Flow >= head {
+		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.Tiles[nd.idx].Flow >= head && !crowded(nd.idx) {
 			lay(int(nd.idx))
 		}
 	}
@@ -1146,7 +1236,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		if laid >= want {
 			break
 		}
-		if g.Tiles[nd.idx].Flow < head {
+		if g.Tiles[nd.idx].Flow < head || wet[nd.idx] || crowded(nd.idx) {
 			continue
 		}
 		lay(int(nd.idx))
