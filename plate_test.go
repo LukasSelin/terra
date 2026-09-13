@@ -241,6 +241,104 @@ func TestAWeldedPlateKeepsTheRangeThatMadeIt(t *testing.T) {
 	}
 }
 
+// A plate that turns meets its neighbour differently all the way along the
+// seam between them: closing at one end and parting at the other, on the one
+// boundary. A plate that only slides meets it the same way everywhere, and
+// that sameness was the whole of why no seam ever had a ridge at one end and a
+// range at the other.
+func TestATurningPlateClosesAtOneEndAndOpensAtTheOther(t *testing.T) {
+	g := NewGrid(96, 96)
+	for i := range g.Tiles {
+		if i%g.W >= 48 {
+			g.Tiles[i].Plate = 1
+		}
+	}
+	plates := []Plate{{Spin: 0.05, into: 0}, {Ocean: true, into: 1}}
+	g.locate(plates)
+	top, _, okTop := g.meeting(plates, 10*g.W+47, 1)
+	bottom, _, okBottom := g.meeting(plates, 86*g.W+47, 1)
+	if !okTop || !okBottom {
+		t.Fatal("the seam between the two plates was not found")
+	}
+	if top*bottom >= 0 {
+		t.Errorf("the seam closes at %.2f at one end and %.2f at the other; a turning plate "+
+			"should close on its neighbour at one end and part from it at the other", top, bottom)
+	}
+}
+
+// And a turn carries a plate's ground round rigidly: what was on its east side
+// is on its south a quarter turn later, and the plate has not opened floor
+// inside itself doing it. A turn puts every tile on the tile nearest where it
+// goes, and nearest is not one to one, so a turn done carelessly leaves a
+// scatter of holes through the middle of the plate - and a hole is new ocean
+// floor, which is a spreading ridge in the middle of a continent.
+func TestATurnCarriesAPlateRoundWhole(t *testing.T) {
+	const size, radius = 96, 30
+	g := NewGrid(size, size)
+	mid := size / 2
+	code := func(x, y int) float64 { return float64(x*1000 + y + 1) }
+	disc := 0
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		t := &g.Tiles[i]
+		t.Plate = 1
+		if math.Hypot(float64(x-mid), float64(y-mid)) <= radius {
+			t.Plate, t.Height = 0, code(x, y)
+			disc++
+		}
+	}
+	// A quarter turn over eight epochs, which is far more than any plate but
+	// a microplate is drawn to turn in a whole history.
+	const epochs = 8
+	plates := []Plate{{Spin: math.Pi / 2 / epochs, into: 0}, {Ocean: true, into: 1}}
+	cr := newCrust(g)
+	book := make([]record, len(g.Tiles))
+	for e := 1; e <= epochs; e++ {
+		(&Land{}).move(g, plates, cr, book, e)
+	}
+
+	held, fresh := 0, 0
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		inside := math.Hypot(float64(x-mid), float64(y-mid)) <= radius-3
+		if g.Tiles[i].Plate == 0 {
+			held++
+		}
+		if inside && (g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0) {
+			fresh++
+		}
+	}
+	if fresh > 0 {
+		t.Errorf("%d tiles inside the turning plate are new floor or another plate's", fresh)
+	}
+	if math.Abs(float64(held-disc)) > 0.05*float64(disc) {
+		t.Errorf("the plate held %d tiles before its turn and %d after", disc, held)
+	}
+	// Every tile the plate still carries should stand where a quarter turn
+	// about the middle puts the place it started from: east round to south.
+	// Rounding puts any one of them a tile or so off, and a turn that was not
+	// going round at all - or going round at a different rate at different
+	// distances from the middle - is off by many.
+	var miss, carried float64
+	for i := range g.Tiles {
+		h := g.Tiles[i].Height
+		if g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0 || h < 1 {
+			continue // not ground the plate started with
+		}
+		c := int(h) - 1
+		x0, y0 := c/1000, c%1000
+		wx, wy := mid-(y0-mid), mid+(x0-mid)
+		miss += math.Hypot(float64(i%g.W-wx), float64(i/g.W-wy))
+		carried++
+	}
+	if carried == 0 {
+		t.Fatal("the turned plate carries none of the ground it started with")
+	}
+	if got := miss / carried; got > 1 {
+		t.Errorf("a tile of the turned plate stands %.1f tiles from where a quarter turn puts it", got)
+	}
+}
+
 // near reports whether any tile within reach of i is marked.
 func near(g *Grid, i int, mark []bool, reach int) bool {
 	p := g.PosOf(i)
