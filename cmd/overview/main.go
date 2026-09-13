@@ -139,6 +139,7 @@ type summary struct {
 	Frozen                          share
 	Rivers                          share
 	FlowMax                         float64
+	LandRain, LandRunoff            float64
 	AgeMax                          int
 }
 
@@ -157,7 +158,7 @@ func measure(land *terra.Land) summary {
 	rock := make([]int, terra.BedrockCount)
 	plates := map[uint8]bool{}
 	heights := make([]float64, 0, n)
-	frozen, rivers := 0, 0
+	frozen, rivers, dry := 0, 0, 0
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		p := g.PosOf(i)
@@ -165,6 +166,9 @@ func measure(land *terra.Land) summary {
 		if !t.Wet() {
 			rock[t.Bedrock]++
 			heights = append(heights, t.Height)
+			s.LandRain += g.Rain(i)
+			s.LandRunoff += g.Runoff(i)
+			dry++
 		}
 		plates[t.Plate] = true
 		s.HeightMin = math.Min(s.HeightMin, t.Height)
@@ -180,6 +184,10 @@ func measure(land *terra.Land) summary {
 		if t.Terrain == terra.Water && t.Flow > riverFlow {
 			rivers++
 		}
+	}
+	if dry > 0 {
+		s.LandRain /= float64(dry)
+		s.LandRunoff /= float64(dry)
 	}
 	sort.Float64s(heights)
 	if len(heights) > 0 {
@@ -218,6 +226,7 @@ func (s summary) print() {
 		fmt.Printf("  %-9s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
 	fmt.Printf("\nfrozen ground %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
+	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
 }
 
 func bar(pct float64) string {
@@ -548,6 +557,8 @@ figcaption{margin-top:8px}
  <div class="stat"><span class="mut">Temperature (°C)</span><b>{{c .Stats.TempMin}} – {{c .Stats.TempMax}}</b></div>
  <div class="stat"><span class="mut">Frozen land</span><b>{{pct .Stats.Frozen.Pct}}</b></div>
  <div class="stat"><span class="mut">Flowing water</span><b>{{pct .Stats.Rivers.Pct}}</b></div>
+ <div class="stat"><span class="mut">Rain / runoff on land (mm)</span><b>{{m .Stats.LandRain}} / {{m .Stats.LandRunoff}}</b></div>
+ <div class="stat"><span class="mut">Greatest river (m³/s)</span><b>{{m .Stats.FlowMax}}</b></div>
 </div>
 <div class="tabs" id="tabs">{{range $i, $l := .Layers}}<button data-i="{{$i}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$l.Title}}</button>{{end}}</div>
 <div class="zoom"><button id="zout" title="Zoom out (-)">−</button><output id="zlevel">100%</output><button id="zin" title="Zoom in (+)">+</button><button id="zfit" title="Fit to width (0)">Fit</button><button id="zone" title="Actual size (1)">1:1</button>
