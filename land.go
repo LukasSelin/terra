@@ -42,6 +42,8 @@ type Land struct {
 	// seed is what the world was made from, kept for the streams of chance
 	// that are drawn apart from the main one; see island.go.
 	seed uint64
+	// moon is where the moon stood on the founding day. See tide.go.
+	moon Epoch
 
 	// Forest0 is how much forest the world was made with, so that how much
 	// of it has been taken can be told.
@@ -84,7 +86,9 @@ func NewLand(seed uint64, t Terms) *Land {
 		Climate: NewClimateOn(t),
 		Terms:   t,
 	}
+	l.moon = epochOf(seed)
 	l.Generate(t)
+	l.Grid.tide = l.Tide()
 	l.Growing = make([]float64, len(l.Grid.Chunks))
 	return l
 }

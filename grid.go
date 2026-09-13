@@ -179,6 +179,9 @@ type Grid struct {
 	// while it runs, and below zero on a map with neither. See weather.go.
 	base float64
 
+	// tide is the day's sea the map is read against: see tide.go.
+	tide Tide
+
 	// air is the map's climate row by row, and rain and runoff are, for each
 	// tile, how much falls on it in a year and how much of that the ground
 	// sends on after the air has taken its share back, in millimetres. See
@@ -259,7 +262,7 @@ func (g *Grid) At(p geom.Pos) *Tile {
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air}
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, tide: g.tide}
 	copy(c.Tiles, g.Tiles)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
