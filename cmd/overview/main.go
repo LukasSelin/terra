@@ -148,6 +148,9 @@ type summary struct {
 	Rivers                          share
 	FlowMax                         float64
 	LandRain, LandRunoff            float64
+	Moon                            string
+	RangeP50, RangeP90, RangeMax    float64
+	Flats                           share
 	AgeMax                          int
 }
 
@@ -197,6 +200,21 @@ func measure(land *terra.Land) summary {
 		s.LandRain /= float64(dry)
 		s.LandRunoff /= float64(dry)
 	}
+	moon := land.Moon()
+	s.Moon = fmt.Sprintf("%s, %.1f days old", moon.Name(), moon.Age)
+	var ranges []float64
+	for i := range g.Tiles {
+		if t := &g.Tiles[i]; !t.Wet() || t.Terrain == terra.Flat {
+			if r := g.TidalRange(g.PosOf(i)); r > 0 {
+				ranges = append(ranges, r)
+			}
+		}
+	}
+	sort.Float64s(ranges)
+	if len(ranges) > 0 {
+		s.RangeP50, s.RangeP90, s.RangeMax = ranges[len(ranges)/2], ranges[len(ranges)*9/10], ranges[len(ranges)-1]
+	}
+	s.Flats = shareOf("tidal flats", terr[terra.Flat], n, "")
 	sort.Float64s(heights)
 	if len(heights) > 0 {
 		s.HeightP50 = heights[len(heights)/2]
@@ -235,6 +253,8 @@ func (s summary) print() {
 	}
 	fmt.Printf("\nfrozen ground %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
 	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
+	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
+		s.Moon, 2*(terra.TideM2+terra.TideS2), 2*(terra.TideM2-terra.TideS2), s.RangeP50, s.RangeP90, s.RangeMax, s.Flats.Pct)
 }
 
 func bar(pct float64) string {
@@ -342,6 +362,24 @@ func drawings(land *terra.Land, s summary) []drawing {
 				c := ramp(rainfall, v)
 				if t.Wet() && g.Runoff(i) == 0 {
 					return scaleRGB(c, 0.45)
+				}
+				return scaleRGB(c, shade(p))
+			},
+		},
+		{
+			file: "tides", title: "Tides",
+			about: fmt.Sprintf("Spring tidal range where the tide reaches, from nothing (pale) to %.1f m (deep violet); tidal flats in mud brown. No tide in grey.", 2*terra.TideFactorMax*(terra.TideM2+terra.TideS2)),
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				if t.Terrain == terra.Flat {
+					return terrainColor[terra.Flat]
+				}
+				r := g.TidalRange(p)
+				if r <= 0 {
+					return scaleRGB(color.RGBA{128, 128, 128, 255}, shade(p))
+				}
+				c := ramp(tidal, r/(2*terra.TideFactorMax*(terra.TideM2+terra.TideS2)))
+				if t.Wet() {
+					return scaleRGB(c, 0.8)
 				}
 				return scaleRGB(c, shade(p))
 			},
@@ -474,6 +512,7 @@ var (
 	water     = []color.RGBA{{10, 14, 24, 255}, {30, 60, 110, 255}, {60, 140, 210, 255}, {200, 240, 255, 255}}
 	magma     = []color.RGBA{{20, 10, 40, 255}, {110, 30, 100, 255}, {220, 80, 60, 255}, {250, 220, 120, 255}}
 	soil      = []color.RGBA{{120, 80, 50, 255}, {190, 160, 90, 255}, {60, 150, 60, 255}}
+	tidal     = []color.RGBA{{235, 235, 245, 255}, {150, 170, 220, 255}, {110, 80, 180, 255}, {60, 20, 90, 255}}
 	rainfall  = []color.RGBA{{240, 232, 200, 255}, {170, 210, 170, 255}, {80, 160, 200, 255}, {20, 60, 150, 255}}
 	thermal   = []color.RGBA{{40, 60, 160, 255}, {100, 180, 220, 255}, {240, 230, 140, 255}, {220, 70, 40, 255}}
 )
@@ -568,6 +607,9 @@ figcaption{margin-top:8px}
  <div class="stat"><span class="mut">Flowing water</span><b>{{pct .Stats.Rivers.Pct}}</b></div>
  <div class="stat"><span class="mut">Rain / runoff on land (mm)</span><b>{{m .Stats.LandRain}} / {{m .Stats.LandRunoff}}</b></div>
  <div class="stat"><span class="mut">Greatest river (m³/s)</span><b>{{m .Stats.FlowMax}}</b></div>
+ <div class="stat"><span class="mut">Moon on day one</span><b>{{.Stats.Moon}}</b></div>
+ <div class="stat"><span class="mut">Coastal spring range (m)</span><b>{{c .Stats.RangeP50}} / {{c .Stats.RangeMax}}</b></div>
+ <div class="stat"><span class="mut">Tidal flats</span><b>{{pct .Stats.Flats.Pct}}</b></div>
 </div>
 <div class="tabs" id="tabs">{{range $i, $l := .Layers}}<button data-i="{{$i}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$l.Title}}</button>{{end}}</div>
 <div class="zoom"><button id="zout" title="Zoom out (-)">−</button><output id="zlevel">100%</output><button id="zin" title="Zoom in (+)">+</button><button id="zfit" title="Fit to width (0)">Fit</button><button id="zone" title="Actual size (1)">1:1</button>

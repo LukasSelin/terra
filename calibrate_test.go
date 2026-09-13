@@ -144,6 +144,31 @@ func TestCalibrate(t *testing.T) {
 		fmt.Printf("  greatest river %.3g\n", maxFlow(g))
 	}
 
+	fmt.Println("\nthe shore, small globes and the full one:")
+	for _, c := range []struct {
+		name  string
+		terms Terms
+		seed  uint64
+	}{{"small 1", smallGlobe(), 1}, {"small 2", smallGlobe(), 2}, {"small 3", smallGlobe(), 3}, {"globe 1", GlobeTerms(), 1}} {
+		g := NewLand(c.seed, c.terms).Grid
+		var ranges []float64
+		flats := 0
+		for i := range g.Tiles {
+			if g.Tiles[i].Terrain == Flat {
+				flats++
+			}
+			if r := g.TidalRange(g.PosOf(i)); r > 0 && !g.underSea(i) {
+				ranges = append(ranges, r)
+			}
+		}
+		sort.Float64s(ranges)
+		if len(ranges) == 0 {
+			ranges = []float64{0}
+		}
+		fmt.Printf("  %-8s flats %.2f%%  spring range on the coast p50 %.2f p90 %.2f max %.2f m\n", c.name,
+			100*float64(flats)/float64(len(g.Tiles)), ranges[len(ranges)/2], ranges[len(ranges)*9/10], ranges[len(ranges)-1])
+	}
+
 	fmt.Println("\nsmall globe, seeds 1-3:")
 	fmt.Println("  seed  secs  slope50  slope90  wet%land  ribs%  sandstone%  maxQ       landP   landR")
 	for seed := uint64(1); seed <= 3; seed++ {

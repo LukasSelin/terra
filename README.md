@@ -28,7 +28,9 @@ rides and which age its rock dates from. The weather over it, by latitude and
 by height and by season, and the rain: carried off the sea by the wind belts,
 wrung out over the ranges, and taken back by the warmth of the air, so that
 rivers are where the water runs off and has the power to cut, and the ground
-wears the way stream power says it does. What grows on it
+wears the way stream power says it does. The moon, and the tide it raises each
+day: springs and neaps, gathered by the shape of each coast, and the tidal
+flats a laden walker can cross at low water one fortnight in two. What grows on it
 and how far along it has come. How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
@@ -79,7 +81,7 @@ go run ./cmd/overview -preset globe -seed 3
 ```
 
 makes a world and writes `overview/index.html`: its terrain, height,
-drainage, rain, runoff, bedrock, plates, rock age, soil, temperature and woods, one map
+drainage, rain, runoff, tides, bedrock, plates, rock age, soil, temperature and woods, one map
 each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
 `-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale` and `-out` override it.
 `-max` makes the world as big as the free memory allows, in the shape the
