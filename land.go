@@ -110,6 +110,11 @@ type Terms struct {
 	// over: 0 draws it, and anything else makes it out of its own history.
 	// See history.go.
 	Epochs int
+	// Wetness is how much rain the world's air carries, against the real
+	// world's: two is a world twice as wet at every latitude, a half one half
+	// as wet. Nothing, as a Terms written without it says, is the real world's.
+	// See weather.go.
+	Wetness float64
 }
 
 // DefaultTerms is the valley: the default size, with edges, drawn rather

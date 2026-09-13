@@ -128,6 +128,22 @@ func TestCalibrate(t *testing.T) {
 			steep[len(steep)/2], steep[0], steep[len(steep)-1], wet[len(wet)/2], wet[len(wet)-1])
 	}
 
+	fmt.Println("\nrain by latitude on land, GlobeTerms seed 1 (mm a year: rain / runoff):")
+	if g := NewLand(1, GlobeTerms()).Grid; g.air != nil && len(g.rain) == len(g.Tiles) {
+		for _, band := range [][2]float64{{0, 10}, {10, 20}, {20, 30}, {30, 40}, {40, 55}, {55, 65}, {65, 80}, {80, 90}} {
+			var p, r, n float64
+			for i := range g.Tiles {
+				lat := math.Abs(g.air.lat[i/g.W])
+				if g.underSea(i) || lat < band[0] || lat >= band[1] {
+					continue
+				}
+				p, r, n = p+g.rain[i], r+g.runoff[i], n+1
+			}
+			fmt.Printf("  %2.0f-%2.0f  %6.0f / %5.0f   over %.0f tiles\n", band[0], band[1], p/n, r/n, n)
+		}
+		fmt.Printf("  greatest river %.3g\n", maxFlow(g))
+	}
+
 	fmt.Println("\nsmall globe, seeds 1-3:")
 	fmt.Println("  seed  secs  slope50  slope90  wet%land  ribs%  sandstone%  maxQ       landP   landR")
 	for seed := uint64(1); seed <= 3; seed++ {

@@ -881,6 +881,7 @@ func (g *Grid) drain() {
 		}
 	})
 	rain := g.rainfall()
+	g.weather()
 	order := make([]heightNode, n)
 	for i := range order {
 		order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
@@ -1443,7 +1444,7 @@ func (g *Grid) seaNear(reach int) []float64 {
 // flood puts the lowest share of the ground under the sea, and reads the
 // sea level off the ground so that erosion can move the coast.
 func (g *Grid) flood(share float64, rng interface{ Float64() float64 }) {
-	g.sea = -1
+	g.sea, g.base = -1, -1
 	if share <= 0 {
 		return
 	}
@@ -1452,6 +1453,7 @@ func (g *Grid) flood(share float64, rng interface{ Float64() float64 }) {
 		heights[i] = g.Tiles[i].Height
 	}
 	g.sea = quantile(heights, share)
+	g.base = g.sea
 	for i := range g.Tiles {
 		if t := &g.Tiles[i]; g.underSea(i) {
 			t.Terrain, g.Wood[i], g.Wild[i], g.Age[i] = Water, 0, 0, 0

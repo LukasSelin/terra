@@ -317,6 +317,30 @@ func drawings(land *terra.Land, s summary) []drawing {
 			},
 		},
 		{
+			file: "rain", title: "Rain",
+			about: "Rain in a year, on a log scale from 100 mm (pale) to 4 m (deep blue), hillshaded. Sea dark.",
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				v := clamp(math.Log10(math.Max(g.Rain(i), 1)/100)/math.Log10(40), 0, 1)
+				c := ramp(rainfall, v)
+				if t.Wet() && g.Runoff(i) == 0 {
+					return scaleRGB(c, 0.45)
+				}
+				return scaleRGB(c, shade(p))
+			},
+		},
+		{
+			file: "runoff", title: "Runoff",
+			about: "What the rain leaves after the air takes its share back, in a year: 0 (sand) to 2 m (deep blue), on a log scale from 10 mm.",
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				r := g.Runoff(i)
+				if r < 10 {
+					return scaleRGB(color.RGBA{225, 205, 150, 255}, shade(p))
+				}
+				v := clamp(math.Log10(r/10)/math.Log10(200), 0, 1)
+				return scaleRGB(ramp(rainfall, v), shade(p))
+			},
+		},
+		{
 			file: "bedrock", title: "Bedrock", legend: rockLegend,
 			about: "The rock under the soil.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
@@ -432,6 +456,7 @@ var (
 	water     = []color.RGBA{{10, 14, 24, 255}, {30, 60, 110, 255}, {60, 140, 210, 255}, {200, 240, 255, 255}}
 	magma     = []color.RGBA{{20, 10, 40, 255}, {110, 30, 100, 255}, {220, 80, 60, 255}, {250, 220, 120, 255}}
 	soil      = []color.RGBA{{120, 80, 50, 255}, {190, 160, 90, 255}, {60, 150, 60, 255}}
+	rainfall  = []color.RGBA{{240, 232, 200, 255}, {170, 210, 170, 255}, {80, 160, 200, 255}, {20, 60, 150, 255}}
 	thermal   = []color.RGBA{{40, 60, 160, 255}, {100, 180, 220, 255}, {240, 230, 140, 255}, {220, 70, 40, 255}}
 )
 

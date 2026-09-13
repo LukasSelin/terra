@@ -19,6 +19,9 @@ func (w *Land) Generate(cfg Terms) {
 	width, height := cfg.Width, cfg.Height
 	g := NewGrid(width, height)
 	g.Wrap = cfg.Wrap
+	// The air is the climate's, read row by row, and it is set before the
+	// ground is made because a history rains on its ground while it runs.
+	g.air = w.Climate.airFor(g, cfg.Wetness)
 
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both

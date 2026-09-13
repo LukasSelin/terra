@@ -600,12 +600,14 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		g.wear(deepWeather)
 		g.meander(deepWeather)
 		g.fill()
+		g.base = g.historyBase()
 		g.drain()
 		g.keepBook(book, e)
 		plates, mids = w.reshape(g, plates, mids, touch, weld)
 		drift(plates, mids, through)
 	}
 
+	g.base = -1
 	g.settleRock(book, plates, epochs)
 	for k := 0; k < smoothing; k++ {
 		g.soften()
@@ -1330,16 +1332,23 @@ func (w *Land) hotspot(g *Grid, book []record) {
 	}
 }
 
+// historyBase is the sea a history is running against: the lowest historySea
+// of the ground as it stands, which is what the book counts as under water and
+// what the air takes its fill from while there is no sea of the map's own.
+func (g *Grid) historyBase() float64 {
+	h := make([]float64, len(g.Tiles))
+	for i := range g.Tiles {
+		h[i] = g.Tiles[i].Height
+	}
+	return quantile(h, historySea)
+}
+
 // keepBook writes down, after an epoch of weather, what the epoch left on
 // each tile: what was buried, and what lay under water. The soil's own
 // make-up carries the first - the water sorted what it laid down, so a tile
 // buried in sand reads as sand - and the second is simply counted.
 func (g *Grid) keepBook(book []record, epoch int) {
-	h := make([]float64, len(g.Tiles))
-	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
-	}
-	sea := quantile(h, historySea)
+	sea := g.base
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() || t.Height <= sea {
