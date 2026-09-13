@@ -160,6 +160,10 @@ type Grid struct {
 	// than at a plate's edge. Drawn once when a history starts and fixed for
 	// the life of the world. See history.go.
 	hot []geom.Pos
+	// welds is how many times two plates became one while the history ran.
+	// It is a count of what happened and not something anything downstream
+	// reads: see TestContinentsWeldIntoOnePlate.
+	welds int
 
 	// frost is, for each tile, the height above which the year there never
 	// warms past Frost. It is the weather's, not the ground's, but it is kept

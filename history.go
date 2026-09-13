@@ -88,11 +88,9 @@ const (
 	// valley like this one is.
 	oceanFloor  = 0.25
 	oceanPerSea = 1.0
-	// plateCap is the most middles a world is measured from. A middle is a
-	// point every tile on the map is compared against, so the partition costs
-	// tiles times middles every epoch and a world that kept splitting would
-	// pay for it forever. It is also what keeps the count inside the byte a
-	// tile stores its plate in.
+	// plateCap is the most plates a world may ever have had, rifts included.
+	// It is what keeps the count inside the byte a tile stores its plate in,
+	// with room above it for noPlate.
 	plateCap = 120
 	// beltWidth is how far from a seam the ground is raised or dropped by
 	// what is happening at it, in tiles. A collision does not make a wall one
@@ -271,12 +269,18 @@ const (
 	// speeding the plates that came out short of what they were drawn at and
 	// slowing the ones that came out over, before the history starts.
 	calibrations = 12
-	// riftGrow is how much faster the new half of a rifted plate floods than
-	// the fastest middle of the plate it splits from. See reshape.
-	riftGrow = 1.0
 	// enclaveMost is the largest share of a world a plate may hold and still
 	// be taken into the one plate it touches. See reshape.
 	enclaveMost = 0.05
+	// breakFrom is the least share of the world a plate must hold for a
+	// small one to break off it.
+	breakFrom = 0.04
+	// breakStretch is how much more slowly a broken-off piece floods toward
+	// the middle of its plate than along the plate's edge. See breakOff.
+	breakStretch = 4.0
+	// breakTries is how many times a piece that came out too small is put back
+	// and broken off again with a faster flood.
+	breakTries = 6
 	// plateFloor and plateCeiling are how much of a world one piece of crust
 	// may hold before something is done about it. Without a floor the drift
 	// squeezes pieces down to slivers and then to nothing, and a sliver is a
@@ -414,6 +418,23 @@ const marginRamp = 6
 const (
 	driftFast = 1.0
 	driftSlow = 0.2
+	// feedShare is how much of how hard two plates meet is read off the crust
+	// that has actually gone down between them, rather than off how fast they
+	// are closing, and feedBlur how many passes of a nine-tile average that
+	// crust is spread over. See tectonics.
+	feedShare = 0.5
+	feedBlur  = 3
+	// tidyPasses is how many times a moved world's plate edges are tidied,
+	// and tidyMost how many of a tile's eight neighbours another plate has to
+	// hold to take it. See tidy.
+	//
+	// Six and once. A tile a tooth one tile wide sticks out of has six of the
+	// other plate round it, and a tile on a bend of an honest boundary has at
+	// most five; at five and twice, run every epoch, it was a smoothing of
+	// every edge on the map thirty-two times over, and a history's plates
+	// came out as round as pebbles.
+	tidyPasses = 1
+	tidyMost   = 6
 )
 
 // What a meeting of plates does to the ground, in metres per epoch at a
@@ -487,10 +508,9 @@ const (
 
 // How many places in a world are fed from below rather than at their edges,
 // and how far each one's works reach. They stay where they are while the
-// plates come and go over them, which on the earth draws a chain of islands;
-// here the crust does not travel across the map, so what a hotspot leaves is
-// a volcanic province rather than a chain. It is the one place this admits to
-// being a model of a model.
+// plates come and go over them, and since the plates carry their ground, what
+// a hotspot leaves is a chain of old cones drawn out behind it along the way
+// its plate is going, the newest over the hotspot itself.
 const (
 	hotspots     = 2
 	hotspotSpan  = DefaultWidth
@@ -509,10 +529,9 @@ const (
 
 // Plate is one piece of a world's crust: where it is going, what it is made
 // of, and - once it has welded onto another - which piece it has become part
-// of. It is a body and not a place: where it is is the business of the
-// middles below, and a plate that has taken in another is measured from both
-// of theirs, which is how a welded continent keeps the shape of the two
-// things that made it instead of snapping back to a disc.
+// of. Where it is is the tiles that ride it: they are grown from middles once,
+// when the crust first breaks, and after that a plate is its ground, carried
+// along with it. See move.
 type Plate struct {
 	DX, DY float64
 	Ocean  bool
@@ -527,10 +546,9 @@ type Plate struct {
 	into uint8
 }
 
-// middle is a point the crust is measured from, in tiles, and which plate it
-// belongs to. Positions are not whole numbers, because a plate moves less
-// than a tile in an epoch late on and rounding that off would stop it moving
-// at all.
+// middle is a point a plate's flood starts from, in tiles, and the plate it
+// floods for: the first plates are grown from them, and a rifting plate is
+// split by flooding from two. See partition and split.
 type middle struct {
 	X, Y float64
 	at   uint8
@@ -634,7 +652,8 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 	g.drain()
 	g.soilTexture()
 	fl := w.flood(g, spacing(g, plateTotal(g)))
-	plates, mids := w.firstPlates(g, sea, fl)
+	plates := w.firstPlates(g, sea, fl)
+	cr := newCrust(g)
 	grain := w.grain(g)
 	bow := w.bow(g)
 	book := make([]record, len(g.Tiles))
@@ -647,14 +666,17 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		// How far through the era we are, which is how far the world has
 		// cooled: the plates slow as it goes.
 		through := float64(e) / math.Max(1, float64(epochs-1))
-		g.partition(plates, mids, fl)
+		// The plates carry their ground on: where they run into each other
+		// one goes down, and where they part new floor comes up. See move.
+		w.move(g, plates, cr, book, e)
+		g.joinUp(fl)
 		// How much boundary each pair shares is a fact about this epoch and
 		// is taken afresh; how hard they have driven into each other is what
 		// welds, and that adds up over the whole history.
 		for i := range touch {
 			touch[i] = 0
 		}
-		w.tectonics(g, plates, book, e, arcGapOn(g, len(mids)), touch, weld, grain, bow)
+		w.tectonics(g, plates, cr, book, e, arcGapOn(g, standing(plates)), touch, weld, grain, bow)
 		// An age of weather between the ages of the earth. What was raised
 		// this epoch starts coming down in the next, and what comes off it is
 		// what fills the basins - which is where a finished map's sandstone
@@ -669,14 +691,11 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		g.wear(deepWeather)
 		g.meander(deepWeather)
 		g.keepBook(book, e)
-		plates, mids = w.reshape(g, plates, mids, touch, weld)
-		drift(plates, mids, through)
+		plates = w.reshape(g, plates, fl, touch, weld)
+		slow(plates, through)
 	}
 
 	g.base = -1
-	// The tiles still say who rode what before the last reshape, which may
-	// have taken a piece in; asked once more, a piece taken in is gone.
-	g.partition(plates, mids, fl)
 	g.settleRock(book, plates, epochs)
 	for k := 0; k < smoothing; k++ {
 		g.soften()
@@ -722,7 +741,7 @@ func (w *Land) molten(g *Grid) {
 // and each plate's rate put right until the plates hold the ground they were
 // drawn at, since where two floods meet depends on every other flood as well
 // as on those two.
-func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) ([]Plate, []middle) {
+func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 	n := plateTotal(g)
 	ocean := clamp01(oceanFloor + oceanPerSea*sea)
 	plates := make([]Plate, n, plateCap)
@@ -770,6 +789,7 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) ([]Plate, []middl
 			p.grow = math.Min(8, math.Max(0.05, p.grow))
 		}
 	}
+	g.partition(plates, mids, fl)
 	// A world has both kinds in it. Left to the draw, a valley - which asks
 	// for no sea and so for few ocean plates - came out on two seeds of five
 	// with nothing but continent, and a world with no floor anywhere has no
@@ -789,7 +809,7 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) ([]Plate, []middl
 	case land == 0:
 		plates[0].Ocean = false
 	}
-	return plates, mids
+	return plates
 }
 
 // spacing is how far apart two neighbouring middles stand on this world, in
@@ -1006,11 +1026,11 @@ func (w *Land) grain(g *Grid) []float64 {
 	return out
 }
 
-// drift moves every plate on by one epoch and slows it by how far the world
-// has cooled. A plate keeps its bearing: what changes is how fast it holds
-// it, so a boundary sweeps across the ground in one direction for the whole
-// history and the range it raises is longer than the epoch that raised it.
-func drift(plates []Plate, mids []middle, through float64) {
+// slow slows every plate by how far the world has cooled. A plate keeps its
+// bearing: what changes is how fast it holds it, so a plate goes on driving
+// into the same neighbour for the whole history and the range it raises is
+// longer than the epoch that raised it.
+func slow(plates []Plate, through float64) {
 	speed := driftFast + (driftSlow-driftFast)*through
 	for k := range plates {
 		p := &plates[k]
@@ -1018,19 +1038,297 @@ func drift(plates []Plate, mids []middle, through float64) {
 			p.DX, p.DY = p.DX/d*speed, p.DY/d*speed
 		}
 	}
-	// Every middle of a plate moves by the plate's own drift, so a welded
-	// continent travels as one thing and keeps the shape its parts gave it.
-	for i := range mids {
-		at := plates[rootOf(plates, mids[i].at)]
-		mids[i].X += at.DX
-		mids[i].Y += at.DY
+}
+
+// driftScale is how many tiles a plate moving at a speed of one travels in an
+// epoch on this world. The speeds are quoted on the default valley, whose
+// plates stand some two dozen tiles apart; a globe's stand five times that,
+// and a plate crossing a tile an epoch there went ten tiles in a whole
+// history - nothing opened, nothing closed, and a continent that rifted came
+// out of it still touching its other half. So a plate goes as far in plate
+// widths on any world, and how hard two of them meet is still read off the
+// speeds.
+func driftScale(g *Grid) float64 {
+	quoted := math.Sqrt(float64(DefaultWidth*DefaultHeight) / plateCount)
+	return math.Max(1, spacing(g, plateTotal(g))/quoted)
+}
+
+// crust is what the plates carry about with them from epoch to epoch beside
+// the tiles and the book: when each tile's crust was made, how much crust has
+// gone down at each place this epoch, and how far each plate is short of its
+// next whole tile. The rest is a move's working, kept so that an epoch does
+// not allocate a map's worth of it.
+type crust struct {
+	born []uint8
+	// fed is how many tiles of crust went down, or were crumpled up, at each
+	// place this epoch. It is what feeds the arcs and the ranges: see
+	// tectonics.
+	fed []float64
+	acc [plateCap][2]float64
+	// now is the epoch being moved, which is when any floor opened in it was
+	// made.
+	now uint8
+
+	plate, nplate []uint8
+	org, norg     []int32
+	fresh, nfresh []bool
+	nborn         []uint8
+	mark          []bool
+	ring, next    []int32
+	tiles         []Tile
+	book          []record
+}
+
+// noPlate is a tile no crust has come to yet.
+const noPlate = 255
+
+func newCrust(g *Grid) *crust {
+	n := len(g.Tiles)
+	return &crust{
+		born: make([]uint8, n), fed: make([]float64, n),
+		plate: make([]uint8, n), nplate: make([]uint8, n),
+		org: make([]int32, n), norg: make([]int32, n),
+		fresh: make([]bool, n), nfresh: make([]bool, n),
+		nborn: make([]uint8, n), mark: make([]bool, n),
+		tiles: make([]Tile, n), book: make([]record, n),
 	}
 }
 
-// partition says which plate each tile rides: whichever middle's flood got to
-// it first, and then whichever plate that middle has since welded itself into.
-// It is taken again every epoch, because the middles have moved and the
-// boundaries move with them.
+// move is an epoch of the plates carrying their ground: every tile goes with
+// its plate, and its height, its rock, what the book has on it and how old its
+// crust is go with it.
+//
+// A plate goes a whole tile at a time, when what it has travelled comes to
+// one, so that nothing is ever resampled or smeared. Where that puts two
+// crusts on one tile, one of them goes down: ocean floor under continent,
+// because it is the heavier, and between two of a kind the older, because old
+// crust is cold and cold crust is dense. Two continents do not really
+// subduct, but what one of them loses at the front of a collision is still
+// crust taken off the map and piled into the range, so it is counted the same
+// way. Where a plate pulls off a tile and nothing comes onto it, the floor
+// opens and new crust comes up: a ridge, made this epoch, and given to
+// whichever of the plates beside it holds most of the ground round it - which,
+// where two are pulling apart, is the nearer of them.
+func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int) {
+	scale := driftScale(g)
+	cr.now = uint8(epoch)
+	for i := range g.Tiles {
+		cr.plate[i], cr.org[i], cr.fresh[i] = g.Tiles[i].Plate, int32(i), false
+	}
+	for k := range plates {
+		if plates[k].into == uint8(k) {
+			cr.acc[k][0] += plates[k].DX * scale
+			cr.acc[k][1] += plates[k].DY * scale
+		}
+	}
+	var step [plateCap][2]int
+	for {
+		moving := false
+		for k := range plates {
+			step[k] = [2]int{}
+			if plates[k].into != uint8(k) {
+				continue
+			}
+			for a := 0; a < 2; a++ {
+				switch {
+				case cr.acc[k][a] >= 1:
+					step[k][a] = 1
+				case cr.acc[k][a] <= -1:
+					step[k][a] = -1
+				}
+				cr.acc[k][a] -= float64(step[k][a])
+			}
+			moving = moving || step[k] != [2]int{}
+		}
+		if !moving {
+			break
+		}
+		cr.shift(g, plates, &step)
+	}
+
+	copy(cr.tiles, g.Tiles)
+	copy(cr.book, book)
+	for j := range g.Tiles {
+		t := cr.tiles[cr.org[j]]
+		if cr.fresh[j] {
+			// New floor, with the soil of the tile beside it: basalt, dated
+			// from now, at the level ocean floor rides at. Set higher, as a
+			// ridge fresh from below really stands, every parting seam on a
+			// globe left a line of it above the sea, and the oceans came out
+			// drawn over with the outlines of where plates used to be.
+			t.Height = oceanFreeboard
+			t.Bedrock, t.Formed = Basalt, uint8(epoch)
+			book[j] = record{melt: 2 * madeEnough}
+		} else {
+			book[j] = cr.book[cr.org[j]]
+		}
+		t.Plate = cr.plate[j]
+		g.Tiles[j] = t
+	}
+	cr.tidy(g)
+}
+
+// tidy gives a tile to another plate where that plate holds nearly all the
+// ground round it. A plate going a tile at a time eats into what it runs over
+// a row at a time, and not every row goes at once, so a front of collision is
+// left with teeth a tile or two wide sticking out of it into the other plate,
+// and a seam raises a comb of ranges along them.
+func (cr *crust) tidy(g *Grid) {
+	for pass := 0; pass < tidyPasses; pass++ {
+		for i := range g.Tiles {
+			cr.nplate[i] = g.Tiles[i].Plate
+			var seen [8]uint8
+			var count [8]int
+			n := 0
+			g.eachNear(i, func(k int) {
+				p := g.Tiles[k].Plate
+				for m := 0; m < n; m++ {
+					if seen[m] == p {
+						count[m]++
+						return
+					}
+				}
+				seen[n], count[n] = p, 1
+				n++
+			})
+			for m := 0; m < n; m++ {
+				if seen[m] != g.Tiles[i].Plate && count[m] >= tidyMost {
+					cr.nplate[i] = seen[m]
+				}
+			}
+		}
+		for i := range g.Tiles {
+			g.Tiles[i].Plate = cr.nplate[i]
+		}
+	}
+}
+
+// sinks reports whether crust of plate p made in epoch bp goes down under
+// crust of plate q made in epoch bq. It is an order and not a judgement, so
+// that where three crusts come to one tile the answer does not depend on which
+// of them arrived first.
+func sinks(plates []Plate, p, bp, q, bq uint8) bool {
+	if plates[p].Ocean != plates[q].Ocean {
+		return plates[p].Ocean
+	}
+	if bp != bq {
+		return bp < bq
+	}
+	return p < q
+}
+
+// shift moves every plate that has a step one tile along it, all at once, and
+// settles what that does: crust meeting crust, and crust leaving a tile bare.
+func (cr *crust) shift(g *Grid, plates []Plate, step *[plateCap][2]int) {
+	for j := range cr.nplate {
+		cr.nplate[j] = noPlate
+	}
+	for i := range cr.plate {
+		j := i
+		if s := step[cr.plate[i]]; s != [2]int{} {
+			x, y := i%g.W+s[0], i/g.W+s[1]
+			if y < 0 || y >= g.H {
+				continue // carried off the map
+			}
+			if x < 0 || x >= g.W {
+				if !g.Wrap {
+					continue
+				}
+				x = g.WrapX(x)
+			}
+			j = y*g.W + x
+		}
+		if cr.nplate[j] != noPlate {
+			cr.fed[j]++
+			if sinks(plates, cr.plate[i], cr.born[i], cr.nplate[j], cr.nborn[j]) {
+				continue
+			}
+		}
+		cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i]
+	}
+	cr.openFloor(g)
+	cr.plate, cr.nplate = cr.nplate, cr.plate
+	cr.org, cr.norg = cr.norg, cr.org
+	cr.fresh, cr.nfresh = cr.nfresh, cr.fresh
+	cr.born, cr.nborn = cr.nborn, cr.born
+}
+
+// openFloor makes new crust on every tile a shift has left bare, from the
+// edges of the bare ground inwards a ring at a time: each tile goes to the
+// plate that holds most of the tiles round it and takes its soil from one of
+// them. A ring is decided whole before any of it is written, so that the order
+// the tiles are looked at in does not lean the new floor toward one side.
+func (cr *crust) openFloor(g *Grid) {
+	ring, next := cr.ring[:0], cr.next[:0]
+	for j := range cr.mark {
+		cr.mark[j] = false
+	}
+	for j := range cr.nplate {
+		if cr.nplate[j] != noPlate {
+			continue
+		}
+		g.eachNear(j, func(k int) {
+			if cr.nplate[k] != noPlate {
+				cr.mark[j] = true
+			}
+		})
+		if cr.mark[j] {
+			ring = append(ring, int32(j))
+		}
+	}
+	type pick struct {
+		plate uint8
+		from  int32
+	}
+	var picks []pick
+	for len(ring) > 0 {
+		picks = picks[:0]
+		for _, j := range ring {
+			var seen [8]uint8
+			var count [8]int
+			var from [8]int32
+			n := 0
+			g.eachNear(int(j), func(k int) {
+				p := cr.nplate[k]
+				if p == noPlate {
+					return
+				}
+				for m := 0; m < n; m++ {
+					if seen[m] == p {
+						count[m]++
+						return
+					}
+				}
+				seen[n], count[n], from[n] = p, 1, cr.norg[k]
+				n++
+			})
+			best := 0
+			for m := 1; m < n; m++ {
+				if count[m] > count[best] || (count[m] == count[best] && seen[m] < seen[best]) {
+					best = m
+				}
+			}
+			picks = append(picks, pick{seen[best], from[best]})
+		}
+		for r, j := range ring {
+			cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = picks[r].plate, picks[r].from, true, cr.now
+		}
+		next = next[:0]
+		for _, j := range ring {
+			g.eachNear(int(j), func(k int) {
+				if cr.nplate[k] == noPlate && !cr.mark[k] {
+					cr.mark[k] = true
+					next = append(next, int32(k))
+				}
+			})
+		}
+		ring, next = next, ring
+	}
+	cr.ring, cr.next = ring, next
+}
+
+// partition says which plate each tile rides when the crust first breaks:
+// whichever middle's flood got to it first.
 //
 // Every middle floods out across the map at once, each at its own plate's
 // rate, slowed by rough ground and by going across its plate's grain, and a
@@ -1040,10 +1338,15 @@ func drift(plates []Plate, mids []middle, through float64) {
 // in. Nearest-middle, which this replaced, is the same thing with every flood
 // at one speed over even ground, and that is a Voronoi diagram: convex rooms
 // of much the same size however the walls are bent.
-//
-// A welded plate floods from each of its middles at the rate of the plate
-// that middle came from, so it keeps the shape of the pieces that made it.
 func (g *Grid) partition(plates []Plate, mids []middle, fl *flooding) {
+	g.floodOver(plates, mids, fl, -1)
+	g.joinUp(fl)
+}
+
+// floodOver is the flooding partition does, over the whole map where within is
+// below nothing and over the tiles of plate within where it is not - which is
+// how a plate is rifted in two. See split.
+func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int) {
 	// What a step in each of the eight directions costs each middle, before
 	// the ground: the length of the step, slowed across the grain, over the
 	// plate's rate.
@@ -1120,7 +1423,7 @@ func (g *Grid) partition(plates []Plate, mids []middle, fl *flooding) {
 					qx = g.WrapX(qx)
 				}
 				j := int32(qy*g.W + qx)
-				if fl.done[j] {
+				if fl.done[j] || (within >= 0 && int(g.Tiles[j].Plate) != within) {
 					continue
 				}
 				nd := fl.dist[i] + step[k][d]*(fl.cost[i]+fl.cost[j])/2
@@ -1133,16 +1436,17 @@ func (g *Grid) partition(plates []Plate, mids []middle, fl *flooding) {
 		fl.queue[b] = fl.queue[b][:0]
 	}
 	for i := range g.Tiles {
-		g.Tiles[i].Plate = at[fl.from[i]]
+		if within < 0 || fl.done[i] {
+			g.Tiles[i].Plate = at[fl.from[i]]
+		}
 	}
-	g.joinUp(fl)
 }
 
-// joinUp makes every plate one piece. A flood is one piece, but a welded plate
-// is several floods, and the part one of them holds can be cut off from the
-// rest as other plates drift between them: left alone it is a disc of one
-// plate out in the middle of another. Every piece of a plate but its largest
-// goes to the plate it borders most.
+// joinUp makes every plate one piece. A flood is one piece, but a plate that
+// is carried about can be cut in two - a plate running into another along a
+// front can be eaten through where the front is narrow - and a piece left on
+// the far side is a scrap of one plate adrift in another. Every piece of a
+// plate but its largest goes to the plate it borders most.
 func (g *Grid) joinUp(fl *flooding) {
 	piece := fl.dist // the distances are spent; the space is reused for labels
 	for i := range piece {
@@ -1240,8 +1544,37 @@ func (g *Grid) eachNear(i int, f func(j int)) {
 // edge nothing happens at all, which is why the middle of a plate is the
 // oldest, flattest ground on a map and everything worth looking at is at the
 // seams.
-func (w *Land) tectonics(g *Grid, plates []Plate, book []record, epoch int, gap float64, touch, weld, grain, bow []float64) {
+func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain, bow []float64) {
 	n := len(g.Tiles)
+	// Where crust has gone down this epoch, spread a few tiles: it goes down on
+	// one side of a seam and the seam is on both, and a plate moves a whole
+	// tile at a time, so the tiles it went down on are a dotted line.
+	fed := cr.fed
+	for k := 0; k < feedBlur; k++ {
+		fed = g.spread(fed)
+	}
+	defer func() {
+		for i := range cr.fed {
+			cr.fed[i] = 0
+		}
+	}()
+	// And what that is worth as a closing. It is scaled so that over the
+	// seams that are closing it comes to what their closing does, which is
+	// the one reading of it that means the same on a valley and on a globe
+	// and in an epoch when the plates went five tiles as in one when they
+	// went none: the crust says where a meeting is fed, and the speeds say
+	// how hard meetings are.
+	var closed, sank float64
+	for i := range g.Tiles {
+		if worst, _, ok := g.meeting(plates, i); ok && worst > 0 {
+			closed += worst / driftFast
+			sank += fed[i]
+		}
+	}
+	gain := 0.0
+	if sank > 0 {
+		gain = closed / sank
+	}
 	if len(g.seam) != n {
 		g.seam = make([]seam, n)
 		g.seamQueue = make([]int32, 0, n)
@@ -1254,32 +1587,12 @@ func (w *Land) tectonics(g *Grid, plates []Plate, book []record, epoch int, gap 
 	// Where the plates actually touch, and what is happening there.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		mine := plates[t.Plate]
-		worst := 0.0
-		worstAt := t.Plate
-		var at *Plate
-		for _, off := range Dirs {
-			q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-			if g.Wrap {
-				q = g.Norm(q)
-			}
-			if !g.In(q) || g.At(q).Plate == t.Plate {
-				continue
-			}
-			other := &plates[g.At(q).Plate]
-			// How fast the two are closing along the line between them, as a
-			// share of a head-on meeting of one tile in an epoch.
-			d := math.Hypot(float64(off.X), float64(off.Y))
-			nx, ny := float64(off.X)/d, float64(off.Y)/d
-			closing := (mine.DX-other.DX)*nx + (mine.DY-other.DY)*ny
-			if math.Abs(closing) > math.Abs(worst) {
-				worst, at, worstAt = closing, other, g.At(q).Plate
-			}
-		}
-		if at == nil {
+		worst, worstAt, ok := g.meeting(plates, i)
+		if !ok {
 			continue
 		}
+		at := &plates[worstAt]
 		// What the two of them have done to each other, for the crust to be
 		// reshaped by afterwards: how much boundary they share at all, and -
 		// where both are continent - how hard they have been driving into
@@ -1293,7 +1606,18 @@ func (w *Land) tectonics(g *Grid, plates []Plate, book []record, epoch int, gap 
 		if !mine.Ocean && !at.Ocean && worst > 0 {
 			weld[int(a)*plateCap+int(b)] += worst / driftFast
 		}
-		lift, makes := liftOf(mine, *at, worst/driftFast)
+		closing := worst / driftFast
+		if worst > 0 && gain > 0 {
+			// Half of how hard a meeting works is how fast the two are
+			// closing, and half is how much crust has actually gone into it:
+			// the arc is fed by the floor going down under it and the range
+			// by the continent crumpled into it. The two agree over an age
+			// and not in an epoch - a plate goes a tile at a time - so the
+			// closing keeps a range rising steadily while the crust says
+			// where it is really being fed.
+			closing = (1-feedShare)*closing + feedShare*fed[i]*gain
+		}
+		lift, makes := liftOf(mine, *at, closing)
 		// An arc and a trench are the two halves of one plate going under
 		// another, and each belongs to its own side of it.
 		under := worst > 0 && mine.Ocean != at.Ocean
@@ -1448,9 +1772,9 @@ func (w *Land) tectonics(g *Grid, plates []Plate, book []record, epoch int, gap 
 // everything else should be asked of the plate they now are; then the pieces
 // too small to be plates, which welding has just made more of; then the ones
 // too large, which welding has also just made more of.
-func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []float64) ([]Plate, []middle) {
+func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []float64) []Plate {
 	stride := len(plates)
-	reach := spacing(g, len(mids))
+	reach := spacing(g, standing(plates))
 
 	area := make([]float64, plateCap)
 	for i := range g.Tiles {
@@ -1484,6 +1808,7 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 			plates[rb].into = ra
 			area[ra] += area[rb]
 			area[rb] = 0
+			g.welds++
 		}
 	}
 
@@ -1494,14 +1819,7 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 	// continent taken into ocean floor would sink a continent's worth of
 	// country to the floor's level in a few epochs, and floor taken into
 	// continent would raise an ocean.
-	//
-	// Its middles go with it. A middle floods at the rate of the plate it came
-	// from, so a microplate taken in and left flooding at a microplate's rate
-	// was a disc of its new plate, carried off into the middle of some other
-	// one as the two drifted apart. With the middles gone its ground is simply
-	// taken by the floods beside it.
 	floor := plateFloor * float64(len(g.Tiles))
-	dropped := make([]bool, plateCap)
 	for k := 0; k < stride; k++ {
 		r := rootOf(plates, uint8(k))
 		if int(r) != k || area[r] == 0 || standing(plates) <= crustFloor {
@@ -1510,13 +1828,11 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 		// A piece with only one neighbour is a hole in that neighbour, and it
 		// goes into it whatever either of them is made of: a plate is a piece
 		// of a world's skin with edges against several others, and a disc
-		// adrift in the middle of one is a plate the drift has carried away
-		// from every seam it had.
+		// adrift in the middle of one has lost every seam it had.
 		if into, alone := enclosedBy(plates, touch, r, stride); alone && area[r] < enclaveMost*float64(len(g.Tiles)) {
 			plates[r].into = into
 			area[into] += area[r]
 			area[r] = 0
-			dropped[r] = true
 			continue
 		}
 		if area[r] >= floor {
@@ -1542,20 +1858,16 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 		plates[r].into = best
 		area[best] += area[r]
 		area[r] = 0
-		dropped[r] = true
 	}
-	kept := mids[:0]
-	for _, m := range mids {
-		if !droppedFrom(plates, dropped, m.at) {
-			kept = append(kept, m)
-		}
+	// A plate is its tiles, so what has gone into another now rides it.
+	for i := range g.Tiles {
+		g.Tiles[i].Plate = rootOf(plates, g.Tiles[i].Plate)
 	}
-	mids = kept
 
 	// Pieces too large. A continent that has swallowed its neighbours has no
-	// edges left inside it and nothing happening on it, so it rifts: a new
-	// middle is set down in it, moving away from the one it came from, and
-	// the parting drops a valley between the two that the sea will find. It
+	// edges left inside it and nothing happening on it, so it rifts: it is
+	// split in two along a ragged line across it, and the new half drives away
+	// from the old, so the floor opens between them and the sea finds it. It
 	// is also the only handle left on how much of a world is continent, so
 	// which kind the new piece is answers for that where the world has drifted
 	// too far from landShare, and follows its parent where it has not.
@@ -1572,10 +1884,6 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 		if int(r) != k || area[r] <= ceiling || len(plates) >= plateCap {
 			continue
 		}
-		at, found := w.inside(g, uint8(k))
-		if !found {
-			continue
-		}
 		kind := plates[r].Ocean
 		switch {
 		case share > landShare+landSlack:
@@ -1583,45 +1891,122 @@ func (w *Land) reshape(g *Grid, plates []Plate, mids []middle, touch, weld []flo
 		case share < landShare-landSlack:
 			kind = false
 		}
-		// Away from the middle it is splitting from, so the two part rather
-		// than shear: a rift is a plate pulling itself in two.
-		// It floods faster than any middle of what it is splitting from, so
-		// the two halves of a rift are halves and not a plate and a
-		// microplate: a welded plate floods from every middle it took in, and
-		// a new one at the parent's own rate came out a disc inside it.
-		fastest := 0.0
-		for _, m := range mids {
-			if rootOf(plates, m.at) == r {
-				fastest = math.Max(fastest, plates[m.at].grow)
-			}
+		to := uint8(len(plates))
+		plates = append(plates, Plate{Ocean: kind, into: to, grow: plates[r].grow})
+		w.lean(&plates[to])
+		ux, uy, ok := w.split(g, fl, plates, r, to)
+		if !ok {
+			plates = plates[:to]
+			continue
 		}
-		a := 2 * math.Pi * w.RNG.Float64()
-		plates = append(plates, Plate{
-			DX:    plates[r].DX + driftFast*math.Cos(a),
-			DY:    plates[r].DY + driftFast*math.Sin(a),
-			Ocean: kind,
-			into:  uint8(len(plates)),
-			grow:  riftGrow * fastest,
-		})
-		w.lean(&plates[len(plates)-1])
-		mids = append(mids, middle{X: at.X, Y: at.Y, at: uint8(len(plates) - 1)})
+		plates[to].DX = plates[r].DX + driftFast*ux
+		plates[to].DY = plates[r].DY + driftFast*uy
 		area[r] /= 2
 	}
-	return plates, mids
+
+	// And small pieces breaking off. Nothing above makes a plate smaller than
+	// half of one too large, while welding and taking in slivers take small
+	// plates away every epoch; so a world that started with a tail of small
+	// plates lost it in a few ages, and ended as ten plates of much the same
+	// size. On the earth small plates are made all the time, and made where
+	// plates are going down under each other - the bending of the slab at a
+	// trench breaks pieces off the plate above it (Mallard et al. 2016). So
+	// while a world has fewer plates than it broke into, a piece breaks off
+	// the edge of a plate where another is closing on it.
+	if standing(plates) < plateTotal(g) && len(plates) < plateCap {
+		plates = w.breakOff(g, fl, plates, area)
+	}
+	return plates
 }
 
-// droppedFrom reports whether a plate, or any plate it has since gone into,
-// was taken in with its middles dropped.
-func droppedFrom(plates []Plate, dropped []bool, k uint8) bool {
-	for {
-		if dropped[k] {
-			return true
+// breakOff breaks a small plate off the edge of a larger one, at a place on
+// its edge where the plate beside it is closing: a flood from that place at a
+// slow rate and one from deep in the plate at its own rate, over the plate's
+// ground, and what the slow one takes is the new plate. How slow is drawn off
+// the same tail the first lesser plates were: a flood that fraction as fast
+// as the other, a distance off, takes a disc about that fraction of the
+// distance across.
+func (w *Land) breakOff(g *Grid, fl *flooding, plates []Plate, area []float64) []Plate {
+	n := float64(len(g.Tiles))
+	var edge []int32
+	for _, i := range g.closingSeams(plates) {
+		if area[g.Tiles[i].Plate] >= breakFrom*n {
+			edge = append(edge, i)
 		}
-		if plates[k].into == k {
-			return false
-		}
-		k = plates[k].into
 	}
+	if len(edge) == 0 {
+		return plates
+	}
+	at := int(edge[w.RNG.IntN(len(edge))])
+	of := g.Tiles[at].Plate
+	// The far side of the plate from where it breaks.
+	far, deep := -1, -1.0
+	for i := 0; i < len(g.Tiles); i += 3 {
+		if g.Tiles[i].Plate != of {
+			continue
+		}
+		dx := float64(i%g.W - at%g.W)
+		if g.Wrap {
+			dx = math.Abs(dx)
+			dx = math.Min(dx, float64(g.W)-dx)
+		}
+		dy := float64(i/g.W - at/g.W)
+		if d := dx*dx + dy*dy; d > deep {
+			far, deep = i, d
+		}
+	}
+	if far < 0 || deep <= 0 {
+		return plates
+	}
+	share := plateLeast * math.Min(minorRange, math.Pow(1-w.RNG.Float64(), -1/minorTail))
+	across := math.Sqrt(share * n / math.Pi)
+	to := uint8(len(plates))
+	a := 2 * math.Pi * w.RNG.Float64()
+	parent := plates[of]
+	plates = append(plates, Plate{
+		DX:    parent.DX + driftFast*math.Cos(a),
+		DY:    parent.DY + driftFast*math.Sin(a),
+		Ocean: parent.Ocean,
+		into:  to,
+		grow:  parent.grow * math.Min(0.9, across/math.Sqrt(deep)),
+	})
+	// Drawn out along the seam and not round: the flood goes slowly toward the
+	// middle of the plate and quickly along its edge, so what breaks off is a
+	// strip of the margin, which is the shape a piece broken off the edge of a
+	// trench is. A round one was a disc bitten out of the coast.
+	ax, ay := float64(far%g.W-at%g.W), float64(far/g.W-at/g.W)
+	if g.Wrap && math.Abs(ax) > float64(g.W)/2 {
+		ax -= math.Copysign(float64(g.W), ax)
+	}
+	d := math.Max(1e-9, math.Hypot(ax, ay))
+	plates[to].leanX, plates[to].leanY, plates[to].stretch = -ay/d, ax/d, breakStretch
+	seeds := []middle{
+		{X: float64(far%g.W) + 0.5, Y: float64(far/g.W) + 0.5, at: of},
+		{X: float64(at%g.W) + 0.5, Y: float64(at/g.W) + 0.5, at: to},
+	}
+	// Where the two floods meet depends on the shape of the plate and the
+	// ground it is on as well as on the rates, so the piece is measured, and
+	// put back and broken again faster, until it is near what it was drawn at.
+	want := share * n
+	for try := 0; ; try++ {
+		g.floodOver(plates, seeds, fl, int(of))
+		got := 0.0
+		for i := range g.Tiles {
+			if g.Tiles[i].Plate == to {
+				got++
+			}
+		}
+		if got >= want/2 || try == breakTries {
+			break
+		}
+		for i := range g.Tiles {
+			if g.Tiles[i].Plate == to {
+				g.Tiles[i].Plate = of
+			}
+		}
+		plates[to].grow *= math.Min(2, math.Sqrt(want/math.Max(1, got)))
+	}
+	return plates
 }
 
 // enclosedBy is the one plate r touches, if it touches only one.
@@ -1646,47 +2031,54 @@ func enclosedBy(plates []Plate, touch []float64, r uint8, stride int) (uint8, bo
 	return only, n == 1
 }
 
-// inside is a point well within a plate's own ground, which is where a rift
-// opens: the tile of it furthest from any other plate, looked for over a
-// sample of its tiles rather than all of them, because this is asked of a map
-// with half a million of them and any tile deep in the middle will do.
-func (w *Land) inside(g *Grid, of uint8) (middle, bool) {
-	best, found := middle{}, false
-	far := -1.0
-	// Capped so the walk is bounded, and by the size of a plate on this
-	// world: capped at a valley's depth, every tile of a great plate on a
-	// globe was as deep as every other and the rift opened at its corner.
-	deep := max(24, int(spacing(g, plateTotal(g))/2))
-	for i := 0; i < len(g.Tiles); i += 7 {
+// split rifts plate of in two, giving the part of it on one side to plate to,
+// and says which way that part lies from the rest. A line is drawn across the
+// plate at random, the tiles of it furthest along that line either way are
+// flooded from at the same rate over the plate's own ground, and whatever the
+// far flood reaches first is the new plate - so the rift is ragged, and the
+// two halves are near enough halves.
+func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, uy float64, ok bool) {
+	a := 2 * math.Pi * w.RNG.Float64()
+	ux, uy = math.Cos(a), math.Sin(a)
+	first, lo, hi := -1, -1, -1
+	low, high := math.Inf(1), math.Inf(-1)
+	for i := 0; i < len(g.Tiles); i += 3 {
 		if g.Tiles[i].Plate != of {
 			continue
 		}
-		// How deep in it is, measured cheaply: how far to the nearest tile of
-		// another plate along the two axes, capped so the walk is bounded.
-		d := 0
-		for ; d < deep; d++ {
-			p := g.PosOf(i)
-			out := false
-			for _, off := range []geom.Pos{{X: d, Y: 0}, {X: -d, Y: 0}, {X: 0, Y: d}, {X: 0, Y: -d}} {
-				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-				if g.Wrap {
-					q = g.Norm(q)
-				}
-				if !g.In(q) || g.At(q).Plate != of {
-					out = true
-					break
-				}
-			}
-			if out {
-				break
+		if first < 0 {
+			first = i
+		}
+		// Measured from one tile of the plate, the short way round a globe.
+		dx := float64(i%g.W - first%g.W)
+		if g.Wrap {
+			if dx > float64(g.W)/2 {
+				dx -= float64(g.W)
+			} else if dx < -float64(g.W)/2 {
+				dx += float64(g.W)
 			}
 		}
-		if float64(d) > far {
-			far, found = float64(d), true
-			best = middle{X: float64(i % g.W), Y: float64(i / g.W)}
+		along := dx*ux + float64(i/g.W-first/g.W)*uy
+		if along < low {
+			low, lo = along, i
+		}
+		if along > high {
+			high, hi = along, i
 		}
 	}
-	return best, found
+	if first < 0 || lo == hi {
+		return 0, 0, false
+	}
+	seeds := []middle{
+		{X: float64(lo%g.W) + 0.5, Y: float64(lo/g.W) + 0.5, at: of},
+		{X: float64(hi%g.W) + 0.5, Y: float64(hi/g.W) + 0.5, at: to},
+	}
+	// The new plate floods at its parent's rate and along its parent's grain,
+	// so neither half is favoured.
+	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
+		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
+	g.floodOver(plates, seeds, fl, int(of))
+	return ux, uy, true
 }
 
 // axisOf is how far from the seam a meeting's fire is: under the arc, where
@@ -1713,6 +2105,39 @@ func reachOf(m made, gap float64) float64 {
 // less. See arcGap.
 func arcGapOn(g *Grid, mids int) float64 {
 	return math.Min(arcGap, spacing(g, mids)/4)
+}
+
+// meeting is the hardest thing happening at tile i's edges: how fast it and
+// the neighbour closing on it or parting from it fastest are closing, as a
+// share of a head-on meeting of one tile an epoch, and which plate that
+// neighbour rides. It is not ok where nothing is closing or parting at all.
+func (g *Grid) meeting(plates []Plate, i int) (worst float64, with uint8, ok bool) {
+	here := g.Tiles[i].Plate
+	mine := plates[here]
+	x, y := i%g.W, i/g.W
+	for _, off := range Dirs {
+		qx, qy := x+off.X, y+off.Y
+		if qy < 0 || qy >= g.H {
+			continue
+		}
+		if qx < 0 || qx >= g.W {
+			if !g.Wrap {
+				continue
+			}
+			qx = g.WrapX(qx)
+		}
+		k := g.Tiles[qy*g.W+qx].Plate
+		if k == here {
+			continue
+		}
+		other := plates[k]
+		d := math.Hypot(float64(off.X), float64(off.Y))
+		closing := ((mine.DX-other.DX)*float64(off.X) + (mine.DY-other.DY)*float64(off.Y)) / d
+		if math.Abs(closing) > math.Abs(worst) {
+			worst, with, ok = closing, k, true
+		}
+	}
+	return worst, with, ok
 }
 
 // profile is the shape of a belt across itself, in [0,1]: where the high
@@ -1761,7 +2186,7 @@ func liftOf(mine, other Plate, closing float64) (float64, made) {
 // hotspot is melt coming up in the middle of a plate rather than at its edge,
 // and it is what puts a volcano where nothing is colliding. Where they are is
 // drawn once for a world and does not move, so the same places go on erupting
-// age after age.
+// age after age under whatever crust is passing over them.
 func (w *Land) hotspot(g *Grid, book []record) {
 	if g.hot == nil {
 		// Two of them on a valley, and as many again for every valley's width
