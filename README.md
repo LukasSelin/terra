@@ -78,6 +78,8 @@ makes a world and writes `overview/index.html`: its terrain, height,
 drainage, bedrock, plates, rock age, soil, temperature and woods, one map
 each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
 `-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale` and `-out` override it.
+`-max` makes the world as big as the free memory allows, in the shape the
+preset or `-w` and `-h` give it.
 
 ## Where it came from
 

@@ -90,6 +90,47 @@ func (t Terms) fits() error {
 	return nil
 }
 
+// Largest is these terms made as big as the memory there is will take: the
+// same shape of ground - Width to Height in the proportion asked for, a
+// globe still a whole number of chunks round - with as many tiles as making
+// it can have, bigger or smaller than asked. It keeps an eighth of the
+// memory back for whatever the program holds besides the land. Terms with
+// no size are read as the default valley's proportions.
+//
+// It fails if the memory there is cannot be read - on a system where free
+// memory is not known and no memory limit is set - or if not even the
+// smallest world of this shape would fit, which wraps ErrTooBig.
+func (t Terms) Largest() (Terms, error) {
+	if t.Width <= 0 || t.Height <= 0 {
+		t.Width, t.Height = DefaultWidth, DefaultHeight
+	}
+	budget, ok := uint64(0), false
+	if limit := debug.SetMemoryLimit(-1); limit != math.MaxInt64 {
+		budget, ok = uint64(limit), true
+	}
+	if free, known := freeMemory(); known && (!ok || free < budget) {
+		budget, ok = free, true
+	}
+	if !ok {
+		return t, errors.New("terra: cannot tell how much memory there is: set GOMEMLIMIT")
+	}
+	budget -= budget / 8
+
+	per := t.Bytes() / (uint64(t.Width) * uint64(t.Height))
+	tiles := min(float64(budget/per), math.MaxInt32)
+	ratio := float64(t.Width) / float64(t.Height)
+	w := int(math.Sqrt(tiles * ratio))
+	if t.Wrap {
+		w -= w % ChunkSide
+	}
+	h := min(int(float64(w)/ratio), int(tiles)/max(w, 1))
+	if w < 1 || h < 1 || (t.Wrap && w < ChunkSide) {
+		return t, fmt.Errorf("%w: not even the smallest world of this shape fits in %s", ErrTooBig, size(budget))
+	}
+	t.Width, t.Height = w, h
+	return t, nil
+}
+
 // size is a count of bytes as somebody would say it.
 func size(b uint64) string {
 	const unit = 1024
