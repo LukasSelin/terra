@@ -281,8 +281,11 @@ func (g *Grid) costsTo(to int32, laden bool, dist []float64, heap []routeNode) [
 				continue
 			}
 			v := int32(vy*g.W + vx)
-			// v is stepping into u.
-			if laden && uDeep && !g.Tiles[v].Deep() {
+			// v is stepping into u. A walker on a flat may be standing in the
+			// day's tide, and one in the water may step on into the water, so
+			// the tables - which have to be good for every day - let a flat
+			// step into the water as the sea itself does. See shore.go.
+			if vt := &g.Tiles[v]; laden && uDeep && !vt.Deep() && !(vt.Terrain == Flat && vt.Mark == None) {
 				continue
 			}
 			c := dist[u] + tableStep(g, v, u)

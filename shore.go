@@ -391,6 +391,12 @@ func (g *Grid) covered(i int, t *Tile) bool {
 	return t.Terrain == Flat && t.Mark == None && len(g.ebb) == len(g.Tiles) && float64(g.ebb[i]) >= g.tide.High
 }
 
+// shut is Shut by index, for the search.
+func (g *Grid) shut(i int) bool {
+	t := &g.Tiles[i]
+	return t.Deep() || g.covered(i, t)
+}
+
 // Shut reports whether a laden walker is kept off p today: open water, or a
 // flat the day's tide covers. See Tile.Deep, which is the same question asked
 // of the water alone, without the day.
