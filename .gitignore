@@ -1,1 +1,3 @@
 /overview/
+*.test.exe
+*.test
