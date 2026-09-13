@@ -56,9 +56,9 @@ const (
 	omega = 7.2921e-5
 	// airDensity is the density of the air near the ground, kg a cubic metre.
 	airDensity = 1.2
-	// airReach is how many kilometres across an air cell would be. A globe's
-	// cells are the power of two in tiles nearest it; a valley, whose tiles
-	// are a kilometre, reads the air tile by tile.
+	// airReach is how many kilometres across an air cell would be. A map's
+	// cells are the largest power of two in tiles that keeps under it, and
+	// keeps airLeast cells either way.
 	airReach = 80.0
 )
 
@@ -229,14 +229,18 @@ type airEnv struct {
 // airCell is how many tiles a side the air cells over g are.
 func airCell(g *Grid, a *Air) int {
 	cell := 1
-	if !g.Wrap {
-		return cell
-	}
-	for float64(2*cell)*a.dy <= airReach*1.2 && g.W%(2*cell) == 0 && g.H%(2*cell) == 0 {
+	for float64(2*cell)*a.dy <= airReach*1.2 && g.W%(2*cell) == 0 && g.H%(2*cell) == 0 &&
+		g.W/(2*cell) >= airLeast && g.H/(2*cell) >= airLeast {
 		cell *= 2
 	}
 	return cell
 }
+
+// airLeast is how few cells a map may be read on either way. A valley is a
+// couple of kilometres of ground to a cell rather than the eighty airReach
+// asks for, because a valley is not eighty kilometres across; what it must
+// not be is so few cells that the ground has nothing to say to the wind.
+const airLeast = 16
 
 // newAirEnv reads the ground of g as the air sees it.
 func newAirEnv(g *Grid) *airEnv {
@@ -260,7 +264,7 @@ func newAirEnv(g *Grid) *airEnv {
 			// A valley is one latitude's weather, but the planet under it
 			// is still round: the pressure the belts lay down still falls
 			// across it from south to north, or the air would not move.
-			lat = Temperate - (float64(cy)+0.5-float64(e.h)/2)*e.dy/111195
+			lat -= (float64(cy) + 0.5 - float64(e.h)/2) * e.dy / 111195
 		}
 		e.lat[cy], e.mean[cy] = lat, mean
 		e.dx[cy] = dx * 1000 * k
@@ -524,10 +528,29 @@ func windsFor(g *Grid) *Winds {
 	if n >= spreadTiles {
 		workers = WorkersFor(phases)
 	}
-	InParallel(phases, workers, func(k, _ int) {
+	// The two equinoxes are the same day to the air, so the autumn's is the
+	// spring's.
+	InParallel(phases-1, workers, func(k, _ int) {
 		e.solve(phaseSin[k], nil, nil, w.u[k], w.v[k], w.p[k])
 	})
+	copy(w.u[3], w.u[1])
+	copy(w.v[3], w.v[1])
+	copy(w.p[3], w.p[1])
 	return w
+}
+
+// airTemp is the temperature of the air at sea level over each cell in an
+// ordinary year, sinT of the way into the north's summer.
+func (e *airEnv) airTemp(sinT float64) []float64 {
+	temp := make([]float64, e.w*e.h)
+	for cy := 0; cy < e.h; cy++ {
+		swing := e.hemi[cy] * Swing * sinT
+		for cx := 0; cx < e.w; cx++ {
+			i := cy*e.w + cx
+			temp[i] = e.mean[cy] + swing*(swingSea+(swingLand-swingSea)*e.cont[i])
+		}
+	}
+	return temp
 }
 
 // solve works out the wind over the cells with the year sinT of the way into
@@ -539,15 +562,10 @@ func (e *airEnv) solve(sinT float64, extra, warm []float64, u, v, p []float32) {
 
 	// The warmth of the air at sea level, and the pressure it and the belts
 	// make between them.
-	temp := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		swing := e.hemi[cy] * Swing * sinT
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			temp[i] = e.mean[cy] + swing*(swingSea+(swingLand-swingSea)*e.cont[i])
-			if warm != nil {
-				temp[i] += warm[i] * warmGain / thermalGain
-			}
+	temp := e.airTemp(sinT)
+	if warm != nil {
+		for i := range temp {
+			temp[i] += warm[i] * warmGain / thermalGain
 		}
 	}
 	temp = e.blur(e.blur(temp, synopticReach), synopticReach)
