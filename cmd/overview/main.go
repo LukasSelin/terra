@@ -7,6 +7,7 @@
 //	go run ./cmd/overview -preset ancient      the valley, made from its history
 //	go run ./cmd/overview -preset globe -scale 1
 //	go run ./cmd/overview -seed 7 -w 256 -h 128 -epochs 16 -sea 0.3
+//	go run ./cmd/overview -preset globe -max    the biggest globe memory allows
 //
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
@@ -31,15 +32,16 @@ import (
 
 func main() {
 	var (
-		seed   = flag.Uint64("seed", 1, "the seed the world is made from")
-		preset = flag.String("preset", "valley", "valley, ancient or globe")
-		w      = flag.Int("w", 0, "width in tiles (overrides the preset)")
-		h      = flag.Int("h", 0, "height in tiles (overrides the preset)")
-		epochs = flag.Int("epochs", -1, "ages of history to run (overrides the preset)")
-		sea    = flag.Float64("sea", -1, "share of the ground under the sea (overrides the preset)")
-		wrap   = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
-		scale  = flag.Int("scale", 0, "pixels per tile (0 picks one)")
-		out    = flag.String("out", "overview", "directory to write into")
+		seed    = flag.Uint64("seed", 1, "the seed the world is made from")
+		preset  = flag.String("preset", "valley", "valley, ancient or globe")
+		w       = flag.Int("w", 0, "width in tiles (overrides the preset)")
+		h       = flag.Int("h", 0, "height in tiles (overrides the preset)")
+		epochs  = flag.Int("epochs", -1, "ages of history to run (overrides the preset)")
+		sea     = flag.Float64("sea", -1, "share of the ground under the sea (overrides the preset)")
+		wrap    = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
+		scale   = flag.Int("scale", 0, "pixels per tile (0 picks one)")
+		out     = flag.String("out", "overview", "directory to write into")
+		biggest = flag.Bool("max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
 	)
 	flag.Parse()
 
@@ -69,13 +71,19 @@ func main() {
 	if *wrap {
 		t.Wrap = true
 	}
-	if t.Wrap && t.Width%terra.ChunkSide != 0 {
-		fail(fmt.Errorf("a globe must be a whole number of chunks round: width %d is not a multiple of %d", t.Width, terra.ChunkSide))
+	if *biggest {
+		var err error
+		if t, err = t.Largest(); err != nil {
+			fail(err)
+		}
 	}
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Wrap)
 	start := time.Now()
-	land := terra.NewLand(*seed, t)
+	land, err := terra.MakeLand(*seed, t)
+	if err != nil {
+		fail(err)
+	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
 
