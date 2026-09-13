@@ -97,10 +97,13 @@ func main() {
 	}
 	g := land.Grid
 	stats := measure(land)
+	cls := classify(land)
+	stats.Biomes = legendOf(cls.Biome, biomeClasses, biomeOf)
+	stats.Forms = legendOf(cls.Form, formClasses, formOf)
 	stats.print()
 
 	var layers []layer
-	for _, l := range drawings(land, stats) {
+	for _, l := range drawings(land, stats, cls) {
 		img := render(g, px, l.color)
 		name := l.file + ".png"
 		if err := writePNG(filepath.Join(*out, name), img); err != nil {
@@ -152,6 +155,7 @@ type summary struct {
 	RangeP50, RangeP90, RangeMax    float64
 	Flats                           share
 	AgeMax                          int
+	Biomes, Forms                   []share
 }
 
 type share struct {
@@ -251,6 +255,14 @@ func (s summary) print() {
 	for _, x := range s.Bedrock {
 		fmt.Printf("  %-9s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
+	fmt.Println("\nbiome:")
+	for _, x := range s.Biomes {
+		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
+	}
+	fmt.Println("\nlandform:")
+	for _, x := range s.Forms {
+		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
+	}
 	fmt.Printf("\nfrozen ground %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
 	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
 	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
@@ -297,7 +309,7 @@ var rockColor = [terra.BedrockCount]color.RGBA{
 	terra.Schist:    {130, 170, 150, 255},
 }
 
-func drawings(land *terra.Land, s summary) []drawing {
+func drawings(land *terra.Land, s summary, cls classes) []drawing {
 	g := land.Grid
 	wet := color.RGBA{40, 70, 110, 255}
 	span := math.Max(s.HeightMax-s.HeightMin, 1)
@@ -326,6 +338,37 @@ func drawings(land *terra.Land, s summary) []drawing {
 				c := terrainColor[t.Terrain]
 				if t.Terrain == terra.Water && t.Flow > riverFlow {
 					c = color.RGBA{80, 150, 220, 255}
+				}
+				if t.Wet() {
+					return c
+				}
+				return scaleRGB(c, shade(p))
+			},
+		},
+		{
+			file: "biome", title: "Biome", legend: s.Biomes,
+			about: "What the weather makes of each tile: the year's mean temperature at its latitude and height against the rain on it, with Köppen's line between desert, steppe and forest. Low ground by a river is wetland, standing woods are drawn a little darker, and the sea is shallow within reach of land.",
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				c := biomeOf(cls.Biome[i]).col
+				if k := cls.Biome[i]; k == cShelf || k == cDeep {
+					return cls.seaColor(i)
+				}
+				if t.Wet() {
+					return c
+				}
+				if t.Terrain == terra.Forest {
+					c = scaleRGB(c, 0.85)
+				}
+				return scaleRGB(c, shade(p))
+			},
+		},
+		{
+			file: "landform", title: "Landform", legend: s.Forms,
+			about: "What the ground makes of each tile, read off the country round it: peaks stand above their neighbours and valleys below them, mountains and plateaus are the highest ground, rough or flat, hills the rough or steep ground below that, and a coast or a cliff is ground beside the sea.",
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				c := formOf(cls.Form[i]).col
+				if k := cls.Form[i]; k == cShelf || k == cDeep {
+					return cls.seaColor(i)
 				}
 				if t.Wet() {
 					return c

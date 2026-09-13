@@ -80,7 +80,7 @@ the vector arithmetic to the tile-by-tile statement of it.
 go run ./cmd/overview -preset globe -seed 3
 ```
 
-makes a world and writes `overview/index.html`: its terrain, height,
+makes a world and writes `overview/index.html`: its terrain, biomes, landforms, height,
 drainage, rain, runoff, tides, bedrock, plates, rock age, soil, temperature and woods, one map
 each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
 `-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale` and `-out` override it.

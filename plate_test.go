@@ -79,9 +79,63 @@ func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 	}
 }
 
+// The pieces are not all one size. The earth's plates run from a fifth of the
+// world down through a long tail of small ones, and a world of middles set
+// down evenly and each given the ground nearest it is a world of equal rooms:
+// its largest plate is not two of its middling ones.
+func TestPlatesAreNotAllOneSize(t *testing.T) {
+	for _, seed := range []uint64{1, 2, 3} {
+		g := plateWorld(seed)
+		var sizes []float64
+		for _, tiles := range pieces(g) {
+			sizes = append(sizes, float64(tiles))
+		}
+		largest := quantile(sizes, 1)
+		if got := largest / quantile(sizes, 0.5); got < 2.5 {
+			t.Errorf("seed %d: the largest plate is %.1f times the middling one; "+
+				"a world with great plates and small ones is several times that", seed, got)
+		}
+	}
+}
+
+// And every piece is one piece. A welded plate is grown from several middles,
+// and the part one of them holds can be cut off from the rest; left so, it is
+// a disc of one plate adrift inside another.
+func TestEveryPlateIsOnePiece(t *testing.T) {
+	for _, seed := range []uint64{1, 2, 3} {
+		g := plateWorld(seed)
+		seen := make([]bool, len(g.Tiles))
+		parts := map[uint8]int{}
+		for s := range g.Tiles {
+			if seen[s] {
+				continue
+			}
+			of := g.Tiles[s].Plate
+			parts[of]++
+			seen[s] = true
+			stack := []int{s}
+			for len(stack) > 0 {
+				i := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				g.eachNear(i, func(j int) {
+					if !seen[j] && g.Tiles[j].Plate == of {
+						seen[j] = true
+						stack = append(stack, j)
+					}
+				})
+			}
+		}
+		for at, n := range parts {
+			if n > 1 {
+				t.Errorf("seed %d: plate %d is in %d pieces", seed, at, n)
+			}
+		}
+	}
+}
+
 // The boundaries are not the straight lines a nearest-middle partition draws.
 // A Voronoi cell is convex, and a convex region is about as tight round its
-// own area as a region can be; a warped one wanders, reaches round its
+// own area as a region can be; a grown one wanders, reaches round its
 // neighbours and leaves bays in itself, and the way to say so in a number is
 // how much edge it needs to hold the ground it holds.
 //
