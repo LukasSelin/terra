@@ -597,11 +597,15 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		// this epoch starts coming down in the next, and what comes off it is
 		// what fills the basins - which is where a finished map's sandstone
 		// and shale come from.
-		g.wear(deepWeather)
-		g.meander(deepWeather)
+		// The water is worked out on the ground the plates have just moved
+		// before it is asked to cut it: the cutting walks from each tile to
+		// the one its water goes to, and ground with hollows in it has tiles
+		// whose water goes nowhere.
 		g.fill()
 		g.base = g.historyBase()
 		g.drain()
+		g.wear(deepWeather)
+		g.meander(deepWeather)
 		g.keepBook(book, e)
 		plates, mids = w.reshape(g, plates, mids, touch, weld)
 		drift(plates, mids, through)

@@ -189,6 +189,9 @@ type Grid struct {
 	// the whole map runs off, in cubic metres a second. Both are drain's.
 	area  []float64
 	water float64
+	// exported is what the last age of weather carried off the land into the
+	// sea or off the edge of the map, grain by grain, in metres over a tile.
+	exported [Grains]float64
 
 	// regions is which laden-walkable ground each tile is part of, and
 	// regionsStale whether the water has moved since it was worked out.
