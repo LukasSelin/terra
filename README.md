@@ -68,6 +68,17 @@ GOEXPERIMENT=simd go test ./...
 What a world does is the same either way, to the last bit, and a test holds
 the vector arithmetic to the tile-by-tile statement of it.
 
+## Looking at one
+
+```bash
+go run ./cmd/overview -preset globe -seed 3
+```
+
+makes a world and writes `overview/index.html`: its terrain, height,
+drainage, bedrock, plates, rock age, soil, temperature and woods, one map
+each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
+`-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale` and `-out` override it.
+
 ## Where it came from
 
 It was the world half of [lreat](https://github.com/LukasSelin/lreat), a
