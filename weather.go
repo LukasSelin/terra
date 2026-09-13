@@ -184,6 +184,7 @@ func (g *Grid) weather() {
 		g.runoff = make([]float64, len(g.Tiles))
 	}
 	a := g.air
+	g.winds = windsFor(g)
 	g.EachRow(func(y int) {
 		row := y * g.W
 		step, first := 1, 0

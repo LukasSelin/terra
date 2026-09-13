@@ -109,6 +109,9 @@ func main() {
 	var layers []layer
 	for _, l := range drawings(land, stats, cls) {
 		img := render(g, px, l.color)
+		if l.overlay != nil {
+			l.overlay(img, px)
+		}
 		name := l.file + ".png"
 		if err := writePNG(filepath.Join(*out, name), img); err != nil {
 			fail(err)
@@ -295,6 +298,9 @@ type drawing struct {
 	file, title, about string
 	legend             []share
 	color              func(i int, p geom.Pos, t *terra.Tile) color.RGBA
+	// overlay, where there is one, draws over the tiles once they are
+	// coloured, px pixels to a tile.
+	overlay func(img *image.RGBA, px int)
 }
 
 type layer struct {
@@ -326,6 +332,8 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 	wet := color.RGBA{40, 70, 110, 255}
 	span := math.Max(s.HeightMax-s.HeightMin, 1)
 	flowLog := math.Log10(math.Max(s.FlowMax, 1e-9))
+
+	mean := windOf(g, -1)
 
 	shade := func(p geom.Pos) float64 {
 		// light from the north-west, off the height difference across the tile
@@ -421,6 +429,20 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				return scaleRGB(c, shade(p))
 			},
 		},
+		{
+			file: "wind", title: "Wind",
+			about: fmt.Sprintf("The year's mean wind near the ground, hue for the way it blows - east red, north yellow-green, west cyan, south violet - and brightness for how hard, full at %.0f m/s. Worked out from the pressure the planet's belts and the warmth of the land and sea lay down, the turning of the planet, the drag of the ground and the ranges in the way.", speedMost),
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				c := windColor(mean.u[i], mean.v[i])
+				if t.Wet() {
+					return scaleRGB(c, 0.8)
+				}
+				return scaleRGB(c, shade(p))
+			},
+		},
+		streamDrawing("wind-mean", "Wind, the year", "The year's mean wind near the ground, as streamlines over its speed: pale where it is calm, deep where it blows hard.", g, mean, shade),
+		streamDrawing("wind-midwinter", "Wind, midwinter", "The wind at the north's midwinter. A continent in its winter sits under a high and blows out to sea; in its summer it draws a low and the sea wind in.", g, windOf(g, 3*terra.Year/4), shade),
+		streamDrawing("wind-midsummer", "Wind, midsummer", "The wind at the north's midsummer.", g, windOf(g, terra.Year/4), shade),
 		{
 			file: "tides", title: "Tides",
 			about: fmt.Sprintf("Spring tidal range where the tide reaches, from nothing (pale) to %.1f m (deep violet); tidal flats in mud brown. No tide in grey.", 2*terra.TideFactorMax*(terra.TideM2+terra.TideS2)),
@@ -534,6 +556,21 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 	}
 }
 
+// streamDrawing is a map of the wind f as streamlines over its speed.
+func streamDrawing(file, title, about string, g *terra.Grid, f *windField, shade func(geom.Pos) float64) drawing {
+	return drawing{
+		file: file, title: title, about: about,
+		color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+			c := ramp(breeze, math.Hypot(f.u[i], f.v[i])/speedMost)
+			if t.Wet() {
+				return scaleRGB(c, 0.88)
+			}
+			return scaleRGB(c, shade(p))
+		},
+		overlay: func(img *image.RGBA, px int) { streamlines(img, f, px) },
+	}
+}
+
 func render(g *terra.Grid, px int, col func(int, geom.Pos, *terra.Tile) color.RGBA) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, g.W*px, g.H*px))
 	for i := range g.Tiles {
@@ -569,6 +606,7 @@ var (
 	soil      = []color.RGBA{{120, 80, 50, 255}, {190, 160, 90, 255}, {60, 150, 60, 255}}
 	tidal     = []color.RGBA{{235, 235, 245, 255}, {150, 170, 220, 255}, {110, 80, 180, 255}, {60, 20, 90, 255}}
 	rainfall  = []color.RGBA{{240, 232, 200, 255}, {170, 210, 170, 255}, {80, 160, 200, 255}, {20, 60, 150, 255}}
+	breeze    = []color.RGBA{{236, 238, 232, 255}, {196, 222, 214, 255}, {150, 196, 214, 255}, {196, 160, 210, 255}}
 	thermal   = []color.RGBA{{40, 60, 160, 255}, {100, 180, 220, 255}, {240, 230, 140, 255}, {220, 70, 40, 255}}
 )
 
