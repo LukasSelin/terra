@@ -174,6 +174,11 @@ type Grid struct {
 	// flood in relief.go.
 	sea float64
 
+	// rain and runoff are, for each tile, how much falls on it in a year and
+	// how much of that the ground sends on after the air has taken its share
+	// back, in millimetres. See weather.go.
+	rain, runoff []float64
+
 	// regions is which laden-walkable ground each tile is part of, and
 	// regionsStale whether the water has moved since it was worked out.
 	// See region.go.
