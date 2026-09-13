@@ -215,7 +215,7 @@ func (g *Grid) wear(by float64) {
 		// water carries off the mixture that was there, and the sorting
 		// happens where it puts it down again rather than where it picks it
 		// up.
-		stripped := by * Wash * math.Sqrt(t.Flow) * slope * hold(t)
+		stripped := by * Wash * math.Sqrt(t.Flow/math.Max(g.water, 1e-12)) * slope * hold(t)
 		change[i] -= stripped
 		was := parts(t)
 		for k := range load[i] {

@@ -31,7 +31,6 @@ func TestAllGroundDrainsSomewhere(t *testing.T) {
 func TestFlowOnlyGathers(t *testing.T) {
 	w := NewLandSized(5, 50, 40)
 	g := w.Grid
-	gathered := spreadUntil / float64(g.landTiles())
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
 			p := geom.Pos{X: x, Y: y}
@@ -40,7 +39,7 @@ func TestFlowOnlyGathers(t *testing.T) {
 				continue
 			}
 			down := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.At(p).Flow >= gathered && g.At(down).Flow < g.At(p).Flow-1e-9 {
+			if g.area[g.Index(p)] >= spreadUntil && g.At(down).Flow < g.At(p).Flow-1e-9 {
 				t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
 					p, g.At(p).Flow, down, g.At(down).Flow)
 			}
@@ -55,8 +54,8 @@ func TestFlowOnlyGathers(t *testing.T) {
 			out += g.Tiles[i].Flow
 		}
 	}
-	if out < 1-1e-6 {
-		t.Fatalf("only %.4f of the map's rain reaches the edge", out)
+	if out < g.water*(1-1e-6) {
+		t.Fatalf("only %.4f of the map's %.4f m3/s reaches the edge", out, g.water)
 	}
 }
 

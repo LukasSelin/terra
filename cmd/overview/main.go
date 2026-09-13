@@ -198,9 +198,9 @@ func measure(land *terra.Land) summary {
 	return s
 }
 
-// riverFlow is the share of the map a channel has to drain to be drawn as
-// running water rather than standing.
-const riverFlow = 0.002
+// riverFlow is how much water, in cubic metres a second, a channel has to
+// carry to be drawn as running water rather than standing.
+const riverFlow = 1.0
 
 func shareOf(name string, c, of int, col string) share {
 	return share{Name: name, Count: c, Pct: 100 * float64(c) / float64(max(of, 1)), Color: col}
@@ -307,7 +307,7 @@ func drawings(land *terra.Land, s summary) []drawing {
 		},
 		{
 			file: "flow", title: "Drainage",
-			about: "How much of the map drains through each tile, on a log scale: the rivers the land has had an age to find.",
+			about: fmt.Sprintf("Water through each tile on a log scale, up to %.0f m³/s: the rivers the land has had an age to find.", s.FlowMax),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				if t.Flow <= 0 {
 					return color.RGBA{10, 14, 24, 255}

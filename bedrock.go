@@ -195,7 +195,7 @@ func (g *Grid) TextureAt(p geom.Pos) (sand, clay float64) {
 // The lines are drawn at each lattice's own middle rather than at a fixed
 // height, so that every map gets some of all four however its noise happened
 // to fall. It is the same cut every other share on this map is made with;
-// see waterShare.
+// see forestShare.
 func (w *Land) layBedrock(g *Grid) {
 	hard := w.lattice(g, float64(g.Span())/2)
 	sunk := w.lattice(g, float64(g.Span())/3)

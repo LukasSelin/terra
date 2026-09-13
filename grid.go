@@ -31,7 +31,7 @@ type Tile struct {
 	Owner   Holder
 
 	// Height is metres above the lowest ground on the map, and Flow is the
-	// share of the map whose water drains through this tile. Between them
+	// water running through this tile in cubic metres a second. Between them
 	// they are the land itself: the rivers, the fertility and the going
 	// underfoot are all read off these two rather than drawn on top of them.
 	// See relief.go.
@@ -185,6 +185,10 @@ type Grid struct {
 	// weather.go.
 	air          *Air
 	rain, runoff []float64
+	// area is how many tiles drain through each tile, and water is how much
+	// the whole map runs off, in cubic metres a second. Both are drain's.
+	area  []float64
+	water float64
 
 	// regions is which laden-walkable ground each tile is part of, and
 	// regionsStale whether the water has moved since it was worked out.
@@ -256,6 +260,8 @@ func (g *Grid) Clone() *Grid {
 	copy(c.Tiles, g.Tiles)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
+	c.area = append([]float64(nil), g.area...)
+	c.water = g.water
 	c.lenders = make([]uint8, len(g.Tiles))
 	c.layChunks()
 	c.layPatches()

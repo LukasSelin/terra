@@ -306,7 +306,7 @@ const (
 	// coarseShare is how much of a world's filled ground comes out sandstone
 	// rather than shale: the sandiest third of it. It is a share and not a
 	// cutoff for the reason every other share on this map is - see
-	// waterShare - and here the reason is sharper than usual. What a deposit
+	// forestShare - and here the reason is sharper than usual. What a deposit
 	// is made of hardly varies while a history is running, because until the
 	// rock is settled at the end every tile is weathering the same basalt,
 	// so the sand in one basin and the next differ by a few hundredths and

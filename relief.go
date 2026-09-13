@@ -64,7 +64,7 @@ const Relief = 60.0
 // height for the reason everything else here is: how much of a map comes out
 // above a fixed line depends entirely on the shape of that map, and what is
 // wanted is that every map has both a lowland to live in and a skyline behind
-// it. See waterShare, cut the same way and for the same reason.
+// it. See forestShare, cut the same way and for the same reason.
 const (
 	Upland      = 260.0
 	uplandShare = 0.22
@@ -136,15 +136,6 @@ func (g *Grid) UplandRise() float64 { return Upland * g.UplandLattice() / (uplan
 // country standing on it.
 func (g *Grid) Skyline() float64 { return Relief + g.UplandRise() }
 
-// waterShare is how much of a map ends up as watercourse. The threshold that
-// achieves it is read off each map's own drainage rather than fixed, because
-// how much water a given amount of falling ground gathers varies enormously
-// with the shape of it: over a handful of seeds the heaviest-draining tile
-// carried anywhere from a fifth of the map to four fifths. A fixed cutoff
-// gives one map a river and the next a puddle. A share gives every map a
-// river of its own size.
-const waterShare = 0.045
-
 // rockShare and rockSteep are how much of a map is bare stone, and how steep
 // ground has to be, in its own terms, to be a candidate for it.
 const (
@@ -152,82 +143,8 @@ const (
 	forestShare = 0.13
 )
 
-// How much rain falls on the lowest ground a map has and how much more falls
-// on its highest: three times as much on the tops. Air going up cools, and
-// cool air cannot hold what warm air was carrying, so the high ground wrings
-// the weather out and gets the most of it.
-//
-// The sea gets none. Rain on the sea is rain that has arrived; what is being
-// counted here is what still has to run somewhere, and every tile of a map -
-// ocean included - used to be given the same share of it. On a globe that put
-// a third of the world's water into the sea before the sea, which is where
-// the threshold a river is picked by was read from.
-//
-// Be clear about what the lift is worth, because it is not much and it would
-// be easy to think otherwise: on the default valley, taking it from one to
-// ten moves the median flow on a flood plain by about a third and the median
-// spring from seventeen metres to twenty-six, and the count of river tiles up
-// in the high fifth of the map from none to one. It cannot do more. A
-// headwater has a handful of tiles above it whatever falls on them, against
-// the thousand above a tile down on the floor, so the catchment wins however
-// wet the mountain is. What actually puts a river's head in the high ground
-// is channelTheta, below. This is here because it is true and because the sea
-// was wrong, and not because it did the work.
-const (
-	rainFlat = 1.0
-	rainHigh = 3.0
-)
-
-// channelTheta is how much of a say the fall of the ground has in whether the
-// water running over it has cut a channel, against how much water there is. A
-// river is where A·S^θ is greatest and not where A alone is: the slope-area
-// law, which is how channel initiation is read in the literature it is taken
-// from (Montgomery and Dietrich, Science, 1992; Tarboton and others, 1991).
-//
-// Water needs less of a catchment to cut a channel on a steep hillside than on
-// a flat one, because the same water moving down a steeper slope carries more.
-// That is why a mountain has streams within a few hundred metres of its ridge
-// while a plain gathers for miles before anything shows, and it is the reading
-// that puts the head of a river in the high ground - see rainHigh, which
-// cannot.
-//
-// One, which is the bottom of the published range and is the stream power
-// index exactly: A·S, a named quantity rather than a number somebody liked.
-// Swept over the default valley and a quarter globe, three seeds each, this is
-// what it buys and what it costs:
-//
-//	θ     valley upland   globe upland   pieces, globe   median river flow
-//	0.50      8.3%           43.8%            50            3.75e-02
-//	0.75     13.6%           44.9%            39            2.37e-02
-//	1.00     16.1%           45.3%            34            1.85e-02
-//	1.25     18.8%           45.1%            31            1.48e-02
-//	1.50     20.1%           45.2%            31            1.21e-02
-//
-// "Upland" is the share of a map's river tiles standing in its high fifth,
-// which is the thing raising θ is for; "pieces" is how many separate networks
-// the globe comes out with, and fewer is better because a river should reach
-// the sea. The globe has all it is going to get by one. The valley goes on
-// gaining past that, but the gain is bought with the size of its rivers - at
-// one and a half the middling river carries a third of what it did - and there
-// is nothing in the sources that says one and a half rather than one.
-//
-// It was a half before, chosen because it reordered the map without replacing
-// it, and it sat in a constant that nothing referenced: the reading hardcoded
-// math.Sqrt and this said 0.5 beside it, so the two could have drifted apart
-// without a word. Taken on flow alone, at θ of nothing, the high fifth of the
-// valley held none of its river tiles, one, and none over three seeds.
-//
-// S here is Grid.Slope, and that it is the along-flow gradient is not an
-// accident worth leaving unsaid: Grid.Aspect picks the direction of the
-// steepest run-corrected fall and Slope is the size of that same fall, so they
-// share an argmax. They did not before Aspect was fixed to do so, and this law
-// would have been incoherent on a field whose A and S pointed different ways.
-const channelTheta = 1.0
-
 // channelSteep is the fall past which more fall stops helping the water cut a
-// channel and starts to hinder it, and channelHead is the least ground a
-// channel's head has to drain, in tiles' worth of rain. Both are there for
-// the flanks of a range.
+// channel and starts to hinder it. It is there for the flanks of a range.
 //
 // The slope-area law is a law about soil-mantled hillsides. Past about two in
 // three the ground does not gather its water into a channel: it sheds it, and
@@ -245,13 +162,8 @@ const channelTheta = 1.0
 // floor, and are left as they were: over three seeds the share of the valley's
 // river in its high fifth goes from 20.7, 24.3 and 13.8 per cent to 14.6, 22.9
 // and 14.2. A half globe's high fifth, after sixty ages, goes from 13.4, 11.5
-// and 11.9 per cent river to 8.4, 4.8 and 8.5. Sixteen tiles is one hectare,
-// the small end of where channel heads are found; thirty-two took the valley's
-// upland streams away altogether on two seeds of three.
-const (
-	channelSteep = 0.7
-	channelHead  = 16.0
-)
+// and 11.9 per cent river to 8.4, 4.8 and 8.5.
+const channelSteep = 0.7
 
 // bankRise is how far above its own channel a great river's flood reaches, in
 // metres. Nothing: a river spreads onto the ground beside it that is no higher
@@ -279,10 +191,10 @@ const (
 // Nothing gives back half of the ground the correction cost - 240 to 256,
 // against 272 when the rule was firing on ridges - while still leaving a
 // settlement more water and more fish than it had then. It also brings the
-// share of a map that comes out as watercourse back toward the waterShare it
-// asks for: the banks are laid after the channels are counted, so whatever
-// they add is over the top of it, and at a metre they were adding two thirds
-// again.
+// share of a map that comes out as watercourse back toward the four and a half
+// in a hundred it was then asked for: the banks are laid after the channels
+// are counted, so whatever they add is over the top of it, and at a metre they
+// were adding two thirds again.
 const bankRise = 0.0
 
 // FloodDepth is how far above its river ground stops being valley floor, in
@@ -856,9 +768,15 @@ func (g *Grid) fill() {
 
 // drain sends every tile's water downhill and adds up what passes through -
 // spread over every lower neighbour while it is a sheet on a hillside, and to
-// the lowest alone once it has gathered; see spreadUntil - so that Flow is the share of the map draining through each
-// tile. Tiles are settled from the highest down, which is the only order in
-// which a tile's own total is complete before it is passed on.
+// the lowest alone once it has gathered; see spreadUntil - so that Flow is the
+// water passing through each tile in cubic metres a second. Tiles are settled
+// from the highest down, which is the only order in which a tile's own total
+// is complete before it is passed on.
+//
+// What each tile starts with is its own runoff, off HydroSpan of catchment -
+// see weather.go - and alongside the water it counts the ground: area is how
+// many tiles drain through each one, which is what the guards against the
+// grid's own patterns are read in. See spreadUntil.
 func (g *Grid) drain() {
 	n := len(g.Tiles)
 	// Which way the water leaves each tile, read before any of it moves.
@@ -880,12 +798,20 @@ func (g *Grid) drain() {
 			down[i] = int32(g.Index(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}))
 		}
 	})
-	rain := g.rainfall()
 	g.weather()
+	if len(g.area) != n {
+		g.area = make([]float64, n)
+	}
+	perMM := HydroSpan * HydroSpan / 1000 / secondsPerYear
+	water := 0.0
 	order := make([]heightNode, n)
 	for i := range order {
 		order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
-		g.Tiles[i].Flow = rain[i]
+		g.Tiles[i].Flow, g.area[i] = 0, 0
+		if !g.underSea(i) {
+			g.Tiles[i].Flow, g.area[i] = g.runoff[i]*perMM, 1
+			water += g.Tiles[i].Flow
+		}
 	}
 	// Highest first, ties by position, which is a total order: every tile
 	// sits in exactly one place and no two of them may be swapped, so what
@@ -901,7 +827,7 @@ func (g *Grid) drain() {
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
-	gathered := spreadUntil / float64(max(1, g.landTiles()))
+	g.water = water
 	var share [8]float64
 	var to [8]int32
 	for _, nd := range order {
@@ -909,8 +835,9 @@ func (g *Grid) drain() {
 			continue
 		}
 		t := &g.Tiles[nd.idx]
-		if t.Flow >= gathered {
+		if g.area[nd.idx] >= spreadUntil {
 			g.Tiles[down[nd.idx]].Flow += t.Flow
+			g.area[down[nd.idx]] += g.area[nd.idx]
 			continue
 		}
 		p := g.PosOf(int(nd.idx))
@@ -934,16 +861,21 @@ func (g *Grid) drain() {
 		}
 		if sum <= 0 {
 			g.Tiles[down[nd.idx]].Flow += t.Flow
+			g.area[down[nd.idx]] += g.area[nd.idx]
 			continue
 		}
 		for m := 0; m < k; m++ {
 			g.Tiles[to[m]].Flow += t.Flow * share[m] / sum
+			g.area[to[m]] += g.area[nd.idx] * share[m] / sum
 		}
 	}
 }
 
-// spreadUntil is how much ground's rain, in tiles, the water running off a
-// hillside gathers before it keeps to one way down.
+// spreadUntil is how much ground, in tiles, the water running off a hillside
+// gathers before it keeps to one way down. It is counted in ground and not in
+// water because what it guards against is the grid's and not the weather's: a
+// wet country gathers a stream's worth of water off fewer tiles, and read in
+// water the chessboard below came back wherever it rained hard.
 //
 // Sent whole to the steepest neighbour from the first drop, the water on a
 // smooth face split into lines a tile apart that never met, and on a face
@@ -987,69 +919,68 @@ const (
 	crowdUntil = 256.0
 )
 
-// cornerWeight is what a diagonal step's corner tile counts for against the
-// share of river a map asks for; see carve. Counted whole it took the valley's
-// upland streams, a third of which are left, and counted not at all a globe
-// came out a sixth wetter than it asked. Half keeps the upland and the share.
-const cornerWeight = 0.5
-
-// landTiles is how many tiles stand above the sea.
-func (g *Grid) landTiles() int {
-	n := 0
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			n++
-		}
-	}
-	return n
-}
-
-// rainfall is what each tile has to send somewhere, as a share of the whole
-// map's water, so that the flows still add to one and every threshold read off
-// them means what it meant. See rainFlat.
+// channelPower is the power, in watts on each metre of bed, that water has to
+// spend on its bed to have cut one, and channelHead is the least ground, in
+// tiles, a channel's head has to drain. Between them they are where a river
+// starts: see carve.
 //
-// How high the ground stands is read against the map's own ground and not
-// against a fixed height, because this runs in the middle of a history as well
-// as at the end of one, where the heights are whatever the last epoch left and
-// not yet anything a constant would recognise. The ends are quantiles rather
-// than the lowest and highest tiles for the usual reason - the highest tile is
-// one tile, and how extreme one tile in half a million gets is a fact about
-// how many tiles there are.
-func (g *Grid) rainfall() []float64 {
-	dry := make([]float64, 0, len(g.Tiles))
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			dry = append(dry, g.Tiles[i].Height)
-		}
+// A river is not a share of the map. It is where the water running down the
+// ground has the power to keep a bed open against the soil creeping into it,
+// and that is rho*g*Q*S - stream power, the reading channel initiation and
+// incision are both measured in (Bagnold, 1966; Montgomery and Dietrich,
+// 1992). Read off real discharge it puts rivers where the rain runs off and
+// the ground falls, so a wet country has more of them and a dry one fewer, and
+// the ranges of a desert stand dry.
+//
+// Stream power and not bed shear, which was tried first. Shear goes as the
+// depth, which goes as the flow to the power 0.39, and a reading that weak in
+// the water turns rivers on and off like a switch: over five seeds of the
+// valley, with the threshold set to give eight tiles in a hundred of it river,
+// half the rain gave none at all.
+//
+// The figure is not a flume's. The fall is read over a tile and the water off
+// HydroSpan of catchment - see weather.go - so what it is tuned to is the map
+// and not a stream bed. Over the first five seeds of the valley, and three
+// small globes, at a head of eight:
+//
+//	power    valley river   upland share   half the rain   twice   small globe
+//	  700       13.1%          17.2%           4.1%        22.6%      3.1%
+//	 1200        7.8%          12.3%           3.0%        17.6%      2.1%
+//	 1500        6.1%           7.1%           2.0%        15.8%      1.7%
+//	 2000        4.5%           1.5%           1.9%        13.9%      1.2%
+//
+// Fifteen hundred keeps the valley near the six in a hundred it had when the
+// rivers were a share, and a globe - far less of it steep, and a third of its
+// land desert or ice - comes out with a river network about a quarter as
+// dense, which is what the drier world should have.
+//
+// The head is counted in ground because it guards against the grid and not
+// against the weather: see spreadUntil. At sixteen tiles, and a power of 800,
+// the high fifth of five valleys held a thousandth of their river: the water
+// spread over a hillside rarely gathers from that many before it reaches the
+// foot.
+const (
+	channelPower = 1500.0
+	channelHead  = 8.0
+)
+
+// bankShare is how much of a map's river, by how much water it carries, is
+// great enough to spread onto its banks.
+const bankShare = 0.25
+
+// streamPower is the power the water spends on each metre of its bed where q
+// cubic metres a second run down a fall of s, in watts a metre: ρ·g·Q·S.
+func streamPower(q, s float64) float64 {
+	if q <= 0 || s <= 0 {
+		return 0
 	}
-	rain := make([]float64, len(g.Tiles))
-	if len(dry) == 0 {
-		// A map wholly under water: nothing runs off it, and the flows may
-		// not all be zero or every threshold read off them is meaningless.
-		for i := range rain {
-			rain[i] = 1 / float64(len(rain))
-		}
-		return rain
-	}
-	q := quantiles(dry, 0.05, 0.95)
-	foot, reach := q[0], math.Max(1e-9, q[1]-q[0])
-	total := 0.0
-	for i := range g.Tiles {
-		if g.underSea(i) {
-			continue
-		}
-		rain[i] = rainFlat + (rainHigh-rainFlat)*clamp01((g.Tiles[i].Height-foot)/reach)
-		total += rain[i]
-	}
-	for i := range rain {
-		rain[i] /= total
-	}
-	return rain
+	return 1000 * 9.81 * q * s
 }
 
-// carve puts the water where the flow says it goes: the wettest waterShare of
-// the map is river, and the heaviest of it spreads onto the lower bank beside
-// it, as a river does. Ground the water has left goes back to grass.
+// carve puts the water where the flow says it goes: a river starts wherever the
+// water has the power to hold a bed open - see channelPower - and runs from
+// there to the sea, and the greatest of them spread onto the lower bank beside
+// them, as a river does. Ground the water has left goes back to grass.
 //
 // It runs at the making of the map and again after every age of weather, so a
 // river can take a course it did not have. It will not run through anything
@@ -1057,21 +988,16 @@ func (g *Grid) rainfall() []float64 {
 // river that swallowed the market would be the end of a run rather than an
 // event in it.
 func (g *Grid) carve(rng interface{ Float64() float64 }) {
-	// What the water has done here, which is what it carries against how fast
-	// it is going: see channelTheta. The share of the map that comes out as
-	// river is the share it always was - this decides which tiles those are,
-	// and not how many.
+	// What the water has the power to do here: see channelPower.
 	cutting := make([]float64, len(g.Tiles))
-	flows := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		s := g.Slope(g.PosOf(i))
 		if s > channelSteep { // a scree, not a stream bed: see channelSteep
 			s = channelSteep * channelSteep / s
 		}
-		cutting[i] = g.Tiles[i].Flow * math.Pow(s, channelTheta)
-		flows[i] = g.Tiles[i].Flow
+		cutting[i] = streamPower(g.Tiles[i].Flow, s)
 	}
-	cut := quantile(append([]float64(nil), cutting...), 1-waterShare)
+	cut := channelPower
 	// Whether a river is great enough to spread onto its banks is a question
 	// about how much water it is carrying and not about how hard it is
 	// cutting, so it is read off the flow and not off the work. They are not
@@ -1080,7 +1006,6 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// Read off the work, nine tenths of the tiles allowed to flood their banks
 	// on a globe stood in the top fifth of the ground - mountainsides in
 	// flood, with the flood plains dry.
-	big := quantile(flows, 1-waterShare/4)
 
 	// Hysteresis, which is what cut/2 below is for. Ground becomes river when
 	// the water really gathers there, and stops being river only when the
@@ -1098,11 +1023,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// tilt. Water does not do that; it goes somewhere.
 	//
 	// So the heads are taken hardest-working first and each is followed down
-	// to the sea, and the map is given channels until it has the share of them
-	// it is meant to have. Marking everything that cleared the line and then
-	// following all of it put nine tiles in a hundred of the default valley
-	// under water against the four and a half it asks for, because the
-	// followed-down trunks are tiles nobody counted.
+	// to the sea.
 	wet := make([]bool, len(g.Tiles))
 	land := 0
 	for i := range g.Tiles {
@@ -1112,18 +1033,11 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			land++
 		}
 	}
-	// The share is of the land. Taken of the whole map, a globe a third of
-	// which is sea laid its whole budget on the other two thirds and came out
-	// with nine tiles in a hundred of its land under water.
-	want := int(waterShare * float64(land))
-	// The least water a head may start from, as a share of the map's rain: see
-	// channelHead. Rain is shared out over the dry ground, so a tile's worth of
-	// it is one part in land.
-	head := channelHead / float64(max(land, 1))
-	laid, corners := 0, 0.0
+	// The least ground a head may start from: see channelHead.
+	head := channelHead
 	lay := func(from int) {
 		for j := from; !wet[j]; {
-			wet[j], laid = true, laid+1
+			wet[j] = true
 			a := g.Aspect(g.PosOf(j))
 			if a == (geom.Pos{}) {
 				return // a hollow: the water stands here
@@ -1146,13 +1060,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 				if other := (geom.Pos{X: p.X, Y: p.Y + a.Y}); g.Height(other) < g.Height(side) {
 					side = other
 				}
-				if s := g.Index(side); !wet[s] {
-					wet[s] = true
-					corners += cornerWeight
-					if corners >= 1 {
-						laid, corners = laid+1, corners-1
-					}
-				}
+				wet[g.Index(side)] = true
 			}
 			j = g.Index(q)
 		}
@@ -1188,12 +1096,12 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	})
 	// crowded says whether a small stream starting at i would run beside a
 	// channel it does not join: see crowdSpace.
-	crowdFlow := crowdUntil / float64(max(land, 1))
+	crowdFlow := crowdUntil
 	reach := crowdSpace * 3
 	path := make([]int32, 0, reach+1)
 	on := func(j int32) bool { return slices.Contains(path, j) }
 	crowded := func(i int32) bool {
-		if g.Tiles[i].Flow >= crowdFlow {
+		if g.area[i] >= crowdFlow {
 			return false
 		}
 		path = path[:0]
@@ -1229,21 +1137,34 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// the rate keeps its water whether or not it would be chosen afresh. See
 	// the remark on hysteresis above.
 	for _, nd := range order {
-		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.Tiles[nd.idx].Flow >= head && !crowded(nd.idx) {
+		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.area[nd.idx] >= head && !crowded(nd.idx) {
 			lay(int(nd.idx))
 		}
 	}
 	for _, nd := range order {
-		if laid >= want {
+		if nd.h < cut {
 			break
 		}
-		if g.Tiles[nd.idx].Flow < head || wet[nd.idx] || crowded(nd.idx) {
+		if g.area[nd.idx] < head || wet[nd.idx] || crowded(nd.idx) {
 			continue
 		}
 		lay(int(nd.idx))
 	}
 	// The great rivers spread onto the ground beside them that the flood
-	// reaches: see bankRise.
+	// reaches: see bankRise. Whether a river is great enough is a question
+	// about how much water it is carrying and not about how hard it is
+	// cutting, so it is read off the flow and not off the work: the hardest
+	// cutting on a map is a steep rill near a ridge, which carries nothing.
+	var network []float64
+	for i := range g.Tiles {
+		if wet[i] && !g.underSea(i) {
+			network = append(network, g.Tiles[i].Flow)
+		}
+	}
+	big := math.Inf(1)
+	if len(network) > 0 {
+		big = quantile(network, 1-bankShare)
+	}
 	for i := range g.Tiles {
 		if g.Tiles[i].Flow < big {
 			continue
