@@ -1399,16 +1399,27 @@ func (g *Grid) relevel(share float64) {
 // flood puts the lowest share of the ground under the sea, and reads the
 // sea level off the ground so that erosion can move the coast.
 func (g *Grid) flood(share float64, rng interface{ Float64() float64 }) {
-	g.sea, g.base = -1, -1
 	if share <= 0 {
+		g.seaAt(-1, rng)
 		return
 	}
 	heights := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		heights[i] = g.Tiles[i].Height
 	}
-	g.sea = quantile(heights, share)
-	g.base = g.sea
+	g.seaAt(quantile(heights, share), rng)
+}
+
+// seaAt puts the sea at level, and everything at or under it under the sea,
+// with its fish. A level below nothing is no sea at all. It is where the level
+// is found that differs between a sea given as a share of the map and one given
+// as water - see flood and pour - and not what the level then does.
+func (g *Grid) seaAt(level float64, rng interface{ Float64() float64 }) {
+	g.sea, g.base = -1, -1
+	if level < 0 {
+		return
+	}
+	g.sea, g.base = level, level
 	for i := range g.Tiles {
 		if t := &g.Tiles[i]; g.underSea(i) {
 			t.Terrain, g.Wood[i], g.Wild[i], g.Age[i] = Water, 0, 0, 0

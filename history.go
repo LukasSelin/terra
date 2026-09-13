@@ -641,7 +641,7 @@ type record struct {
 // the drainage worked out, so that everything after it in Generate - the
 // woods, the outcrops, the soils, the market - reads the same kind of ground
 // it would have read from the picture.
-func (w *Land) history(g *Grid, epochs int, sea float64) {
+func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	w.molten(g)
 	// The water has to have something to carry. Soil is made from the rock
 	// beneath it, and at the end of the molten era that is basalt everywhere;
@@ -700,7 +700,13 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 	for k := 0; k < smoothing; k++ {
 		g.soften()
 	}
-	w.normalise(g)
+	// A world given water keeps the basins its plates made, for the water to
+	// fill; one that is not keeps the drawn map's spread whole. See basins.
+	if water > 0 {
+		w.basins(g, plates)
+	} else {
+		w.normalise(g)
+	}
 	g.fill()
 	g.drain()
 }

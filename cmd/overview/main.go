@@ -37,7 +37,8 @@ func main() {
 		w       = flag.Int("w", 0, "width in tiles (overrides the preset)")
 		h       = flag.Int("h", 0, "height in tiles (overrides the preset)")
 		epochs  = flag.Int("epochs", -1, "ages of history to run (overrides the preset)")
-		sea     = flag.Float64("sea", -1, "share of the ground under the sea (overrides the preset)")
+		sea     = flag.Float64("sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
+		water   = flag.Float64("water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
 		wrap    = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
 		scale   = flag.Int("scale", 0, "pixels per tile (0 picks one)")
 		out     = flag.String("out", "overview", "directory to write into")
@@ -68,6 +69,9 @@ func main() {
 	if *sea >= 0 {
 		t.SeaShare = *sea
 	}
+	if *water >= 0 {
+		t.Water = *water
+	}
 	if *wrap {
 		t.Wrap = true
 	}
@@ -78,7 +82,7 @@ func main() {
 		}
 	}
 
-	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Wrap)
+	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
 	start := time.Now()
 	land, err := terra.MakeLand(*seed, t)
 	if err != nil {
@@ -154,6 +158,7 @@ type summary struct {
 	Moon                            string
 	RangeP50, RangeP90, RangeMax    float64
 	Flats                           share
+	SeaPct                          float64
 	AgeMax                          int
 	Biomes, Forms                   []share
 }
@@ -219,6 +224,13 @@ func measure(land *terra.Land) summary {
 		s.RangeP50, s.RangeP90, s.RangeMax = ranges[len(ranges)/2], ranges[len(ranges)*9/10], ranges[len(ranges)-1]
 	}
 	s.Flats = shareOf("tidal flats", terr[terra.Flat], n, "")
+	under := 0
+	for i := range g.Tiles {
+		if level := g.SeaLevel(); level >= 0 && g.Tiles[i].Height <= level {
+			under++
+		}
+	}
+	s.SeaPct = 100 * float64(under) / float64(max(n, 1))
 	sort.Float64s(heights)
 	if len(heights) > 0 {
 		s.HeightP50 = heights[len(heights)/2]
@@ -639,7 +651,7 @@ figcaption{margin-top:8px}
 .grid figcaption{margin-top:4px;font-size:13px}
 </style></head><body><main>
 <h1>A world from seed {{.Seed}}</h1>
-<div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · sea {{.Terms.SeaShare}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}} · made in {{.Took}}</div>
+<div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · {{if and (gt .Terms.Epochs 0) (gt .Terms.Water 0.0)}}water {{.Terms.Water}} m, {{pct .Stats.SeaPct}} sea{{else}}sea {{.Terms.SeaShare}}{{end}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}} · made in {{.Took}}</div>
 <div class="stats">
  <div class="stat"><span class="mut">Tiles</span><b>{{.Stats.Tiles}}</b></div>
  <div class="stat"><span class="mut">Plates</span><b>{{.Stats.Plates}}</b></div>

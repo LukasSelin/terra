@@ -26,14 +26,21 @@ func (w *Land) Generate(cfg Terms) {
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both
 		// what its history left. See history.go.
-		w.history(g, cfg.Epochs, cfg.SeaShare)
+		w.history(g, cfg.Epochs, cfg.SeaShare, cfg.Water)
 	} else {
 		w.raise(g)
 		// What is under the ground is laid down with the ground, and before
 		// the water has been anywhere: a river runs over the rock it finds.
 		w.layBedrock(g)
 	}
-	g.flood(cfg.SeaShare, w.RNG)
+	// The sea: poured, where there is a history to say how deep the basins
+	// are, and otherwise the lowest share of the ground. See water.go.
+	poured := cfg.Epochs > 0 && cfg.Water > 0
+	if poured {
+		g.pour(cfg.Water, w.RNG)
+	} else {
+		g.flood(cfg.SeaShare, w.RNG)
+	}
 	g.fill()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
@@ -42,7 +49,11 @@ func (w *Land) Generate(cfg Terms) {
 	g.incise()
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
-	g.relevel(cfg.SeaShare)
+	if poured {
+		g.repour(cfg.Water)
+	} else {
+		g.relevel(cfg.SeaShare)
+	}
 	g.fill()
 	g.drain()
 	g.carve(w.RNG)

@@ -48,6 +48,9 @@ func (t Terms) Check() error {
 	if t.Wrap && t.Width%ChunkSide != 0 {
 		return fmt.Errorf("terra: a globe must be a whole number of chunks round: width %d is not a multiple of %d", t.Width, ChunkSide)
 	}
+	if t.Water < 0 {
+		return fmt.Errorf("terra: a world cannot have less than no water: %v", t.Water)
+	}
 	// Tiles are counted in int32 wherever a list of them is kept - the
 	// order the water runs down in, the stack the regions are filled from -
 	// so no map may hold more than one of those can count.

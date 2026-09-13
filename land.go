@@ -113,7 +113,18 @@ type Terms struct {
 	// none: its water leaves at the edges. A globe has no edges but the
 	// poles, and without a sea every river on it runs to a pole and every
 	// laden walker is cut off by one.
+	//
+	// A world made from its history and given Water has its sea from the
+	// water instead, and SeaShare only says how much of its first crust is
+	// ocean: see water.go.
 	SeaShare float64
+	// Water is how much water a world made from its history has, as the
+	// depth in metres it would stand to spread evenly over the whole map. It
+	// fills the basins the plates made, so how much of the world is sea is the
+	// ground's to decide. Nothing is no water, and the sea is SeaShare's. A map
+	// that was drawn has no plates to decide anything, and takes SeaShare
+	// whatever this says.
+	Water float64
 	// Epochs is how many ages of the earth to run before the land is handed
 	// over: 0 draws it, and anything else makes it out of its own history.
 	// See history.go.
@@ -135,7 +146,7 @@ func DefaultTerms() Terms {
 // it sea, made out of its own history. See Globe for why a world this size
 // is run rather than drawn.
 func GlobeTerms() Terms {
-	return Terms{Width: 1024, Height: 512, Wrap: true, SeaShare: 0.3, Epochs: 16}
+	return Terms{Width: 1024, Height: 512, Wrap: true, SeaShare: 0.3, Epochs: 16, Water: DefaultWater}
 }
 
 // Routers returns n routers over this land's map, made once and kept between

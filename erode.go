@@ -196,11 +196,13 @@ func (g *Grid) wear(by float64) {
 
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		// Nothing is cut below the foot of the map. Ground that already lies
-		// under it - a made world's sea bed can - is left where it is rather
-		// than lifted to it, which made ground out of nothing whenever the
-		// weather so much as touched a tile down there.
-		t.Height = math.Max(math.Min(0, t.Height), t.Height+change[i])
+		// No floor under it. The water is never cut below the ground it runs
+		// into - see fluvial.go - and the creep never takes a tile below the
+		// one it gives to, so nothing here digs a hole; what a floor at the
+		// foot of the map did was make ground out of nothing, first by lifting
+		// a sea bed that lay under it and then by refusing to let the creep
+		// ease one down a hand's breadth further.
+		t.Height += change[i]
 		// Soil goes with the ground it was in. What washes off a slope is
 		// what that slope could have grown; what lands on the flat is what
 		// makes a flood plain worth farming.
