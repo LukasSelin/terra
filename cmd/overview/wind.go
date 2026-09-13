@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
 
 	"github.com/LukasSelin/terra"
+	"github.com/LukasSelin/terra/clock"
+	"github.com/LukasSelin/terra/geom"
 )
 
 // The wind, drawn. A wind is a direction and a speed at every tile, which a
@@ -190,4 +193,104 @@ func jitter(x, y int) (float64, float64) {
 	h *= 0xBF58476D1CE4E5B9
 	h ^= h >> 32
 	return float64(h&0xFFFF) / 65536, float64((h>>16)&0xFFFF) / 65536
+}
+
+// weatherDrawing is the day's weather: the wind as streamlines over the
+// pressure, with the systems in it marked - L for a low, H for a high, and a
+// ring for a tropical storm.
+func weatherDrawing(land *terra.Land, shade func(geom.Pos) float64) drawing {
+	g := land.Grid
+	f := &windField{w: g.W, h: g.H, wrap: g.Wrap, u: make([]float64, len(g.Tiles)), v: make([]float64, len(g.Tiles))}
+	pres := make([]float64, len(g.Tiles))
+	for i := range g.Tiles {
+		p := g.PosOf(i)
+		f.u[i], f.v[i] = land.WindAt(p)
+		pres[i] = land.PressureAt(p)
+	}
+	f.across, f.down = windOf(g, 0).across, windOf(g, 0).down
+	counts := map[terra.SystemKind]int{}
+	if land.Weather != nil {
+		for _, s := range land.Weather.Systems {
+			if s.Strength() != 0 {
+				counts[s.Kind]++
+			}
+		}
+	}
+	date := clock.At(land.Tick)
+	return drawing{
+		file: "weather", title: "Weather today",
+		about: fmt.Sprintf("The weather on %v: the wind near the ground as streamlines, over the pressure at sea level from 970 hPa (violet) through 1013 (pale) to 1040 (amber), with isobars every 4 hPa. %d lows (L), %d highs (H) and %d tropical storms (rings) are on the planet; the lows turn anticlockwise north of the equator and clockwise south of it, and are carried east by the westerlies.",
+			date, counts[terra.Low], counts[terra.High], counts[terra.Storm]),
+		color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+			c := ramp(pressure, (pres[i]-970)/70)
+			// An isobar where the pressure crosses a multiple of four
+			// between this tile and the next one along or down.
+			q := g.Norm(geom.Pos{X: p.X + 1, Y: p.Y})
+			r := geom.Pos{X: p.X, Y: min(p.Y+1, g.H-1)}
+			band := func(v float64) int { return int(math.Floor(v / 4)) }
+			if band(pres[i]) != band(pres[g.Index(q)]) || band(pres[i]) != band(pres[g.Index(r)]) {
+				c = scaleRGB(c, 0.72)
+			}
+			if t.Wet() {
+				return scaleRGB(c, 0.9)
+			}
+			return scaleRGB(c, shade(p))
+		},
+		overlay: func(img *image.RGBA, px int) {
+			streamlines(img, f, px)
+			if land.Weather == nil {
+				return
+			}
+			for _, s := range land.Weather.Systems {
+				if s.Strength() == 0 {
+					continue
+				}
+				x, y, on := land.Place(s)
+				if !on {
+					continue
+				}
+				mark(img, x*float64(px), y*float64(px), s, g.Wrap)
+			}
+		},
+	}
+}
+
+var pressure = []color.RGBA{{150, 110, 190, 255}, {205, 190, 225, 255}, {240, 240, 236, 255}, {240, 215, 160, 255}, {220, 160, 70, 255}}
+
+// glyphs are the letters the systems are marked with, five pixels by seven.
+var glyphs = map[terra.SystemKind][7]string{
+	terra.Low:  {"#....", "#....", "#....", "#....", "#....", "#....", "#####"},
+	terra.High: {"#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"},
+}
+
+// mark draws a system at pixel x, y: its letter, or a ring for a storm.
+func mark(img *image.RGBA, x, y float64, s terra.System, wrap bool) {
+	ink := color.RGBA{190, 30, 40, 255}
+	if s.Kind == terra.High {
+		ink = color.RGBA{30, 60, 170, 255}
+	}
+	if s.Kind == terra.Storm {
+		ink = color.RGBA{150, 20, 120, 255}
+		for a := 0.0; a < 2*math.Pi; a += 0.08 {
+			for _, r := range []float64{5, 6} {
+				splat(img, x+r*math.Cos(a), y+r*math.Sin(a), ink, 1, wrap)
+			}
+		}
+		splat(img, x, y, ink, 1, wrap)
+		return
+	}
+	const k = 2
+	g := glyphs[s.Kind]
+	for gy, row := range g {
+		for gx, c := range row {
+			if c != '#' {
+				continue
+			}
+			for dy := 0; dy < k; dy++ {
+				for dx := 0; dx < k; dx++ {
+					splat(img, x+float64((gx-2)*k+dx), y+float64((gy-3)*k+dy), ink, 1, wrap)
+				}
+			}
+		}
+	}
 }

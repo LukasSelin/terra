@@ -42,6 +42,7 @@ func main() {
 		wrap    = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
 		scale   = flag.Int("scale", 0, "pixels per tile (0 picks one)")
 		out     = flag.String("out", "overview", "directory to write into")
+		day     = flag.Int("day", 30, "the day of the world whose weather is drawn")
 		biggest = flag.Bool("max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
 	)
 	flag.Parse()
@@ -90,6 +91,13 @@ func main() {
 	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
+
+	// The day's weather, run from the founding up to the day asked for.
+	for tick := 0; tick <= max(*day, 0); tick++ {
+		land.Tick = tick
+		land.Climate.Advance(tick, land.RNG)
+		land.AdvanceWeather()
+	}
 
 	px := *scale
 	if px <= 0 {
@@ -440,6 +448,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				return scaleRGB(c, shade(p))
 			},
 		},
+		weatherDrawing(land, shade),
 		streamDrawing("wind-mean", "Wind, the year", "The year's mean wind near the ground, as streamlines over its speed: pale where it is calm, deep where it blows hard.", g, mean, shade),
 		streamDrawing("wind-midwinter", "Wind, midwinter", "The wind at the north's midwinter. A continent in its winter sits under a high and blows out to sea; in its summer it draws a low and the sea wind in.", g, windOf(g, 3*terra.Year/4), shade),
 		streamDrawing("wind-midsummer", "Wind, midsummer", "The wind at the north's midsummer.", g, windOf(g, terra.Year/4), shade),
