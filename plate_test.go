@@ -24,22 +24,23 @@ func pieces(g *Grid) map[uint8]int {
 	return held
 }
 
-// A world breaks into more pieces than it ends with: continents that run into
-// each other weld, and what was two plates with a range between them becomes
-// one plate with an old range through the middle of it. It is the thing the
-// crust could not do when its plates were a fixed list of moving points, and
-// it is where most of the mountains on a finished map come from - a range
-// whose cause is over and which has been weathering ever since.
+// Continents that run into each other weld, and what was two plates with a
+// range between them becomes one plate with an old range through the middle
+// of it. It is the thing the crust could not do when its plates were a fixed
+// list of moving points, and it is where most of the mountains on a finished
+// map come from - a range whose cause is over and which has been weathering
+// ever since.
+//
+// It is counted and not read off how many pieces a world ends with, which is
+// how this was first written: small plates now break off as well as weld, and
+// a world that has done both can end with as many plates as it began with.
 func TestContinentsWeldIntoOnePlate(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
-		began := max(3, plateCount*g.Span()/plateSpan)
-		ended := len(pieces(g))
-		if ended >= began {
-			t.Errorf("seed %d broke into %d pieces and ended with %d: nothing welded",
-				seed, began, ended)
+		if g.welds == 0 {
+			t.Errorf("seed %d: nothing welded", seed)
 		}
-		if ended < crustFloor {
+		if ended := len(pieces(g)); ended < crustFloor {
 			t.Errorf("seed %d welded itself down to %d pieces, below the floor of %d",
 				seed, ended, crustFloor)
 		}
@@ -98,9 +99,9 @@ func TestPlatesAreNotAllOneSize(t *testing.T) {
 	}
 }
 
-// And every piece is one piece. A welded plate is grown from several middles,
-// and the part one of them holds can be cut off from the rest; left so, it is
-// a disc of one plate adrift inside another.
+// And every piece is one piece. A plate carried into another can be eaten
+// through where its front is narrow, and a piece left on the far side is a
+// scrap of one plate adrift inside another.
 func TestEveryPlateIsOnePiece(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
