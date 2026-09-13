@@ -33,6 +33,9 @@ var moveCost = [TerrainCount]float64{
 	// dearer than open grass and cheaper than anything with a slope on it.
 	// It is not water's 3.5 because nobody is swimming - see Tile.Deep.
 	Ice: 1.4,
+	// A flat the tide has left is mud: dearer than grass or ice, cheaper than
+	// a wood. Covered, it is waded like water; see Grid.Covered.
+	Flat: 1.6,
 }
 
 // Saving is what a road laid on p would take off each crossing of it, as a

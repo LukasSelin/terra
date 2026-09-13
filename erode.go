@@ -88,6 +88,8 @@ func (w *Land) Erode() {
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
+	// The coast has moved, so the tide's reach has, and the flats with it.
+	g.tides()
 	g.resoil()
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
@@ -197,7 +199,7 @@ func (g *Grid) wear(by float64) {
 		// Soil goes with the ground it was in. What washes off a slope is
 		// what that slope could have grown; what lands on the flat is what
 		// makes a flood plain worth farming.
-		if !t.Wet() {
+		if !t.Wet() && !t.Terrain.Tidal() {
 			g.Rich[i] = clamp01(g.Rich[i] + change[i]/SoilDepth)
 			g.Fertility[i] = math.Min(g.Fertility[i], g.Rich[i])
 			mix(t, gained[i])
@@ -311,8 +313,8 @@ func (g *Grid) resoil() {
 	const toward = 0.08
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() {
-			continue
+		if t.Wet() || t.Terrain.Tidal() {
+			continue // salt mud grows nothing, however much the river feeds it
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		// The rock underneath goes on making soil out of itself, so ground

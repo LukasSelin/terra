@@ -265,6 +265,7 @@ var terrainColor = [terra.TerrainCount]color.RGBA{
 	terra.Field:  {214, 190, 110, 255},
 	terra.Rock:   {150, 140, 130, 255},
 	terra.Ice:    {226, 238, 246, 255},
+	terra.Flat:   {158, 146, 118, 255},
 }
 
 var rockColor = [terra.BedrockCount]color.RGBA{

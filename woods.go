@@ -100,15 +100,15 @@ func (g *Grid) readWoods() {
 	suit := make([]float64, len(g.Tiles))
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			if g.Tiles[i].Wet() {
-				continue // the river is not ground trees might have had
+			if g.Tiles[i].Wet() || g.Tiles[i].Terrain.Tidal() {
+				continue // the river is not ground trees might have had, nor the tide's mud
 			}
 			suit[i] = g.WoodsAt(geom.Pos{X: i % g.W, Y: i / g.W})
 		}
 	})
 	suits := make([]float64, 0, len(g.Tiles))
 	for i := range g.Tiles {
-		if !g.Tiles[i].Wet() {
+		if !g.Tiles[i].Wet() && !g.Tiles[i].Terrain.Tidal() {
 			suits = append(suits, suit[i])
 		}
 	}
@@ -134,7 +134,7 @@ func (g *Grid) readHolds() {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			p := geom.Pos{X: i % g.W, Y: i / g.W}
-			g.holds[i] = !g.TooSteep(p) && !g.Frozen(p) && g.WoodsAt(p) >= g.woodsLine
+			g.holds[i] = !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Frozen(p) && g.WoodsAt(p) >= g.woodsLine
 		}
 	})
 }

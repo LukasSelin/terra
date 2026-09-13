@@ -47,6 +47,10 @@ type terrain struct {
 	// one because cutting down is how a valley deepens, the other because a
 	// field is soil by definition.
 	hold float64
+	// tidal says this ground belongs to the tide: the sea covers it one day
+	// and leaves it the next, so whether it can be walked is a question for
+	// the day and not for the ground. Nothing grows on it. See shore.go.
+	tidal bool
 }
 
 var terrains = [TerrainCount]terrain{
@@ -61,6 +65,11 @@ var terrains = [TerrainCount]terrain{
 	// not share with open water is that somebody can walk on it; that is
 	// Tile.Deep, which is the walker's question and not the map-maker's.
 	Ice: {name: "ice", wet: true, hold: 1},
+	// A flat is not wet. Silt settles on it - that is what made it - and it
+	// stands above the water it drains into at low tide, so the map-maker's
+	// questions have ground's answers. The sea's half is the day's: see
+	// Grid.Covered. Mud holds its soil about as well as open grass does.
+	Flat: {name: "flat", hold: 0.5, tidal: true},
 }
 
 // String is what this ground is called.
@@ -77,6 +86,14 @@ func (t Terrain) Wet() bool {
 		return false
 	}
 	return terrains[t].wet
+}
+
+// Tidal reports whether this is ground the tide covers and leaves.
+func (t Terrain) Tidal() bool {
+	if int(t) >= len(terrains) {
+		return false
+	}
+	return terrains[t].tidal
 }
 
 // Hold is how much of its soil this ground keeps against the weather.

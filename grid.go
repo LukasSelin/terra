@@ -14,6 +14,7 @@ const (
 	Field
 	Rock // an outcrop: stone to cut, nothing to grow
 	Ice  // sea that never thaws: nothing to take, and walked over, not swum
+	Flat // mud the tide covers and leaves: see shore.go
 	// TerrainCount is how many kinds of ground there are. It sizes the
 	// tables that have to carry a row for each; see kind.go.
 	TerrainCount
@@ -179,8 +180,13 @@ type Grid struct {
 	// while it runs, and below zero on a map with neither. See weather.go.
 	base float64
 
-	// tide is the day's sea the map is read against: see tide.go.
-	tide Tide
+	// tide is the day's sea the map is read against: see tide.go. tidal is,
+	// for each tile, how many times the open ocean's tide it has, and ebb, on
+	// a flat, how far under mean sea it lies in those tides. Both are laid
+	// with the coast, and are nothing on a map with no sea. See shore.go.
+	tide  Tide
+	tidal []float32
+	ebb   []float32
 
 	// air is the map's climate row by row, and rain and runoff are, for each
 	// tile, how much falls on it in a year and how much of that the ground
@@ -264,6 +270,9 @@ func (g *Grid) At(p geom.Pos) *Tile {
 func (g *Grid) Clone() *Grid {
 	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, tide: g.tide}
 	copy(c.Tiles, g.Tiles)
+	c.frost = append([]float64(nil), g.frost...)
+	c.tidal = append([]float32(nil), g.tidal...)
+	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
 	c.area = append([]float64(nil), g.area...)

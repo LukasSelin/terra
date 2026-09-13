@@ -1181,7 +1181,9 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		t := &g.Tiles[i]
 		held := t.Mark != None || t.Owner != 0
 		switch {
-		case wet[i] && !t.Wet() && !held:
+		case wet[i] && !t.Wet() && !held && !(t.Terrain == Flat && g.underSea(i)):
+			// A flat under mean sea is the tide's, and the sea is not laid
+			// over it here: see shore.go.
 			t.Terrain, g.Wood[i], g.Wild[i], g.Age[i] = Water, 0, 0, 0
 			g.Fish[i] = 0.7 + 0.3*rng.Float64()
 		case !wet[i] && t.Wet():

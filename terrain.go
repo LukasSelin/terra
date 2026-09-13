@@ -59,6 +59,9 @@ func (w *Land) Generate(cfg Terms) {
 	})
 	// And with it, where the sea itself never thaws. See Grid.freeze.
 	g.freeze()
+	// The tide's reach, and the flats it covers and uncovers, before the woods
+	// are shared out: a wood's share is a share of ground trees could have.
+	g.tides()
 
 	// Woods stand where the ground is damp enough to grow them and gentle
 	// enough to hold soil: the valley sides above the flood, not the crown of
@@ -135,8 +138,7 @@ func (w *Land) Generate(cfg Terms) {
 	g.EachRow(func(y int) {
 		for x := 0; x < width; x++ {
 			p := geom.Pos{X: x, Y: y}
-			if g.Frozen(p) {
-				i := g.Index(p)
+			if i := g.Index(p); g.Frozen(p) && g.Tiles[i].Terrain != Flat {
 				g.Tiles[i].Terrain, g.Wood[i], g.Wild[i] = Rock, 0, 0
 			}
 		}
@@ -152,7 +154,7 @@ func (w *Land) Generate(cfg Terms) {
 	// the weather takes every age.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() {
+		if t.Wet() || t.Terrain.Tidal() {
 			continue
 		}
 		g.Fertility[i] = g.SoilAt(geom.Pos{X: i % width, Y: i / width})
