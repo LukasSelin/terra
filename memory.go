@@ -21,9 +21,16 @@ import (
 // the plates beside the ground while the epochs run. They are measured at
 // a little over 200 and 350, and rounded up so that the reading is of what
 // a land takes at most rather than on the day it was measured.
+//
+// The run was raised when the water began to be cut implicitly: the solver
+// keeps its order, its receivers and a load of each grain beside the ground
+// while each epoch wears, and the rain and runoff are kept on the map. Peak
+// heap on a 1024 by 512 globe rose by 29 per cent against the same world
+// before it, and a drawn valley's by 4; 350 grown by that is 450, over the
+// line it was rounded to.
 const (
 	bytesDrawn = 256
-	bytesRun   = 448
+	bytesRun   = 512
 )
 
 // ErrTooBig is what MakeLand wraps when a world would not fit in the memory
