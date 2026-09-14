@@ -201,10 +201,21 @@ func (w *Land) Rates(regrowth float64) []float64 {
 	if len(w.rates) != len(g.Chunks) {
 		w.rates = make([]float64, len(g.Chunks))
 	}
+	byClimate := w.Terms.Growth.climate(g.Wrap)
 	for i := range w.rates {
 		c := &g.Chunks[i]
 		mid := min(g.H-1, c.Y0+c.H/2)
-		w.rates[i] = regrowth * growthOf(w.Climate.TempAt(mid)-Lapse*c.Height)
+		temp := w.Climate.TempAt(mid) - Lapse*c.Height
+		if !byClimate {
+			w.rates[i] = regrowth * growthOf(temp)
+			continue
+		}
+		// Under the climate's rules the year of the chunk's middle tile is
+		// read, at the chunk's mean height: see climateGrowth.
+		t := mid*g.W + min(g.W-1, c.X0+c.W/2)
+		mean, swing := w.yearAt(t)
+		mean += Lapse * (g.Tiles[t].Height - c.Height)
+		w.rates[i] = regrowth * climateGrowth(temp, mean, swing, g.Rain(t))
 	}
 	return w.rates
 }

@@ -1,6 +1,10 @@
 package terra
 
-import "github.com/LukasSelin/terra/geom"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/geom"
+)
 
 // woodsShare is how much of a map's dry land will hold a wood. It is the
 // answer to a settlement watching the forest close over it: with nothing to
@@ -28,12 +32,88 @@ const woodsShare = 0.2
 // true of it.
 const woodsSteep = 0.2
 
+// soilCritical is the steepest a soil-mantled hillside stands, as a rise over
+// a run: Roering, Kirchner and Dietrich (1999) fit a critical gradient of 1.2
+// to 1.35 to the hillslopes of the Oregon Coast Range, beyond which soil moves
+// downhill as fast as it is made. It is the climate's woods' slope limit.
+const soilCritical = 1.25
+
+// luck is how much a founding wood's draw can add to how well its ground
+// suits trees. See Land.Generate.
+const luck = 0.35
+
+// The woods the climate makes. A forest stands where the rain outruns what
+// the air could take back up: Budyko's dryness index φ, the potential
+// evaporation over the rain, is under one under every closed forest on Earth
+// and over two under none (Budyko, 1974), and Holdridge's life zones put moist
+// and wet forest under a ratio of one and dry forest between one and two
+// (Holdridge, 1967). Under the ice and above the tree line nothing is a
+// forest, and nor is anything under Holdridge's polar biotemperature.
+//
+// Within a climate the water is not spread evenly. It gathers where much
+// ground drains through a place and the place is too flat to send it on, and
+// the topographic wetness index ln(a/tan β) of Beven and Kirkby (1979) is that
+// reading - a the catchment above a tile per metre of its width, β its slope.
+// TOPMODEL reads a place's share of its catchment's water as its index against
+// the catchment's mean, and so is this: the water a tile has is the rain over
+// what the air could take, times its index over the land's mean. The wet
+// hollows of a dry country hold a wood and its dry ridges do not, which is a
+// gallery forest; in a wet one only the sharpest crests are too dry.
+//
+// So a tile suits trees by the water it has against the water a forest needs,
+// and WoodsAt gives that as a half at a ratio of one, which is climateLine.
+const climateLine = 0.5
+
+// twiSlope is the least slope the wetness index is read at, as a rise over a
+// run: ground flatter than a thousandth drains as though it fell a thousandth,
+// and a perfectly flat tile would otherwise be infinitely wet.
+const twiSlope = 1e-3
+
+// twi is the topographic wetness index of tile i.
+func (g *Grid) twi(i int) float64 {
+	a := 1.0
+	if i < len(g.area) {
+		a = math.Max(1, g.area[i])
+	}
+	return math.Log(a * TileSpan / math.Max(twiSlope, g.Slope(g.PosOf(i))))
+}
+
+// waterRatio is the water tile i has against what a forest on it needs: the
+// rain over what the air could take up, times how much of its catchment's
+// water it gathers. Nothing over nothing is no water.
+func (g *Grid) waterRatio(i int) float64 {
+	if g.air == nil || i >= len(g.rain) || g.twiMean <= 0 {
+		return 0
+	}
+	y := i / g.W
+	pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.Tiles[i].Height)
+	if pet <= 0 {
+		return math.Inf(1)
+	}
+	return g.rain[i] / pet * g.twi(i) / g.twiMean
+}
+
 // WoodsAt is how well a tile's ground suits trees: damp enough to grow them
 // and gentle enough to hold the soil they grow in. It is the reading the map
 // was made with, and it moves when the weather moves the ground under it.
+//
+// Under the climate's rules - see Terms.Woods - it is the climate's reading
+// instead, over the same limit of slope: half of the water tile has against
+// what a forest needs, up to one, and nothing at all under the ice, above the
+// tree line or under Holdridge's polar biotemperature. See climateLine.
 func (g *Grid) WoodsAt(p geom.Pos) float64 {
 	if !g.In(p) || g.TooSteep(p) {
 		return 0
+	}
+	if g.climateWoods {
+		i := g.Index(p)
+		if g.Treeless(p) || g.Barren(p) {
+			return 0
+		}
+		if len(g.warm) == len(g.Tiles) && biotemperature(g.meanOn(i, g.Tiles[i].Height), float64(g.swing[i])) < holdridgePolar {
+			return 0
+		}
+		return clamp01(climateLine * g.waterRatio(i))
 	}
 	t := g.At(p)
 	damp := clamp01(1 - t.Drain/(2*FloodDepth))
@@ -51,6 +131,13 @@ func (g *Grid) TooSteep(p geom.Pos) bool {
 	}
 	if !g.woodsRead {
 		g.readWoods()
+	}
+	// Under the climate's rules the line is not a share of the map but the
+	// slope soil stops standing on. A share of every slope on a globe is a
+	// share of a map most of which is flat sea, and the steepest fifth of that
+	// was nine tenths of the humid land.
+	if g.climateWoods {
+		return g.Slope(p) > soilCritical
 	}
 	// Steeper than the line, not at it: on ground with no slope in it at all
 	// the line is zero, and flat ground is the last thing that should read as
@@ -97,6 +184,25 @@ func (g *Grid) readWoods() {
 	// the list is in tile order however the rows were worked. WoodsAt asks
 	// TooSteep, which reads the map afresh if the slopes are not in yet -
 	// they are, three lines above, or none of this would mean anything.
+	if g.climateWoods {
+		// The land's mean wetness index, which the climate's woods are read
+		// against: see twi.
+		twis := make([]float64, len(g.Tiles))
+		g.EachRow(func(y int) {
+			for i := y * g.W; i < (y+1)*g.W; i++ {
+				twis[i] = g.twi(i)
+			}
+		})
+		var sum, n float64
+		for i := range g.Tiles {
+			if !g.Tiles[i].Wet() && !g.Tiles[i].Terrain.Tidal() {
+				sum, n = sum+twis[i], n+1
+			}
+		}
+		if g.twiMean = 0; n > 0 {
+			g.twiMean = sum / n
+		}
+	}
 	suit := make([]float64, len(g.Tiles))
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
@@ -114,6 +220,9 @@ func (g *Grid) readWoods() {
 	}
 	if len(suits) > 0 {
 		g.woodsLine = quantile(suits, 1-woodsShare)
+	}
+	if g.climateWoods {
+		g.woodsLine = climateLine
 	}
 	g.readHolds()
 }
@@ -134,7 +243,7 @@ func (g *Grid) readHolds() {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			p := geom.Pos{X: i % g.W, Y: i / g.W}
-			g.holds[i] = !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Frozen(p) && g.WoodsAt(p) >= g.woodsLine
+			g.holds[i] = !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Treeless(p) && g.WoodsAt(p) >= g.woodsLine
 		}
 	})
 }

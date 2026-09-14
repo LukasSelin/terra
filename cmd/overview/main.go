@@ -254,7 +254,7 @@ func measure(land *terra.Land) summary {
 		s.Bedrock = append(s.Bedrock, shareOf(b.String(), rock[b], land0, hex(rockColor[b])))
 	}
 	s.Plates = len(plates)
-	s.Frozen = shareOf("frozen ground", frozen, land0, "")
+	s.Frozen = shareOf("permafrost", frozen, land0, "")
 	s.Rivers = shareOf("flowing water", rivers, n, "")
 	return s
 }
@@ -286,7 +286,7 @@ func (s summary) print() {
 	for _, x := range s.Forms {
 		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
-	fmt.Printf("\nfrozen ground %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
+	fmt.Printf("\npermafrost %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
 	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
 	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
 		s.Moon, 2*(terra.TideM2+terra.TideS2), 2*(terra.TideM2-terra.TideS2), s.RangeP50, s.RangeP90, s.RangeMax, s.Flats.Pct)
@@ -375,7 +375,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		},
 		{
 			file: "biome", title: "Biome", legend: s.Biomes,
-			about: "What the weather makes of each tile: the year's mean temperature at its latitude and height against the rain on it, with Köppen's line between desert, steppe and forest. Low ground by a river is wetland, standing woods are drawn a little darker, and the sea is shallow within reach of land.",
+			about: "What the weather makes of each tile, by Köppen–Geiger: the warmest and coldest month at its latitude and height, and the rain on it and when in the year it falls. Desert is under half the dry line and steppe under it; the tree line is a warmest month of ten degrees. Low ground by a river is wetland, standing woods are drawn a little darker, and the sea is shallow within reach of land.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				c := biomeOf(cls.Biome[i]).col
 				if k := cls.Biome[i]; k == cShelf || k == cDeep {

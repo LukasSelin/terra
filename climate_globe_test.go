@@ -35,16 +35,16 @@ func TestGrowthIsSlowerTowardThePoles(t *testing.T) {
 		t.Fatalf("the pole averages %.1f, above the frost", c.MeanAt(pole))
 	}
 	// Midsummer in the north is midwinter in the south.
-	c.Temp = seasonal(Year / 4)
+	c.Temp, c.tick = seasonal(Year/4), Year/4
 	north, south := c.TempAt(c.rows/4), c.TempAt(3*c.rows/4)
-	c.Temp = seasonal(3 * Year / 4)
+	c.Temp, c.tick = seasonal(3*Year/4), 3*Year/4
 	northLater, southLater := c.TempAt(c.rows/4), c.TempAt(3*c.rows/4)
 	if !(north > northLater && south < southLater) {
 		t.Fatalf("north %.1f then %.1f, south %.1f then %.1f: the seasons do not turn over", north, northLater, south, southLater)
 	}
 	var lo, hi float64 = 100, -100
 	for tick := 0; tick < Year; tick++ {
-		c.Temp = seasonal(tick)
+		c.Temp, c.tick = seasonal(tick), tick
 		lo, hi = min(lo, c.TempAt(equator)), max(hi, c.TempAt(equator))
 	}
 	if hi-lo > 1 {
@@ -193,8 +193,8 @@ func TestTheIceEdgeIsNotALineOfLatitude(t *testing.T) {
 		t.Fatalf("ground with no sea about it is warmed by %v of it", warm)
 	}
 	for y := 0; y < c.rows; y += 37 {
-		if c.frostlineAt(y, 0) != c.frostline(y) {
-			t.Fatalf("row %d with no sea about it reads a different frostline", y)
+		if c.seaMeanAt(y, maritime(0)) != c.MeanAt(y) {
+			t.Fatalf("row %d with no sea about it reads a different year", y)
 		}
 	}
 	if testing.Short() {
@@ -240,8 +240,8 @@ func TestTheIceEdgeIsNotALineOfLatitude(t *testing.T) {
 // a pole is ice rather than the open, fish-rich ocean it used to be, and a
 // river that reaches one is ice too. See SeaFreeze.
 func TestThePolarSeaIsIce(t *testing.T) {
-	if Icefall <= 0 {
-		t.Fatalf("water freezes %.0f metres below where the ground does", Icefall)
+	if SeaFreeze >= 0 {
+		t.Fatalf("sea water freezes at %.1f degrees", SeaFreeze)
 	}
 	if testing.Short() {
 		t.Skip("a globe takes a second or two to make")

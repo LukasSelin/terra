@@ -172,6 +172,9 @@ func (g *Grid) weather() {
 		g.rain = make([]float64, len(g.Tiles))
 		g.runoff = make([]float64, len(g.Tiles))
 	}
+	if len(g.rainWarm) != len(g.Tiles) {
+		g.rainWarm = make([]float32, len(g.Tiles))
+	}
 	g.winds = windsFor(g)
 	g.rainOn()
 }
@@ -248,6 +251,7 @@ func (g *Grid) rainOn() {
 			}
 			cell := e.at(int(math.Round(fx)), int(math.Round(fy)))
 			var p float64
+			var each [phases]float64
 			for k := range phases {
 				air := e.sample32(carried[k], fx, fy)
 				if gx != 0 || gy != 0 {
@@ -261,6 +265,17 @@ func (g *Grid) rainOn() {
 					}
 				}
 				p += air / phases
+				each[k] = air
+			}
+			// The warmer half of the year is its summer phase and half of each
+			// turn either side of it: the north's summer is the south's winter.
+			summer := each[2]
+			if a.lat[y] < 0 {
+				summer = each[0]
+			}
+			g.rainWarm[i] = 0.5
+			if total := each[0] + each[1] + each[2] + each[3]; total > 0 {
+				g.rainWarm[i] = float32((summer + (each[1]+each[3])/2) / total)
 			}
 			g.rain[i], g.runoff[i] = p, 0
 			if !g.sunk(i) {
@@ -575,6 +590,14 @@ func petTable(lat float64) []float64 {
 		span  = 10.0   // degrees between the day's warmest and coldest
 	)
 	phi := lat * math.Pi / 180
+	// The evaporation keeps the year it was calibrated on - the temperate
+	// swing capped at Temperate's - and not solarSwing's, which the ground and
+	// the wind read. Read at the growing swing, the high latitudes' longer
+	// warm months took up more of the rain, and on eight small globes the
+	// discharge exceedance exponent went from 0.447 to 0.502, out of the real
+	// networks' 0.40-0.46 (Rodriguez-Iturbe et al., 1992) while the drainage
+	// area's stayed in it: the rivers are tuned to this year, and moving it is
+	// a question for the water and not for the thresholds.
 	hemi := math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
 	var ra, swing [12]float64
 	days := [12]float64{31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
