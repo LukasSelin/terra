@@ -50,10 +50,16 @@ func TestNothingSettlingIsBraunAndWillett(t *testing.T) {
 // Raised steadily and cut steadily, a river settles on the slope where the two
 // balance: S = U/(K·√Q). The implicit step gets there at any size of step, and
 // a step a thousand times too long for an explicit one is no different.
+//
+// K is the test's own and not Erodibility. This is a question about the
+// solver, and how many steps a river takes to get to its slope goes as one
+// over K: at the map's figure, set by what real ground wears at, four
+// thousand steps of one age leave it still on the way.
 func TestAnUpliftedRiverReachesItsSteadySlope(t *testing.T) {
 	const uplift = 0.5 // metres a step
+	const k = 2.0
 	for _, by := range []float64{1, 2000} {
-		c, q := chain(200, Erodibility, by)
+		c, q := chain(200, k, by)
 		for step := 0; step < 4000; step++ {
 			for i := 1; i < len(c.h); i++ {
 				c.h[i] += uplift
@@ -63,7 +69,7 @@ func TestAnUpliftedRiverReachesItsSteadySlope(t *testing.T) {
 		}
 		for i := 1; i < len(c.h); i++ {
 			slope := (c.h[i] - c.h[i-1]) / TileSpan
-			want := uplift / (by * Erodibility * math.Sqrt(q[i]))
+			want := uplift / (by * k * math.Sqrt(q[i]))
 			if math.IsNaN(slope) || math.Abs(slope-want) > 1e-3*want {
 				t.Fatalf("by %v, tile %d: slope %v, want %v", by, i, slope, want)
 			}

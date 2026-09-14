@@ -41,11 +41,21 @@ type terrain struct {
 	// what an act wants of water is the fish, and Affords says that already.
 	// This is the map's own fact about its own ground.
 	wet bool
-	// hold is how well the ground holds its soil against the weather, from
-	// nothing to all of it. Bare rock keeps almost none, a wood most of what
-	// falls on it, and a channel and a worked field are counted whole - the
-	// one because cutting down is how a valley deepens, the other because a
-	// field is soil by definition.
+	// hold is how much of what the weather could take off bare earth it
+	// takes off this ground, from nothing to all of it: a channel and a worked
+	// field are counted whole - the one because cutting down is how a valley
+	// deepens, the other because a ploughed field is bare earth by another
+	// name.
+	//
+	// The rest is set by what real ground loses. Montgomery (2007), over some
+	// fifteen hundred measurements: ploughed fields a median of 1.5 mm a year,
+	// ground under what grows there of itself 0.013, a hundred times less. Open
+	// grass and woods are both that, and a wood holds half again what grass
+	// does. An outcrop has no soil for the rain to strip and comes down at the
+	// pace its rock weathers, which is slower again: Portenga and Bierman
+	// (2011) have bare rock at a tenth of whole catchments. They were 0.6, 0.25
+	// and 0.15, which had a ploughed hillside wearing three times as fast as a
+	// wooded one; see yardstick_test.go for how it is read.
 	hold float64
 	// tidal says this ground belongs to the tide: the sea covers it one day
 	// and leaves it the next, so whether it can be walked is a question for
@@ -54,11 +64,11 @@ type terrain struct {
 }
 
 var terrains = [TerrainCount]terrain{
-	Grass:  {name: "open", hold: 0.6},
-	Forest: {name: "wood", hold: 0.25},
+	Grass:  {name: "open", hold: 0.06},
+	Forest: {name: "wood", hold: 0.03},
 	Water:  {name: "water", wet: true, hold: 1},
 	Field:  {name: "field", hold: 1},
-	Rock:   {name: "outcrop", hold: 0.15},
+	Rock:   {name: "outcrop", hold: 0.01},
 	// Ice is wet: it is the sea, and the map-maker's questions about water
 	// all have the sea's answer here. Nothing grows on it, nothing settles
 	// on it, and it stands above nothing, so it has no drain. What it does

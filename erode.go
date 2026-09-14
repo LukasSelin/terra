@@ -231,14 +231,23 @@ func (g *Grid) wear(by float64) {
 // trench one tile across loses a few hundredths of its depth an age, and a
 // range twenty tiles across a hundred times less.
 //
-// Measured on the high fifth of a half globe over three seeds and sixty ages:
-// the deepest hundredth of the ground lay 17.2, 18.5 and 25.2 metres below
-// the ground either side of it without creep, and 7.7, 8.8 and 15.4 with it,
-// for ten metres off the highest summit. Half as much held the trenches at
-// the depth they started; twice as much was not tried, because at this figure
-// the great rivers' bends were already easing out as fast as they were cut
-// until their banks were left to meander.
-const Creep = 0.1
+// On the grid it is diffusion: the ground at a tile goes as Creep/4 of the
+// curvature in tiles, which is Creep/4 x TileSpan^2 x hold square metres an
+// age. The figure is the real one. Roering and others (1999), calibrating
+// hillslopes in the Oregon Coast Range against their erosion rates, have
+// 0.0031 to 0.0045 square metres a year; Fernandes and Dietrich (1997) put
+// the world between 0.00044 and 0.036. At this figure open grass creeps at
+// 0.0036.
+//
+// It was 0.1, which on grass as it held then was nearly a square metre a
+// year, two hundred and sixty times Roering's. That figure was measured
+// against trenches rather than against ground: on the high fifth of a half
+// globe over three seeds and sixty ages, the deepest hundredth of the ground
+// lay 17.2, 18.5 and 25.2 metres below the ground either side of it without
+// creep, and 7.7, 8.8 and 15.4 with it. What was cutting those trenches was
+// water wearing ten times too fast; with the water at the real figure too -
+// see Erodibility - a history weathers as it did. See deepWeather.
+const Creep = 0.00384
 
 // creep books what an age of creep moves onto change and gained. Each pair of
 // neighbours is taken once, and what one gives the other takes, so no ground

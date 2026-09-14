@@ -36,13 +36,23 @@ import (
 // with one cubic metre a second running over it down a fall of one in one,
 // before what is growing on it and what it is made of - see hold - have their
 // say. It is not a rock's figure. The fall is read over a tile and the water
-// off HydroSpan of catchment, and the size of it is what makes the ground move
-// at the speed a settlement can see: a ploughed slope loses a few centimetres
-// of soil a decade and a wooded one a few millimetres, so a hillside farmed
-// hard is worn out in a century or two and one left standing keeps what it
-// has for longer than anybody watching it will be alive.
+// off HydroSpan of catchment, and the size of it is set by what real ground
+// loses: a ploughed slope a millimetre and a half of soil a year, the median
+// of Montgomery's (2007) compilation, and a valley nobody farms a twentieth of
+// a millimetre, the median Portenga and Bierman (2011) read off the sand of
+// real catchments. A hillside farmed hard loses its soil in a couple of
+// thousand years and one left standing keeps it for a hundred thousand.
 //
-// It was Wash before, twelve, charged against the root of the share of the
+// It was two, which had ploughed slopes losing twelve millimetres a year and
+// the untouched valley more than a millimetre - both about ten times anything
+// measured. Ploughed is one age of weather on the slopes of seed 3's 60 by 40
+// valley; untouched is what the water carried off valleys 1 to 3 over forty
+// ages, spread over them. With grass and wood holding what they hold now:
+//
+//	K      ploughed mm/yr   untouched mm/yr
+//	0.25        1.64             0.053
+//
+// Before that it was Wash, twelve, charged against the root of the share of the
 // map's water a tile carried - which made how fast a hillside wore a fact
 // about how big the map was: a globe's hillsides, each a smaller share of a
 // larger whole, wore eleven times slower than the valley's. Charged against
@@ -53,7 +63,7 @@ import (
 //	was       -4003         +4355              2.83                  0.023
 //	1.5       -3019         +3656              2.99                  0.019
 //	2.0       -3690         +3762              2.94                  0.027
-const Erodibility = 2.0
+const Erodibility = 0.25
 
 // depositOf is how readily each grain comes out of the water on ground that
 // lets it, as a share of what passes: sand at the first slackening, silt where

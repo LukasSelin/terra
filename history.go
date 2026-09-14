@@ -384,7 +384,22 @@ const (
 // ground goes up at the seams and how fast the weather takes it down again,
 // which is the balance that decides whether a map comes out as ridges or as
 // country.
-const deepWeather = 1.5
+//
+// It was 1.5 while an age of weather wore ground at ten times any real rate
+// and grass let go of its soil almost as readily as a ploughed field. With
+// both at the real figures - see Erodibility and hold - it takes eighty times
+// as many ages for the water to take the same off an epoch's open ground, so
+// it is eighty times as many, and the balance with the plates is the one it
+// was. Only the creep, which was two hundred and sixty times too fast, is
+// slower against the water than it was.
+const deepWeather = 120.0
+
+// deepMeander is how many ages of a river's wandering an epoch is worth. It
+// stays where deepWeather was, because the wandering was never too fast: a
+// great river here moves across its valley at a few thousandths of its width
+// a year, where real ones do up to a hundredth or two, and a history that let
+// it wander eighty times as far would unpick every range it crossed.
+const deepMeander = 1.5
 
 // smoothing is how many times a finished history is softened before its
 // heights are matched to a drawn map's spread. A seam raises a range narrower
@@ -722,7 +737,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		g.base = g.historyBase()
 		g.drain()
 		g.wear(deepWeather)
-		g.meander(deepWeather)
+		g.meander(deepMeander)
 		g.keepBook(book, e)
 		plates = w.reshape(g, plates, fl, touch, weld)
 		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
