@@ -50,6 +50,12 @@ func parts(t *Tile) [Grains]float64 {
 	return [Grains]float64{Sand: t.Sand, Silt: t.Silt(), Clay: t.Clay}
 }
 
+// wearRock is how much faster a channel cuts soft rock than hard, as a power
+// of the rock's hardness against the map's middling rock. It is the water
+// taking a soft bed out from under a hard one faster than it can take the
+// hard one, which is how a scarp retreats and a mesa is left standing.
+const wearRock = 1.0
+
 // hold is how much of the soil on a tile moves in an age, by what is growing
 // or standing on it and by what the soil itself is made of.
 //
@@ -60,11 +66,12 @@ func parts(t *Tile) [Grains]float64 {
 // whole model charges for clearing a hillside: over forty ages the ploughed
 // slopes on hard rock came out richer than they started, because the slow
 // weathering of the ground could no longer keep up with the soil going. What
-// the rock decides is what the water cuts - see incise and meander - which is
-// where a difference in strength shows as a difference in shape. Woods are what
-// hold a hillside together; a ploughed field is bare earth by another name; a
-// roof or a road takes the ground it covers out of the weather altogether;
-// and loose sand goes where clay stays, whatever is growing on either.
+// the rock decides is what the water cuts - see incise, meander and wearRock -
+// which is where a difference in strength shows as a difference in shape.
+// Woods are what hold a hillside together; a ploughed field is bare earth by
+// another name; a roof or a road takes the ground it covers out of the weather
+// altogether; and loose sand goes where clay stays, whatever is growing on
+// either.
 func hold(t *Tile) float64 {
 	if t.Mark != None {
 		return 0
@@ -96,8 +103,11 @@ func (w *Land) Erode() {
 	// takes the hillsides down. See meander.go.
 	g.meander(1)
 	// What the age has left steeper than ground can stand on comes down, and
-	// lies at the foot of the slope it came off. See slide.go.
+	// lies below the slope it came off. See slide.go.
 	g.landslide(true)
+	// What the age wore away has bared the bed beneath it here and there, and
+	// the soil is made again from that. See strata.go.
+	g.expose()
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
@@ -146,6 +156,7 @@ func (g *Grid) wear(by float64) {
 		eff:    make([]float64, n),
 		abrade: make([]float64, n),
 	}
+	soft := 1 / g.meanHard()
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
@@ -168,6 +179,17 @@ func (g *Grid) wear(by float64) {
 			c.f[i] = power * hold(t)
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
+			// Where the water has gathered into a channel it is cutting rock
+			// and not stripping soil, and there the rock does pay: see hold
+			// for why it may not on a hillside. It is charged against the
+			// map's middling rock, so a map of one rock wears as it did.
+			if g.strata != nil && g.area != nil {
+				if ch := clamp01((g.area[i] - shapeHead) / (textureChannel - shapeHead)); ch > 0 {
+					pay := 1 + ch*(math.Pow(t.Hard()*soft, -wearRock)-1)
+					c.f[i] *= pay
+					c.rock[i] *= pay
+				}
+			}
 			// What it lets settle: more of it the gentler the ground, less of
 			// it the more water there is to keep it up, and nothing on ground
 			// somebody has built on.

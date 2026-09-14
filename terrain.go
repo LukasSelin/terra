@@ -50,12 +50,19 @@ func (w *Land) Generate(cfg Terms) {
 	// down. See shape.go and slide.go.
 	area := g.shape()
 	w.texture(g, area)
+	// And the soft beds taken down against the hard ones, which is where the
+	// ridges and the scarps of layered country come from. See denude.
+	g.denude()
 	g.landslide(false)
+	// The ground has moved into the beds under it, so the rock it is made of
+	// has too. See strata.go.
+	g.expose()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
 	// goes: incise moves the ground, so the drainage has to be taken again on
 	// the ground it left. See Incise.
 	g.incise()
+	g.expose()
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
 	if poured {

@@ -199,7 +199,7 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 				if off.X != 0 && off.Y != 0 {
 					run *= math.Sqrt2
 				}
-				if fall := (g.Tiles[i].Height - g.At(q).Height) / run; fall > Critical+slideLeast/run+1e-9 {
+				if fall := (g.Tiles[i].Height - g.At(q).Height) / run; fall > standMost*Critical+slideLeast/run+1e-9 {
 					t.Fatalf("%s: tile %v stands %.3f over %v after the slides", name, p, fall, q)
 				}
 			}

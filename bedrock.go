@@ -17,7 +17,8 @@ import (
 // hard it is to work.
 //
 // So there are two new things on a tile: what the rock beneath it is, which
-// is a fact about the region and never changes, and what the soil on top is
+// is the bed of the region's pile the ground has worn down to - see
+// strata.go - and what the soil on top is
 // made of, which starts as what that rock weathers to and is then moved
 // about by every age of weather. Everything else here is read off those two
 // rather than stored, in the way the rivers and the going underfoot are read
@@ -103,9 +104,10 @@ var hardness = [BedrockCount]float64{
 }
 
 // Hard is how well the rock under this tile stands up to being worn away. It
-// divides what an age of weather takes off, so ground over shale comes down
+// divides what a river cuts, holds up how steep the ground can stand, and
+// steepens the fall a channel is shaped to, so ground over shale comes down
 // three times as fast as ground over granite and the difference between them
-// is a hillside.
+// is a hillside - and, where one lies over the other, a scarp.
 func (t *Tile) Hard() float64 { return hardness[t.Bedrock] }
 
 // String is what a rock is called.
@@ -203,6 +205,13 @@ func (g *Grid) TextureAt(p geom.Pos) (sand, clay float64) {
 // height, so that every map gets some of all four however its noise happened
 // to fall. It is the same cut every other share on this map is made with;
 // see forestShare.
+//
+// That crossing is the floor of the country. Over it lies a pile of beds -
+// see strata.go and coverBeds - hard and soft by turns, tipped the way the
+// whole country leans and warped into broad swells, so that what the ground
+// is made of depends on how high it stands as well as where: the lowlands
+// cut down to the floor, and the high ground is the pile, capped by whichever
+// hard bed it has not yet worn through.
 func (w *Land) layBedrock(g *Grid) {
 	hard := w.lattice(g, float64(g.Span())/2)
 	sunk := w.lattice(g, float64(g.Span())/3)
@@ -219,6 +228,94 @@ func (w *Land) layBedrock(g *Grid) {
 			g.Tiles[i].Bedrock = Shale
 		}
 	}
+	// The older, harder half of the country stands up through the pile: it
+	// is where the floor was raised, and the beds over it were the first to
+	// go. See coverShield.
+	shield := make([]float64, len(g.Tiles))
+	for i := range shield {
+		shield[i] = coverShield * smooth(clamp01((hard[i]-hardLine)/coverShieldEdge))
+	}
+	w.coverBeds(g, shield)
+}
+
+// The pile a drawn map is given. coverBeds is the rocks of it from the
+// bottom up: soft beds between hard ones, which is the only arrangement that
+// makes a scarp. Each is coverThin to coverThick metres, and the foot of the
+// pile lies at coverFoot of the way up the map's ground, so that about the
+// lowest third of the country is worn through to the floor.
+//
+// coverDip is how steeply the whole pile leans, as rise over run, at most;
+// coverSwell how many metres its broad warps lift and drop it, and
+// coverSwellSpan how many tiles across they are. coverShield is how many
+// metres higher the pile's foot lies over the older, harder half of the
+// floor, and coverShieldEdge how far into that half, as a reading of its
+// lattice, it takes to get there.
+var coverRocks = []Bedrock{Shale, Sandstone, Shale, Limestone, Shale, Sandstone}
+
+const (
+	coverThin       = 14.0
+	coverThick      = 40.0
+	coverFoot       = 0.4
+	coverDip        = 0.03
+	coverSwell      = 30.0
+	coverSwellSpan  = 24.0
+	coverShield     = 40.0
+	coverShieldEdge = 0.15
+)
+
+// coverBeds lays the pile over the floor layBedrock has drawn. It draws
+// nothing from the world's chance - its luck is the seed's own, hashed - so
+// the world that comes out of a seed is the one it always was everywhere the
+// pile does not reach.
+func (w *Land) coverBeds(g *Grid, shield []float64) {
+	luck := func(k uint64) float64 { return unit(splitmix(w.seed ^ 0x62656473 ^ k*0x9E3779B97F4A7C15)) }
+	heights := g.heights()
+	foot := quantile(heights, coverFoot)
+	lean := 2 * math.Pi * luck(1)
+	dip := coverDip * (0.2 + 0.8*luck(2))
+	thick := make([]float64, len(coverRocks))
+	for k := range thick {
+		thick[k] = coverThin + (coverThick-coverThin)*luck(uint64(10+k))
+	}
+	g.strata = make([]column, len(g.Tiles))
+	g.EachRow(func(y int) {
+		for x := 0; x < g.W; x++ {
+			i := y*g.W + x
+			c := basement(g.Tiles[i].Bedrock, 0, heights[i])
+			// Where the foot of the pile is under this tile: the lean of the
+			// country, measured from its middle, and the swells over it.
+			along := (float64(x-g.W/2)*math.Cos(lean) + float64(y-g.H/2)*math.Sin(lean)) * TileSpan
+			at := foot + dip*along + coverSwell*(2*g.swellAt(w.seed, x, y)-1) + shield[i]
+			for k, rock := range coverRocks {
+				c.lay(rock, 0, 0, at, at+thick[k])
+				at += thick[k]
+			}
+			// The top bed goes on up for ever: whatever stands higher than
+			// the pile was drawn is the pile's top rock.
+			c.top[0] = float32(math.Max(float64(c.top[0]), heights[i]))
+			g.strata[i] = c
+		}
+	})
+	g.expose()
+}
+
+// swellAt is the broad warp of a drawn map's pile at x, y, in [0,1]: a smooth
+// blend of hashed corners coverSwellSpan tiles apart, going round a globe.
+func (g *Grid) swellAt(seed uint64, x, y int) float64 {
+	cols := int(math.Ceil(float64(g.W)/coverSwellSpan)) + 1
+	fx, fy := float64(x)/coverSwellSpan, float64(y)/coverSwellSpan
+	cx, cy := int(fx), int(fy)
+	tx, ty := smooth(fx-float64(cx)), smooth(fy-float64(cy))
+	corner := func(dx, dy int) float64 {
+		c := cx + dx
+		if g.Wrap {
+			c %= max(1, cols-1)
+		}
+		return unit(splitmix(seed ^ 0x7377656c ^ uint64(c)*0x9E3779B97F4A7C15 ^ uint64(cy+dy)*0xC2B2AE3D27D4EB4F))
+	}
+	top := corner(0, 0) + tx*(corner(1, 0)-corner(0, 0))
+	bottom := corner(0, 1) + tx*(corner(1, 1)-corner(0, 1))
+	return top + ty*(bottom-top)
 }
 
 // soilTexture sets every tile's soil to what its ground weathers to. It runs

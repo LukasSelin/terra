@@ -131,7 +131,7 @@ const (
 // rate, in units of that time.
 var standPace = -math.Log(1 - math.Cbrt(standReach)) // Cbrt is the root at standShape
 
-// stand is what a stock at have comes to over k of growing weather, filling
+// fillStand is what a stock at have comes to over k of growing weather, filling
 // back at rate of a full stock per growing tick, on a stand that is age old at
 // the end of it and comes on in full. A full of nought is ground whose stand
 // needs no age, and only the stock's clock binds. It never takes away what is
@@ -145,7 +145,7 @@ var standPace = -math.Log(1 - math.Cbrt(standReach)) // Cbrt is the root at stan
 // Where it runs slower, a stock can only be above its ceiling by having been
 // left there, and it waits where it is until the ceiling passes it and then
 // goes on at its own pace: wait is how much growing weather that takes.
-func stand(have, age, k, full, rate float64) float64 {
+func fillStand(have, age, k, full, rate float64) float64 {
 	if !(have < 1) {
 		return have
 	}
@@ -227,7 +227,7 @@ func (g *Grid) Ripen(i int, k float64) {
 			continue
 		}
 		s := f.Stock(g)
-		s[i] = stand(s[i], g.Age[i], k, f.Full, f.Rate)
+		s[i] = fillStand(s[i], g.Age[i], k, f.Full, f.Rate)
 	}
 }
 

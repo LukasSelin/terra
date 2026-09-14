@@ -19,7 +19,7 @@ import (
 // Catching up is the same arithmetic as the day's pass with a season's
 // growing weather in place of a day's, and it comes to what the days would
 // have come to: every filling is a closed form in the growing weather - see
-// stand and logistic - so a season of it at once is a season of days of it,
+// fillStand and logistic - so a season of it at once is a season of days of it,
 // to the rounding of the sums. It used to be a straight filling held under a
 // ceiling, and a stand that would have been held back by its age one day and
 // let go the next came out a hair different; that is gone, and a test holds

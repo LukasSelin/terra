@@ -49,8 +49,10 @@ type Tile struct {
 
 	// Bedrock is the rock under this tile, and Sand and Clay the shares of
 	// the soil over it that are one and the other, the rest being silt. The
-	// rock never changes; what is made of it moves with every age of
-	// weather, sorted by the water that carries it. Between them they are
+	// rock is the bed of the pile under the tile that its surface lies in,
+	// and changes as the weather wears down into the next one - see
+	// strata.go; what is made of it moves with every age of weather, sorted
+	// by the water that carries it. Between them they are
 	// what the ground is made of, and the fertility, the drainage and how
 	// fast a hillside comes down are all read off them. See bedrock.go.
 	//
@@ -161,6 +163,11 @@ type Grid struct {
 	// holds is whether trees will take on each tile, read at the same time
 	// as the lines above and from the same ground. See readHolds.
 	holds []bool
+
+	// strata is, for each tile, the pile of beds its rock is: what Bedrock is
+	// read off as the ground wears into it. Nil on a map made without one,
+	// whose tiles keep the rock they were given. See strata.go.
+	strata []column
 
 	// seam and seamQueue are the working memory a history's plate boundaries
 	// are spread with, kept here so that an epoch allocates nothing. See
@@ -304,6 +311,7 @@ func (g *Grid) Clone() *Grid {
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
+	c.strata = slices.Clone(g.strata)
 	c.frost = append([]float64(nil), g.frost...)
 	c.tidal = append([]float32(nil), g.tidal...)
 	c.ebb = append([]float32(nil), g.ebb...)

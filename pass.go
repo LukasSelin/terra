@@ -151,7 +151,7 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 	age := g.Age[lo:hi]
 	grow(age, ks, k)
 	// Whatever is coming on fills a little further, bounded by the age it
-	// has had; see stand. Each filling is a pass of its own over the run,
+	// has had; see fillStand. Each filling is a pass of its own over the run,
 	// in the order the growing table has them.
 	for _, e := range stocked {
 		fill(e.stock(g)[lo:hi], age, ks, e.kind, e.spanned, e.full, e.rate, k)
@@ -185,11 +185,11 @@ func growScalar(age []float64, ks []int64, k float64) {
 }
 
 // fillScalar fills the stock s on every tile of the given kind over k of
-// growing weather, up to what its age over full accounts for; see stand.
+// growing weather, up to what its age over full accounts for; see fillStand.
 func fillScalar(s, age []float64, ks []int64, kind int64, full, rate, k float64) {
 	for j, kk := range ks {
 		if kk == kind {
-			s[j] = stand(s[j], age[j], k, full, rate)
+			s[j] = fillStand(s[j], age[j], k, full, rate)
 		}
 	}
 }

@@ -66,6 +66,24 @@ const (
 	Repose   = 0.7
 )
 
+// standRock is how much steeper ground stands for the rock it is made of, as
+// a power of its hardness against the map's middling rock, and standMost and
+// standLeast the most and least that may make of Critical and Repose. The
+// most is held to the top of Roering's range, 1.35 over 1.2: past that a
+// tile is a wall and not a hillside, and a scarp a tile wide is steeper than
+// the grid can say anything true about.
+const (
+	standRock  = 0.3
+	standMost  = 1.35 / Critical
+	standLeast = 0.7
+)
+
+// stand is what the rock makes of the slopes ground fails at and is left at,
+// given its hardness against the map's middling rock.
+func stand(hard float64) float64 {
+	return math.Max(standLeast, math.Min(standMost, math.Pow(hard, standRock)))
+}
+
 // Settles is the fall below which what came down comes to rest: debris flows
 // stop and build their fans where the channel they run in flattens to about
 // ten degrees (Takahashi 1981; Hungr and others 1984 put the start of
@@ -90,6 +108,12 @@ const runoutMost = 4096
 // and after, to the rounding of the sums, which is how the ages of weather run
 // it; without, what came down is let go, which is how the making of a map runs
 // it. See above for why.
+//
+// What stands steep depends on what it is made of. The slope a tile fails at
+// and the slope it is left at go with the rock at its surface against the
+// map's middling rock - see stand - so a cap of hard rock holds a cliff over
+// the soft beds beneath it, and those beds slump back to a gentler foot. That
+// is the whole shape of a scarp and of the rim of a mesa.
 //
 // Each tile a slide cuts or lays anything on is looked at again, and so are the
 // neighbours of the one that failed, whose fall to it has just grown; the
@@ -127,6 +151,7 @@ func (g *Grid) landslide(keep bool) {
 		}
 	}
 	runs := int32(0)
+	soft := 1 / g.meanHard()
 	for head := 0; head < len(queue); head++ {
 		// Take back the front of the queue now and then, so that it does not
 		// grow for as long as the slides go on.
@@ -137,16 +162,24 @@ func (g *Grid) landslide(keep bool) {
 		i := queue[head]
 		queued[i] = false
 		// The neighbour it stands steepest above, past what it can stand at.
-		to, run, worst := int32(-1), 0.0, slideLeast
+		to, run, worst, rests := int32(-1), 0.0, slideLeast, Repose
 		neighbours(i, func(j int32, r float64) {
-			if over := h[i] - h[j] - Critical*r; over > worst {
-				to, run, worst = j, r, over
+			critical, repose := Critical, Repose
+			if g.strata != nil {
+				// Whether the edge fails is the rock the edge is made of;
+				// what it is left at is the rock the failure bares.
+				s := stand(g.hardAt(int(i), h[i]) * soft)
+				critical = Critical * s
+				repose = Repose * stand(g.hardAt(int(i), h[j]+Repose*s*r)*soft)
+			}
+			if over := h[i] - h[j] - critical*r; over > worst {
+				to, run, worst, rests = j, r, over, repose
 			}
 		})
 		if to < 0 {
 			continue
 		}
-		d := h[i] - h[to] - Repose*run
+		d := h[i] - h[to] - rests*run
 		// What comes down: the soil first, then the rock the soil was made
 		// of, as the mixture that rock makes.
 		fromSoil := math.Min(d, soil[i])
