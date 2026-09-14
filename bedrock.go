@@ -59,9 +59,20 @@ const (
 
 // weathers is what each rock leaves behind when the weather has finished with
 // it: the shares of sand and clay in the soil over it, the silt being what is
-// left of the one. These are the compositions the map starts from and the
-// ones the ground returns to wherever the water has stripped what was there
-// and the rock underneath has to make it again.
+// left of the one, where the weathering is middling - see weathered, which
+// moves them with the climate. These are what the soil the rock makes is made
+// of, wherever the water has stripped what was there and the rock underneath
+// has to make it again.
+//
+// They are not measurements of any one soil. Each row is put inside the USDA
+// texture class that the residual soil on that rock falls in under a temperate
+// climate, as Buol and others (Soil Genesis and Classification) and
+// Birkeland (Soils and Geomorphology, 1999) describe them: granite to grus and
+// a gritty loam, sandstone to a sandy loam, shale to clay, limestone to the clayey residue that is left when the lime
+// has gone - terra rossa at its reddest - basalt to a clay loam, and schist
+// to a loam between the granite it is often made of and the shale it often
+// was. Where in its class a row sits is a choice, and it was the table the map
+// already had.
 var weathers = [BedrockCount]struct{ sand, clay float64 }{
 	Granite:   {0.45, 0.20},
 	Limestone: {0.20, 0.35},
@@ -163,25 +174,21 @@ func (t *Tile) Loam() float64 {
 // held to a share, only to being positive.
 func (t *Tile) Wash() float64 { return math.Max(0, 1+0.6*(t.Sand-t.Clay)) }
 
-// riverSilt is what a river lays down: the fine end of what it was carrying,
-// sorted out of the coarse by the water slowing. It is why a flood plain is
-// the best ground a valley has - not clay, which is what the water keeps
-// hold of longest and drops last, and not sand, which never got that far.
-var riverSilt = struct{ sand, clay float64 }{0.25, 0.20}
-
-// TextureAt is what the soil at p is made of if nothing has disturbed it: what
-// the rock beneath weathers to, moved toward river silt on ground the water
-// has been over and left something on. It is read off the drainage in the way
-// SoilAt is, and for the same reason - when the ground moves, what the ground
-// is made of moves with it - so it is what a fresh map's soils are set to and
-// what worn ground is pulled back toward as the rock under it makes more.
+// TextureAt is what the soil the rock at p makes is made of: what the rock
+// weathers to, turned further toward clay the warmer and wetter the ground
+// is. See weathered.
+//
+// It used to be moved toward a fixed river silt on low ground as well, by how
+// far the tile stood under FloodDepth, which laid a flood plain's texture on
+// by a line rather than by a river. What a river lays down is now what the
+// river carried, sorted as it settles and worn finer the further it went -
+// see depositOf and Sternberg - and it is laid where the river lays it. So
+// this is the rock's part only, which is what a fresh map's soils are set to
+// and what the rock adds to a soil as it makes more of it.
 func (g *Grid) TextureAt(p geom.Pos) (sand, clay float64) {
-	t := g.At(p)
-	w := weathers[t.Bedrock]
-	// How much of what is here the water brought rather than the rock made.
-	// The valley floor is alluvium over its rock; a shoulder is its rock.
-	laid := clamp01(1 - t.Drain/FloodDepth)
-	return w.sand + laid*(riverSilt.sand-w.sand), w.clay + laid*(riverSilt.clay-w.clay)
+	i := g.Index(p)
+	w := weathers[g.Tiles[i].Bedrock]
+	return weathered(w.sand, w.clay, g.weathering(i))
 }
 
 // layBedrock writes down what rock is under every tile. Two lattices far

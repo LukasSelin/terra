@@ -27,9 +27,6 @@ import (
 // how the rivers' sizes are shared out - is held against real drainage at
 // that one. The exponents and ratios of a river network do not care which.
 
-// ageYears is how long one age of Erode is: a decade. See erode.go.
-const ageYears = 10.0
-
 // yardstick is one figure measured on real ground, and the reading of a map
 // that answers to it.
 type yardstick struct {

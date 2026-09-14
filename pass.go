@@ -151,15 +151,15 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 	age := g.Age[lo:hi]
 	grow(age, ks, k)
 	// Whatever is coming on fills a little further, bounded by the age it
-	// has had; see grown. Each filling is a pass of its own over the run,
+	// has had; see stand. Each filling is a pass of its own over the run,
 	// in the order the growing table has them.
 	for _, e := range stocked {
-		fill(e.stock(g)[lo:hi], age, ks, e.kind, e.spanned, e.full, e.rate*k)
+		fill(e.stock(g)[lo:hi], age, ks, e.kind, e.spanned, e.full, e.rate, k)
 	}
 	// And what comes back that is not a stand coming on; see Replenish.
-	shoal(g.Fish[lo:hi], ks, FishRegrowth*k)
-	rest(g.Fertility[lo:hi], g.Rich[lo:hi], ks, Fallow*k)
-	meadow(g.Sward[lo:hi], ks, SwardRegrowth*k)
+	shoal(g.Fish[lo:hi], ks, regrow(FishRegrowth, k))
+	rest(g.Fertility[lo:hi], g.Rich[lo:hi], ks, regrow(Fallow, k))
+	meadow(g.Sward[lo:hi], ks, regrow(SwardRegrowth, k))
 }
 
 // The passes one tile at a time. They are the whole of the pass where the
@@ -184,44 +184,40 @@ func growScalar(age []float64, ks []int64, k float64) {
 	}
 }
 
-// fillScalar fills the stock s on every tile of the given kind by what by
-// puts on, up to what its age over full accounts for; see grown and Grown.
-func fillScalar(s, age []float64, ks []int64, kind int64, full, by float64) {
+// fillScalar fills the stock s on every tile of the given kind over k of
+// growing weather, up to what its age over full accounts for; see stand.
+func fillScalar(s, age []float64, ks []int64, kind int64, full, rate, k float64) {
 	for j, kk := range ks {
-		if kk != kind {
-			continue
+		if kk == kind {
+			s[j] = stand(s[j], age[j], k, full, rate)
 		}
-		ceiling := 1.0
-		if full > 0 {
-			ceiling = clamp01(age[j] / full)
-		}
-		s[j] = grown(s[j], ceiling, by)
 	}
 }
 
-// shoalScalar puts the fish back in the water, up to full.
-func shoalScalar(fish []float64, ks []int64, by float64) {
+// shoalScalar puts the fish back in the water, up to full, by the run's
+// logistic factor; see logistic.
+func shoalScalar(fish []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isWater[kk] {
-			fish[j] = min(1, fish[j]+by)
+			fish[j] = logistic(fish[j], 1, fall)
 		}
 	}
 }
 
 // restScalar rests the fields, up to what the ground can hold.
-func restScalar(fert, rich []float64, ks []int64, by float64) {
+func restScalar(fert, rich []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isField[kk] {
-			fert[j] = min(rich[j], fert[j]+by)
+			fert[j] = logistic(fert[j], rich[j], fall)
 		}
 	}
 }
 
 // meadowScalar puts the grass back on open ground, up to full.
-func meadowScalar(sward []float64, ks []int64, by float64) {
+func meadowScalar(sward []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isGrass[kk] {
-			sward[j] = min(1, sward[j]+by)
+			sward[j] = logistic(sward[j], 1, fall)
 		}
 	}
 }

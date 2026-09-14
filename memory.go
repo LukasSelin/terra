@@ -33,9 +33,18 @@ import (
 // is - and an air cell is several tiles, so all of it comes to some forty
 // bytes a tile. Measured on a 1024 by 512 globe, the peak heap rose by five
 // and a half per cent when the wind came in, which these figures cover.
+//
+// The run was raised again when the soil began to be kept. The soil itself is
+// free - a tile's thickness sits in padding the tile already had - but each
+// epoch's wear keeps the soil, the rock's rate, the rate the step settles on
+// and the sand's wear beside the ground, and the creep is solved implicitly
+// with a coefficient and a neighbour for each pair of tiles. Peak heap sampled
+// over the making of a 1024 by 512 globe rose from 754 bytes a tile to 835,
+// eleven per cent; 512 grown by that is 567. A drawn map, which wears nothing
+// while it is made, read 257 before and after.
 const (
 	bytesDrawn = 256
-	bytesRun   = 512
+	bytesRun   = 600
 )
 
 // ErrTooBig is what MakeLand wraps when a world would not fit in the memory

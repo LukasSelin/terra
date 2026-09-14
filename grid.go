@@ -53,7 +53,15 @@ type Tile struct {
 	// weather, sorted by the water that carries it. Between them they are
 	// what the ground is made of, and the fertility, the drainage and how
 	// fast a hillside comes down are all read off them. See bedrock.go.
+	//
+	// Soil is how many metres of that soil there are over the rock: made
+	// out of the rock by the weather, taken off by the water, the creep and
+	// the slides before any rock is, and laid down again where they stop.
+	// It is single precision because it is a thickness of a few metres
+	// read to a tenth of a millimetre, and because it sits in the padding
+	// after Bedrock and so costs a tile nothing. See soil.go.
 	Bedrock Bedrock
+	Soil    float32
 	Sand    float64
 	Clay    float64
 
