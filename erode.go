@@ -3,6 +3,7 @@ package terra
 import (
 	"github.com/LukasSelin/terra/geom"
 	"math"
+	"slices"
 )
 
 // Weathering: the land does not hold still.
@@ -78,6 +79,15 @@ func hold(t *Tile) float64 {
 	return t.Terrain.Hold() * t.Wash()
 }
 
+// rockErodibility is how hard the water cuts the rock under tile i once its
+// soil is gone, against Erodibility: K_b over K.
+//
+// It is a placeholder, and it is to be deleted when the bedrock's own
+// erodibility is split from what is growing on the ground: until then the
+// rock is cut at the rate the ground over it always was, so that what the soil
+// changes is how much of the ground is soil and not how fast the ground goes.
+func rockErodibility(t *Tile) float64 { return hold(t) }
+
 // Erode weathers the map by one age and works the drainage out again. It is
 // the one thing that changes the shape of the land after the map is made, and
 // everything the shape decides - where the rivers run, what the soil will
@@ -87,10 +97,14 @@ func (w *Land) Erode() {
 	// The whole ground moves at once, so the ground asleep is brought up to
 	// date first; what the age does to it is done to it as it now stands.
 	w.CatchUpAll()
+	was := g.soils()
 	g.wear(ageYears)
 	// And sideways: a river cuts the outside of its bends while the weather
 	// takes the hillsides down. See meander.go.
 	g.meander(1)
+	// What the age has left steeper than ground can stand on comes down, and
+	// lies below the slope it came off. See slide.go.
+	g.landslide(true)
 	// What the age wore away has bared the bed beneath it here and there, and
 	// the soil is made again from that. See strata.go.
 	g.expose()
@@ -99,7 +113,7 @@ func (w *Land) Erode() {
 	g.height()
 	// The coast has moved, so the tide's reach has, and the flats with it.
 	g.tides()
-	g.resoil()
+	g.resoil(was)
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
 	// has cut into may not.
@@ -122,6 +136,9 @@ func (w *Land) Erode() {
 // on the same K and the same creep - see epochYears - with its tiles read at
 // the width of a piece of a planet rather than of a field.
 //
+// What goes comes off the soil first and the rock after, and the rock goes on
+// making soil under whatever is left: see soil.go.
+//
 // It leaves the drainage stale on purpose: the caller says when the water is
 // worked out again, because doing it here would do it twice in Erode.
 func (g *Grid) wear(years float64) {
@@ -134,26 +151,43 @@ func (g *Grid) wear(years float64) {
 		f:      make([]float64, n),
 		settle: make([][Grains]float64, n),
 		parts:  make([][Grains]float64, n),
+		soil:   make([]float64, n),
+		rock:   make([]float64, n),
+		eff:    make([]float64, n),
+		abrade: make([]float64, n),
 	}
 	soft := 1 / g.meanHard()
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
 			c.h[i] = t.Height
+			c.soil[i] = float64(t.Soil)
+			// What the water takes off a tile is its soil, or its rock where it
+			// has none, which is the soil the rock would make.
 			c.parts[i] = parts(t)
+			if t.Soil <= 0 {
+				sand, clay := g.TextureAt(g.PosOf(i))
+				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
+			}
 			if int(recv[i]) == i {
 				continue
 			}
 			// How hard the water cuts: stream power, charged to what holds
-			// the ground down. See fluvial.go.
-			c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * hold(t) / run[i]
+			// the ground down for the soil and to the rock for the rock. See
+			// fluvial.go.
+			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
+			c.f[i] = power * hold(t)
+			c.rock[i] = power * rockErodibility(t)
+			c.abrade[i] = abrasion(run[i])
 			// Where the water has gathered into a channel it is cutting rock
 			// and not stripping soil, and there the rock does pay: see hold
 			// for why it may not on a hillside. It is charged against the
 			// map's middling rock, so a map of one rock wears as it did.
 			if g.strata != nil && g.area != nil {
 				if ch := clamp01((g.area[i] - shapeHead) / (textureChannel - shapeHead)); ch > 0 {
-					c.f[i] *= 1 + ch*(math.Pow(t.Hard()*soft, -wearRock)-1)
+					pay := 1 + ch*(math.Pow(t.Hard()*soft, -wearRock)-1)
+					c.f[i] *= pay
+					c.rock[i] *= pay
 				}
 			}
 			// What it lets settle: more of it the gentler the ground, less of
@@ -213,26 +247,44 @@ func (g *Grid) wear(years float64) {
 			gained[i][gr] += laid[gr]
 		}
 	})
-	g.creep(years, change, gained)
-
-	for i := range g.Tiles {
-		t := &g.Tiles[i]
-		// No floor under it. The water is never cut below the ground it runs
-		// into - see fluvial.go - and the creep never takes a tile below the
-		// one it gives to, so nothing here digs a hole; what a floor at the
-		// foot of the map did was make ground out of nothing, first by lifting
-		// a sea bed that lay under it and then by refusing to let the creep
-		// ease one down a hand's breadth further.
-		t.Height += change[i]
-		// Soil goes with the ground it was in. What washes off a slope is
-		// what that slope could have grown; what lands on the flat is what
-		// makes a flood plain worth farming.
-		if !t.Wet() && !t.Terrain.Tidal() {
-			g.Rich[i] = clamp01(g.Rich[i] + change[i]/SoilDepth)
-			g.Fertility[i] = math.Min(g.Fertility[i], g.Rich[i])
-			mix(t, gained[i])
-		}
+	// The soil the water took: all of the cut, as far as the soil went.
+	lost := make([]float64, n)
+	for i := range lost {
+		lost[i] = math.Min(c.soil[i], c.cutAt(next, int32(i)))
 	}
+	g.creep(years, change, gained, lost)
+
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			t := &g.Tiles[i]
+			// No floor under it. The water is never cut below the ground it
+			// runs into - see fluvial.go - and the creep never takes a tile
+			// below the one it gives to, so nothing here digs a hole; what a
+			// floor at the foot of the map did was make ground out of nothing,
+			// first by lifting a sea bed that lay under it and then by refusing
+			// to let the creep ease one down a hand's breadth further.
+			t.Height += change[i]
+			// What is left of the soil, what arrived on it, and what the rock
+			// made under it over the age. What arrives is worked into what was
+			// there; what the rock makes is the rock's own mixture.
+			h := math.Max(0, c.soil[i]-lost[i])
+			laid := carrying(gained[i])
+			surface := !t.Wet() && !t.Terrain.Tidal()
+			if surface {
+				mix(t, h, gained[i])
+			}
+			h += laid
+			if surface {
+				made := soilMade(h, years, SoilMaking*g.weathering(i)) - h
+				if made > 0 {
+					sand, clay := g.TextureAt(g.PosOf(i))
+					mix(t, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
+					h += made
+				}
+			}
+			t.Soil = float32(h)
+		}
+	})
 }
 
 // Diffusivity is how fast the ground creeps, in square metres a year, on ground
@@ -279,31 +331,78 @@ func (g *Grid) creepShare(years float64) float64 {
 	return 4 * Diffusivity * years / (s * s)
 }
 
-// creep books what years of creep move onto change and gained. Each pair of
-// neighbours is taken once, and what one gives the other takes, so no ground
-// is made or lost. The rock does not slow it, for the reason given at hold;
-// what is growing does, because roots are what hold a hillside together.
-// Whatever somebody has built on stays where it is, and nothing slumps onto it.
-func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64) {
+// soilActive is the most soil the creep draws on: the layer roots, burrows and
+// frost stir, which is about a metre deep however much lies under it (Roering
+// and others 2002, on the depth of the mixed layer on soil-mantled slopes).
+const soilActive = 1.0
+
+// creepSteepest is how near Critical the creep's speeding up is followed
+// before it is held: at nineteen twentieths of it the flux is ten times the
+// linear one, and past it the ground is not creeping but about to fail, which
+// is the landslides' business.
+const creepSteepest = 0.95
+
+// creepSweeps is how many sweeps the creep's step is solved with. It is fixed,
+// so an age comes out the same however close it came; each sweep takes the
+// error down by Σk/(1+Σk), which on the steepest ground a history creeps is a
+// third, so twelve leave a millionth.
+const creepSweeps = 12
+
+// creep books what an age of creep moves onto change and gained, and the soil
+// it takes off each tile onto lost.
+//
+// The flux between two neighbours is Roering and others' (1999) nonlinear
+// creep with the depth of soil in it, as Johnstone and Hilley (2015) found it:
+//
+//	q = D·(H/H0)·∇z / (1 − (|∇z|/Sc)²)
+//
+// so the soil goes faster the deeper it is, and without limit as the slope
+// comes up to the critical one. D is Diffusivity charged to what holds the ground,
+// H the soil on the higher tile up to soilActive, H0 SoilScale and Sc Critical.
+// A tile with no soil on it has nothing to creep.
+//
+// The step is taken implicitly, as Perron (2011) takes it: the heights at the
+// end of the age are what the fluxes are read off, with the coefficients read
+// off the heights at the start. The system is solved by sweeping; what it
+// books is read off the pairs, so whatever the sweeps come to, what one tile
+// gives its neighbour takes and no ground is made or lost. And no tile gives
+// more soil than it has: a tile whose fluxes would take more is taken down to
+// rock and no further.
+//
+// The rock does not slow it, for the reason given at hold; what is growing
+// does, because roots are what hold a hillside together. Whatever somebody has
+// built on stays where it is, and nothing slumps onto it.
+func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, lost []float64) {
 	// A river great enough to wander has banks that are its own business: see
 	// meander, which takes the outside of a bend and builds the inside, and
 	// whose bends creep would otherwise ease back out as fast as they are cut.
 	wander := meanderFlow
 	share := g.creepShare(years)
+	span := g.span()
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
-		off  geom.Pos
-		near float64
+		off       geom.Pos
+		near, run float64
 	}{
-		{geom.Pos{X: 1, Y: 0}, 1},
-		{geom.Pos{X: -1, Y: 1}, 0.5},
-		{geom.Pos{X: 0, Y: 1}, 1},
-		{geom.Pos{X: 1, Y: 1}, 0.5},
+		{geom.Pos{X: 1, Y: 0}, 1, span},
+		{geom.Pos{X: -1, Y: 1}, 0.5, span * math.Sqrt2},
+		{geom.Pos{X: 0, Y: 1}, 1, span},
+		{geom.Pos{X: 1, Y: 1}, 0.5, span * math.Sqrt2},
+	}
+	n := len(g.Tiles)
+	nb := make([]int32, len(pairs)*n)
+	k := make([]float64, len(pairs)*n)
+	diag := make([]float64, n)
+	z := make([]float64, n)
+	for i := range g.Tiles {
+		z[i], diag[i] = g.Tiles[i].Height, 1
 	}
 	for i := range g.Tiles {
 		a := &g.Tiles[i]
 		p := g.PosOf(i)
-		for _, pr := range pairs {
+		for e, pr := range pairs {
+			at := len(pairs)*i + e
+			nb[at] = -1
 			q := geom.Pos{X: p.X + pr.off.X, Y: p.Y + pr.off.Y}
 			if !g.In(q) {
 				continue
@@ -316,61 +415,116 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64) 
 			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {
 				continue
 			}
-			hi, lo := i, j
+			top := a
 			if b.Height > a.Height {
-				hi, lo = j, i
+				top = b
 			}
-			top := &g.Tiles[hi]
+			fall := math.Min(math.Abs(a.Height-b.Height)/pr.run, creepSteepest*Critical) / Critical
 			// An eighth each, so that a tile standing above all eight of its
-			// neighbours gives up no more than the share of its height over them.
-			moved := share / 8 * pr.near * (top.Height - g.Tiles[lo].Height) * hold(top)
-			if moved <= 0 {
+			// neighbours on SoilScale of soil gives up no more than the share of
+			// its height over them.
+			kk := share / 8 * pr.near * hold(top) *
+				math.Min(float64(top.Soil), soilActive) / SoilScale / (1 - fall*fall)
+			if kk <= 0 {
 				continue
 			}
-			change[hi] -= moved
-			change[lo] += moved
-			was := parts(top)
-			for k := range was {
-				gained[lo][k] += moved * was[k]
+			nb[at], k[at] = int32(j), kk
+			diag[i] += kk
+			diag[j] += kk
+		}
+	}
+	// Jacobi sweeps on (1 + Σk)·z'_i − Σ k·z'_j = z_i.
+	next := slices.Clone(z)
+	sum := make([]float64, n)
+	for s := 0; s < creepSweeps; s++ {
+		copy(sum, z)
+		for at, j := range nb {
+			if j < 0 {
+				continue
 			}
+			i := at / len(pairs)
+			sum[i] += k[at] * next[j]
+			sum[j] += k[at] * next[i]
+		}
+		for i := range next {
+			next[i] = sum[i] / diag[i]
+		}
+	}
+	// What each tile would give, and how much of that its soil covers.
+	gives := make([]float64, n)
+	for at, j := range nb {
+		if j < 0 {
+			continue
+		}
+		i := at / len(pairs)
+		if d := k[at] * (next[i] - next[j]); d > 0 {
+			gives[i] += d
+		} else {
+			gives[j] -= d
+		}
+	}
+	for at, j := range nb {
+		if j < 0 {
+			continue
+		}
+		i := int32(at / len(pairs))
+		hi, lo := i, j
+		moved := k[at] * (next[i] - next[j])
+		if moved < 0 {
+			hi, lo, moved = j, i, -moved
+		}
+		if moved <= 0 {
+			continue
+		}
+		if have := float64(g.Tiles[hi].Soil) - lost[hi]; gives[hi] > have {
+			moved *= math.Max(0, have) / gives[hi]
+		}
+		change[hi] -= moved
+		change[lo] += moved
+		lost[hi] += moved
+		was := parts(&g.Tiles[hi])
+		for gr := range was {
+			gained[lo][gr] += moved * was[gr]
 		}
 	}
 }
 
-// SoilDepth is how many metres of ground make the difference between land
-// that will grow anything and land that will grow nothing. A settlement can
-// strip a hillside of it in a few lifetimes of hard farming.
-const SoilDepth = 3.0
+// soils is what SoilAt reads on every tile, for resoil to read the age's
+// difference against.
+func (g *Grid) soils() []float64 {
+	out := make([]float64, len(g.Tiles))
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			out[i] = g.SoilAt(g.PosOf(i))
+		}
+	})
+	return out
+}
 
-// resoil lets ground that the moving water has made better become better:
-// a flat newly within reach of the flood comes up toward what such ground
-// holds, a little each age rather than overnight.
+// resoil moves what the ground could grow by what the age did to it: Rich
+// goes up or down by as much as SoilAt did, which is to say by the soil the
+// age took away or laid down, the water it brought nearer or took further
+// off, and what the soil is now made of.
 //
-// It only ever raises. What lowers soil is the weather taking it away, above,
-// and nothing else should: a field somebody has cut a channel to holds more
-// than the bare ground around it would, and that is the whole point of having
-// dug it. An earlier version pulled every tile toward what its drainage alone
-// would give, which quietly undid irrigation every age and cost the
-// settlements that had invested in it dearly.
-func (g *Grid) resoil() {
-	const toward = 0.08
+// By the difference, and not to the reading itself. What a settlement has
+// done to its ground is in Rich and not in SoilAt - a field somebody has cut a
+// channel to holds more than the bare ground around it would, and that is the
+// whole point of having dug it - and an earlier version pulled every tile
+// toward what its drainage alone would give, which quietly undid irrigation
+// every age and cost the settlements that had invested in it dearly. A
+// difference keeps what they added and charges them for what the weather
+// took.
+//
+// It used to add the change in height over three metres, a depth of soil the
+// same everywhere, and pull the rest up a twelfth of the way toward the
+// reading each age. The soil is kept now, so both of those are the soil.
+func (g *Grid) resoil(was []float64) {
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() || t.Terrain.Tidal() || t.Terrain == Pan {
 			continue // salt grows nothing, however much the river feeds it
 		}
-		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		// The rock underneath goes on making soil out of itself, so ground
-		// the water has stripped comes back toward what its own rock
-		// weathers to rather than keeping whatever was last washed onto it.
-		// It is the same slow pull as the fertility above, on the same
-		// clock, because it is the same weathering doing both.
-		sand, clay := g.TextureAt(p)
-		t.Sand += toward * (sand - t.Sand)
-		t.Clay += toward * (clay - t.Clay)
-		if can := g.SoilAt(p); can > g.Rich[i] {
-			g.Rich[i] += toward * (can - g.Rich[i])
-		}
+		g.Rich[i] = clamp01(g.Rich[i] + g.SoilAt(g.PosOf(i)) - was[i])
 		g.Fertility[i] = math.Min(g.Fertility[i], g.Rich[i])
 	}
 }
@@ -380,21 +534,19 @@ func carrying(load [Grains]float64) float64 {
 	return load[Sand] + load[Silt] + load[Clay]
 }
 
-// mix works what has just been laid down on a tile into the soil already
-// there. What arrives does not replace what was there; it is ploughed and
-// burrowed and frozen into the top of it, so the tile ends up somewhere
-// between the two, nearer the newcomer the more of it there is.
-//
-// The soil already there is weighed as SoilDepth metres of it, which is the
-// same depth the fertility is reckoned in: a river that lays down a
-// centimetre in an age barely moves what the field is made of, and one that
-// buries a bank in three metres of silt has made new ground.
-func mix(t *Tile, laid [Grains]float64) {
+// mix works what has just been laid down on a tile into the held metres of
+// soil already there. What arrives does not replace what was there; it is
+// ploughed and burrowed and frozen into the top of it, so the tile ends up
+// somewhere between the two, nearer the newcomer the more of it there is
+// against what there was: a river that lays down a centimetre on a metre of
+// soil barely moves what the field is made of, and one that lays it on bare
+// rock has made the field.
+func mix(t *Tile, held float64, laid [Grains]float64) {
 	d := carrying(laid)
 	if d <= 0 {
 		return
 	}
-	held := SoilDepth
+	held = math.Max(0, held)
 	t.Sand = (t.Sand*held + laid[Sand]) / (held + d)
 	t.Clay = (t.Clay*held + laid[Clay]) / (held + d)
 }

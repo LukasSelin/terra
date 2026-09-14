@@ -39,9 +39,18 @@ import (
 // sorted heights the beds are carried through each rescaling on. Measured
 // against the same worlds before it, the peak heap of a drawn 1024 by 512
 // globe rose by 36 per cent and a made one's by 8, which these are raised by.
+//
+// The run was raised again when the soil began to be kept. The soil itself is
+// free - a tile's thickness sits in padding the tile already had - but each
+// epoch's wear keeps the soil, the rock's rate, the rate the step settles on
+// and the sand's wear beside the ground, and the creep is solved implicitly
+// with a coefficient and a neighbour for each pair of tiles. Peak heap sampled
+// over the making of a 1024 by 512 globe, before the beds, rose from 754 bytes
+// a tile to 835, eleven per cent; 576 grown by that is 638. A drawn map, which
+// wears nothing while it is made, read 257 before and after.
 const (
 	bytesDrawn = 384
-	bytesRun   = 576
+	bytesRun   = 640
 )
 
 // ErrTooBig is what MakeLand wraps when a world would not fit in the memory
@@ -58,6 +67,9 @@ func (t Terms) Check() error {
 	}
 	if t.Wrap && t.Width%ChunkSide != 0 {
 		return fmt.Errorf("terra: a globe must be a whole number of chunks round: width %d is not a multiple of %d", t.Width, ChunkSide)
+	}
+	if t.Woods > ByClimate || t.Growth > ByClimate {
+		return fmt.Errorf("terra: no such rule: woods %d, growth %d", t.Woods, t.Growth)
 	}
 	if t.Water < 0 {
 		return fmt.Errorf("terra: a world cannot have less than no water: %v", t.Water)

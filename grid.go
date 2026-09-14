@@ -1,6 +1,7 @@
 package terra
 
 import (
+	"math"
 	"slices"
 
 	"github.com/LukasSelin/terra/geom"
@@ -55,7 +56,15 @@ type Tile struct {
 	// by the water that carries it. Between them they are
 	// what the ground is made of, and the fertility, the drainage and how
 	// fast a hillside comes down are all read off them. See bedrock.go.
+	//
+	// Soil is how many metres of that soil there are over the rock: made
+	// out of the rock by the weather, taken off by the water, the creep and
+	// the slides before any rock is, and laid down again where they stop.
+	// It is single precision because it is a thickness of a few metres
+	// read to a tenth of a millimetre, and because it sits in the padding
+	// after Bedrock and so costs a tile nothing. See soil.go.
 	Bedrock Bedrock
+	Soil    float32
 	Sand    float64
 	Clay    float64
 
@@ -152,6 +161,11 @@ type Grid struct {
 	steepLine float64
 	woodsLine float64
 	woodsRead bool
+	// climateWoods says the woods are read off the climate rather than shared
+	// out, and twiMean is the mean wetness index of the dry land the climate's
+	// woods are read against. See Terms.Woods and WoodsAt.
+	climateWoods bool
+	twiMean      float64
 	// holds is whether trees will take on each tile, read at the same time
 	// as the lines above and from the same ground. See readHolds.
 	holds []bool
@@ -176,15 +190,17 @@ type Grid struct {
 	// reads: see TestContinentsWeldIntoOnePlate.
 	welds int
 
-	// frost is, for each tile, the height above which the year there never
-	// warms past Frost. It is the weather's, not the ground's, but it is kept
-	// here because everything that asks it is a question about a tile: it is
-	// written once, when the land is made, by the world that knows what
-	// climate this map has. It is by tile and not by row because the sea
-	// moderates the ground near it, so the line the frost keeps follows a
-	// coast rather than a parallel. See Frozen, Climate.frostlineAt and
-	// Maritime.
-	frost []float64
+	// warm is, for each tile, the year's mean temperature at sea level there,
+	// and swing half the distance from its coldest day to its warmest. They
+	// are the weather's, not the ground's, but they are kept here because
+	// everything that asks them is a question about a tile: they are written
+	// once, when the land is made, by the world that knows what climate this
+	// map has. They are by tile and not by row because the sea moderates the
+	// ground near it, so the lines the frost and the trees keep follow a coast
+	// rather than a parallel. Every such line is read off these and the
+	// height, which the weather moves: see Frozen, Treeless, Barren, Freezing,
+	// Climate.seaMeanAt and Maritime.
+	warm, swing []float32
 
 	// sea is the height of the sea, or below zero on a map with none. See
 	// flood in relief.go.
@@ -213,6 +229,9 @@ type Grid struct {
 	// weather.go.
 	air          *Air
 	rain, runoff []float64
+	// rainWarm is how much of each tile's year of rain falls in its warmer
+	// half, which is what tells a monsoon from a Mediterranean winter rain.
+	rainWarm []float32
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See wind.go.
 	winds *Winds
@@ -308,7 +327,10 @@ func (g *Grid) Clone() *Grid {
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
-	c.frost = append([]float64(nil), g.frost...)
+	c.warm = append([]float32(nil), g.warm...)
+	c.swing = append([]float32(nil), g.swing...)
+	c.rainWarm = append([]float32(nil), g.rainWarm...)
+	c.climateWoods = g.climateWoods
 	c.tidal = append([]float32(nil), g.tidal...)
 	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)
@@ -447,43 +469,108 @@ func (g *Grid) HasNeighbor(p geom.Pos, ok func(*Tile) bool) bool {
 // MarkDef.Roofs, where a game says which of its marks have a roof.
 func (t *Tile) Roofed() bool { return markRoofs[t.Mark] }
 
-// Frozen reports whether the ground here never thaws: high enough, or far
+// Frozen reports whether the ground here is permafrost: high enough, or far
 // enough toward the pole, or far enough from the sea, that the year's mean
-// stays under Frost. It is one rule where there were three - the poles were
-// bare because they were cold, the peaks were green because nobody had told
-// the weather they were high, and the ice edge was a ruled line because
-// nobody had told it where the water was - and it is what puts a tree line on
-// a map with mountains on it.
+// stays under Permafrost. It is one rule where there were three - the poles
+// were bare because they were cold, the peaks were green because nobody had
+// told the weather they were high, and the ice edge was a ruled line because
+// nobody had told it where the water was.
+//
+// Frozen ground is not bare ground. The taiga of Siberia stands on permafrost
+// a hundred metres deep; what keeps a tree off the ground is the summer, not
+// the year, and that is Treeless, and what keeps everything off it is the ice,
+// and that is Barren. The line was the growing frost for all three, which put
+// a fifth of a globe's land under bare rock.
 //
 // It is a fact about the ground and the latitude, both of which the weather
-// wanders around rather than changes, so it is read off a height written down
-// when the land was made. Water is not frozen ground: what a frozen sea is
-// belongs to the sea, and nothing here has an answer for it yet.
+// wanders around rather than changes, so it is read off the year written down
+// when the land was made and the height the ground now has. Water is not
+// frozen ground: see Freezing.
 func (g *Grid) Frozen(p geom.Pos) bool {
-	if len(g.frost) != len(g.Tiles) || !g.In(p) {
-		return false
-	}
-	i := g.Index(p)
-	return !g.Tiles[i].Wet() && g.Tiles[i].Height >= g.frost[i]
+	i, ok := g.yearIndex(p)
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < Permafrost
 }
 
-// Freezing reports whether the water at p never thaws. It is the water's half
-// of Frozen, read off the same frostline and the same height: high enough, or
-// far enough toward the pole, or far enough from the open sea, that the year
-// there never comes up to the point water turns back into water. An enclosed
-// polar sea freezes over while an open one at the same latitude does not,
-// which is Maritime doing to the ice what it does to the tree line.
+// Treeless reports whether the summer here is too short or too cool for a
+// tree: above the tree line, by Köppen's warmest month or Körner's growing
+// season, whichever is the stricter. See treeMean.
+func (g *Grid) Treeless(p geom.Pos) bool {
+	i, ok := g.yearIndex(p)
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < treeLineMean(float64(g.swing[i]))
+}
+
+// Barren reports whether the ground here is under ice: a summer too cold to
+// melt the snow its year brings, by Ohmura's equilibrium line. See iceSummer.
+// It is the ground that grows nothing, which is what an outcrop is.
+func (g *Grid) Barren(p geom.Pos) bool {
+	i, ok := g.yearIndex(p)
+	if !ok || g.Tiles[i].Wet() {
+		return false
+	}
+	summer := g.meanOn(i, g.Tiles[i].Height) + summerPeak*math.Abs(float64(g.swing[i]))
+	return summer < iceSummer(g.Rain(i))
+}
+
+// Freezing reports whether the water at p never thaws: high enough, or far
+// enough toward the pole, or far enough from the open sea, that the year's
+// mean at its surface is under the point sea water freezes. An enclosed polar
+// sea freezes over while an open one at the same latitude does not, which is
+// Maritime doing to the ice what it does to the tree line.
 //
 // A river is asked the same question as the sea and gets the same answer. A
 // channel at eleven degrees below freezing is ice whatever is upstream of it,
 // and the fish in it were the last thing left at the pole that had no
-// business being there. See SeaFreeze and Icefall.
+// business being there. See SeaFreeze.
 func (g *Grid) Freezing(p geom.Pos) bool {
-	if len(g.frost) != len(g.Tiles) || !g.In(p) {
-		return false
+	i, ok := g.yearIndex(p)
+	return ok && g.Tiles[i].Wet() && g.meanOn(i, g.Surface(i)) < SeaFreeze
+}
+
+// yearIndex is the index of p, and whether the map has a year written down
+// for it at all. A grid made by hand has none, and nothing on it freezes.
+func (g *Grid) yearIndex(p geom.Pos) (int, bool) {
+	if len(g.warm) != len(g.Tiles) || !g.In(p) {
+		return 0, false
 	}
-	i := g.Index(p)
-	return g.Tiles[i].Wet() && g.Surface(i) > g.frost[i]+Icefall
+	return g.Index(p), true
+}
+
+// meanOn is the year's mean on tile i at a height of h metres.
+func (g *Grid) meanOn(i int, h float64) float64 {
+	return float64(g.warm[i]) - Lapse*h
+}
+
+// YearAt is the shape of the year on the ground at tile i, as the lines the
+// frost and the trees keep read it: its mean, and the mean of its coldest and
+// its warmest month, in degrees. It is nothing on a map with no climate
+// written down.
+func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
+	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) {
+		return 0, 0, 0
+	}
+	mean = g.meanOn(i, g.Tiles[i].Height)
+	d := monthPeak * math.Abs(float64(g.swing[i]))
+	return mean, mean - d, mean + d
+}
+
+// RainWarm is the share of the year's rain on tile i that falls in its warmer
+// half year. A half is rain the year round.
+func (g *Grid) RainWarm(i int) float64 {
+	if i < 0 || i >= len(g.rainWarm) {
+		return 0.5
+	}
+	return float64(g.rainWarm[i])
+}
+
+// contAt is how much of the country round tile i is land, as the air reads
+// it, and a middling amount where the air has not been read.
+func (g *Grid) contAt(i int) float64 {
+	if g.winds == nil {
+		return contMiddling
+	}
+	e := g.winds.airEnv
+	fx, fy := e.cellAt(g, i)
+	return e.sample(e.cont, fx, fy)
 }
 
 // freeze turns the water that never thaws to ice, and gives back to the water
@@ -493,7 +580,7 @@ func (g *Grid) Freezing(p geom.Pos) bool {
 // in it yet and gets them back the way any water does, and ground the water
 // has left is carve's to name.
 func (g *Grid) freeze() {
-	if len(g.frost) != len(g.Tiles) {
+	if len(g.warm) != len(g.Tiles) {
 		return
 	}
 	g.EachRow(func(y int) {

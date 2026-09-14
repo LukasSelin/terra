@@ -137,7 +137,7 @@ func TestAHardCapHoldsItsEdge(t *testing.T) {
 		g.strata[i] = c
 		g.Tiles[i].Bedrock = c.rockAt(h)
 	}
-	g.landslide()
+	g.landslide(false)
 	y := g.H / 2
 	var capFall, footFall []float64
 	for x := 1; x < g.W; x++ {
@@ -317,7 +317,7 @@ func TestHogbacksRunAlongTheStrike(t *testing.T) {
 		}
 		g.shape()
 		g.denude()
-		g.landslide()
+		g.landslide(false)
 		g.expose()
 		return g
 	}

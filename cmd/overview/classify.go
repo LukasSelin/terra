@@ -14,9 +14,10 @@ import (
 // call the place. This file reads two such names off what the land already
 // knows, and neither is written back to it - they are for looking at.
 //
-// A biome is what the weather makes of a tile: the year's mean temperature
-// at its latitude and height against the rain that falls on it, the way
-// Whittaker and Köppen divide the world. A landform is what the ground makes
+// A biome is what the weather makes of a tile: its year's warmest and coldest
+// month and its mean at its latitude and height, against the rain that falls
+// on it and when in the year that rain falls, the way Köppen divides the
+// world. A landform is what the ground makes
 // of it, and that cannot be read off one tile: a peak is a peak because the
 // ground round it is lower, a valley because it is higher, a coast because
 // the sea is next to it. Each is measured over the tile's neighbourhood.
@@ -49,21 +50,25 @@ var waterClass = [waterClasses]class{
 	cFlat:   {"tidal flat", color.RGBA{158, 146, 118, 255}},
 }
 
-// Biomes, after the water.
+// Biomes, after the water. Each is one of Köppen's types, or a few of them
+// taken together (Köppen, 1936; the thresholds as Peel, Finlayson and
+// McMahon, 2007, give them, with Köppen's own three degrees under freezing
+// between C and D).
 const (
-	bIceCap = waterClasses + iota
-	bTundra
-	bBoreal
-	bColdSteppe
-	bTemperateRain
-	bTemperateForest
-	bGrassland
-	bColdDesert
-	bRainforest
-	bDryForest
-	bSavanna
-	bHotDesert
-	bWetland
+	bIceCap          = waterClasses + iota // EF
+	bTundra                                // ET
+	bBoreal                                // D with a summer under 22 degrees
+	bContinental                           // Dsa, Dwa, Dfa: D with a hot summer
+	bColdSteppe                            // BSk
+	bHotSteppe                             // BSh
+	bColdDesert                            // BWk
+	bHotDesert                             // BWh
+	bMediterranean                         // Cs
+	bTemperateForest                       // Cf, Cw
+	bRainforest                            // Af
+	bMonsoon                               // Am
+	bSavanna                               // Aw
+	bWetland                               // a river's floodplain, in any climate but B and E
 	biomeClasses
 )
 
@@ -71,15 +76,16 @@ var biomeClass = [biomeClasses - waterClasses]class{
 	bIceCap - waterClasses:          {"ice cap", color.RGBA{242, 245, 248, 255}},
 	bTundra - waterClasses:          {"tundra", color.RGBA{168, 164, 136, 255}},
 	bBoreal - waterClasses:          {"boreal forest", color.RGBA{64, 104, 86, 255}},
+	bContinental - waterClasses:     {"continental forest", color.RGBA{96, 128, 80, 255}},
 	bColdSteppe - waterClasses:      {"cold steppe", color.RGBA{178, 176, 138, 255}},
-	bTemperateRain - waterClasses:   {"temperate rainforest", color.RGBA{34, 102, 76, 255}},
-	bTemperateForest - waterClasses: {"temperate forest", color.RGBA{86, 142, 70, 255}},
-	bGrassland - waterClasses:       {"grassland", color.RGBA{176, 196, 104, 255}},
-	bColdDesert - waterClasses:      {"temperate desert", color.RGBA{206, 194, 152, 255}},
-	bRainforest - waterClasses:      {"tropical rainforest", color.RGBA{22, 112, 42, 255}},
-	bDryForest - waterClasses:       {"seasonal forest", color.RGBA{124, 152, 58, 255}},
-	bSavanna - waterClasses:         {"savanna", color.RGBA{212, 190, 96, 255}},
+	bHotSteppe - waterClasses:       {"hot steppe", color.RGBA{196, 188, 112, 255}},
+	bColdDesert - waterClasses:      {"cold desert", color.RGBA{206, 194, 152, 255}},
 	bHotDesert - waterClasses:       {"hot desert", color.RGBA{236, 208, 142, 255}},
+	bMediterranean - waterClasses:   {"mediterranean", color.RGBA{150, 160, 80, 255}},
+	bTemperateForest - waterClasses: {"temperate forest", color.RGBA{86, 142, 70, 255}},
+	bRainforest - waterClasses:      {"tropical rainforest", color.RGBA{22, 112, 42, 255}},
+	bMonsoon - waterClasses:         {"monsoon forest", color.RGBA{70, 130, 50, 255}},
+	bSavanna - waterClasses:         {"savanna", color.RGBA{212, 190, 96, 255}},
 	bWetland - waterClasses:         {"wetland", color.RGBA{92, 138, 118, 255}},
 }
 
@@ -180,6 +186,8 @@ func formOf(k uint8) class {
 // classes is every tile of a map named both ways.
 type classes struct {
 	Biome, Form []uint8
+	// Koppen is the Köppen–Geiger type of each dry tile, and empty elsewhere.
+	Koppen []string
 	// MeanTemp is the year's mean on the ground, in degrees, and LandDist
 	// how many tiles off the nearest dry land a tile is.
 	MeanTemp, LandDist []float64
@@ -198,7 +206,7 @@ func (c classes) seaColor(i int) color.RGBA {
 func classify(land *terra.Land) classes {
 	g := land.Grid
 	n := len(g.Tiles)
-	c := classes{Biome: make([]uint8, n), Form: make([]uint8, n), MeanTemp: make([]float64, n)}
+	c := classes{Biome: make([]uint8, n), Form: make([]uint8, n), Koppen: make([]string, n), MeanTemp: make([]float64, n)}
 
 	// How far the neighbourhood reaches follows the size of the map, as the
 	// land's own measures do: a hill on a valley is a mountain range on a
@@ -228,18 +236,10 @@ func classify(land *terra.Land) classes {
 	}
 	sea := seaOf(g, channel)
 
-	// The year's mean on the ground is the latitude's, less what the height
-	// takes off it, and warmed by the sea round about by the same measure
-	// the frost is: see terra.Maritime.
-	seaShare := make([]float64, n)
-	for i := range sea {
-		if sea[i] {
-			seaShare[i] = 1
-		}
-	}
-	seaShare = boxMean(seaShare, g.W, g.H, g.Span()/6, g.Wrap)
+	// The year on the ground is the one the frost and the trees are read by:
+	// see terra.Grid.YearAt.
 	for i := range g.Tiles {
-		c.MeanTemp[i] = land.Climate.MeanAt(i/g.W) - terra.Lapse*height[i] + terra.Maritime*seaShare[i] + g.CoastWarmth(i)
+		c.MeanTemp[i], _, _ = g.YearAt(i)
 	}
 	c.LandDist = distance(g, func(i int) bool { return !g.Tiles[i].Wet() })
 
@@ -327,7 +327,8 @@ func classify(land *terra.Land) classes {
 			}
 			p := g.PosOf(i)
 			byRiver := flood[i] && t.Drain < terra.FloodDepth/2
-			c.Biome[i] = biome(g, p, c.MeanTemp[i], g.Rain(i), byRiver)
+			c.Koppen[i] = koppen(g, p)
+			c.Biome[i] = biome(c.Koppen[i], byRiver)
 
 			atSea := false
 			for _, d := range terra.Dirs {
@@ -373,46 +374,140 @@ func classify(land *terra.Land) classes {
 	return c
 }
 
-// biome is what the weather makes of dry ground: a year's mean of temp
-// degrees and rain mm. The line between dry and not is Köppen's, which moves
-// with the warmth because warm air takes more of the rain back.
-func biome(g *terra.Grid, p geom.Pos, temp, rain float64, byRiver bool) uint8 {
-	if g.Frozen(p) {
-		if temp < terra.Bitter {
-			return bIceCap
+// koppen is the Köppen–Geiger type of the dry ground at p.
+//
+// The year's months are read off the tile's year as a sine, and its rain as
+// one too: a share w of the year's rain falling in the warmer half is a monthly
+// rain of P/12 (1 + a cos θ) with a = π(w - ½), θ the month's distance from
+// midsummer. That is enough to tell a summer rain from a winter one and a dry
+// season from none, which is all Köppen's second letters ask.
+func koppen(g *terra.Grid, p geom.Pos) string {
+	i := g.Index(p)
+	mean, cold, hot := g.YearAt(i)
+	return koppenOf(mean, cold, hot, g.Rain(i), g.RainWarm(i), g.Barren(p))
+}
+
+// koppenOf is the Köppen–Geiger type of a year with the given mean, coldest
+// and warmest month, rain, and share of that rain in the warmer half, on
+// ground under ice or not.
+func koppenOf(mean, cold, hot, rain, warm float64, ice bool) string {
+	if hot < 10 {
+		if hot < 0 || ice {
+			return "EF"
 		}
-		return bTundra
+		return "ET"
 	}
-	dry := 20 * (temp + 7) // below this, desert; below twice it, steppe
-	if byRiver && rain >= dry {
+	a := math.Max(-1, math.Min(1, math.Pi*(warm-0.5)))
+	sDry, sWet, wDry, wWet := math.Inf(1), 0.0, math.Inf(1), 0.0
+	for k := range 12 {
+		th := (float64(k)+0.5)*math.Pi/6 - math.Pi
+		m := rain / 12 * (1 + a*math.Cos(th))
+		if math.Abs(th) < math.Pi/2 {
+			sDry, sWet = math.Min(sDry, m), math.Max(sWet, m)
+		} else {
+			wDry, wWet = math.Min(wDry, m), math.Max(wWet, m)
+		}
+	}
+	dry := math.Min(sDry, wDry)
+
+	// The line between dry and not moves with the warmth, because warm air
+	// takes more of the rain back, and with when the rain falls, because rain
+	// in the summer is taken back sooner than rain in the winter. Under half
+	// the line is desert, and under the line steppe.
+	threshold := 20*mean + 140
+	switch {
+	case warm >= 0.7:
+		threshold = 20*mean + 280
+	case warm <= 0.3:
+		threshold = 20 * mean
+	}
+	if rain < threshold {
+		kind, heat := "BS", "k"
+		if rain < threshold/2 {
+			kind = "BW"
+		}
+		if mean >= 18 {
+			heat = "h"
+		}
+		return kind + heat
+	}
+
+	if cold >= 18 {
+		switch {
+		case dry >= 60:
+			return "Af"
+		case dry >= 100-rain/25:
+			return "Am"
+		}
+		return "Aw"
+	}
+	group := "C"
+	if cold <= -3 {
+		group = "D"
+	}
+	season := "f"
+	switch {
+	case sDry < 40 && sDry < wWet/3:
+		season = "s"
+	case wDry < sWet/10:
+		season = "w"
+	}
+	summer := "c"
+	switch {
+	case hot >= 22:
+		summer = "a"
+	case warmMonths(mean, hot) >= 4:
+		summer = "b"
+	}
+	return group + season + summer
+}
+
+// warmMonths is how many months of a sinusoidal year with the given mean and
+// warmest month stand at ten degrees or more.
+func warmMonths(mean, hot float64) int {
+	amp := (hot - mean) / (math.Sin(math.Pi/12) / (math.Pi / 12))
+	n := 0
+	for k := range 12 {
+		if mean+amp*math.Cos((float64(k)+0.5)*math.Pi/6-math.Pi) >= 10 {
+			n++
+		}
+	}
+	return n
+}
+
+// biome is the class a Köppen type is drawn as, and wetland where a river
+// floods ground that is neither dry nor polar.
+func biome(k string, byRiver bool) uint8 {
+	if byRiver && k[0] != 'B' && k[0] != 'E' {
 		return bWetland
 	}
 	switch {
-	case temp < 7:
-		if rain < 1.5*dry {
-			return bColdSteppe
-		}
-		return bBoreal
-	case temp < 15:
-		switch {
-		case rain < dry:
-			return bColdDesert
-		case rain < 2*dry:
-			return bGrassland
-		case rain < 3.5*dry:
-			return bTemperateForest
-		}
-		return bTemperateRain
-	}
-	switch {
-	case rain < dry:
+	case k == "EF":
+		return bIceCap
+	case k == "ET":
+		return bTundra
+	case k == "BWh":
 		return bHotDesert
-	case rain < 2*dry:
+	case k == "BWk":
+		return bColdDesert
+	case k == "BSh":
+		return bHotSteppe
+	case k == "BSk":
+		return bColdSteppe
+	case k == "Af":
+		return bRainforest
+	case k == "Am":
+		return bMonsoon
+	case k[0] == 'A':
 		return bSavanna
-	case rain < 3.5*dry:
-		return bDryForest
+	case k[0] == 'C' && k[1] == 's':
+		return bMediterranean
+	case k[0] == 'C':
+		return bTemperateForest
+	case k[2] == 'a':
+		return bContinental
 	}
-	return bRainforest
+	return bBoreal
 }
 
 // floodReach is how many tiles out a river floods for each root of a cubic

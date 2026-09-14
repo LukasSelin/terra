@@ -1,5 +1,7 @@
 package terra
 
+import "math"
+
 // What grows on a tile takes time to come on, and that time is not the same
 // for everything growing. This is where that time is kept against an actual
 // tile and advanced; system.Land is what advances it.
@@ -96,15 +98,104 @@ func (g *Grid) Standing(i int) {
 	g.Age[i] = ripe[t.Mark][t.Terrain]
 }
 
-// grown puts back what growing weather puts back, up to what the stand's
-// age accounts for. Age bounds what a stand grows into, and nothing else:
-// it never takes away what is already standing, so a wood is only ever
-// held back from filling out, never thinned by the calendar.
-func grown(have, ceiling, by float64) float64 {
-	if have >= ceiling {
+// How a stand fills. A wood does not put on the same timber every year: it
+// comes on slowly while it is saplings, fastest in the middle of its life and
+// slower again as it closes up against what the ground will carry. That is
+// the Chapman-Richards curve foresters fit to stands (Richards 1959; Pienaar
+// and Turnbull 1973),
+//
+//	V(t) = Vmax·(1 − e^(−kt))^p,
+//
+// with Vmax a full stock of one, p standShape, and k set so the curve has come
+// to standReach of full when the time a Growth names has passed.
+//
+// A stand is filled on two of these clocks. The stock's own, over the time
+// its Rate says a full stock takes to come back - one over the rate, as the
+// straight filling it replaces took - which is how fast what was taken grows
+// back; and the stand's age, over the time its Full says, which is the most
+// a stand that old can carry. What is standing follows its own curve up to
+// the one its age allows, and then follows that one.
+//
+// Both are curves of the same shape, so a stock's place on one is its place
+// on the other times how much faster one clock runs than the other, and the
+// whole of a stand's filling over any stretch of growing weather has a closed
+// form. It is what lets ground that slept for a season be caught up in one
+// go to what the season's days would have done one at a time - to the
+// rounding, and not to a hair either side of wherever the ceiling caught up.
+const (
+	standShape = 3.0
+	standReach = 0.99
+)
+
+// standPace is k·t at the time the curve comes to standReach: the curve's
+// rate, in units of that time.
+var standPace = -math.Log(1 - math.Cbrt(standReach)) // Cbrt is the root at standShape
+
+// fillStand is what a stock at have comes to over k of growing weather, filling
+// back at rate of a full stock per growing tick, on a stand that is age old at
+// the end of it and comes on in full. A full of nought is ground whose stand
+// needs no age, and only the stock's clock binds. It never takes away what is
+// already standing, so a wood is only ever held back from filling out, never
+// thinned by the calendar.
+//
+// In the curve's root, w = V^(1/p), a stock's own clock is 1 − w falling by
+// e^(−k·rate·k) and the age's ceiling is 1 − e^(−k·age/full). Where the stock's
+// clock runs faster than the stand's - rate·full of one or more - a stock that
+// reaches its ceiling is held to it and rides it up, and is a min and a max.
+// Where it runs slower, a stock can only be above its ceiling by having been
+// left there, and it waits where it is until the ceiling passes it and then
+// goes on at its own pace: wait is how much growing weather that takes.
+func fillStand(have, age, k, full, rate float64) float64 {
+	if !(have < 1) {
 		return have
 	}
-	return min(ceiling, have+by)
+	w := 0.0
+	if have > 0 {
+		w = math.Cbrt(have)
+	}
+	next := 1 - (1-w)*math.Exp(-standPace*rate*k)
+	if full > 0 {
+		if rate*full >= 1 {
+			ceiling := 1 - math.Exp(-standPace*math.Max(0, age)/full)
+			next = math.Max(w, math.Min(next, ceiling))
+		} else {
+			wait := -math.Log1p(-w)*full/standPace - math.Max(0, age-k)
+			next = 1 - (1-w)*math.Exp(-standPace*rate*math.Max(0, k-math.Max(0, wait)))
+		}
+	}
+	if !(next > w) {
+		return have
+	}
+	return math.Max(have, next*next*next)
+}
+
+// refuge is the share of a full stock that comes back from outside: the fish
+// that swim in from the next water, the seed that blows onto grazed ground, the
+// dung and the dust a worn field is given whether or not anybody gives it
+// anything. It is what brings a stock back from nothing, which the logistic
+// curve alone never does.
+const refuge = 0.01
+
+// regrow is how much a logistic filling at rate is left short of its ceiling
+// over k of growing weather, as the factor it is cut by: e^(−r·(1+refuge)·k).
+// The pass works it out once for a run and a tile works it out for itself,
+// the same product of the same numbers either way.
+func regrow(rate, k float64) float64 { return math.Exp(-rate * (1 + refuge) * k) }
+
+// logistic is what a stock at have under a ceiling of most comes to where it
+// fills as Schaefer's (1954) surplus production has a fishery fill: at a rate
+// in proportion to what there is and to the room left, dB/dt = r·B·(1 − B/K),
+// with refuge of the ceiling always arriving from outside. That has a closed
+// form, x' = M·x / (x + (M − x)·fall), in x = B/K + refuge and M = 1 + refuge,
+// so a season of it at once is a season of days of it. At or over the ceiling
+// a stock is the ceiling, as it was when the filling was straight.
+func logistic(have, most, fall float64) float64 {
+	if !(have < most) || most <= 0 {
+		return most
+	}
+	x := math.Max(0, have)/most + refuge
+	x = (1 + refuge) * x / (x + (1+refuge-x)*fall)
+	return math.Max(have, math.Min(most, (x-refuge)*most))
 }
 
 // Ripen advances what is growing on this tile by k of growing weather: the
@@ -136,7 +227,7 @@ func (g *Grid) Ripen(i int, k float64) {
 			continue
 		}
 		s := f.Stock(g)
-		s[i] = grown(s[i], g.Grown(i, f.Full), f.Rate*k)
+		s[i] = fillStand(s[i], g.Age[i], k, f.Full, f.Rate)
 	}
 }
 
@@ -175,19 +266,26 @@ func (g *Grid) Green(i int) float64 {
 	return sum / float64(len(ps))
 }
 
-// How much a water tile's fish come back per growing day, and how much
-// worn fertility a field recovers per growing day toward what the land
-// can hold. Neither of these is a process: a shoal is a stock that
-// replenishes, not a crop that has to come on, and worn soil is resting
-// rather than growing.
+// How fast a water tile's fish come back, and how fast worn fertility on a
+// field comes back toward what the land can hold, as the intrinsic rate r
+// of a logistic filling per growing day: see logistic. Neither of these is a
+// process: a shoal is a stock that replenishes, not a crop that has to come
+// on, and worn soil is resting rather than growing.
+//
+// They were a straight share of full put back each growing day - 0.0012 for
+// the fish, 0.0006 for a field and 0.002 for the grass - and each is now the
+// rate that brings a stock from nothing to within a hundredth of full in the
+// same time the straight filling took: ln(10⁴)/((1+refuge)·days). Ground that
+// was only a little worn comes back slower than it did and ground half worn
+// faster, which is what a stock that grows out of itself does.
 const (
-	FishRegrowth = 0.0012
-	Fallow       = 0.0006
-	// SwardRegrowth is how much of a full sward a growing day puts back on
-	// open ground. Grass is the quickest thing the year makes: a lawn
-	// grazed to nothing is most of the way back within a season. It is the
-	// whole of what bounds a warren where nothing hunts it.
-	SwardRegrowth = 0.002
+	FishRegrowth = 0.011
+	Fallow       = 0.0055
+	// SwardRegrowth is how fast a sward comes back on open ground. Grass is
+	// the quickest thing the year makes: a lawn grazed to nothing is most of
+	// the way back within a season. It is the whole of what bounds a warren
+	// where nothing hunts it.
+	SwardRegrowth = 0.018
 	// SeedTakes is how much sward open ground must carry for a wood's seed
 	// to take in it. A seed takes among shoots, and ground grazed below
 	// this has none: a warren at the edge of a wood holds the meadow open,
@@ -205,11 +303,11 @@ func (g *Grid) SeedTakes(i int) bool { return g.Sward[i] >= SeedTakes }
 func (g *Grid) Replenish(i int, k float64) {
 	switch g.Tiles[i].Terrain {
 	case Water:
-		g.Fish[i] = min(1, g.Fish[i]+FishRegrowth*k)
+		g.Fish[i] = logistic(g.Fish[i], 1, regrow(FishRegrowth, k))
 	case Field:
-		g.Fertility[i] = min(g.Rich[i], g.Fertility[i]+Fallow*k)
+		g.Fertility[i] = logistic(g.Fertility[i], g.Rich[i], regrow(Fallow, k))
 	case Grass:
-		g.Sward[i] = min(1, g.Sward[i]+SwardRegrowth*k)
+		g.Sward[i] = logistic(g.Sward[i], 1, regrow(SwardRegrowth, k))
 	}
 }
 

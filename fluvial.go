@@ -254,6 +254,16 @@ func stackOf(recv []int32) []int32 {
 // room for: a flat under mean sea is where the tide lays its mud, and it lays
 // it until the flat stands at high water. Both are nil where there is no tide.
 //
+// And where the ground has soil on it there are three more. soil is how deep
+// it is, f is how hard the water cuts it, and rock how hard the water cuts
+// the rock under it: a tile the water takes more than its soil off in a step
+// is cut at the one until the soil is gone and at the other after. eff is the
+// rate that comes to over the step, which is what the step is booked at. All
+// three are nil where the ground is one thing all the way down.
+//
+// abrade is the share of the sand passing each tile that the passage wears
+// down to silt: see Sternberg. It is nil where nothing is worn.
+//
 // edge is, in a history, the height a root on the map's edge cuts toward - the
 // lower ground its water leaves for - and +Inf where a root cuts toward
 // nothing. It is nil outside a history. See edgeWork.
@@ -267,6 +277,10 @@ type fluvial struct {
 	floor  []float64
 	keep   []float64
 	room   []float64
+	soil   []float64
+	rock   []float64
+	eff    []float64
+	abrade []float64
 	edge   []float64
 }
 
@@ -277,6 +291,71 @@ func (c *fluvial) edgeCut(i int32, next float64) float64 {
 		return 0
 	}
 	return c.f[i] * (next - c.edge[i])
+}
+
+// Sternberg is how fast what a river carries is worn finer as it goes: the
+// size of its grains falls as D = D0·e^(−αx) with the distance x it has come
+// (Sternberg 1875). Gravel-bed rivers fine at a hundredth to a tenth of a
+// kilometre (Hoey and Ferguson 1994); the lower end is taken, for the sand of
+// a river rather than its cobbles. Per kilometre.
+const Sternberg = 0.01
+
+// sandFolds is how many e-foldings of grain size the sand spans, from two
+// millimetres down to the sixteenth of one where silt begins: ln 32. Grains
+// spread evenly over that span in the logarithm of their size cross into silt
+// at α over it per unit of distance, which is how the share of sand turned to
+// silt is read off a rate that is about sizes.
+var sandFolds = math.Log(32)
+
+// abrasion is the share of the sand that run metres of river wears to silt.
+func abrasion(run float64) float64 {
+	return -math.Expm1(-Sternberg * run / 1000 / sandFolds)
+}
+
+// rate is how hard the water cuts tile i over the step, given how far above
+// the ground it drains into the tile stood at the last sweep: its soil's rate
+// for the share of the step the soil lasts, and its rock's for the rest. The
+// soil lasts the whole step if the cut at its rate is no deeper than it is.
+func (c *fluvial) rate(i int32, above float64) float64 {
+	if c.rock == nil {
+		return c.f[i]
+	}
+	f := c.f[i]
+	if cut := f * math.Max(0, above); cut > c.soil[i] {
+		lasts := c.soil[i] / cut
+		f = lasts*f + (1-lasts)*c.rock[i]
+	}
+	c.eff[i] = f
+	return f
+}
+
+// booked is the rate a tile's step is booked at: what rate settled on.
+func (c *fluvial) booked(i int32) float64 {
+	if c.eff == nil {
+		return c.f[i]
+	}
+	return c.eff[i]
+}
+
+// pass sends what is carried off tile i on to r, wearing the sand as it goes.
+func (c *fluvial) pass(load [][Grains]float64, i, r int32, gr int, passing float64) {
+	if gr == int(Sand) && c.abrade != nil {
+		worn := passing * c.abrade[i]
+		load[r][Sand] += passing - worn
+		load[r][Silt] += worn
+		return
+	}
+	load[r][gr] += passing
+}
+
+// cutAt is how much the water took off tile i in the step that settled on
+// next.
+func (c *fluvial) cutAt(next []float64, i int32) float64 {
+	r := c.recv[i]
+	if r == i {
+		return 0
+	}
+	return c.booked(i) * math.Max(0, next[i]-c.below(next, r))
 }
 
 // below is the height the water at a tile draining into r cuts toward: its
@@ -310,7 +389,7 @@ func (c *fluvial) solve(iters int) []float64 {
 			}
 			for gr := range load[i] {
 				carried := load[i][gr] + cut[i]*c.parts[i][gr]
-				load[r][gr] += carried * (1 - c.settle[i][gr])
+				c.pass(load, i, r, gr, carried*(1-c.settle[i][gr]))
 			}
 		}
 		// The heights, from the sea up, with what arrives held where the last
@@ -325,14 +404,16 @@ func (c *fluvial) solve(iters int) []float64 {
 				}
 				continue
 			}
-			f := c.f[i]
+			hr := c.below(next, r)
+			// next[i] is still the last sweep's here, which is what says how
+			// much of the step the soil lasts.
+			f := c.rate(i, next[i]-hr)
 			var share, laid float64
 			for gr := range load[i] {
 				share += c.settle[i][gr] * c.parts[i][gr]
 				laid += c.settle[i][gr] * load[i][gr]
 			}
 			fa := f * (1 - share)
-			hr := c.below(next, r)
 			if c.h[i] <= hr {
 				fa = 0 // at or under the water it runs into: nothing to cut toward
 			}
@@ -378,13 +459,13 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 			}
 			continue
 		}
-		cut := c.f[i] * math.Max(0, next[i]-c.below(next, r))
+		cut := c.cutAt(next, i)
 		change[i] -= cut
 		var laid [Grains]float64
 		for gr := range load[i] {
 			carried := load[i][gr] + cut*c.parts[i][gr]
 			laid[gr] = carried * c.settle[i][gr]
-			load[r][gr] += carried - laid[gr]
+			c.pass(load, i, r, gr, carried-laid[gr])
 		}
 		if lay != nil {
 			lay(i, laid)
