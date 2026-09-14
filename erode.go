@@ -80,7 +80,7 @@ func (w *Land) Erode() {
 	// The whole ground moves at once, so the ground asleep is brought up to
 	// date first; what the age does to it is done to it as it now stands.
 	w.CatchUpAll()
-	g.wear(1)
+	g.wear(ageYears)
 	// And sideways: a river cuts the outside of its bends while the weather
 	// takes the hillsides down. See meander.go.
 	g.meander(1)
@@ -107,14 +107,14 @@ func (w *Land) Erode() {
 // is ages of weather in between the ages of everything else, and there is no
 // settlement there to catch up and no tree line yet to re-read.
 //
-// by is how many ages of weather this pass is worth. An age is a decade for a
-// settlement and Erode passes 1; a history passes more, because an epoch of
-// the earth is not a decade and mountains that are never worn down are a map
-// of knife edges nobody can walk over.
+// years is how long this pass is. An age is a decade for a settlement and
+// Erode passes ageYears; a history passes an epoch, which is millions of years,
+// on the same K and the same creep - see epochYears - with its tiles read at
+// the width of a piece of a planet rather than of a field.
 //
 // It leaves the drainage stale on purpose: the caller says when the water is
 // worked out again, because doing it here would do it twice in Erode.
-func (g *Grid) wear(by float64) {
+func (g *Grid) wear(years float64) {
 	n := len(g.Tiles)
 	recv, run := g.receivers()
 	c := fluvial{
@@ -135,7 +135,7 @@ func (g *Grid) wear(by float64) {
 			}
 			// How hard the water cuts: stream power, charged to what holds
 			// the ground down. See fluvial.go.
-			c.f[i] = by * Erodibility * math.Sqrt(t.Flow) * hold(t) / run[i]
+			c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * hold(t) / run[i]
 			// What it lets settle: more of it the gentler the ground, less of
 			// it the more water there is to keep it up, and nothing on ground
 			// somebody has built on.
@@ -150,6 +150,7 @@ func (g *Grid) wear(by float64) {
 		}
 	})
 	g.tideWork(&c, recv)
+	g.edgeWork(&c, recv, years)
 	g.stillWork(&c, recv)
 	next := c.solve(settleIters)
 
@@ -192,7 +193,7 @@ func (g *Grid) wear(by float64) {
 			gained[i][gr] += laid[gr]
 		}
 	})
-	g.creep(by, change, gained)
+	g.creep(years, change, gained)
 
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
@@ -214,12 +215,13 @@ func (g *Grid) wear(by float64) {
 	}
 }
 
-// Creep is the share of the difference in height between two neighbouring
-// tiles that an age of weather moves from the higher to the lower, on ground
-// that holds nothing back. It is the slow slumping of a hillside under its own
-// weight - frost heave, burrows, rain splash - and it is the other half of what
-// shapes a slope: the water cuts, and the ground either side of the cut falls
-// in after it.
+// Diffusivity is how fast the ground creeps, in square metres a year, on ground
+// that holds nothing back: D in dh/dt = D·curvature. What a pass moves between
+// two neighbours is a share of the difference in height between them - see
+// creepShare - and on a field's tiles an age of it is four in a thousand. It is
+// the slow slumping of a hillside under its own weight - frost heave, burrows,
+// rain splash - and it is the other half of what shapes a slope: the water
+// cuts, and the ground either side of the cut falls in after it.
 //
 // Without it a channel one tile wide has walls that never come down, so every
 // line of water down the flank of a range cut itself a trench of its own and
@@ -231,34 +233,43 @@ func (g *Grid) wear(by float64) {
 // trench one tile across loses a few hundredths of its depth an age, and a
 // range twenty tiles across a hundred times less.
 //
-// On the grid it is diffusion: the ground at a tile goes as Creep/4 of the
-// curvature in tiles, which is Creep/4 x TileSpan^2 x hold square metres an
-// age. The figure is the real one. Roering and others (1999), calibrating
+// The figure is the real one. Roering and others (1999), calibrating
 // hillslopes in the Oregon Coast Range against their erosion rates, have
 // 0.0031 to 0.0045 square metres a year; Fernandes and Dietrich (1997) put
-// the world between 0.00044 and 0.036. At this figure open grass creeps at
-// 0.0036.
+// the world between 0.00044 and 0.036. At this figure, times what open grass
+// holds, grass creeps at 0.0036.
 //
-// It was 0.1, which on grass as it held then was nearly a square metre a
+// It was a share of 0.1 an age, which on grass as it held then was nearly a square metre a
 // year, two hundred and sixty times Roering's. That figure was measured
 // against trenches rather than against ground: on the high fifth of a half
 // globe over three seeds and sixty ages, the deepest hundredth of the ground
 // lay 17.2, 18.5 and 25.2 metres below the ground either side of it without
 // creep, and 7.7, 8.8 and 15.4 with it. What was cutting those trenches was
 // water wearing ten times too fast; with the water at the real figure too -
-// see Erodibility - a history weathers as it did. See deepWeather.
-const Creep = 0.00384
+// see Erodibility - a history weathers as it did. That share was 0.00384,
+// which is this.
+const Diffusivity = 0.06
 
-// creep books what an age of creep moves onto change and gained. Each pair of
+// creepShare is the share of the difference in height between two neighbouring
+// tiles that years of creep move from the higher to the lower, on ground that
+// holds nothing back: diffusion taken on the grid, where the ground at a tile
+// goes as a quarter of the share times its curvature in tiles.
+func (g *Grid) creepShare(years float64) float64 {
+	s := g.span()
+	return 4 * Diffusivity * years / (s * s)
+}
+
+// creep books what years of creep move onto change and gained. Each pair of
 // neighbours is taken once, and what one gives the other takes, so no ground
 // is made or lost. The rock does not slow it, for the reason given at hold;
 // what is growing does, because roots are what hold a hillside together.
 // Whatever somebody has built on stays where it is, and nothing slumps onto it.
-func (g *Grid) creep(by float64, change []float64, gained [][Grains]float64) {
+func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64) {
 	// A river great enough to wander has banks that are its own business: see
 	// meander, which takes the outside of a bend and builds the inside, and
 	// whose bends creep would otherwise ease back out as fast as they are cut.
 	wander := meanderFlow
+	share := g.creepShare(years)
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
 		off  geom.Pos
@@ -291,8 +302,8 @@ func (g *Grid) creep(by float64, change []float64, gained [][Grains]float64) {
 			}
 			top := &g.Tiles[hi]
 			// An eighth each, so that a tile standing above all eight of its
-			// neighbours gives up no more than Creep of its height over them.
-			moved := by * Creep / 8 * pr.near * (top.Height - g.Tiles[lo].Height) * hold(top)
+			// neighbours gives up no more than the share of its height over them.
+			moved := share / 8 * pr.near * (top.Height - g.Tiles[lo].Height) * hold(top)
 			if moved <= 0 {
 				continue
 			}

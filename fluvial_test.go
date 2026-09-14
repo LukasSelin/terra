@@ -182,7 +182,7 @@ func TestWearingAMapConservesTheGround(t *testing.T) {
 	for i := range g.Tiles {
 		before += g.Tiles[i].Height
 	}
-	g.wear(5)
+	g.wear(5 * ageYears)
 	after := 0.0
 	for i := range g.Tiles {
 		after += g.Tiles[i].Height
@@ -255,7 +255,7 @@ func TestATidalCoastConservesTheGround(t *testing.T) {
 		for i := range g.Tiles {
 			before += g.Tiles[i].Height
 		}
-		g.wear(3)
+		g.wear(3 * ageYears)
 		after := 0.0
 		for i := range g.Tiles {
 			after += g.Tiles[i].Height

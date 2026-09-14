@@ -32,7 +32,7 @@ import (
 // Everything the water takes is booked to where it lands or to the sea, grain
 // by grain, and nothing is made or lost on the way.
 
-// Erodibility is K in E = K·Q^m·S: metres of ground an age takes off a tile
+// Erodibility is K in E = K·Q^m·S: metres of ground a year takes off a tile
 // with one cubic metre a second running over it down a fall of one in one,
 // before what is growing on it and what it is made of - see hold - have their
 // say. It is not a rock's figure. The fall is read over a tile and the water
@@ -68,10 +68,19 @@ import (
 // metres of catchment a tile, 2304 times the ground the tile is: see
 // weather.go. The water now runs off the tile, and since the cutting goes as
 // the root of the water, the same cutting is had at 48 times the figure - K
-// is Whipple and Tucker's (1999) coefficient, and its units, metres of
-// ground an age for each root of a cubic metre a second, are what dimensional
-// analysis carries from one discharge to the other. 0.25 is 12.
-const Erodibility = 12.0
+// is Whipple and Tucker's (1999) coefficient, and its units - metres of
+// ground a year for each root of a cubic metre a second, down a fall of one -
+// are what dimensional analysis carries from one discharge to the other, and
+// from one clock to another. 0.25 an age off the old water is 12 an age off
+// the real water, which is 1.2 a year.
+//
+// Read as the law on drainage area, E = K_A·A^m·S, it is K_A = K·r^m for
+// runoff r in metres a second: at the valley's four hundred millimetres a
+// year, 1.3e-4 a year, and times what grass holds, 8e-6 - inside the 1e-7 to
+// 1e-4 real channels in rock of every kind are fitted at (Stock and
+// Montgomery 1999; Harel, Mudd and Attal 2016). So a history, which is millions
+// of years of it, wears with the same K on the same clock: see epochYears.
+const Erodibility = 1.2
 
 // depositOf is how readily each grain comes out of the water on ground that
 // lets it, as a share of what passes: sand at the first slackening, silt where
@@ -107,12 +116,16 @@ const settleIters = 4
 // the sea, still water - is its own receiver and is a root: its height is what
 // everything above it is cut down toward.
 func (g *Grid) receivers() (recv []int32, run []float64) {
+	if g.deep > 0 {
+		return g.deepReceivers()
+	}
 	n := len(g.Tiles)
 	recv = make([]int32, n)
 	run = make([]float64, n)
+	span := g.span()
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			recv[i], run[i] = int32(i), TileSpan
+			recv[i], run[i] = int32(i), span
 			if g.sunk(i) || g.standing(i) {
 				continue
 			}
@@ -127,7 +140,66 @@ func (g *Grid) receivers() (recv []int32, run []float64) {
 			}
 			recv[i] = int32(g.Index(q))
 			if a.X != 0 && a.Y != 0 {
-				run[i] = TileSpan * math.Sqrt2
+				run[i] = span * math.Sqrt2
+			}
+		}
+	})
+	return recv, run
+}
+
+// deepReceivers is receivers for a history: where each tile's water goes
+// across the ground with its hollows filled to where they spill, so that the
+// only roots are the sea and the edge of the map.
+//
+// A settlement's decade has lakes in it, and a lake is where the cutting
+// stops. An epoch is millions of years, and on that clock a hollow does not
+// stay one: it fills with what the water brings it until it spills, and its
+// outlet is cut down, or it is a basin of the desert whose floor is the only
+// ground in it that is not worn. Read with its lakes as roots, a history's
+// ranges - raised kilometres an epoch at real rates - stood in their own
+// hollows where no water ever left them, and rose without end: six hundred
+// kilometres by the eighth epoch of a valley. Routing over the filled ground
+// is what FastScape does for the same reason (Cordonnier, Bovy and Braun
+// 2019), and the solve already leaves a tile at or under the ground it drains
+// to uncut, so the floor of a filled hollow is only ever built up.
+func (g *Grid) deepReceivers() (recv []int32, run []float64) {
+	n := len(g.Tiles)
+	recv = make([]int32, n)
+	run = make([]float64, n)
+	span := g.span()
+	h := make([]float64, n)
+	root := make([]bool, n)
+	for i := range g.Tiles {
+		h[i] = g.Tiles[i].Height
+		if p := g.PosOf(i); g.sunk(i) || g.outlet(p.X, p.Y) {
+			root[i] = true
+		}
+	}
+	g.fillFrom(h, root)
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			recv[i], run[i] = int32(i), span
+			if root[i] {
+				continue
+			}
+			p := g.PosOf(i)
+			steepest := 0.0
+			for _, off := range Dirs {
+				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+				if g.Wrap {
+					q = g.Norm(q)
+				}
+				if !g.In(q) {
+					continue
+				}
+				j := g.Index(q)
+				d := span
+				if off.X != 0 && off.Y != 0 {
+					d *= math.Sqrt2
+				}
+				if fall := (h[i] - h[j]) / d; fall > steepest {
+					recv[i], run[i], steepest = int32(j), d, fall
+				}
 			}
 		}
 	})
@@ -181,6 +253,10 @@ func stackOf(recv []int32) []int32 {
 // is how much of what reaches a root the root holds, and room how much it has
 // room for: a flat under mean sea is where the tide lays its mud, and it lays
 // it until the flat stands at high water. Both are nil where there is no tide.
+//
+// edge is, in a history, the height a root on the map's edge cuts toward - the
+// lower ground its water leaves for - and +Inf where a root cuts toward
+// nothing. It is nil outside a history. See edgeWork.
 type fluvial struct {
 	h      []float64
 	recv   []int32
@@ -191,6 +267,16 @@ type fluvial struct {
 	floor  []float64
 	keep   []float64
 	room   []float64
+	edge   []float64
+}
+
+// edgeCut is how much the water takes off root i, whose height at the end of
+// the step is next: nothing, unless it is an edge that cuts toward lower ground.
+func (c *fluvial) edgeCut(i int32, next float64) float64 {
+	if c.edge == nil || !(next > c.edge[i]) {
+		return 0
+	}
+	return c.f[i] * (next - c.edge[i])
 }
 
 // below is the height the water at a tile draining into r cuts toward: its
@@ -233,6 +319,10 @@ func (c *fluvial) solve(iters int) []float64 {
 			r := c.recv[i]
 			if r == i {
 				next[i], cut[i] = c.h[i], 0
+				if c.edge != nil && c.h[i] > c.edge[i] {
+					next[i] = (c.h[i] + c.f[i]*c.edge[i]) / (1 + c.f[i])
+					cut[i] = c.edgeCut(i, next[i])
+				}
 				continue
 			}
 			f := c.f[i]
@@ -281,8 +371,10 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 					}
 				}
 			}
+			cut := c.edgeCut(i, next[i])
+			change[i] -= cut
 			for gr := range load[i] {
-				exported[gr] += load[i][gr] - kept[gr]
+				exported[gr] += load[i][gr] - kept[gr] + cut*c.parts[i][gr]
 			}
 			continue
 		}
@@ -304,6 +396,35 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 		}
 	}
 	return exported
+}
+
+// edgeWork has, in a history, the roots on the map's edge cut toward the sea
+// the history runs against. Outside a history an edge is where a valley's
+// water leaves it and the ground there holds its height, which for a decade is
+// true. For an epoch it is not: raised kilometres by a seam and never cut, the
+// edges of a made valley and the poles of a made globe stood tens of
+// kilometres high, the tallest ground on the map, because they were the only
+// ground the water could not wear. The water leaving the map goes on down to
+// the sea somewhere off it, and the edge is cut toward that.
+func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
+	if g.deep <= 0 {
+		return
+	}
+	n := len(g.Tiles)
+	c.edge = make([]float64, n)
+	base := math.Max(0, g.base)
+	for i := range n {
+		c.edge[i] = math.Inf(1)
+		if int(recv[i]) != i || g.sunk(i) {
+			continue
+		}
+		t := &g.Tiles[i]
+		if p := g.PosOf(i); !g.outlet(p.X, p.Y) || t.Height <= base {
+			continue
+		}
+		c.edge[i] = base
+		c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * hold(t) / g.span()
+	}
 }
 
 // stillWork has still water keep what reaches it. A lake, a salt flat and the

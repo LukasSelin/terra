@@ -43,6 +43,15 @@ const TileSpan = 25.0
 // erode.go.
 const ageYears = 10 * yr
 
+// span is how wide a tile of g is on the ground, in metres: TileSpan, except
+// while a history runs, when a tile is a piece of a planet. See deepSpan.
+func (g *Grid) span() float64 {
+	if g.deep > 0 {
+		return g.deep
+	}
+	return TileSpan
+}
+
 // tilesAcross is how many tiles span metres wide a length of metres is. A
 // distance on the ground is written in metres at its declaration and turned
 // into tiles here, at the point of use, so that a map read at another span

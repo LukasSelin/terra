@@ -343,7 +343,7 @@ func (g *Grid) Slope(p geom.Pos) float64 {
 		if !g.In(q) {
 			continue
 		}
-		run := TileSpan
+		run := g.span()
 		if off.X != 0 && off.Y != 0 {
 			run *= math.Sqrt2
 		}

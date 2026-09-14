@@ -343,24 +343,33 @@ const historySea = 0.35
 // The fill has always had one - see fillEnough - and the fire and the crushing
 // had none, so any trace of either beat a continent: a seam that brushed past
 // a tile once, raising it by a hand's breadth, made that tile igneous forever.
-// Fifteen metres is about one epoch of a rift working at its full rate, which
-// is the scale at which something has actually happened to the ground rather
-// than merely happened near it.
+// One epoch of a rift working at its full rate, which is the scale at which
+// something has actually happened to the ground rather than merely happened
+// near it: six kilometres.
 //
 // It is the second half of what stopped a made world paving itself. With melt
 // taken as a level rather than a total the basalt on a made valley falls from
 // fifty-four parts in a hundred to thirty-four; with this as well it falls to
 // twenty-four, and the sandstone, the shale and the schist all rise. No rock
 // owns the map and all six are on it in quantity.
-const madeEnough = 15.0
+const madeEnough = -riftRate * epochYears
 
 // accreteEnough is how many metres of volcanic ground have to be raised on a
-// tile of ocean floor, over the whole history, before it is continent.
-const accreteEnough = 60.0
+// tile of ocean floor, over the whole history, before it is continent: four
+// epochs of a rift's flooring, as it was tuned at.
+const accreteEnough = 4 * madeEnough
+
+// fillRate is how fast a basin fills, in metres a year, and so what an epoch
+// of burial lays on a tile: a tenth of a millimetre, which is what sediment
+// piles up at when it is measured over millions of years rather than over one
+// flood (Sadler 1981 - a rate read over a longer span is a slower one, because
+// it has more gaps in it). Four hundred metres an epoch is a fifteenth of what
+// makes a rock, as the one an epoch was of the fifteen metres before.
+const fillRate = 0.1 * mm / yr
 
 const (
 	marineMud  = 0.5
-	fillEnough = 3.0
+	fillEnough = 3 * fillRate * epochYears
 	// coarseShare is how much of a world's filled ground comes out sandstone
 	// rather than shale: the sandiest third of it. It is a share and not a
 	// cutoff for the reason every other share on this map is - see
@@ -377,29 +386,61 @@ const (
 	coarseShare = 0.35
 )
 
-// deepWeather is how many ages of weather an epoch of the earth is worth.
-// Erode's age is a decade, and an epoch here is not: mountains raised and
-// never worn stand as walls, and a map of walls is one nobody can cross.
-// What this figure is really setting is the balance between how fast the
-// ground goes up at the seams and how fast the weather takes it down again,
-// which is the balance that decides whether a map comes out as ridges or as
-// country.
+// Deep time: how long an epoch is, and how big a tile is while it lasts.
 //
-// It was 1.5 while an age of weather wore ground at ten times any real rate
-// and grass let go of its soil almost as readily as a ploughed field. With
-// both at the real figures - see Erodibility and hold - it takes eighty times
-// as many ages for the water to take the same off an epoch's open ground, so
-// it is eighty times as many, and the balance with the plates is the one it
-// was. Only the creep, which was two hundred and sixty times too fast, is
-// slower against the water than it was.
-const deepWeather = 120.0
+// An epoch was 120 ages of weather, twelve hundred years, and in it a plate
+// crossed a tile - 25 metres, two centimetres a year - while a collision
+// raised its range 45 metres, which is 37 millimetres a year: four to ten
+// times the fastest rock uplift measured anywhere (Lavé and Avouac 2001 have
+// 4 to 8 across the front of the Himalaya). A history of sixteen epochs was
+// nineteen thousand years, and nothing it described - a continent rifting, an
+// ocean closing, an arc growing into a continent - takes less than tens of
+// millions. The figures were right for each other and wrong for the world.
+//
+// So an epoch is epochYears, and every rate in it is a real one: plates in
+// centimetres a year, uplift and subsidence in millimetres a year, the water
+// cutting at Erodibility and the ground creeping at Diffusivity, the same K
+// and the same D a settlement's valley wears at, on the same clock of years.
+// What that fixes is the size of a tile. A plate here crosses driftFast tiles
+// an epoch at the speed of the fastest plates, times driftScale on a wider
+// world, because that is what keeps a history's plates meeting and parting
+// as often on a globe as on a valley; at driftFastRate for epochYears that
+// is deepSpan metres a tile. On the globe preset it is 37.5 kilometres, and
+// the globe is 38,400 kilometres round - within four in a hundred of the
+// planet its air already reads it as. On a small globe it is 106 kilometres,
+// and on the valley 200: a history's world is a planet in a handful of tiles.
+//
+// A history reads its tiles at that span - the fall of the ground over a tile,
+// the ground the water comes off, how far the creep reaches - and hands the
+// finished heights to the map by rank alone (see normalise and basins), which
+// shape.go then lays again at TileSpan as the water would have worn it. That
+// rank, and the rock, are all a 25 metre tile keeps of its history; which is
+// honest, since a 25 metre tile's worth of anything is below what an epoch on
+// a 37 kilometre tile can say.
+//
+// The river's wandering is not run in deep time. A bend is metres to hundreds
+// of metres across, which is inside one of these tiles, and a height moved
+// sideways off a tile two hundred kilometres wide is not a bank.
+//
+// What this is not yet is a coarse grid of its own. The design that would be:
+// run the history on a grid of deepTarget tiles - one to five kilometres, so
+// that an orogen's flanks and an arc's gap from its trench are tens of tiles
+// and not one - with the plates carried a tile at a time as now but many
+// steps to an epoch (at 5 cm/yr and 2 km a tile, a hundred steps), wearing
+// every step; then downscale onto the playable grid by bilinear interpolation
+// of the coarse heights as shape's uplift field, with the rock and the plate
+// taken by nearest coarse tile, and the fine relief the shaping's own. The
+// cost that stops it here is the move: shifting a crust a tile is a pass over
+// the whole grid, and a hundred of them an epoch on a coarse globe of 20,000 by
+// 10,000 two-kilometre tiles is a thousand times what a history costs now.
+// The unit plumbing is what it needs first, and is what this is.
+const epochYears = 4 * myr
 
-// deepMeander is how many ages of a river's wandering an epoch is worth. It
-// stays where deepWeather was, because the wandering was never too fast: a
-// great river here moves across its valley at a few thousandths of its width
-// a year, where real ones do up to a hundredth or two, and a history that let
-// it wander eighty times as far would unpick every range it crossed.
-const deepMeander = 1.5
+// deepSpan is how wide, in metres, a tile of g is read as while a history
+// runs. See epochYears.
+func deepSpan(g *Grid) float64 {
+	return driftFastRate * epochYears / (driftFast * driftScale(g))
+}
 
 // smoothing is how many times a finished history is softened before its
 // heights are matched to a drawn map's spread. A seam raises a range narrower
@@ -419,16 +460,27 @@ const smoothing = 1
 // continental margin at this scale.
 const marginRamp = 6
 
-// A map is a region and not a world - eighty tiles at TileSpan is two
-// kilometres of country - so these are what a boundary's *works* travel
-// across the ground, not what a plate does in any real sense. At a tile an
-// epoch a seam crosses a fifth of a default map over a whole history, which
+// How fast a plate goes at the start of the plate era and at the end of it, in
+// metres a year: five centimetres, which is a quick plate today - the Pacific
+// goes at seven to ten, the Atlantic's at two (DeMets, Gordon and Argus 2010)
+// - and one, which is a slow one. A young world convects hard and its plates
+// race; an old one has cooled and slowed.
+//
+// driftFast and driftSlow are the same two speeds in the units a plate's DX
+// and DY are kept in: tiles an epoch on the valley, at the fastest. At a tile
+// an epoch a seam crosses a fifth of a default map over a whole history, which
 // leaves plate interiors that were never touched by anything. Faster than
 // that and every tile on the map has been in a mountain range at some point,
-// which is the same uniformity this was meant to replace.
+// which is the same uniformity this was meant to replace. What those tiles
+// are in metres follows from the speed: see deepSpan.
+const (
+	driftFastRate = 5 * cm / yr
+	driftSlowRate = 1 * cm / yr
+)
+
 const (
 	driftFast = 1.0
-	driftSlow = 0.2
+	driftSlow = driftFast * driftSlowRate / driftFastRate
 	// feedShare is how much of how hard two plates meet is read off the crust
 	// that has actually gone down between them, rather than off how fast they
 	// are closing, and feedBlur how many passes of a nine-tile average that
@@ -462,18 +514,36 @@ const (
 	spinMost = 0.2
 )
 
-// What a meeting of plates does to the ground, in metres per epoch at a
-// head-on closing of one tile. Continents crumple and stay up because they
-// are too light to go down; ocean floor meeting a continent goes under it,
-// which trenches the one and lifts an arc of volcanoes on the other; two
-// floors meeting make islands out of open water. Parting drops the ground and
-// floors it with what comes up.
+// What a meeting of plates does to the ground, in metres a year where two
+// plates close head-on at driftFastRate. Continents crumple and stay up
+// because they are too light to go down; ocean floor meeting a continent goes
+// under it, which trenches the one and lifts an arc of volcanoes on the
+// other; two floors meeting make islands out of open water. Parting drops the
+// ground and floors it with what comes up.
+//
+// Rock uplift, before the weather takes any of it: 4 to 8 millimetres a year
+// across the Himalayan front (Lavé and Avouac 2001), 1 to 3 in the forearcs
+// and arcs of the Andes and Japan, up to 5 on the islands of Vanuatu (Taylor
+// and others 1980), and 0.1 to 2 of subsidence in a young rift or at the
+// outer wall of a trench (Allen and Allen 2013). The five are kept in the
+// proportion they were tuned to - 45, 28, -20, 18 and -15 - which is what
+// decides which rock a meeting leaves, and the whole set is put where the
+// collision's own figure is real.
 const (
-	orogeny  = 45.0
-	arcLift  = 28.0
-	trench   = -20.0
-	islandUp = 18.0
-	rifting  = -15.0
+	orogenyRate = 4.5 * mm / yr
+	arcRate     = 2.8 * mm / yr
+	trenchRate  = -2.0 * mm / yr
+	islandRate  = 1.8 * mm / yr
+	riftRate    = -1.5 * mm / yr
+)
+
+// And the same, as metres in an epoch: what liftOf hands out.
+const (
+	orogeny  = orogenyRate * epochYears
+	arcLift  = arcRate * epochYears
+	trench   = trenchRate * epochYears
+	islandUp = islandRate * epochYears
+	rifting  = riftRate * epochYears
 )
 
 // How high a plate floats before anything happens at its edges: a continent
@@ -489,11 +559,23 @@ const (
 // settling is how much of the way to its own level a plate comes in an
 // epoch, so that crust which changes hands rises or sinks over an age rather
 // than jumping. It moves a whole plate by what its middle is short of, so a
-// plate keeps the country it is carrying; see tectonics.
+// plate keeps the country it is carrying; see tectonics. It is written as a
+// time, settleTime, which is no measured figure: a load on the mantle is
+// compensated in some ten thousand years, and what is slow here is a plate as
+// a whole coming to the level of the crust it has gathered, which stands in
+// for the isostasy this model does not have. Twenty-five million years is the
+// fifteen in a hundred an epoch it was tuned at.
+//
+// The distance between the levels is the real one: the continents' mean
+// stands 4.5 kilometres above the abyssal floor, +0.8 against -3.7 (Cogley
+// 1984). It was 240 metres, beside a range that rose 45 an epoch; with the
+// range at its real rate the step has to be real too, or every coast is a
+// seam. The floor stands six kilometres above nothing, which is about how far
+// the deepest trenches go below it.
 const (
-	oceanFreeboard     = 100.0
-	continentFreeboard = 340.0
-	settling           = 0.15
+	oceanFreeboard     = 6 * km
+	continentFreeboard = oceanFreeboard + 4.5*km
+	settleTime         = 25 * myr
 	// bowRise is how far a plate's own ground stands off its level, either
 	// way, and bowSpan is how broad one of those swells or basins is, in
 	// tiles. bowPull is how much of the way to that shape the ground comes in
@@ -523,13 +605,22 @@ const (
 	// level of its own takes a share of whatever texture the ground has every
 	// epoch, and sixteen of those is all of it. Pulling toward a bow puts
 	// texture in rather than taking it out.
-	bowRise = 200.0
+	//
+	// A kilometre, which is the dynamic topography a mantle holds a plate's
+	// ground up or down by (Hager and others 1985; Braun 2010). It was two
+	// hundred metres beside a freeboard of 240; the freeboard is real now, and
+	// so is this.
+	bowRise = 1 * km
 	bowSpan = 64.0
 	// bowLeast is the finest octave of it: below this the weather and the
 	// water are already saying what the ground does at that size.
 	bowLeast = 6.0
 	bowPull  = 0.30
 )
+
+// settling is the share of the way to its level a plate comes in an epoch of
+// settleTime.
+var settling = 1 - math.Exp(-epochYears/settleTime)
 
 // How many places in a world are fed from below rather than at their edges,
 // and how far each one's works reach. They stay where they are while the
@@ -540,7 +631,11 @@ const (
 	hotspots     = 2
 	hotspotSpan  = DefaultWidth
 	hotspotReach = 7.0
-	hotspotLift  = 10.0
+	// hotspotLift is what one does in an epoch it is awake, at its middle: a
+	// millimetre a year, in the proportion to a collision it was tuned at, which
+	// is about the rate the Hawaiian volcanoes pile up their edifices at over a
+	// million years (a few kilometres of shield; Clague and Dalrymple 1987).
+	hotspotLift = 1 * mm / yr * epochYears
 	// hotspotWakes is how often one of them is awake in an epoch. A volcano
 	// is not a thing that happens continuously for the age of a world: it
 	// goes off, and then it is quiet for longer than anybody watching it will
@@ -686,6 +781,9 @@ type record struct {
 // woods, the outcrops, the soils, the market - reads the same kind of ground
 // it would have read from the picture.
 func (w *Land) history(g *Grid, epochs int, sea, water float64) {
+	// The tiles are pieces of a planet until the history is over. See
+	// epochYears.
+	g.deep = deepSpan(g)
 	w.molten(g)
 	// The water has to have something to carry. Soil is made from the rock
 	// beneath it, and at the end of the molten era that is basalt everywhere;
@@ -734,14 +832,13 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		// hold what the water brings them: see stillWork.
 		g.base = g.historyBase()
 		g.drain()
-		g.wear(deepWeather)
-		g.meander(deepMeander)
+		g.wear(epochYears)
 		g.keepBook(book, e)
 		plates = w.reshape(g, plates, fl, touch, weld)
 		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
 	}
 
-	g.base = -1
+	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean, epochs)
 	for k := 0; k < smoothing; k++ {
 		g.soften()
@@ -2674,6 +2771,7 @@ func (g *Grid) historyBase() float64 {
 // buried in sand reads as sand - and the second is simply counted.
 func (g *Grid) keepBook(book []record, epoch int) {
 	sea := g.base
+	fill := fillRate * epochYears // metres of burial an epoch: see fillRate
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() || t.Height <= sea {
@@ -2686,8 +2784,8 @@ func (g *Grid) keepBook(book []record, epoch int) {
 			// whether it is next door, which is enough to tell a bed that
 			// silts up from one that does not.
 			if g.offshore(geom.Pos{X: i % g.W, Y: i / g.W}, sea) {
-				book[i].laid[Clay] += marineMud * 0.7
-				book[i].laid[Silt] += marineMud * 0.3
+				book[i].laid[Clay] += marineMud * 0.7 * fill
+				book[i].laid[Silt] += marineMud * 0.3 * fill
 				t.Formed = uint8(epoch)
 			}
 			continue
@@ -2695,9 +2793,9 @@ func (g *Grid) keepBook(book []record, epoch int) {
 		// Ground below the water it drains into is ground being filled in,
 		// and rock made of what is falling on it now dates from now.
 		if t.Drain < FloodDepth/2 {
-			book[i].laid[Sand] += t.Sand
-			book[i].laid[Silt] += t.Silt()
-			book[i].laid[Clay] += t.Clay
+			book[i].laid[Sand] += t.Sand * fill
+			book[i].laid[Silt] += t.Silt() * fill
+			book[i].laid[Clay] += t.Clay * fill
 			t.Formed = uint8(epoch)
 		}
 	}

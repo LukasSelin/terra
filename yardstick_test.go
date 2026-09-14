@@ -680,7 +680,7 @@ func diffusivity() float64 {
 	}
 	i := g.H/2*g.W + mid
 	before := g.Tiles[i].Height
-	g.wear(1)
+	g.wear(ageYears)
 	return (before - g.Tiles[i].Height) / curve / ageYears
 }
 
@@ -734,7 +734,7 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			}
 			g.Rekind()
 			before := heights(g)
-			g.wear(1)
+			g.wear(ageYears)
 			lost := 0.0
 			for _, i := range slopes {
 				lost += before[i] - g.Tiles[i].Height

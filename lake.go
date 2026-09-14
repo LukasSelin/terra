@@ -738,7 +738,7 @@ func (g *Grid) flow() {
 	if len(g.area) != n {
 		g.area = make([]float64, n)
 	}
-	perMM := discharge(1, TileSpan)
+	perMM := discharge(1, g.span())
 	water := 0.0
 	for i := range g.Tiles {
 		g.Tiles[i].Flow, g.area[i] = 0, 0
