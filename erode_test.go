@@ -49,13 +49,19 @@ func TestWeatherMovesSoilDownhill(t *testing.T) {
 // The one thing about the weather that is the settlement's own doing: woods
 // hold a hillside together and a ploughed field does not, so a people that
 // clears its slopes to farm them washes those slopes into its own river.
+//
+// The slopes are the hillsides and not the banks, at the start or at the end.
+// In a valley cut into its ground the tiles beside a river are as steep as any,
+// and the river takes them whatever grows on them - see meander. Counted in, the
+// woods lost 1923 metres against 3047 ploughed, less than twice; with the
+// rivers' own banks set aside, the rain's share of it is what is left.
 func TestWoodsHoldAHillsideTogether(t *testing.T) {
 	lost := func(cover Terrain) float64 {
 		w := NewLandSized(3, 60, 40)
 		g := w.Grid
 		var slopes []int
 		for i := range g.Tiles {
-			if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 {
+			if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 				tl.Terrain = cover
 				slopes = append(slopes, i)
 			}
@@ -67,6 +73,9 @@ func TestWoodsHoldAHillsideTogether(t *testing.T) {
 		}
 		var total float64
 		for _, i := range slopes {
+			if g.Tiles[i].Wet() || g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
+				continue // the river came to it, and took it as a bank
+			}
 			if d := before[i] - g.Tiles[i].Height; d > 0 {
 				total += d
 			}

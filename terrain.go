@@ -45,6 +45,12 @@ func (w *Land) Generate(cfg Terms) {
 	} else {
 		g.flood(cfg.SeaShare, w.RNG)
 	}
+	// The ground as the water would have worn it, with the first-order valleys
+	// cut into its hillsides, and what that leaves too steep to stand brought
+	// down. See shape.go and slide.go.
+	area := g.shape()
+	w.texture(g, area)
+	g.landslide()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
 	// goes: incise moves the ground, so the drainage has to be taken again on

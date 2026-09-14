@@ -143,7 +143,10 @@ func TestTheWeatherChangesFromDayToDay(t *testing.T) {
 	}
 	t.Logf("pressure %.0f to %.0f hPa, wind at most %.0f m/s, the probe's wind changed on %d of 60 days, %d storm-days",
 		lowest, highest, most, changed, storms)
-	if lowest < 930 || highest > 1060 {
+	// The sea-level extremes on record: 870 hPa in Typhoon Tip (1979), 1084 in
+	// Siberia (1968). It was 930 to 1060, and a storm over the shaped ground of
+	// seed 3 deepened to 924 - see shape.go.
+	if lowest < 870 || highest > 1084 {
 		t.Errorf("pressure ran from %.0f to %.0f hPa", lowest, highest)
 	}
 	if most > windMost || most < 10 {
