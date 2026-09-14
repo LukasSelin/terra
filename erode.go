@@ -3,7 +3,6 @@ package terra
 import (
 	"github.com/LukasSelin/terra/geom"
 	"math"
-	"sort"
 )
 
 // Weathering: the land does not hold still.
@@ -22,35 +21,6 @@ import (
 // and finds the soil it depended on in a different place from where it left
 // it. Nobody decides that; it falls out of where they chose to put their
 // fields.
-
-// Wash is how much soil an age of weather - a decade of it; see
-// system.ErodeEvery - takes off a tile, given the water crossing it and the
-// steepness of it. What the water can lift goes as the root of how much of it
-// there is rather than in proportion: taken in proportion, the valley floor
-// carries so much of the map's water that it scoured itself out instead of
-// silting up, which is the opposite of what a flood plain is. The root is the
-// usual reading, and with it the channel still cuts down while the ground
-// beside it fills.
-//
-// The size of it is what makes the ground move at the speed ground moves: a
-// ploughed slope loses a few centimetres of soil a decade and a wooded one a
-// few millimetres, so a hillside farmed hard is worn out in a century or two
-// and one left standing keeps what it has for longer than anybody watching it
-// will be alive.
-const Wash = 12
-
-// Settle is the share of what the water is carrying that it puts down on
-// gentle ground each tile it crosses. Steep ground keeps its load moving.
-//
-// It is one figure no longer: water sorts what it carries, and that sorting
-// is most of why one field is sand and the next is clay. A grain of sand goes
-// down at the first slackening; silt travels to where the river spills; clay
-// stays up in the water almost as long as there is any water moving at all.
-// So the share is the grain's, and the three of them average within a
-// hundredth of the single figure this was, so that a map silts up at about
-// the rate the whole model was measured at and what is new is where each
-// grain of it lands rather than how much of it settles.
-var settleOf = [Grains]float64{Sand: 0.62, Silt: 0.33, Clay: 0.10}
 
 // SettleSlope is the slope above which water carries everything it has and
 // lays down nothing.
@@ -117,6 +87,8 @@ func (w *Land) Erode() {
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
+	// The coast has moved, so the tide's reach has, and the flats with it.
+	g.tides()
 	g.resoil()
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
@@ -144,127 +116,198 @@ func (w *Land) Erode() {
 // worked out again, because doing it here would do it twice in Erode.
 func (g *Grid) wear(by float64) {
 	n := len(g.Tiles)
-
-	// Highest ground first, so that what a tile sheds is in the water before
-	// the tile below it is asked what the water is carrying.
-	order := make([]int32, n)
-	for i := range order {
-		order[i] = int32(i)
+	recv, run := g.receivers()
+	c := fluvial{
+		h:      make([]float64, n),
+		recv:   recv,
+		stack:  stackOf(recv),
+		f:      make([]float64, n),
+		settle: make([][Grains]float64, n),
+		parts:  make([][Grains]float64, n),
 	}
-	sort.Slice(order, func(a, b int) bool {
-		ha, hb := g.Tiles[order[a]].Height, g.Tiles[order[b]].Height
-		if ha != hb {
-			return ha > hb
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			t := &g.Tiles[i]
+			c.h[i] = t.Height
+			c.parts[i] = parts(t)
+			if int(recv[i]) == i {
+				continue
+			}
+			// How hard the water cuts: stream power, charged to what holds
+			// the ground down. See fluvial.go.
+			c.f[i] = by * Erodibility * math.Sqrt(t.Flow) * hold(t) / run[i]
+			// What it lets settle: more of it the gentler the ground, less of
+			// it the more water there is to keep it up, and nothing on ground
+			// somebody has built on.
+			if t.Mark != None {
+				continue
+			}
+			slack := clamp01(1 - g.Slope(g.PosOf(i))/SettleSlope)
+			held := math.Sqrt(settleFlow / math.Max(settleFlow, t.Flow))
+			for gr := range depositOf {
+				c.settle[i][gr] = math.Min(0.9, depositOf[gr]*slack*held)
+			}
 		}
-		return order[a] < order[b] // ties by position, so an age repeats
 	})
+	g.tideWork(&c, recv)
+	g.stillWork(&c, recv)
+	next := c.solve(settleIters)
 
-	load := make([][Grains]float64, n)   // soil in the water leaving each tile
-	change := make([]float64, n)         // metres gained or lost
-	gained := make([][Grains]float64, n) // what was laid down here, by grain
-	for _, i := range order {
+	change := make([]float64, n)
+	gained := make([][Grains]float64, n)
+	g.exported = c.account(next, change, gained, func(i int32, laid [Grains]float64) {
 		t := &g.Tiles[i]
-		p := geom.Pos{X: int(i) % g.W, Y: int(i) / g.W}
-		slope := g.Slope(p)
-
-		// Still water - a lake, or the flat a lake dries back to - stops the
-		// water, and everything the water was carrying goes down in it. That
-		// is how a lake silts up and how a basin fills, and it is the one
-		// place the load has to go when there is nowhere lower for it.
-		still := g.standing(int(i))
-
-		// What the water lays down here: more of it the gentler the ground,
-		// and more of the coarse than of the fine, which is the sorting. A
-		// tile takes the mixture the water had left to give it, not the
-		// mixture that came off the hill.
-		if carrying(load[i]) > 0 {
-			var settled [Grains]float64
-			slack := clamp01(1 - slope/SettleSlope)
-			for k := range settled {
-				settled[k] = load[i][k] * settleOf[k] * slack
-				if still {
-					settled[k] = load[i][k]
+		if t.Wet() && !g.standing(int(i)) {
+			// A river in flood puts most of its silt over the bank. That is
+			// what a flood plain is: not ground the river spared, but ground
+			// the river made. Without it the silt stays in the channel, the
+			// bed rises, and the good land beside it slowly washes away
+			// instead of being fed.
+			p := g.PosOf(int(i))
+			var bank [8]int
+			banks := 0
+			for _, off := range Dirs {
+				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+				if !g.In(q) {
+					continue
 				}
-				load[i][k] -= settled[k]
+				if b := g.At(q); !b.Wet() && b.Drain < FloodDepth {
+					bank[banks] = g.Index(q)
+					banks++
+				}
 			}
-			if t.Wet() && !still {
-				// A river in flood puts most of its silt over the bank. That
-				// is what a flood plain is: not ground the river spared, but
-				// ground the river made. Without it the silt stays in the
-				// channel, the bed rises, and the good land beside it slowly
-				// washes away instead of being fed.
-				var bank []int
-				for _, off := range Dirs {
-					c := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-					if !g.In(c) {
-						continue
+			if banks > 0 {
+				for gr := range laid {
+					over := laid[gr] * Overbank
+					for _, j := range bank[:banks] {
+						change[j] += over / float64(banks)
+						gained[j][gr] += over / float64(banks)
 					}
-					if b := g.At(c); !b.Wet() && b.Drain < FloodDepth {
-						bank = append(bank, g.Index(c))
-					}
-				}
-				if len(bank) > 0 {
-					for k := range settled {
-						over := settled[k] * Overbank
-						for _, j := range bank {
-							change[j] += over / float64(len(bank))
-							gained[j][k] += over / float64(len(bank))
-						}
-						settled[k] -= over
-					}
+					laid[gr] -= over
 				}
 			}
-			for k := range settled {
-				change[i] += settled[k]
-				gained[i][k] += settled[k]
-			}
 		}
-		// What it takes away. A stripping takes the soil as it finds it: the
-		// water carries off the mixture that was there, and the sorting
-		// happens where it puts it down again rather than where it picks it
-		// up.
-		if still {
-			continue
+		for gr := range laid {
+			change[i] += laid[gr]
+			gained[i][gr] += laid[gr]
 		}
-		stripped := by * Wash * math.Sqrt(t.Flow) * slope * hold(t)
-		change[i] -= stripped
-		was := parts(t)
-		for k := range load[i] {
-			load[i][k] += stripped * was[k]
-		}
-
-		a := g.Aspect(p)
-		if a == (geom.Pos{}) {
-			// Off the map, or into the sea, the water and everything in it
-			// leaves. Anywhere else it is the bottom of a hollow, and what it
-			// carried stays there.
-			if !g.underSea(int(i)) && !g.outlet(p.X, p.Y) {
-				for k := range load[i] {
-					change[i] += load[i][k]
-					gained[i][k] += load[i][k]
-				}
-			}
-			continue
-		}
-		down := int32(g.Index(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}))
-		for k := range load[i] {
-			load[down][k] += load[i][k]
-		}
-	}
+	})
+	g.creep(by, change, gained)
 
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Height = math.Max(0, t.Height+change[i])
+		// No floor under it. The water is never cut below the ground it runs
+		// into - see fluvial.go - and the creep never takes a tile below the
+		// one it gives to, so nothing here digs a hole; what a floor at the
+		// foot of the map did was make ground out of nothing, first by lifting
+		// a sea bed that lay under it and then by refusing to let the creep
+		// ease one down a hand's breadth further.
+		t.Height += change[i]
 		// Soil goes with the ground it was in. What washes off a slope is
 		// what that slope could have grown; what lands on the flat is what
 		// makes a flood plain worth farming.
-		if !t.Wet() {
+		if !t.Wet() && !t.Terrain.Tidal() {
 			g.Rich[i] = clamp01(g.Rich[i] + change[i]/SoilDepth)
 			g.Fertility[i] = math.Min(g.Fertility[i], g.Rich[i])
 			mix(t, gained[i])
 		}
 	}
+}
 
+// Creep is the share of the difference in height between two neighbouring
+// tiles that an age of weather moves from the higher to the lower, on ground
+// that holds nothing back. It is the slow slumping of a hillside under its own
+// weight - frost heave, burrows, rain splash - and it is the other half of what
+// shapes a slope: the water cuts, and the ground either side of the cut falls
+// in after it.
+//
+// Without it a channel one tile wide has walls that never come down, so every
+// line of water down the flank of a range cut itself a trench of its own and
+// the mountains came out combed. With it a gully's walls go as fast as its bed
+// and only the water that gathers enough to outrun the slumping keeps a
+// valley, which is what sets how far apart a range's streams are.
+//
+// It falls hardest on the smallest shapes and hardly at all on the large: a
+// trench one tile across loses a few hundredths of its depth an age, and a
+// range twenty tiles across a hundred times less.
+//
+// On the grid it is diffusion: the ground at a tile goes as Creep/4 of the
+// curvature in tiles, which is Creep/4 x TileSpan^2 x hold square metres an
+// age. The figure is the real one. Roering and others (1999), calibrating
+// hillslopes in the Oregon Coast Range against their erosion rates, have
+// 0.0031 to 0.0045 square metres a year; Fernandes and Dietrich (1997) put
+// the world between 0.00044 and 0.036. At this figure open grass creeps at
+// 0.0036.
+//
+// It was 0.1, which on grass as it held then was nearly a square metre a
+// year, two hundred and sixty times Roering's. That figure was measured
+// against trenches rather than against ground: on the high fifth of a half
+// globe over three seeds and sixty ages, the deepest hundredth of the ground
+// lay 17.2, 18.5 and 25.2 metres below the ground either side of it without
+// creep, and 7.7, 8.8 and 15.4 with it. What was cutting those trenches was
+// water wearing ten times too fast; with the water at the real figure too -
+// see Erodibility - a history weathers as it did. See deepWeather.
+const Creep = 0.00384
+
+// creep books what an age of creep moves onto change and gained. Each pair of
+// neighbours is taken once, and what one gives the other takes, so no ground
+// is made or lost. The rock does not slow it, for the reason given at hold;
+// what is growing does, because roots are what hold a hillside together.
+// Whatever somebody has built on stays where it is, and nothing slumps onto it.
+func (g *Grid) creep(by float64, change []float64, gained [][Grains]float64) {
+	// A river great enough to wander has banks that are its own business: see
+	// meander, which takes the outside of a bend and builds the inside, and
+	// whose bends creep would otherwise ease back out as fast as they are cut.
+	most := 0.0
+	for i := range g.Tiles {
+		most = math.Max(most, g.Tiles[i].Flow)
+	}
+	wander := meanderFlow * most
+	// Half the pairs, so that each is taken once: east, and the three below.
+	pairs := [...]struct {
+		off  geom.Pos
+		near float64
+	}{
+		{geom.Pos{X: 1, Y: 0}, 1},
+		{geom.Pos{X: -1, Y: 1}, 0.5},
+		{geom.Pos{X: 0, Y: 1}, 1},
+		{geom.Pos{X: 1, Y: 1}, 0.5},
+	}
+	for i := range g.Tiles {
+		a := &g.Tiles[i]
+		p := g.PosOf(i)
+		for _, pr := range pairs {
+			q := geom.Pos{X: p.X + pr.off.X, Y: p.Y + pr.off.Y}
+			if !g.In(q) {
+				continue
+			}
+			j := g.Index(q)
+			b := &g.Tiles[j]
+			if a.Mark != None || b.Mark != None {
+				continue
+			}
+			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {
+				continue
+			}
+			hi, lo := i, j
+			if b.Height > a.Height {
+				hi, lo = j, i
+			}
+			top := &g.Tiles[hi]
+			// An eighth each, so that a tile standing above all eight of its
+			// neighbours gives up no more than Creep of its height over them.
+			moved := by * Creep / 8 * pr.near * (top.Height - g.Tiles[lo].Height) * hold(top)
+			if moved <= 0 {
+				continue
+			}
+			change[hi] -= moved
+			change[lo] += moved
+			was := parts(top)
+			for k := range was {
+				gained[lo][k] += moved * was[k]
+			}
+		}
+	}
 }
 
 // SoilDepth is how many metres of ground make the difference between land
@@ -286,8 +329,8 @@ func (g *Grid) resoil() {
 	const toward = 0.08
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() || t.Terrain == Pan {
-			continue // salt does not weather back into soil
+		if t.Wet() || t.Terrain.Tidal() || t.Terrain == Pan {
+			continue // salt grows nothing, however much the river feeds it
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		// The rock underneath goes on making soil out of itself, so ground

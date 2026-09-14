@@ -26,10 +26,11 @@ func digest(l *Land) string {
 	g := l.Grid
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		fmt.Fprintf(h, "{%v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v}",
+		u, v := g.MeanWind(i)
+		fmt.Fprintf(h, "{%v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v}",
 			t.Terrain, t.Mark, t.Owner, g.Fertility[i], g.Rich[i], g.Wood[i], g.Wild[i], g.Fish[i],
 			t.Height, t.Flow, t.Drain, t.Bedrock, t.Sand, t.Clay, t.Plate, t.Formed,
-			g.Age[i], t.Fenced, g.Traffic[i])
+			g.Age[i], t.Fenced, g.Traffic[i], g.Rain(i), g.Runoff(i), u, v, g.PressureOn(i, Year/4))
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }

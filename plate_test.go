@@ -24,22 +24,23 @@ func pieces(g *Grid) map[uint8]int {
 	return held
 }
 
-// A world breaks into more pieces than it ends with: continents that run into
-// each other weld, and what was two plates with a range between them becomes
-// one plate with an old range through the middle of it. It is the thing the
-// crust could not do when its plates were a fixed list of moving points, and
-// it is where most of the mountains on a finished map come from - a range
-// whose cause is over and which has been weathering ever since.
+// Continents that run into each other weld, and what was two plates with a
+// range between them becomes one plate with an old range through the middle
+// of it. It is the thing the crust could not do when its plates were a fixed
+// list of moving points, and it is where most of the mountains on a finished
+// map come from - a range whose cause is over and which has been weathering
+// ever since.
+//
+// It is counted and not read off how many pieces a world ends with, which is
+// how this was first written: small plates now break off as well as weld, and
+// a world that has done both can end with as many plates as it began with.
 func TestContinentsWeldIntoOnePlate(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
-		began := max(3, plateCount*g.Span()/plateSpan)
-		ended := len(pieces(g))
-		if ended >= began {
-			t.Errorf("seed %d broke into %d pieces and ended with %d: nothing welded",
-				seed, began, ended)
+		if g.welds == 0 {
+			t.Errorf("seed %d: nothing welded", seed)
 		}
-		if ended < crustFloor {
+		if ended := len(pieces(g)); ended < crustFloor {
 			t.Errorf("seed %d welded itself down to %d pieces, below the floor of %d",
 				seed, ended, crustFloor)
 		}
@@ -79,9 +80,63 @@ func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 	}
 }
 
+// The pieces are not all one size. The earth's plates run from a fifth of the
+// world down through a long tail of small ones, and a world of middles set
+// down evenly and each given the ground nearest it is a world of equal rooms:
+// its largest plate is not two of its middling ones.
+func TestPlatesAreNotAllOneSize(t *testing.T) {
+	for _, seed := range []uint64{1, 2, 3} {
+		g := plateWorld(seed)
+		var sizes []float64
+		for _, tiles := range pieces(g) {
+			sizes = append(sizes, float64(tiles))
+		}
+		largest := quantile(sizes, 1)
+		if got := largest / quantile(sizes, 0.5); got < 2.5 {
+			t.Errorf("seed %d: the largest plate is %.1f times the middling one; "+
+				"a world with great plates and small ones is several times that", seed, got)
+		}
+	}
+}
+
+// And every piece is one piece. A plate carried into another can be eaten
+// through where its front is narrow, and a piece left on the far side is a
+// scrap of one plate adrift inside another.
+func TestEveryPlateIsOnePiece(t *testing.T) {
+	for _, seed := range []uint64{1, 2, 3} {
+		g := plateWorld(seed)
+		seen := make([]bool, len(g.Tiles))
+		parts := map[uint8]int{}
+		for s := range g.Tiles {
+			if seen[s] {
+				continue
+			}
+			of := g.Tiles[s].Plate
+			parts[of]++
+			seen[s] = true
+			stack := []int{s}
+			for len(stack) > 0 {
+				i := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				g.eachNear(i, func(j int) {
+					if !seen[j] && g.Tiles[j].Plate == of {
+						seen[j] = true
+						stack = append(stack, j)
+					}
+				})
+			}
+		}
+		for at, n := range parts {
+			if n > 1 {
+				t.Errorf("seed %d: plate %d is in %d pieces", seed, at, n)
+			}
+		}
+	}
+}
+
 // The boundaries are not the straight lines a nearest-middle partition draws.
 // A Voronoi cell is convex, and a convex region is about as tight round its
-// own area as a region can be; a warped one wanders, reaches round its
+// own area as a region can be; a grown one wanders, reaches round its
 // neighbours and leaves bays in itself, and the way to say so in a number is
 // how much edge it needs to hold the ground it holds.
 //
@@ -183,6 +238,104 @@ func TestAWeldedPlateKeepsTheRangeThatMadeIt(t *testing.T) {
 		t.Errorf("%.0f%% of the upland is more than a belt from any live seam; "+
 			"a world whose high ground is all on its edges has forgotten what it did",
 			100*share)
+	}
+}
+
+// A plate that turns meets its neighbour differently all the way along the
+// seam between them: closing at one end and parting at the other, on the one
+// boundary. A plate that only slides meets it the same way everywhere, and
+// that sameness was the whole of why no seam ever had a ridge at one end and a
+// range at the other.
+func TestATurningPlateClosesAtOneEndAndOpensAtTheOther(t *testing.T) {
+	g := NewGrid(96, 96)
+	for i := range g.Tiles {
+		if i%g.W >= 48 {
+			g.Tiles[i].Plate = 1
+		}
+	}
+	plates := []Plate{{Spin: 0.05, into: 0}, {Ocean: true, into: 1}}
+	g.locate(plates)
+	top, _, okTop := g.meeting(plates, 10*g.W+47, 1)
+	bottom, _, okBottom := g.meeting(plates, 86*g.W+47, 1)
+	if !okTop || !okBottom {
+		t.Fatal("the seam between the two plates was not found")
+	}
+	if top*bottom >= 0 {
+		t.Errorf("the seam closes at %.2f at one end and %.2f at the other; a turning plate "+
+			"should close on its neighbour at one end and part from it at the other", top, bottom)
+	}
+}
+
+// And a turn carries a plate's ground round rigidly: what was on its east side
+// is on its south a quarter turn later, and the plate has not opened floor
+// inside itself doing it. A turn puts every tile on the tile nearest where it
+// goes, and nearest is not one to one, so a turn done carelessly leaves a
+// scatter of holes through the middle of the plate - and a hole is new ocean
+// floor, which is a spreading ridge in the middle of a continent.
+func TestATurnCarriesAPlateRoundWhole(t *testing.T) {
+	const size, radius = 96, 30
+	g := NewGrid(size, size)
+	mid := size / 2
+	code := func(x, y int) float64 { return float64(x*1000 + y + 1) }
+	disc := 0
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		t := &g.Tiles[i]
+		t.Plate = 1
+		if math.Hypot(float64(x-mid), float64(y-mid)) <= radius {
+			t.Plate, t.Height = 0, code(x, y)
+			disc++
+		}
+	}
+	// A quarter turn over eight epochs, which is far more than any plate but
+	// a microplate is drawn to turn in a whole history.
+	const epochs = 8
+	plates := []Plate{{Spin: math.Pi / 2 / epochs, into: 0}, {Ocean: true, into: 1}}
+	cr := newCrust(g)
+	book := make([]record, len(g.Tiles))
+	for e := 1; e <= epochs; e++ {
+		(&Land{}).move(g, plates, cr, book, e)
+	}
+
+	held, fresh := 0, 0
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		inside := math.Hypot(float64(x-mid), float64(y-mid)) <= radius-3
+		if g.Tiles[i].Plate == 0 {
+			held++
+		}
+		if inside && (g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0) {
+			fresh++
+		}
+	}
+	if fresh > 0 {
+		t.Errorf("%d tiles inside the turning plate are new floor or another plate's", fresh)
+	}
+	if math.Abs(float64(held-disc)) > 0.05*float64(disc) {
+		t.Errorf("the plate held %d tiles before its turn and %d after", disc, held)
+	}
+	// Every tile the plate still carries should stand where a quarter turn
+	// about the middle puts the place it started from: east round to south.
+	// Rounding puts any one of them a tile or so off, and a turn that was not
+	// going round at all - or going round at a different rate at different
+	// distances from the middle - is off by many.
+	var miss, carried float64
+	for i := range g.Tiles {
+		h := g.Tiles[i].Height
+		if g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0 || h < 1 {
+			continue // not ground the plate started with
+		}
+		c := int(h) - 1
+		x0, y0 := c/1000, c%1000
+		wx, wy := mid-(y0-mid), mid+(x0-mid)
+		miss += math.Hypot(float64(i%g.W-wx), float64(i/g.W-wy))
+		carried++
+	}
+	if carried == 0 {
+		t.Fatal("the turned plate carries none of the ground it started with")
+	}
+	if got := miss / carried; got > 1 {
+		t.Errorf("a tile of the turned plate stands %.1f tiles from where a quarter turn puts it", got)
 	}
 }
 

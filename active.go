@@ -67,6 +67,9 @@ type Waking struct {
 // asleep and are not now, and sweeps a few that still are.
 func (w *Land) Wake(k Waking) {
 	g := w.Grid
+	// The day's sea, first, so that everything the day reads of the shore
+	// reads the same tide.
+	g.tide = w.Tide()
 	if len(g.Active) != len(g.Chunks) {
 		g.Active = make([]bool, len(g.Chunks))
 	}

@@ -125,6 +125,9 @@ type Router struct {
 	// spreadHolder is who the standing survey was spread for, so that a
 	// survey is not read back for somebody whose gates are different.
 	spreadHolder Holder
+	// spreadTide is the day's sea the survey was spread under: a flat it
+	// crossed at low water may be under it tomorrow. See shore.go.
+	spreadTide Tide
 }
 
 // Holding tells the router whose walker it is routing for, so that the fence
@@ -269,7 +272,7 @@ func (r *Router) route(f *Routes, from, stop geom.Pos, guided bool, prefer geom.
 		// the tile it is going to, so between two pieces of ground there
 		// is no way, and the search that would say so is not run. See
 		// region.go.
-		if laden && !g.Tiles[g.Index(from)].Deep() && !g.reachesLaden(from, stop) {
+		if laden && !g.shut(g.Index(from)) && !g.reachesLaden(from, stop) {
 			return f
 		}
 	}
@@ -331,7 +334,6 @@ func (r *Router) route(f *Routes, from, stop geom.Pos, guided bool, prefer geom.
 				continue
 			}
 			tj := int32(cy*g.W + cx)
-			t := &g.Tiles[tj]
 			// Open water is not dear to a laden walker, it is shut. Two
 			// things are still allowed through it. The end of the journey
 			// itself, because somebody may wade in from the bank to fish, or
@@ -340,7 +342,12 @@ func (r *Router) route(f *Routes, from, stop geom.Pos, guided bool, prefer geom.
 			// the river has risen under, or whose bridge has gone, has to be
 			// able to get out of it; what is forbidden is walking in, not
 			// being in.
-			if laden && t.Deep() && j != stopSlot && !g.Tiles[ti].Deep() {
+			//
+			// A flat the day's tide covers is open water for the day, and shut
+			// the same way. The regions and the landmarks read every flat as
+			// ground, which is the most open the map ever is, so what they say
+			// is still never more than the walk: see shore.go.
+			if laden && g.shut(int(tj)) && j != stopSlot && !g.shut(int(ti)) {
 				continue
 			}
 			// The step carries the climb into the tile, which is what makes
@@ -379,6 +386,7 @@ func (r *Router) Survey(from geom.Pos, load, limit float64) {
 	r.route(&r.spread, from, offMap, false, offMap)
 	r.spreadFrom, r.spreadLaden, r.spreadLimit, r.surveyed = r.spread.from, load > SwimLoad, limit, true
 	r.spreadHolder = r.holder
+	r.spreadTide = r.g.tide
 }
 
 // Forget drops the survey, so the next cost is walked afresh.
@@ -399,7 +407,7 @@ func (r *Router) fromSurvey(to geom.Pos) float64 {
 	}
 	// The end of a journey may be open water even for a laden walker, so a
 	// water tile the spread would not step into is costed from its bank.
-	if r.spreadLaden && g.Tiles[g.Index(to)].Deep() {
+	if r.spreadLaden && g.shut(g.Index(to)) {
 		best := r.spreadLimit
 		ti := int32(g.Index(to))
 		for d := range Dirs {
@@ -435,6 +443,8 @@ func stepInto(g *Grid, from, to int32) float64 {
 	step := moveCost[t.Terrain]
 	if t.Mark != None {
 		step = markCost[t.Mark]
+	} else if g.covered(int(to), t) {
+		step = moveCost[Water] // waded, today
 	}
 	if d := g.Surface(int(to)) - g.Surface(int(from)); d > 0 {
 		step += Climb * d

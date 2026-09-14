@@ -37,6 +37,21 @@ const (
 	Year      = 4 * Season
 )
 
+// The moon's months, in days. They are not whole numbers and the calendar's
+// Month is: a calendar month is thirty days because a season is ninety and a
+// year four seasons, and the moon has never kept to either. So the moon runs
+// on its own clock beside the calendar, and a full moon falls half a day
+// earlier each calendar month - which is what a moon does in the real world
+// too, and why its festivals wander through the year.
+//
+// SynodicMonth is from new moon to new moon: the phases, and the fortnightly
+// swing of the tides from springs to neaps. AnomalisticMonth is from one
+// nearest approach to the next, which makes some springs higher than others.
+const (
+	SynodicMonth     = 29.530589
+	AnomalisticMonth = 27.554550
+)
+
 // Season names, from the one tick zero falls in. A world is founded in early
 // spring, with the growing season ahead of it rather than behind it.
 type Quarter uint8

@@ -41,35 +41,54 @@ type terrain struct {
 	// what an act wants of water is the fish, and Affords says that already.
 	// This is the map's own fact about its own ground.
 	wet bool
-	// hold is how well the ground holds its soil against the weather, from
-	// nothing to all of it. Bare rock keeps almost none, a wood most of what
-	// falls on it, and a channel and a worked field are counted whole - the
-	// one because cutting down is how a valley deepens, the other because a
-	// field is soil by definition.
+	// hold is how much of what the weather could take off bare earth it
+	// takes off this ground, from nothing to all of it: a channel and a worked
+	// field are counted whole - the one because cutting down is how a valley
+	// deepens, the other because a ploughed field is bare earth by another
+	// name.
+	//
+	// The rest is set by what real ground loses. Montgomery (2007), over some
+	// fifteen hundred measurements: ploughed fields a median of 1.5 mm a year,
+	// ground under what grows there of itself 0.013, a hundred times less. Open
+	// grass and woods are both that, and a wood holds half again what grass
+	// does. An outcrop has no soil for the rain to strip and comes down at the
+	// pace its rock weathers, which is slower again: Portenga and Bierman
+	// (2011) have bare rock at a tenth of whole catchments. They were 0.6, 0.25
+	// and 0.15, which had a ploughed hillside wearing three times as fast as a
+	// wooded one; see yardstick_test.go for how it is read.
 	hold float64
+	// tidal says this ground belongs to the tide: the sea covers it one day
+	// and leaves it the next, so whether it can be walked is a question for
+	// the day and not for the ground. Nothing grows on it. See shore.go.
+	tidal bool
 }
 
 var terrains = [TerrainCount]terrain{
-	Grass:  {name: "open", hold: 0.6},
-	Forest: {name: "wood", hold: 0.25},
+	Grass:  {name: "open", hold: 0.06},
+	Forest: {name: "wood", hold: 0.03},
 	Water:  {name: "water", wet: true, hold: 1},
 	Field:  {name: "field", hold: 1},
-	Rock:   {name: "outcrop", hold: 0.15},
+	Rock:   {name: "outcrop", hold: 0.01},
 	// Ice is wet: it is the sea, and the map-maker's questions about water
 	// all have the sea's answer here. Nothing grows on it, nothing settles
 	// on it, and it stands above nothing, so it has no drain. What it does
 	// not share with open water is that somebody can walk on it; that is
 	// Tile.Deep, which is the walker's question and not the map-maker's.
 	Ice: {name: "ice", wet: true, hold: 1},
+	// A flat is not wet. Silt settles on it - that is what made it - and it
+	// stands above the water it drains into at low tide, so the map-maker's
+	// questions have ground's answers. The sea's half is the day's: see
+	// Grid.Covered. Mud holds its soil about as well as open grass does.
+	Flat: {name: "flat", hold: 0.5, tidal: true},
 	// Salt is a lake with no way out: water that arrives and never leaves
 	// except into the air, and leaves what it carried behind. It is water in
 	// every sense the map-maker means and nothing lives in it.
 	Salt: {name: "salt lake", wet: true, hold: 1},
 	// Pan is the floor of a lake that the air keeps dry, or the ring a salt
 	// lake has shrunk back from: flat, crusted and bare. It is ground and not
-	// water, and a loose crust of silt and salt holds against the weather
-	// about as well as bare rock does.
-	Pan: {name: "salt flat", hold: 0.3},
+	// water. A salt crust is cemented rather than loose, and it is counted as
+	// holding what open grass holds.
+	Pan: {name: "salt flat", hold: 0.06},
 }
 
 // String is what this ground is called.
@@ -86,6 +105,14 @@ func (t Terrain) Wet() bool {
 		return false
 	}
 	return terrains[t].wet
+}
+
+// Tidal reports whether this is ground the tide covers and leaves.
+func (t Terrain) Tidal() bool {
+	if int(t) >= len(terrains) {
+		return false
+	}
+	return terrains[t].tidal
 }
 
 // Hold is how much of its soil this ground keeps against the weather.

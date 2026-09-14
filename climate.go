@@ -240,8 +240,17 @@ const Lapse = 0.0065
 // less what the height of the ground takes off it. It is the reading anything
 // standing on a tile or living on it should ask; Climate.TempAt is the
 // weather of the row, which is that reading at the foot of the map.
+//
+// On a globe whose day's weather has been asked for, the warmth the day's
+// wind has carried in is added: a cold snap behind a low, a warm spell in a
+// southerly. A valley's weather is one temperature for everywhere - see
+// Climate - and is left to its own spells.
 func (w *Land) TempAt(p geom.Pos) float64 {
-	return w.Climate.TempAt(p.Y) - Lapse*w.Grid.At(p).Height
+	t := w.Climate.TempAt(p.Y) - Lapse*w.Grid.At(p).Height
+	if w.Grid.Wrap {
+		t += w.WarmthAt(p)
+	}
+	return t
 }
 
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt

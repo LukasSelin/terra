@@ -8,13 +8,22 @@ import (
 	"github.com/LukasSelin/terra/geom"
 )
 
+// perMM turns a millimetre a year off one tile into cubic metres a second.
+const perMM = HydroSpan * HydroSpan / 1000 / secondsPerYear
+
+// airOf is a hand-made valley's air, with its rain multiplied by wetness.
+func airOf(g *Grid, wetness float64) {
+	g.air = Climate{rows: g.H}.airFor(g, wetness)
+}
+
 // bowl is a valley map with one hollow in the middle of it: a floor at four
 // metres rising to a ring of ridge at twelve, broken on the east by a notch
 // whose lowest point is nine and a half metres, and falling away outside the
-// ring to the edges of the map, which is where the water leaves.
-func bowl(aridity float64) *Grid {
+// ring to the edges of the map, which is where the water leaves. Its rain is
+// the valley's times wetness.
+func bowl(wetness float64) *Grid {
 	g := NewGrid(25, 25)
-	g.aridity = aridity
+	airOf(g, wetness)
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
 			r := math.Hypot(float64(x-12), float64(y-12))
@@ -25,6 +34,9 @@ func bowl(aridity float64) *Grid {
 			case r >= 7.5:
 				h = math.Max(0.5, 12-(r-7.5))
 			}
+			// Millimetres of unevenness, so that no two tiles of the floor
+			// stand at quite the same height; the notch is left exact.
+			h += 1e-3 * float64((x*7+y*13)%11)
 			if y == 12 && x >= 17 {
 				h = math.Min(h, 9.5-0.5*float64(x-18))
 			}
@@ -45,7 +57,7 @@ func settle(g *Grid) {
 // over it: a lake, open, standing at exactly the height of the notch, with the
 // whole of its water going out of the one tile it leaves by.
 func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
-	g := bowl(0)
+	g := bowl(1)
 	was := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		was[i] = g.Tiles[i].Height
@@ -82,18 +94,16 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 	}
 	// What the lake passes on is what reached it, less what its surface gave
 	// the air.
-	given, total := 0.0, 0.0
+	given := 0.0
 	for i := range g.Tiles {
-		et := landEvap(g.rain[i], g.evap[i])
-		total += g.rain[i] - et
 		if g.lakeOf[i] >= 0 {
-			given += g.evap[i] - et
+			given += g.loss(i) * perMM
 		}
 	}
 	out := g.Tiles[l.Outlet].Flow
-	want := l.Inflow - given/total
-	if out < want-1e-9 {
-		t.Fatalf("the outlet carries %.4f of the map's water; the lake was given %.4f and kept %.4f", out, l.Inflow, given/total)
+	want := l.Inflow - given
+	if want <= 0 || out < want-1e-9 {
+		t.Fatalf("the outlet carries %.4f m3/s; the lake was given %.4f and its surface took %.4f", out, l.Inflow, given)
 	}
 	if o := g.PosOf(int(l.Outlet)); o.Y != 12 || o.X < 16 {
 		t.Fatalf("the lake leaves by %v, which is not the notch", o)
@@ -104,7 +114,7 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 // surface gives the air is what runs into it, below the notch, with nothing
 // going out, and what it leaves behind is salt.
 func TestAHollowInDryCountryStopsWhereTheAirTakesItsWater(t *testing.T) {
-	g := bowl(0.8)
+	g := bowl(dryBowl)
 	settle(g)
 	l, ok := g.LakeAt(geom.Pos{X: 12, Y: 12})
 	if !ok {
@@ -120,8 +130,7 @@ func TestAHollowInDryCountryStopsWhereTheAirTakesItsWater(t *testing.T) {
 	// back, to within one tile's worth.
 	var in, given, most float64
 	for i := range g.Tiles {
-		et := landEvap(g.rain[i], g.evap[i])
-		loss := g.evap[i] - et
+		loss := g.loss(i)
 		most = math.Max(most, loss)
 		if g.lakeOf[i] >= 0 {
 			given += loss
@@ -135,7 +144,7 @@ func TestAHollowInDryCountryStopsWhereTheAirTakesItsWater(t *testing.T) {
 			p = q
 		}
 		if j := g.Index(p); g.lakeOf[j] >= 0 || g.pans[j] {
-			in += g.rain[i] - et
+			in += g.runoff[i]
 		}
 	}
 	if math.Abs(in-given) > most {
@@ -163,7 +172,7 @@ func TestAHollowInDryCountryStopsWhereTheAirTakesItsWater(t *testing.T) {
 // watercourse wherever the ground would cut one - see carve - so this asks
 // only after the hollow.)
 func TestAHollowWithNothingRunningIntoItIsASaltFlat(t *testing.T) {
-	g := bowl(1)
+	g := bowl(1e-9)
 	settle(g)
 	centre := g.Index(geom.Pos{X: 12, Y: 12})
 	if len(g.Lakes) != 1 || g.Lakes[0].Tiles != 0 || !g.Lakes[0].Closed {
@@ -183,9 +192,9 @@ func TestAHollowWithNothingRunningIntoItIsASaltFlat(t *testing.T) {
 // it: an upper one whose floor is at eight metres and whose lip, at ten, lets
 // it out into a lower one, floored at two, which spills at six over a sill
 // down to the edge.
-func steps(aridity float64) *Grid {
+func steps(wetness float64) *Grid {
 	g := NewGrid(30, 11)
-	g.aridity = aridity
+	airOf(g, wetness)
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
 			var h float64
@@ -217,7 +226,7 @@ func steps(aridity float64) *Grid {
 // Two hollows, one above the other. The upper spills into the lower, and the
 // lower fills with its own water and the upper's before it goes on.
 func TestAnUpperLakeSpillsIntoTheOneBelowIt(t *testing.T) {
-	g := steps(0)
+	g := steps(1)
 	settle(g)
 	upper, ok := g.LakeAt(geom.Pos{X: 4, Y: 5})
 	if !ok {
@@ -256,9 +265,8 @@ func TestAnUpperLakeSpillsIntoTheOneBelowIt(t *testing.T) {
 // that it cannot keep has to go into the lower one and be counted there, or
 // the lower one comes out drier than the water reaching it says.
 func TestOverflowIsCountedWhereItLands(t *testing.T) {
-	// At this dryness the upper hollow runs over and the lower one does not:
-	// 0.4 fills both, and 0.6 neither.
-	g := steps(0.5)
+	// At this dryness the upper hollow runs over and the lower one does not.
+	g := steps(dryStep)
 	settle(g)
 	lower, ok := g.LakeAt(geom.Pos{X: 17, Y: 5})
 	upper, uok := g.LakeAt(geom.Pos{X: 4, Y: 5})
@@ -270,7 +278,7 @@ func TestOverflowIsCountedWhereItLands(t *testing.T) {
 	var given, most float64
 	k := g.lakeOf[g.Index(geom.Pos{X: 17, Y: 5})]
 	for i := range g.Tiles {
-		loss := g.evap[i] - landEvap(g.rain[i], g.evap[i])
+		loss := g.loss(i)
 		most = math.Max(most, loss)
 		if g.lakeOf[i] == k {
 			given += loss
@@ -288,13 +296,13 @@ func TestOverflowIsCountedWhereItLands(t *testing.T) {
 		}
 		// The lower hollow is the ground from ten to twenty-four across.
 		if j := g.Index(p); g.lakeOf[j] == k || (g.pans[j] && p.X >= 10 && p.X < 25) {
-			in += g.rain[i] - landEvap(g.rain[i], g.evap[i])
+			in += g.runoff[i]
 		}
 	}
 	// The upper lake's surface gave some of what it was given to the air.
 	for i := range g.Tiles {
 		if l, ok := g.LakeAt(g.PosOf(i)); ok && l == upper {
-			in -= g.evap[i] - landEvap(g.rain[i], g.evap[i])
+			in -= g.loss(i)
 		}
 	}
 	// Within two tiles: a level is placed to the nearest tile, and no two
@@ -315,8 +323,10 @@ func TestSaltLakesStandInDryCountry(t *testing.T) {
 			continue
 		}
 		closed++
-		if g.rain[i] >= g.evap[i] {
-			t.Fatalf("a salt lake at %v, where %.0f falls and the air takes %.0f", g.PosOf(i), g.rain[i], g.evap[i])
+		// The air could take up more than falls where what it takes off open
+		// water is more than what runs off the ground.
+		if g.loss(i) <= g.runoff[i] {
+			t.Fatalf("a salt lake at %v, where %.0f falls and %.0f runs off", g.PosOf(i), g.rain[i], g.runoff[i])
 		}
 	}
 	if closed == 0 {
@@ -333,12 +343,20 @@ func TestSaltLakesStandInDryCountry(t *testing.T) {
 	}
 }
 
+// dryBowl, dryStep and dryValley are how much of a temperate valley's rain the
+// dry cases below are given.
+const (
+	dryBowl   = 0.4
+	dryStep   = 0.7
+	dryValley = 0.3
+)
+
 // Asked to be dry, a valley keeps its water: some of its hollows hold salt
 // lakes, or salt flats, where the same valley in its latitude's rain held
 // lakes that ran on to the edge.
 func TestADryValleyKeepsItsWater(t *testing.T) {
 	cfg := DefaultTerms()
-	cfg.Aridity = 0.7
+	cfg.Wetness = dryValley
 	for _, seed := range []uint64{1, 2, 3} {
 		g := NewLand(seed, cfg).Grid
 		if g.Count(func(t *Tile) bool { return t.Terrain == Salt || t.Terrain == Pan }) == 0 {
@@ -351,7 +369,7 @@ func TestADryValleyKeepsItsWater(t *testing.T) {
 // The same seed makes the same lakes.
 func TestTheSameSeedFillsTheSameLakes(t *testing.T) {
 	cfg := DefaultTerms()
-	cfg.Aridity = 0.7
+	cfg.Wetness = dryValley
 	a, b := NewLand(4, cfg).Grid, NewLand(4, cfg).Grid
 	if len(a.Lakes) != len(b.Lakes) {
 		t.Fatalf("%d lakes one time and %d the next", len(a.Lakes), len(b.Lakes))

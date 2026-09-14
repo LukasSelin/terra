@@ -52,14 +52,6 @@ const LakeDepth = 1.0
 // white.
 const saltShore = 2.0
 
-// runoffCurve is the shape of how much of the rain on dry ground reaches a
-// channel rather than going back to the air through the ground and what
-// grows on it. It is Turc and Pike's reading of the Budyko curve: evaporation
-// from the land is P/(1+(P/E)^ν)^(1/ν), which is nearly all of the rain where
-// the air could take far more than falls, and nearly all of what the air can
-// take where far more falls than that. Two is the usual ν.
-const runoffCurve = 2.0
-
 // Lake is one body of standing water.
 type Lake struct {
 	// Level is the height of its surface, in metres.
@@ -72,7 +64,7 @@ type Lake struct {
 	// Tiles is how many tiles lie under its water, and Floor how many of salt
 	// flat lie round it. A dry lake is a closed one with no tiles of water.
 	Tiles, Floor int
-	// Inflow is the share of the map's running water that reaches it.
+	// Inflow is the water that reaches it, in cubic metres a second.
 	Inflow float64
 }
 
@@ -81,8 +73,8 @@ type Lake struct {
 // the tile stands on or swims at, and what the water running off it runs off.
 func (g *Grid) Surface(i int) float64 {
 	h := g.Tiles[i].Height
-	if len(g.lakeOf) == len(g.Tiles) && g.lakeOf[i] >= 0 && g.level[i] > h {
-		return g.level[i]
+	if len(g.lakeOf) == len(g.Tiles) && g.lakeOf[i] >= 0 && g.lakeLevel[i] > h {
+		return g.lakeLevel[i]
 	}
 	return h
 }
@@ -148,107 +140,19 @@ func (g *Grid) flowStep(i int) geom.Pos {
 	return step
 }
 
-// The weather the water is read from.
-//
-// How much falls is a matter of latitude first: the rising air at the
-// equator rains out what it carries, comes down dry at thirty degrees, where
-// the deserts of the world lie, and the westerlies bring rain again to the
-// fifties before the cold air at the poles has nothing left to give. After
-// that it is a matter of how far the sea is, because the rain comes off it;
-// and of how high the ground stands, because air going up cools and cannot
-// keep what warm air carried. How much the air takes back is a matter of how
-// warm it is.
-const (
-	// rainPole is what falls at the poles and in the dry belts at their
-	// driest, in millimetres a year; rainTropic is what the equator gets on
-	// top of that and rainWesterly what the mid-latitudes get, at their
-	// peaks.
-	rainPole     = 200.0
-	rainTropic   = 1900.0
-	rainWesterly = 800.0
-	// evapRate is how many millimetres a year open water gives the air for
-	// every degree the year's mean stands above evapFloor. Nine hundred at
-	// ten degrees and eighteen hundred at twenty-five are the figures for a
-	// temperate lake and a tropical one.
-	evapRate  = 60.0
-	evapFloor = -5.0
-)
-
-// rainAt is what falls on flat ground at a latitude, in millimetres a year.
-// The temperate valley, at forty-five degrees, gets nine hundred.
-func rainAt(lat float64) float64 {
-	a := math.Abs(lat)
-	tropic := a / 12
-	westerly := (a - 50) / 15
-	return rainPole + rainTropic*math.Exp(-tropic*tropic) + rainWesterly*math.Exp(-westerly*westerly)
-}
-
-// evapAt is what open water gives the air in a year with the given mean, in
-// millimetres.
-func evapAt(mean float64) float64 {
-	return evapRate * math.Max(0, mean-evapFloor)
-}
-
-// weather writes down what falls on every tile and what the air would take
-// off open water there. A valley is at the temperate latitude everywhere; a
-// globe reads each row's own. It is taken afresh every time the water is
-// worked out, because the ground and the coast it reads have moved.
-func (g *Grid) weather() {
-	n := len(g.Tiles)
-	if len(g.rain) != n {
-		g.rain, g.evap = make([]float64, n), make([]float64, n)
-	}
-	dry := make([]float64, 0, n)
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			dry = append(dry, g.Tiles[i].Height)
-		}
-	}
-	foot, reach := 0.0, 1.0
-	if len(dry) > 0 {
-		q := quantiles(dry, 0.05, 0.95)
-		foot, reach = q[0], math.Max(1e-9, q[1]-q[0])
-	}
-	// How far in from the sea: a coast gets its latitude's rain, the heart
-	// of a continent half of it, and a rock in the ocean a quarter again. A
-	// map with no sea is a piece of country and not a continent, and gets
-	// its latitude's rain throughout.
-	var near []float64
-	if g.sea >= 0 {
-		near = g.seaNear(g.Span() / maritimeSpan)
-	}
-	wet := 1 - clamp01(g.aridity)
-	g.EachRow(func(y int) {
-		lat, mean := Temperate, MeanTemp
-		if g.Wrap {
-			lat = 90 - 180*(float64(y)+0.5)/float64(g.H)
-			mean = MeanTemp + warmth(lat)
-		}
-		base := rainAt(lat) * wet
-		for i := y * g.W; i < (y+1)*g.W; i++ {
-			h := g.Tiles[i].Height
-			g.evap[i] = evapAt(mean - Lapse*math.Max(0, h))
-			if g.underSea(i) {
-				g.rain[i] = 0 // rain on the sea has arrived; see rainFlat
-				continue
-			}
-			lift := rainFlat + (rainHigh-rainFlat)*clamp01((h-foot)/reach)
-			inland := 1.0
-			if near != nil {
-				inland = math.Min(1.25, 0.5+near[i])
-			}
-			g.rain[i] = base * lift * inland
-		}
-	})
-}
-
-// landEvap is what the ground gives back to the air of the rain on it, in
-// millimetres a year: see runoffCurve.
-func landEvap(rain, evap float64) float64 {
-	if rain <= 0 || evap <= 0 {
+// loss is what the air takes off tile i in a year where it lies under open
+// water, over and above what it takes off the ground there anyway, in mm:
+// the evaporation of open water, less what the ground was already giving
+// back. Counted that way, what runs off every tile - see Grid.Runoff - can be
+// counted the same whether or not the tile ends up wet, and a lake's surface
+// takes the rest.
+func (g *Grid) loss(i int) float64 {
+	if len(g.rain) != len(g.Tiles) || g.sunk(i) || g.air == nil {
 		return 0
 	}
-	return rain / math.Pow(1+math.Pow(rain/evap, runoffCurve), 1/runoffCurve)
+	y := i / g.W
+	pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.Tiles[i].Height)
+	return math.Max(0, pet-(g.rain[i]-g.runoff[i]))
 }
 
 // basin is one hollow in the tree of them. The sea and the edges of the map
@@ -297,6 +201,11 @@ func (t *basins) full(x int32) bool {
 // drain works out where the water stands and where it goes, from the ground
 // as it now is: the lakes, the salt flats, which way each tile's water leaves,
 // and how much of the map's water passes through each tile, as Flow.
+//
+// What each tile starts with is its own runoff, off HydroSpan of catchment -
+// see weather.go - and alongside the water it counts the ground: area is how
+// many tiles drain through each one, which is what the guards against the
+// grid's own patterns are read in. See spreadUntil.
 func (g *Grid) drain() {
 	g.weather()
 	g.pool()
@@ -359,7 +268,7 @@ func (g *Grid) pool() {
 			}
 		}
 		cur, low := int32(-1), int32(-1)
-		if g.underSea(i) || g.outlet(p.X, p.Y) {
+		if g.sunk(i) || g.outlet(p.X, p.Y) {
 			cur = 0 // and its water leaves from this tile: no low to go by
 		}
 		for _, s := range sides {
@@ -436,12 +345,7 @@ func (g *Grid) pool() {
 	runoff := make([]float64, n)
 	loss := make([]float64, n)
 	for i := range g.Tiles {
-		if g.underSea(i) {
-			continue
-		}
-		et := landEvap(g.rain[i], g.evap[i])
-		runoff[i] = g.rain[i] - et
-		loss[i] = math.Max(0, g.evap[i]-et)
+		runoff[i], loss[i] = g.runoff[i], g.loss(i)
 	}
 	for x := 1; x < len(t.b); x++ {
 		b := &t.b[x]
@@ -507,11 +411,11 @@ func (g *Grid) pool() {
 	// sea; one that is not full but whose hollows all are is a lake at the
 	// height its surface gives back what it holds; and one with hollows not
 	// yet full is those hollows.
-	if len(g.level) != n {
-		g.level, g.lakeOf, g.pans = make([]float64, n), make([]int32, n), make([]bool, n)
+	if len(g.lakeLevel) != n {
+		g.lakeLevel, g.lakeOf, g.pans = make([]float64, n), make([]int32, n), make([]bool, n)
 	}
-	for i := range g.level {
-		g.level[i], g.lakeOf[i], g.pans[i] = -1, -1, false
+	for i := range g.lakeLevel {
+		g.lakeLevel[i], g.lakeOf[i], g.pans[i] = -1, -1, false
 	}
 	g.Lakes = g.Lakes[:0]
 	var stack []int32
@@ -623,7 +527,7 @@ func (t *basins) levelOf(x int32, g *Grid) float64 {
 		if h >= b.spill {
 			return b.spill
 		}
-		l := math.Max(0, g.evap[j]-landEvap(g.rain[j], g.evap[j]))
+		l := g.loss(int(j))
 		if left < l/2 {
 			return math.Max(floor, h)
 		}
@@ -681,7 +585,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 		g.Lakes = append(g.Lakes, Lake{Level: level, Outlet: -1, Tiles: len(under)})
 		k := int32(len(g.Lakes) - 1)
 		for _, j := range under {
-			g.level[j], g.lakeOf[j] = level, k
+			g.lakeLevel[j], g.lakeOf[j] = level, k
 		}
 		return
 	}
@@ -704,7 +608,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 		under = nil
 	}
 	for _, j := range under {
-		g.level[j], g.lakeOf[j] = level, k
+		g.lakeLevel[j], g.lakeOf[j] = level, k
 		l.Tiles++
 	}
 	for _, j := range shore {
@@ -751,7 +655,7 @@ func (g *Grid) flow() {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		closed := g.lakeOf[i] >= 0 && g.Lakes[g.lakeOf[i]].Closed
-		if g.underSea(i) || g.outlet(p.X, p.Y) || closed || g.pans[i] {
+		if g.sunk(i) || g.outlet(p.X, p.Y) || closed || g.pans[i] {
 			stand[i], reached[i], from[i] = g.Surface(i), true, -1
 			q.push(floodNode{h: stand[i], seq: seq, idx: int32(i)})
 			seq++
@@ -795,7 +699,7 @@ func (g *Grid) flow() {
 				continue
 			}
 			p := g.PosOf(i)
-			if g.underSea(i) || g.pans[i] {
+			if g.sunk(i) || g.pans[i] {
 				g.down[i] = -1
 				continue
 			}
@@ -826,31 +730,30 @@ func (g *Grid) flow() {
 		g.Lakes[k].Outlet = exit[k]
 	}
 
-	// Adding it up. What runs off each tile goes down; what reaches an open
-	// lake goes out of its outlet less what the lake's surface gives the air;
-	// what reaches a closed lake or a salt flat stays there.
-	total := 0.0
+	// Adding it up. What runs off each tile goes down - spread over every
+	// lower neighbour while it is a sheet on a hillside, and to the one it
+	// goes to alone once it has gathered; see spreadUntil - and what reaches
+	// an open lake goes out of its outlet less what the lake's surface gives
+	// the air. What reaches a closed lake or a salt flat stays there.
+	if len(g.area) != n {
+		g.area = make([]float64, n)
+	}
+	perMM := HydroSpan * HydroSpan / 1000 / secondsPerYear
+	water := 0.0
 	for i := range g.Tiles {
-		r := 0.0
+		g.Tiles[i].Flow, g.area[i] = 0, 0
 		if !g.underSea(i) {
-			r = g.rain[i] - landEvap(g.rain[i], g.evap[i])
+			g.Tiles[i].Flow, g.area[i] = g.runoff[i]*perMM, 1
+			water += g.Tiles[i].Flow
 		}
-		g.Tiles[i].Flow = r
-		total += r
 	}
-	if total <= 0 {
-		// Nothing runs anywhere: a map wholly under water. The flows may
-		// not all be nothing, or every threshold read off them is.
-		for i := range g.Tiles {
-			g.Tiles[i].Flow = 1 / float64(n)
-		}
-		return
-	}
+	g.water = water
 	pooled := make([]float64, len(g.Lakes))
+	pooledArea := make([]float64, len(g.Lakes))
 	given := make([]float64, len(g.Lakes))
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 {
-			given[k] += math.Max(0, g.evap[i]-landEvap(g.rain[i], g.evap[i]))
+			given[k] += g.loss(i) * perMM
 		}
 	}
 	// Which lakes spill out through each tile, so their water can be added
@@ -861,27 +764,68 @@ func (g *Grid) flow() {
 			outs[e] = append(outs[e], int32(k))
 		}
 	}
+	var share [8]float64
+	var to [8]int32
 	for k := len(g.route) - 1; k >= 0; k-- {
 		i := g.route[k]
+		t := &g.Tiles[i]
 		for _, l := range outs[i] {
-			g.Tiles[i].Flow += math.Max(0, pooled[l]-given[l])
+			t.Flow += math.Max(0, pooled[l]-given[l])
+			g.area[i] += pooledArea[l]
 		}
 		if l := g.lakeOf[i]; l >= 0 {
-			pooled[l] += g.Tiles[i].Flow
+			pooled[l] += t.Flow
+			pooledArea[l] += g.area[i]
 			continue
 		}
-		if d := g.down[i]; d >= 0 {
-			g.Tiles[d].Flow += g.Tiles[i].Flow
+		d := g.down[i]
+		if d < 0 {
+			continue
+		}
+		if g.area[i] >= spreadUntil {
+			g.Tiles[d].Flow += t.Flow
+			g.area[d] += g.area[i]
+			continue
+		}
+		// A sheet: every lower neighbour, by how far it falls. Lower is read
+		// off where the water stands, so that every neighbour it spreads to
+		// was reached before this tile and is added up after it.
+		p := g.PosOf(int(i))
+		m, sum := 0, 0.0
+		for _, off := range Dirs {
+			q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if !g.In(q) {
+				continue
+			}
+			j := g.Index(q)
+			drop := stand[i] - stand[j]
+			if drop <= 0 {
+				continue
+			}
+			if off.X != 0 && off.Y != 0 {
+				drop /= math.Sqrt2
+			}
+			share[m], to[m] = drop, int32(j)
+			sum += share[m]
+			m++
+		}
+		if sum <= 0 {
+			g.Tiles[d].Flow += t.Flow
+			g.area[d] += g.area[i]
+			continue
+		}
+		for q := 0; q < m; q++ {
+			g.Tiles[to[q]].Flow += t.Flow * share[q] / sum
+			g.area[to[q]] += g.area[i] * share[q] / sum
 		}
 	}
 	for i := range g.Tiles {
 		if l := g.lakeOf[i]; l >= 0 {
-			g.Tiles[i].Flow = pooled[l]
+			g.Tiles[i].Flow, g.area[i] = pooled[l], pooledArea[l]
 		}
-		g.Tiles[i].Flow /= total
 	}
 	for k := range g.Lakes {
-		g.Lakes[k].Inflow = pooled[k] / total
+		g.Lakes[k].Inflow = pooled[k]
 	}
 }
 

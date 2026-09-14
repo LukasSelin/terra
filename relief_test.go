@@ -34,26 +34,20 @@ func drainsSomewhere(t *testing.T, g *Grid) {
 		}
 		j := g.Index(p)
 		edge := g.outlet(p.X, p.Y)
-		if !edge && !g.underSea(j) && !g.closedLake(j) && !g.pans[j] {
+		if !edge && !g.sunk(j) && !g.closedLake(j) && !g.pans[j] {
 			t.Fatalf("the water from %v stops at %v, in a hollow with nowhere to go", g.PosOf(i), p)
 		}
 	}
 }
 
-// Water gathers as it goes: a tile carries everything its uphill neighbours
-// sent it, so flow only ever grows downstream. That is what makes the rivers
-// come out where they do rather than where they were put. The one place it
-// thins is the outlet of a lake, which passes on what the lake was given less
-// what its surface gave the air.
-func TestFlowOnlyGathers(t *testing.T) {
-	g := NewLandSized(5, 50, 40).Grid
-	flowOnlyGathers(t, g)
-}
-
+// flowOnlyGathers fails if water that has come together carries less on the
+// tile it goes to than on the tile it left. The one place it may is the
+// outlet of a lake, which passes on what the lake was given less what its
+// surface gave the air, so lakes are not asked.
 func flowOnlyGathers(t *testing.T, g *Grid) {
 	t.Helper()
 	for i := range g.Tiles {
-		if g.lakeOf[i] >= 0 {
+		if g.lakeOf[i] >= 0 || g.area[i] < spreadUntil {
 			continue
 		}
 		p := g.PosOf(i)
@@ -65,6 +59,47 @@ func flowOnlyGathers(t *testing.T, g *Grid) {
 			t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
 				p, g.At(p).Flow, down, g.At(down).Flow)
 		}
+	}
+}
+
+// Water gathers as it goes: a tile carries everything its uphill neighbours
+// sent it, so flow only ever grows downstream. That is what makes the rivers
+// come out where they do rather than where they were put.
+//
+// Once it has come together, that is. Before then it is a sheet on a hillside
+// and goes down every way that falls, so the tile below takes only a share of
+// it; see spreadUntil. What is asked of the sheet is that none of it is lost.
+func TestFlowOnlyGathers(t *testing.T) {
+	w := NewLandSized(5, 50, 40)
+	g := w.Grid
+	flowOnlyGathers(t, g)
+	// The whole of the map's rain leaves it, or goes back to the air off a
+	// lake: what goes off the edge is what the edge tiles carry, and none of
+	// the rest disappears on the way.
+	out := 0.0
+	for i := range g.Tiles {
+		p := g.PosOf(i)
+		switch {
+		case g.lakeOf[i] >= 0:
+		case g.outlet(p.X, p.Y), g.pans[i]:
+			out += g.Tiles[i].Flow
+		}
+	}
+	perMM := HydroSpan * HydroSpan / 1000 / secondsPerYear
+	for k, l := range g.Lakes {
+		given := 0.0
+		for i := range g.Tiles {
+			if g.lakeOf[i] == int32(k) {
+				given += g.loss(i) * perMM
+			}
+		}
+		if l.Closed {
+			given = l.Inflow
+		}
+		out += math.Min(l.Inflow, given)
+	}
+	if out < g.water*(1-1e-6) {
+		t.Fatalf("only %.4f of the map's %.4f m3/s reaches the edge or the air", out, g.water)
 	}
 }
 

@@ -16,6 +16,7 @@ const (
 	Field
 	Rock // an outcrop: stone to cut, nothing to grow
 	Ice  // sea that never thaws: nothing to take, and walked over, not swum
+	Flat // mud the tide covers and leaves: see shore.go
 	Salt // a lake with no outlet, where the air takes all the water brings
 	Pan  // the dry floor of one: a crust of salt nothing grows on
 	// TerrainCount is how many kinds of ground there are. It sizes the
@@ -35,7 +36,7 @@ type Tile struct {
 	Owner   Holder
 
 	// Height is metres above the lowest ground on the map, and Flow is the
-	// share of the map whose water drains through this tile. Between them
+	// water running through this tile in cubic metres a second. Between them
 	// they are the land itself: the rivers, the fertility and the going
 	// underfoot are all read off these two rather than drawn on top of them.
 	// See relief.go.
@@ -163,6 +164,10 @@ type Grid struct {
 	// than at a plate's edge. Drawn once when a history starts and fixed for
 	// the life of the world. See history.go.
 	hot []geom.Pos
+	// welds is how many times two plates became one while the history ran.
+	// It is a count of what happened and not something anything downstream
+	// reads: see TestContinentsWeldIntoOnePlate.
+	welds int
 
 	// frost is, for each tile, the height above which the year there never
 	// warms past Frost. It is the weather's, not the ground's, but it is kept
@@ -178,23 +183,48 @@ type Grid struct {
 	// flood in relief.go.
 	sea float64
 
-	// The standing water, and the way all the water goes. rain and evap are
-	// what falls on each tile and what open water there would give back to
-	// the air, in millimetres a year, and aridity is how much drier than its
-	// latitude this map was asked to be. level is the surface of the lake a
-	// tile lies under, below zero where it lies under none; lakeOf says which
-	// lake that is and pans which tiles are the dry salt floor of one. down is
-	// the tile each tile's water goes to next, -1 where it goes no further,
-	// and route is every tile in an order that has each one after the tile
-	// its water goes to. See lake.go.
-	rain, evap []float64
-	aridity    float64
-	level      []float64
-	lakeOf     []int32
-	pans       []bool
-	Lakes      []Lake
-	down       []int32
-	route      []int32
+	// base is the level the air takes its water from and the rivers cut down
+	// to: the sea once there is one, the sea a history is running against
+	// while it runs, and below zero on a map with neither. See weather.go.
+	base float64
+
+	// tide is the day's sea the map is read against: see tide.go. tidal is,
+	// for each tile, how many times the open ocean's tide it has, and ebb, on
+	// a flat, how far under mean sea it lies in those tides. Both are laid
+	// with the coast, and are nothing on a map with no sea. See shore.go.
+	tide  Tide
+	tidal []float32
+	ebb   []float32
+
+	// air is the map's climate row by row, and rain and runoff are, for each
+	// tile, how much falls on it in a year and how much of that the ground
+	// sends on after the air has taken its share back, in millimetres. See
+	// weather.go.
+	air          *Air
+	rain, runoff []float64
+	// winds is the climate of the wind the rain was last read from. It is
+	// never changed once made, so copies of the map share it. See wind.go.
+	winds *Winds
+	// area is how many tiles drain through each tile, and water is how much
+	// the whole map runs off, in cubic metres a second. Both are drain's.
+	area  []float64
+	water float64
+	// exported is what the last age of weather carried off the land into the
+	// sea or off the edge of the map, grain by grain, in metres over a tile.
+	exported [Grains]float64
+
+	// The standing water, and the way all the water goes. level is the
+	// surface of the lake a tile lies under; lakeOf says which lake that is,
+	// -1 where it lies under none, and pans which tiles are the dry salt floor
+	// of one. down is the tile each tile's water goes to next once it has
+	// gathered, -1 where it goes no further, and route is every tile in an
+	// order that has each one after the tile its water goes to. See lake.go.
+	lakeLevel []float64
+	lakeOf    []int32
+	pans      []bool
+	Lakes     []Lake
+	down      []int32
+	route     []int32
 
 	// regions is which laden-walkable ground each tile is part of, and
 	// regionsStale whether the water has moved since it was worked out.
@@ -239,7 +269,7 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1}
+	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
@@ -262,10 +292,17 @@ func (g *Grid) At(p geom.Pos) *Tile {
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea,
-		aridity: g.aridity, level: slices.Clone(g.level), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
+	c.frost = append([]float64(nil), g.frost...)
+	c.tidal = append([]float32(nil), g.tidal...)
+	c.ebb = append([]float32(nil), g.ebb...)
+	c.rain = append([]float64(nil), g.rain...)
+	c.runoff = append([]float64(nil), g.runoff...)
+	c.area = append([]float64(nil), g.area...)
+	c.water = g.water
 	c.lenders = make([]uint8, len(g.Tiles))
 	c.layChunks()
 	c.layPatches()

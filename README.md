@@ -22,11 +22,21 @@ for day := 0; ; day++ {
 
 ## What it knows
 
-The ground - height, flow, drainage, the rock under it and the sand and clay
-over that, which plate it rides and which age its rock dates from. The lakes
-standing in its hollows: full and running over where the rain keeps them so,
-salt and shrunk back, or dry pans, where the air takes what comes in. The
-weather over it, by latitude and by height and by season. What grows on it
+The ground - height, the water running over it in cubic metres a second,
+drainage, the rock under it and the sand and clay over that, which plate it
+rides and which age its rock dates from. The lakes standing in its hollows:
+full and running over where the rain keeps them so, salt and shrunk back, or
+dry pans, where the air takes what comes in. The weather over it, by latitude
+and by height and by season. The wind, worked out the way a meteorologist would:
+the warmth of the air makes the pressure, the pressure and the planet's
+turning and the drag of the ground make the wind, and the ranges in its way
+turn it aside or send it through the gaps. And the rain the wind carries off
+the sea, wrung out over the ranges it climbs, and taken back by the warmth of
+the air, so that
+rivers are where the water runs off and has the power to cut, and the ground
+wears the way stream power says it does. The moon, and the tide it raises each
+day: springs and neaps, gathered by the shape of each coast, and the tidal
+flats a laden walker can cross at low water one fortnight in two. What grows on it
 and how far along it has come. How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
@@ -69,6 +79,20 @@ GOEXPERIMENT=simd go test ./...
 
 What a world does is the same either way, to the last bit, and a test holds
 the vector arithmetic to the tile-by-tile statement of it.
+
+## Looking at one
+
+```bash
+go run ./cmd/overview -preset globe -seed 3
+```
+
+makes a world and writes `overview/index.html`: its terrain, biomes, landforms, height,
+drainage, rain, runoff, wind - as a colour wheel, and as streamlines for the year and
+for each solstice - the day's weather, tides, bedrock, plates, rock age, soil, temperature
+and woods, one map each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
+`-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale`, `-day` and `-out` override it.
+`-max` makes the world as big as the free memory allows, in the shape the
+preset or `-w` and `-h` give it.
 
 ## Where it came from
 

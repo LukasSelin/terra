@@ -33,6 +33,9 @@ var moveCost = [TerrainCount]float64{
 	// dearer than open grass and cheaper than anything with a slope on it.
 	// It is not water's 3.5 because nobody is swimming - see Tile.Deep.
 	Ice: 1.4,
+	// A flat the tide has left is mud: dearer than grass or ice, cheaper than
+	// a wood. Covered, it is waded like water; see Grid.Covered.
+	Flat: 1.6,
 	// A salt lake is swum like any other water. A salt flat is level and
 	// firm, and costs what open grass does.
 	Salt: 3.5,
@@ -106,9 +109,13 @@ func (g *Grid) MoveCost(p geom.Pos) float64 {
 	if !g.In(p) {
 		return math.Inf(1)
 	}
-	t := g.At(p)
+	i := g.Index(p)
+	t := &g.Tiles[i]
 	if t.Mark != None {
 		return markCost[t.Mark]
+	}
+	if g.covered(i, t) {
+		return moveCost[Water]
 	}
 	return moveCost[t.Terrain]
 }
@@ -212,7 +219,7 @@ func (r *Router) TravelCost(from, to geom.Pos) float64 {
 		r.load, r.limit = 0, 0
 		return math.Inf(1)
 	}
-	if r.surveyed && from == r.spreadFrom && (r.load > SwimLoad) == r.spreadLaden && r.holder == r.spreadHolder {
+	if r.surveyed && from == r.spreadFrom && (r.load > SwimLoad) == r.spreadLaden && r.holder == r.spreadHolder && r.spreadTide == g.tide {
 		limit := r.limit
 		r.load, r.limit = 0, 0
 		if c := r.fromSurvey(to); limit <= 0 || c < limit {

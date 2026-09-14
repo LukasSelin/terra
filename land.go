@@ -36,12 +36,18 @@ type Land struct {
 
 	Grid    *Grid
 	Climate Climate // the weather over the whole map this tick
+	// Weather is the day's weather - the systems moving through and the wind
+	// they make - once AdvanceWeather has been asked for it, and nil before.
+	// A copy of a land shares it. See synoptic.go.
+	Weather *Weather
 
 	// Terms are the terms this land was made on.
 	Terms Terms
 	// seed is what the world was made from, kept for the streams of chance
 	// that are drawn apart from the main one; see island.go.
 	seed uint64
+	// moon is where the moon stood on the founding day. See tide.go.
+	moon Epoch
 
 	// Forest0 is how much forest the world was made with, so that how much
 	// of it has been taken can be told.
@@ -70,9 +76,13 @@ type Land struct {
 // A globe is a whole number of chunks round: the nine chunks around a place
 // hold everything within a chunk of it only if no chunk is narrower than the
 // rest.
+//
+// It panics on terms that fail Check, and it does not ask whether the world
+// will fit in memory: terms that come from outside the program - a flag, a
+// file, a player - go through MakeLand instead.
 func NewLand(seed uint64, t Terms) *Land {
-	if t.Wrap && t.Width%ChunkSide != 0 {
-		panic("world: a globe must be a whole number of chunks round")
+	if err := t.Check(); err != nil {
+		panic(err)
 	}
 	l := &Land{
 		seed:    seed,
@@ -80,7 +90,9 @@ func NewLand(seed uint64, t Terms) *Land {
 		Climate: NewClimateOn(t),
 		Terms:   t,
 	}
+	l.moon = epochOf(seed)
 	l.Generate(t)
+	l.Grid.tide = l.Tide()
 	l.Growing = make([]float64, len(l.Grid.Chunks))
 	return l
 }
@@ -105,17 +117,27 @@ type Terms struct {
 	// none: its water leaves at the edges. A globe has no edges but the
 	// poles, and without a sea every river on it runs to a pole and every
 	// laden walker is cut off by one.
+	//
+	// A world made from its history and given Water has its sea from the
+	// water instead, and SeaShare only says how much of its first crust is
+	// ocean: see water.go.
 	SeaShare float64
+	// Water is how much water a world made from its history has, as the
+	// depth in metres it would stand to spread evenly over the whole map. It
+	// fills the basins the plates made, so how much of the world is sea is the
+	// ground's to decide. Nothing is no water, and the sea is SeaShare's. A map
+	// that was drawn has no plates to decide anything, and takes SeaShare
+	// whatever this says.
+	Water float64
 	// Epochs is how many ages of the earth to run before the land is handed
 	// over: 0 draws it, and anything else makes it out of its own history.
 	// See history.go.
 	Epochs int
-	// Aridity is how much drier than its latitude the land is, from nothing
-	// to all of it: 0 is the rain the latitude gives, and 0.7 takes seven
-	// tenths of that away, which is a dry steppe on a temperate valley and
-	// enough that most of its hollows keep their water to themselves. See
-	// lake.go.
-	Aridity float64
+	// Wetness is how much rain the world's air carries, against the real
+	// world's: two is a world twice as wet at every latitude, a half one half
+	// as wet. Nothing, as a Terms written without it says, is the real world's.
+	// See weather.go.
+	Wetness float64
 }
 
 // DefaultTerms is the valley: the default size, with edges, drawn rather
@@ -128,7 +150,7 @@ func DefaultTerms() Terms {
 // it sea, made out of its own history. See Globe for why a world this size
 // is run rather than drawn.
 func GlobeTerms() Terms {
-	return Terms{Width: 1024, Height: 512, Wrap: true, SeaShare: 0.3, Epochs: 16}
+	return Terms{Width: 1024, Height: 512, Wrap: true, SeaShare: 0.3, Epochs: 16, Water: DefaultWater}
 }
 
 // Routers returns n routers over this land's map, made once and kept between

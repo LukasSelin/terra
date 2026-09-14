@@ -23,24 +23,40 @@ func (w *Land) Generate(cfg Terms) {
 	width, height := cfg.Width, cfg.Height
 	g := NewGrid(width, height)
 	g.Wrap = cfg.Wrap
-	g.aridity = cfg.Aridity
+	// The air is the climate's, read row by row, and it is set before the
+	// ground is made because a history rains on its ground while it runs.
+	g.air = w.Climate.airFor(g, cfg.Wetness)
 
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both
 		// what its history left. See history.go.
-		w.history(g, cfg.Epochs, cfg.SeaShare)
+		w.history(g, cfg.Epochs, cfg.SeaShare, cfg.Water)
 	} else {
 		w.raise(g)
 		// What is under the ground is laid down with the ground, and before
 		// the water has been anywhere: a river runs over the rock it finds.
 		w.layBedrock(g)
 	}
-	g.flood(cfg.SeaShare, w.RNG)
+	// The sea: poured, where there is a history to say how deep the basins
+	// are, and otherwise the lowest share of the ground. See water.go.
+	poured := cfg.Epochs > 0 && cfg.Water > 0
+	if poured {
+		g.pour(cfg.Water, w.RNG)
+	} else {
+		g.flood(cfg.SeaShare, w.RNG)
+	}
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
 	// goes: incise moves the ground, so the drainage has to be taken again on
 	// the ground it left. See Incise.
 	g.incise()
+	// And the sea is levelled again on the ground the cutting left. See
+	// Grid.relevel.
+	if poured {
+		g.repour(cfg.Water)
+	} else {
+		g.relevel(cfg.SeaShare)
+	}
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
@@ -59,6 +75,9 @@ func (w *Land) Generate(cfg Terms) {
 	})
 	// And with it, where the sea itself never thaws. See Grid.freeze.
 	g.freeze()
+	// The tide's reach, and the flats it covers and uncovers, before the woods
+	// are shared out: a wood's share is a share of ground trees could have.
+	g.tides()
 
 	// Woods stand where the ground is damp enough to grow them and gentle
 	// enough to hold soil: the valley sides above the flood, not the crown of
@@ -135,8 +154,7 @@ func (w *Land) Generate(cfg Terms) {
 	g.EachRow(func(y int) {
 		for x := 0; x < width; x++ {
 			p := geom.Pos{X: x, Y: y}
-			if g.Frozen(p) {
-				i := g.Index(p)
+			if i := g.Index(p); g.Frozen(p) && g.Tiles[i].Terrain != Flat {
 				g.Tiles[i].Terrain, g.Wood[i], g.Wild[i] = Rock, 0, 0
 			}
 		}
@@ -152,7 +170,7 @@ func (w *Land) Generate(cfg Terms) {
 	// the weather takes every age.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() {
+		if t.Wet() || t.Terrain.Tidal() {
 			continue
 		}
 		if t.Terrain == Pan {
