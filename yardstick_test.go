@@ -629,11 +629,16 @@ var ploughedOnce struct {
 }
 
 // ploughedAndWooded is how fast the slopes of seed 3's valley come down, in
-// millimetres a year, all ploughed and all wooded: the experiment of
+// millimetres a year, all ploughed and all wooded: the ground of
 // TestWoodsHoldAHillsideTogether, read as a rate.
+//
+// It is the soil the weather strips off the slopes, net of what it lays back
+// on them - what a plot on a hillside measures - and so it is one age of wear
+// and not forty of Erode. Over forty ages the rivers take their banks out of
+// the same slopes and fill raises the hollows they leave, and between them
+// they moved a wooded slope twenty times more than the rain on it did.
 func ploughedAndWooded() (ploughed, wooded float64) {
 	ploughedOnce.Do(func() {
-		const ages = 40
 		rate := func(cover Terrain) float64 {
 			w := NewLandSized(3, 60, 40)
 			g := w.Grid
@@ -646,14 +651,12 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			}
 			g.Rekind()
 			before := heights(g)
-			for k := 0; k < ages; k++ {
-				w.Erode()
-			}
+			g.wear(1)
 			lost := 0.0
 			for _, i := range slopes {
-				lost += math.Max(0, before[i]-g.Tiles[i].Height)
+				lost += before[i] - g.Tiles[i].Height
 			}
-			return lost / float64(len(slopes)) / (ages * ageYears) * 1000
+			return lost / float64(len(slopes)) / ageYears * 1000
 		}
 		ploughedOnce.ploughed, ploughedOnce.wooded = rate(Field), rate(Forest)
 	})
