@@ -387,7 +387,7 @@ func roughAt(i int, h float64) float64 {
 // apart into strips.
 const (
 	textureDepth   = 4.570010309744883 // metres either side of the ground, on ground at textureSteep
-	textureSpan    = 5.40290781077158  // tiles from valley to valley
+	textureSpacing = 135.0726952692895 // metres from valley to valley: 5.4029 tiles as searched
 	textureReach   = 2.571232958955619 // how far each patch's waves carry, in patches
 	textureChannel = 64.0              // tiles of drainage above which a tile is a river's and is left alone
 	textureSteep   = 0.3
@@ -404,7 +404,8 @@ func (w *Land) texture(g *Grid, area []float64) {
 	for k := 0; k < 3; k++ {
 		lie = g.spread(lie)
 	}
-	cell := int(math.Max(2, math.Round(textureSpan)))
+	span := tilesAcross(textureSpacing, TileSpan) // tiles from valley to valley
+	cell := int(math.Max(2, math.Round(span)))
 	sigma := textureReach * float64(cell)
 	reach := int(math.Ceil(2 * textureReach))
 	cols, rows := (g.W+cell-1)/cell, (g.H+cell-1)/cell
@@ -457,7 +458,7 @@ func (w *Land) texture(g *Grid, area []float64) {
 					oy := float64(y - (cy*cell + cell/2))
 					k := waves[cy*cols+cx]
 					wgt := math.Exp(-(ox*ox + oy*oy) / (2 * sigma * sigma))
-					sum += wgt * math.Cos(2*math.Pi*(float64(x)*k.nx+float64(y)*k.ny)/textureSpan)
+					sum += wgt * math.Cos(2*math.Pi*(float64(x)*k.nx+float64(y)*k.ny)/span)
 					weight += wgt * wgt
 				}
 			}

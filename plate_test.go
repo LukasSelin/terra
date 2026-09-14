@@ -224,7 +224,7 @@ func TestAWeldedPlateKeepsTheRangeThatMadeIt(t *testing.T) {
 			continue
 		}
 		total++
-		if !near(g, i, seamAt, int(beltWidth)) {
+		if !near(g, i, seamAt, int(beltOn(g))) {
 			inside++
 		}
 	}
@@ -404,7 +404,7 @@ func inland(g *Grid) []int32 {
 // Two things moved it. An arc is raised behind the trench and not on it, so
 // there is a coastal plain in front of the range; and a plate rides with
 // swells and basins in it, so the sea finds its coast in the shape of the
-// ground rather than at the boundary of the crust. See arcGap and bowRise.
+// ground rather than at the boundary of the crust. See arcGapReach and bowRise.
 func TestMountainsAreNotAllOnTheCoast(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)

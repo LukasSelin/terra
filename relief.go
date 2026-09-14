@@ -654,7 +654,7 @@ func (g *Grid) incise() {
 		// gorge through shale and is turned aside by granite.
 		cut[i] = Incise * math.Sqrt(greatShare(g.Tiles[i].Flow)) / g.Tiles[i].Hard()
 	}
-	for pass := 0; pass < valleyWidth; pass++ {
+	for pass := 0; pass < int(math.Round(tilesAcross(valleyWidth, TileSpan))); pass++ {
 		cut = g.spread(cut)
 	}
 	for i := range g.Tiles {
@@ -662,10 +662,11 @@ func (g *Grid) incise() {
 	}
 }
 
-// valleyWidth is how far the cut is carried out from the channel, in passes
-// of the blur below and so roughly in tiles. Three is a valley a few hundred
-// metres across, with sides that can be walked up.
-const valleyWidth = 3
+// valleyWidth is how far the cut is carried out from the channel, in metres:
+// a pass of the blur below for every tile of it. Seventy-five metres either
+// side is a valley a few hundred metres across, with sides that can be walked
+// up.
+const valleyWidth = 75 * metre
 
 // spread is one pass of a blur: every tile becomes the mean of itself and the
 // eight around it, with the edge of the map reflecting rather than pulling
@@ -739,7 +740,7 @@ func (g *Grid) outlet(x, y int) bool {
 // diagonal steps filled in as well - see carve.
 const spreadUntil = 64.0
 
-// crowdSpace is how near, in tiles, a small stream may start to another
+// crowdSpace is how near, in metres, a small stream may start to another
 // channel it does not join, and crowdUntil is how much ground's rain, in
 // tiles, makes a stream no longer small.
 //
@@ -757,7 +758,7 @@ const spreadUntil = 64.0
 // tiles with an unjoined channel within three tiles went from 41 and 34 per
 // cent of the river to 17 and 16.
 const (
-	crowdSpace = 3
+	crowdSpace = 75 * metre
 	crowdUntil = 256.0
 )
 
@@ -946,7 +947,8 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// crowded says whether a small stream starting at i would run beside a
 	// channel it does not join: see crowdSpace.
 	crowdFlow := crowdUntil
-	reach := crowdSpace * 3
+	space := int(math.Round(tilesAcross(crowdSpace, TileSpan)))
+	reach := space * 3
 	path := make([]int32, 0, reach+1)
 	on := func(j int32) bool { return slices.Contains(path, j) }
 	crowded := func(i int32) bool {
@@ -958,8 +960,8 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			path = append(path, j)
 		}
 		p := g.PosOf(int(i))
-		for dy := -crowdSpace; dy <= crowdSpace; dy++ {
-			for dx := -crowdSpace; dx <= crowdSpace; dx++ {
+		for dy := -space; dy <= space; dy++ {
+			for dx := -space; dx <= space; dx++ {
 				q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
 				if !g.In(q) {
 					continue

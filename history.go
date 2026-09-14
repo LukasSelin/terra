@@ -92,13 +92,18 @@ const (
 	// It is what keeps the count inside the byte a tile stores its plate in,
 	// with room above it for noPlate.
 	plateCap = 120
-	// beltWidth is how far from a seam the ground is raised or dropped by
-	// what is happening at it, in tiles. A collision does not make a wall one
+	// beltReach is how far from a seam the ground is raised or dropped by
+	// what is happening at it, in metres. A collision does not make a wall one
 	// tile wide: it thickens a belt of country either side, which is why a
 	// range has flanks and foothills and a pass through it. Applying the lift
 	// only where two plates actually touch made a map of knife edges - the
 	// steep ground doubled and there was nothing to walk up.
-	beltWidth = 10.0
+	//
+	// It was ten tiles on every world, which was 250 metres of a field and
+	// meant nothing of a planet. 375 kilometres is half the width of the
+	// Andes, and of the Alps with their forelands; it is ten tiles of the
+	// globe preset's deep span, where it was tuned. See beltOn.
+	beltReach = 375 * km
 	// beltGrain is how long a stretch of a range keeps its character, in
 	// tiles, and beltVary is how much of the range's height and width that
 	// character is worth either way. A seam applied at one width and one
@@ -149,7 +154,7 @@ const (
 	// D-infinity at twenty-three, so it was taken out again.
 	beltGrain = 30.0
 	beltVary  = 0.55
-	// arcGap is how far behind the trench the arc stands, in tiles. The
+	// arcGapReach is how far behind the trench the arc stands, in metres. The
 	// country it raises reaches a belt's width beyond that, so an arc's works
 	// are spread over the gap and the belt together.
 	//
@@ -181,7 +186,19 @@ const (
 	// is that plus ten, which is half a kilometre of ground, and the map is a
 	// toy beside the thing it is named after. What is kept is the order of it
 	// - trench, then a plain, then the mountains - and not the scale.
-	arcGap = 10.0
+	//
+	// That was when a tile was 25 metres in a history too. At deepSpan it is
+	// the real gap: two hundred kilometres, where the slab under the arc is
+	// a hundred deep (Gill 1981; Syracuse and Abers 2006 have the volcanic
+	// front 150 to 300 kilometres from the trench).
+	arcGapReach = 200 * km
+	// seamLeast is the fewest tiles a belt or a gap is drawn over, whatever
+	// it is in metres. It is the grid's and not the ground's: on a valley's
+	// history a tile is two hundred kilometres, the arc's gap is one tile and
+	// its belt two, and one tile between a trench and its arc is no plain,
+	// nor two tiles a flank. Below three the ranges came back as walls on the
+	// sea's edge.
+	seamLeast = 3.0
 	// axisWidth is how near the seam itself a tile has to be for what is
 	// happening there to change what it is made of, rather than only how
 	// high it stands. A collision lifts a belt of country ten tiles wide and
@@ -628,9 +645,12 @@ var settling = 1 - math.Exp(-epochYears/settleTime)
 // a hotspot leaves is a chain of old cones drawn out behind it along the way
 // its plate is going, the newest over the hotspot itself.
 const (
-	hotspots     = 2
-	hotspotSpan  = DefaultWidth
-	hotspotReach = 7.0
+	hotspots    = 2
+	hotspotSpan = DefaultWidth
+	// hotspotReach is how far a hotspot's works reach from it, in metres: the
+	// flanks and moat of a volcanic pile like Hawaii's, some 250 kilometres
+	// out (Watts 2001). See hotspotOn.
+	hotspotReach = 250 * km
 	// hotspotLift is what one does in an epoch it is awake, at its middle: a
 	// millimetre a year, in the proportion to a collision it was tuned at, which
 	// is about the rate the Hawaiian volcanoes pile up their edifices at over a
@@ -1960,6 +1980,7 @@ func (g *Grid) eachNear(i int, f func(j int)) {
 func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain, bow []float64) {
 	n := len(g.Tiles)
 	scale := driftScale(g)
+	belt := beltOn(g)
 	g.locate(plates)
 	// Where crust has gone down this epoch, spread a few tiles: it goes down on
 	// one side of a seam and the seam is on both, and a plate moves a whole
@@ -2059,7 +2080,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			}
 			j := g.Index(q)
 			step := here.away + math.Hypot(float64(off.X), float64(off.Y))
-			if step >= reachOf(here.makes, gap) {
+			if step >= reachOf(here.makes, gap, belt) {
 				continue
 			}
 			if here.stay && g.Tiles[j].Plate != here.side {
@@ -2146,7 +2167,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// taller and broader: a seam under a strong stretch of crust
 			// raises a wide massif and one under a weak stretch raises a
 			// ridge with a pass in it.
-			wide := reachOf(s.makes, gap) * grain[i]
+			wide := reachOf(s.makes, gap, belt) * grain[i]
 			if s.away >= wide {
 				continue
 			}
@@ -2530,18 +2551,30 @@ func axisOf(m made, gap, grain float64) float64 {
 // reachOf is how far a meeting's works are carried from the seam. An arc
 // stands back from the trench and needs room behind it for the country it
 // raises; everything else falls away from where it happened.
-func reachOf(m made, gap float64) float64 {
+func reachOf(m made, gap, belt float64) float64 {
 	if m == arc {
-		return beltWidth + gap
+		return belt + gap
 	}
-	return beltWidth
+	return belt
+}
+
+// beltOn is how far from a seam, in tiles, a meeting's works reach on this
+// world: beltReach at its deep span, and never under seamLeast.
+func beltOn(g *Grid) float64 {
+	return math.Max(seamLeast, tilesAcross(beltReach, deepSpan(g)))
+}
+
+// hotspotOn is how far, in tiles, a hotspot's works reach on this world.
+func hotspotOn(g *Grid) float64 {
+	return math.Max(seamLeast, tilesAcross(hotspotReach, deepSpan(g)))
 }
 
 // arcGapOn is how far behind the trench this world's arcs stand: the quoted
 // distance, or a quarter of the way between two plate middles where that is
-// less. See arcGap.
+// less, and never under seamLeast. See arcGapReach.
 func arcGapOn(g *Grid, mids int) float64 {
-	return math.Min(arcGap, spacing(g, mids)/4)
+	gap := math.Max(seamLeast, tilesAcross(arcGapReach, deepSpan(g)))
+	return math.Min(gap, spacing(g, mids)/4)
 }
 
 // meeting is the hardest thing happening at tile i's edges: how fast it and
@@ -2724,7 +2757,8 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 			g.hot[i] = geom.Pos{X: w.RNG.IntN(g.W), Y: w.RNG.IntN(g.H)}
 		}
 	}
-	r := int(hotspotReach)
+	reach := hotspotOn(g)
+	r := int(reach)
 	for _, h := range g.hot {
 		if w.RNG.Float64() > hotspotWakes {
 			continue // quiet this age
@@ -2732,7 +2766,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 		for dy := -r; dy <= r; dy++ {
 			for dx := -r; dx <= r; dx++ {
 				d := math.Hypot(float64(dx), float64(dy))
-				if d > hotspotReach {
+				if d > reach {
 					continue
 				}
 				q := geom.Pos{X: h.X + dx, Y: h.Y + dy}
@@ -2742,7 +2776,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 				if !g.In(q) {
 					continue
 				}
-				lift := hotspotLift * smooth(1-d/hotspotReach)
+				lift := hotspotLift * smooth(1-d/reach)
 				j := g.Index(q)
 				g.Tiles[j].Height += lift
 				book[j].melt += lift

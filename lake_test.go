@@ -315,22 +315,29 @@ func TestOverflowIsCountedWhereItLands(t *testing.T) {
 
 // A globe has its deserts where the air comes down dry: a salt lake stands
 // only where the air takes more off open water than falls.
+//
+// Over three globes and not one. Whether a given globe has a hollow in a
+// desert is a matter of where its history put its ranges: with the history
+// on a clock of millions of years, the second small globe has none, and the
+// first has twenty-two tiles of salt lake and the seventh 272.
 func TestSaltLakesStandInDryCountry(t *testing.T) {
-	g := NewLand(2, smallGlobe()).Grid
 	closed := 0
-	for i := range g.Tiles {
-		if !g.closedLake(i) {
-			continue
-		}
-		closed++
-		// The air could take up more than falls where what it takes off open
-		// water is more than what runs off the ground.
-		if g.loss(i) <= g.runoff[i] {
-			t.Fatalf("a salt lake at %v, where %.0f falls and %.0f runs off", g.PosOf(i), g.rain[i], g.runoff[i])
+	for _, seed := range []uint64{1, 2, 3} {
+		g := NewLand(seed, smallGlobe()).Grid
+		for i := range g.Tiles {
+			if !g.closedLake(i) {
+				continue
+			}
+			closed++
+			// The air could take up more than falls where what it takes off
+			// open water is more than what runs off the ground.
+			if g.loss(i) <= g.runoff[i] {
+				t.Fatalf("a salt lake at %v, where %.0f falls and %.0f runs off", g.PosOf(i), g.rain[i], g.runoff[i])
+			}
 		}
 	}
 	if closed == 0 {
-		t.Fatal("a globe with dry belts on it has no salt lake anywhere")
+		t.Fatal("three globes with dry belts on them have no salt lake anywhere")
 	}
 	// And the default valley, at the temperate latitude, has none at all.
 	for _, seed := range []uint64{1, 2, 3} {
