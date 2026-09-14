@@ -100,9 +100,7 @@ var realYardsticks = []realYardstick{
 		name: "channel concavity, valley", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(valleys(5)); return th },
-	},
-		gap: "known gap: B - profiles are less concave than stream power carves them: theta 0.32",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
@@ -222,9 +220,7 @@ var realYardsticks = []realYardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	},
-		gap: "known gap: D - the same seed at 512x256 has a hypsometric integral 0.09 below 256x128",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",

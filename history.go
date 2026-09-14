@@ -100,10 +100,19 @@ const (
 	// steep ground doubled and there was nothing to walk up.
 	//
 	// It was ten tiles on every world, which was 250 metres of a field and
-	// meant nothing of a planet. 375 kilometres is half the width of the
-	// Andes, and of the Alps with their forelands; it is ten tiles of the
-	// globe preset's deep span, where it was tuned. See beltOn.
-	beltReach = 375 * km
+	// meant nothing of a planet. The lift falls to nothing at the reach, so
+	// it stands at half its height halfway out: 550 kilometres puts that at
+	// 275, which is half the width of the Andes and short of Tibet's. It is
+	// fifteen tiles of the globe preset's deep span and five of a small
+	// globe's. See beltOn.
+	//
+	// Where in the real range it sits was read off the small globes, which at
+	// 375 had a belt three and a half tiles wide: fewer arcs grew into
+	// continent, plate sizes fell off as A^-0.37 against Bird's 0.15-0.35, and
+	// the drainage exponent (0.379), Hack's exponent (0.512) and Flint's fit
+	// (0.823) all fell out of their ranges. At 550 all four are in; at 750 the
+	// plates were at 0.39 and the drainage at 0.50.
+	beltReach = 550 * km
 	// beltGrain is how long a stretch of a range keeps its character, in
 	// tiles, and beltVary is how much of the range's height and width that
 	// character is worth either way. A seam applied at one width and one

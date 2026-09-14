@@ -27,16 +27,10 @@ import (
 // valley while a stream scratches at it.
 
 // greatFlow is the discharge, in cubic metres a second, of a great river on
-// ground the size of these maps: twenty litres a second, above the seven to
-// seventeen the trunk of the default valley carries over its first three
-// seeds, so that no valley's river is held at it. What a river does to its
-// banks and its bed goes as the root of its share of this, and no further -
-// see greatShare.
-//
-// The bends are sensitive to it the way a chaotic thing is: at ten and fifteen
-// litres the third valley's river came out of forty ages turning on fewer of
-// its tiles than it started with (0.454 to 0.433), and at five and twenty on
-// more. Twenty is the one of those that leaves no river capped.
+// ground the size of these maps: ten litres a second, about what the trunk of
+// the default valley carries (seven to seventeen over its first three seeds).
+// What a river does to its banks and its bed goes as the root of its share of
+// this, and no further - see greatShare.
 //
 // It was the greatest flow on each map, read afresh every age, which made how
 // hard a river cut a fact about every other river on the map: a stream on a
@@ -44,7 +38,15 @@ import (
 // what the same stream did in a valley, and a map whose trunk silted into a
 // lake had every other river on it cut harder the next age. A river's work is
 // its own water's.
-const greatFlow = 0.02
+//
+// The valley's rivers are sensitive to it the way a chaotic thing is, and the
+// figure is picked among values that are all real sizes of a trunk. With the
+// soil kept as its own depth (soil.go), at ten litres the third valley's river
+// bends more after forty ages and the fifth valley's floor is finer than its
+// hillsides; at twenty, thirty and fifty the floor came out the coarser, and
+// at thirty the river lost bends. Before the soil was kept, ten and fifteen
+// lost bends and twenty did not.
+const greatFlow = 0.01
 
 // greatShare is the share of a great river's work a river carrying q does.
 func greatShare(q float64) float64 { return math.Min(1, q/greatFlow) }
