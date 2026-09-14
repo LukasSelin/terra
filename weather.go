@@ -29,9 +29,6 @@ import "math"
 // gathers. See the remark on scale above.
 const HydroSpan = 1200.0
 
-// secondsPerYear turns a year's water into a flow.
-const secondsPerYear = 365.25 * 24 * 3600
-
 // Air is what the weather of a map is, row by row: the parts of the climate
 // that do not change from one day to the next and that the water is read off.
 // It is made once, with the map, and shared by every copy of it.

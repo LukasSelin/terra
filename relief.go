@@ -23,11 +23,6 @@ import (
 // and call the tiles that carry enough of it a river. Fertility, woods and
 // outcrops then read off the finished land instead of being scattered over it.
 
-// TileSpan is how wide a tile is on the ground, in metres. It is what turns a
-// difference in height into a slope, and so the only reason heights and
-// distances can be spoken of in the same breath.
-const TileSpan = 25.0
-
 // Relief is the fall of the lowland in metres, from the lowest ground a map
 // can have to the shoulders of the valley: sixty metres over eighty tiles is
 // a river valley with sides to it, enough that walking uphill is felt and
