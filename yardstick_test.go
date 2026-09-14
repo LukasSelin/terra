@@ -20,12 +20,12 @@ import (
 // ones. So every yardstick here is a figure somebody measured on real ground,
 // with the paper it came from, and the map is asked to fall inside it.
 //
-// Two scales, because the map has two - see weather.go. The ground is
-// TileSpan a tile, and what is read off the ground - how steep, how high, how
-// far apart the valleys - is held against real ground at that scale. The
-// water is HydroSpan of catchment a tile, and what is read off the water -
-// how the rivers' sizes are shared out - is held against real drainage at
-// that one. The exponents and ratios of a river network do not care which.
+// The ground is TileSpan a tile and so is the water that runs off it - see
+// weather.go - so what is read off the ground, how steep and how high and how
+// far apart the valleys, and what is read off the water, how the rivers'
+// sizes are shared out, are both held against real ground at that scale. The
+// "water" readings are exponents and ratios, which do not care about scale at
+// all; see TestTheSameGroundAtTwiceTheSize for whether the map agrees.
 
 // yardstick is one figure measured on real ground, and the reading of a map
 // that answers to it.
@@ -752,10 +752,9 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 func meanderMigration() float64 {
 	const ages = 40
 	big := func(g *Grid) []int {
-		most := maxFlow(g)
 		var out []int
 		for i := range g.Tiles {
-			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && t.Flow >= meanderFlow*most {
+			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && t.Flow >= meanderFlow {
 				out = append(out, i)
 			}
 		}

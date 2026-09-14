@@ -26,8 +26,25 @@ import (
 // it is charged by how much water is doing it, so a great river remakes its
 // valley while a stream scratches at it.
 
-// bankCut is how much of the outer bank of a bend the greatest river on the
-// map takes in an age of weather, in metres of height. A river migrating a
+// greatFlow is the discharge, in cubic metres a second, of a great river on
+// ground the size of these maps: what the trunk of the default valley carries,
+// seven to seventeen litres a second over its first three seeds. What a river
+// does to its banks and its bed goes as the root of its share of this, and
+// no further - see greatShare.
+//
+// It was the greatest flow on each map, read afresh every age, which made how
+// hard a river cut a fact about every other river on the map: a stream on a
+// globe, a small share of a great trunk, wandered and incised a fraction of
+// what the same stream did in a valley, and a map whose trunk silted into a
+// lake had every other river on it cut harder the next age. A river's work is
+// its own water's.
+const greatFlow = 0.01
+
+// greatShare is the share of a great river's work a river carrying q does.
+func greatShare(q float64) float64 { return math.Min(1, q/greatFlow) }
+
+// bankCut is how much of the outer bank of a bend a great river - see
+// greatFlow - takes in an age of weather, in metres of height. A river migrating a
 // metre or two an age across ground that is being cut by tens is what tips
 // the drainage into the new course rather than the old one.
 //
@@ -50,11 +67,12 @@ const bankCut = 2.5
 // of moving across it, and the map sinks.
 const pointBar = 0.7
 
-// meanderFlow is the least share of the greatest flow on the map that a
-// channel has to carry before it wanders at all. Below it the water is in a
-// gully cut into a hillside, and a gully does not meander: it has no flood
-// plain to move about in and no strength to make one.
-const meanderFlow = 0.02
+// meanderFlow is the least discharge, in cubic metres a second, a channel has
+// to carry before it wanders at all: a fiftieth of a great river's, which is
+// what it was of the greatest on the map. Below it the water is in a gully cut
+// into a hillside, and a gully does not meander: it has no flood plain to move
+// about in and no strength to make one.
+const meanderFlow = greatFlow / 50
 
 // turn is a quarter turn of a step, one way and the other. A bend's outer
 // bank is a quarter turn off the way the water is going, on the side it is
@@ -75,14 +93,6 @@ func turn(d geom.Pos, left bool) geom.Pos {
 // actually moves. Nothing here moves it; this only makes the ground it will
 // move into.
 func (g *Grid) meander(by float64) {
-	most := 0.0
-	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
-	}
-	if most <= 0 {
-		return
-	}
-
 	// Where each tile's water comes from: of everything draining into it, the
 	// one carrying the most, which is the channel and not the hillside.
 	from := make([]geom.Pos, len(g.Tiles))
@@ -107,10 +117,10 @@ func (g *Grid) meander(by float64) {
 
 	change := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		share := g.Tiles[i].Flow / most
-		if share < meanderFlow {
+		if g.Tiles[i].Flow < meanderFlow {
 			continue
 		}
+		share := greatShare(g.Tiles[i].Flow)
 		in := from[i]
 		if in == (geom.Pos{}) {
 			continue // nothing above it: a spring has no bend to cut

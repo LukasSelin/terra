@@ -258,11 +258,7 @@ func (g *Grid) creep(by float64, change []float64, gained [][Grains]float64) {
 	// A river great enough to wander has banks that are its own business: see
 	// meander, which takes the outside of a bend and builds the inside, and
 	// whose bends creep would otherwise ease back out as fast as they are cut.
-	most := 0.0
-	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
-	}
-	wander := meanderFlow * most
+	wander := meanderFlow
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
 		off  geom.Pos

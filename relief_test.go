@@ -85,7 +85,7 @@ func TestFlowOnlyGathers(t *testing.T) {
 			out += g.Tiles[i].Flow
 		}
 	}
-	perMM := discharge(1, HydroSpan)
+	perMM := discharge(1, TileSpan)
 	for k, l := range g.Lakes {
 		given := 0.0
 		for i := range g.Tiles {

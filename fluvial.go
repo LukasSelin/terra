@@ -36,7 +36,7 @@ import (
 // with one cubic metre a second running over it down a fall of one in one,
 // before what is growing on it and what it is made of - see hold - have their
 // say. It is not a rock's figure. The fall is read over a tile and the water
-// off HydroSpan of catchment, and the size of it is set by what real ground
+// off the tile's own ground, and the size of it is set by what real ground
 // loses: a ploughed slope a millimetre and a half of soil a year, the median
 // of Montgomery's (2007) compilation, and a valley nobody farms a twentieth of
 // a millimetre, the median Portenga and Bierman (2011) read off the sand of
@@ -63,7 +63,15 @@ import (
 //	was       -4003         +4355              2.83                  0.023
 //	1.5       -3019         +3656              2.99                  0.019
 //	2.0       -3690         +3762              2.94                  0.027
-const Erodibility = 0.25
+//
+// The figures in both tables were read with the water off twelve hundred
+// metres of catchment a tile, 2304 times the ground the tile is: see
+// weather.go. The water now runs off the tile, and since the cutting goes as
+// the root of the water, the same cutting is had at 48 times the figure - K
+// is Whipple and Tucker's (1999) coefficient, and its units, metres of
+// ground an age for each root of a cubic metre a second, are what dimensional
+// analysis carries from one discharge to the other. 0.25 is 12.
+const Erodibility = 12.0
 
 // depositOf is how readily each grain comes out of the water on ground that
 // lets it, as a share of what passes: sand at the first slackening, silt where
@@ -80,11 +88,14 @@ var depositOf = [Grains]float64{Sand: 0.62, Silt: 0.33, Clay: 0.10}
 // It is Yuan's G/q with the flow taken per unit width of a bed as wide as the
 // root of its discharge, which is how the world's rivers widen.
 //
-// One, which is a stream a stride across. At ten and at a hundred - letting
-// every river up to that size drop its load as a trickle would - the valley
-// wore and sorted within a few hundredths of the same, and sent a sixth less
-// to the sea.
-const settleFlow = 1.0
+// It was one, read off water gathered from 2304 times a tile's ground - see
+// weather.go - and it is the same line at the water the ground really sheds:
+// under half a litre a second, a trickle off the first few hundred square
+// metres of a hillside. At ten and at a hundred times that - letting every
+// river up to that size drop its load as a trickle would - the valley wore
+// and sorted within a few hundredths of the same, and sent a sixth less to the
+// sea.
+const settleFlow = 1.0 / 2304
 
 // settleIters is how many sweeps up and down the order the cutting and the
 // settling are solved with. It is fixed, so an age comes out the same however

@@ -594,7 +594,7 @@ func (w *Land) lattice(g *Grid, span float64) []float64 {
 func smooth(t float64) float64 { return t * t * (3 - 2*t) }
 
 // Incise is how far the water has cut into the ground it has been running
-// over, in metres, along the largest river a map has. It is what makes a
+// over, in metres, along a great river: see greatFlow. It is what makes a
 // valley a valley rather than a dip: raised and left alone, a river lies on
 // the surface of the country like a line drawn on it, and the ground falls
 // away from the water at a slope nobody can see. Cut down, the river sits at
@@ -645,13 +645,6 @@ const Incise = 12.0
 // standing straight up out of the flood plain, and the map got steeper
 // everywhere without looking like anything.
 func (g *Grid) incise() {
-	most := 0.0
-	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
-	}
-	if most <= 0 {
-		return
-	}
 	cut := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		if g.standing(i) {
@@ -659,7 +652,7 @@ func (g *Grid) incise() {
 		}
 		// Charged by the water, and paid by the rock: the same river cuts a
 		// gorge through shale and is turned aside by granite.
-		cut[i] = Incise * math.Sqrt(g.Tiles[i].Flow/most) / g.Tiles[i].Hard()
+		cut[i] = Incise * math.Sqrt(greatShare(g.Tiles[i].Flow)) / g.Tiles[i].Hard()
 	}
 	for pass := 0; pass < valleyWidth; pass++ {
 		cut = g.spread(cut)
@@ -787,10 +780,14 @@ const (
 // valley, with the threshold set to give eight tiles in a hundred of it river,
 // half the rain gave none at all.
 //
-// The figure is not a flume's. The fall is read over a tile and the water off
-// HydroSpan of catchment - see weather.go - so what it is tuned to is the map
-// and not a stream bed. Over the first five seeds of the valley, and three
-// small globes, at a head of eight:
+// The figures in the tables below were read with the water off twelve hundred
+// metres of catchment a tile, 2304 times the tile's own ground - see
+// weather.go - and the power goes as the water, so each is 2304 times the
+// power the same rivers spend at their real discharge. That real figure,
+// under a watt on a metre of bed, is a litre a second falling one in ten: the
+// order of the mean flow off the few thousand square metres a channel head in
+// soil-mantled country drains (Montgomery and Dietrich 1988, 1992). Over the
+// first five seeds of the valley, and three small globes, at a head of eight:
 //
 //	power    valley river   upland share   half the rain   twice   small globe
 //	  700       13.1%          17.2%           4.1%        22.6%      3.1%
@@ -825,7 +822,7 @@ const (
 // spread over a hillside rarely gathers from that many before it reaches the
 // foot.
 const (
-	channelPower = 2100.0
+	channelPower = 2100.0 / 2304 // watts a metre
 	channelHead  = 8.0
 )
 

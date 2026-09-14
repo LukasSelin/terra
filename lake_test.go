@@ -9,7 +9,7 @@ import (
 )
 
 // perMM turns a millimetre a year off one tile into cubic metres a second.
-var perMM = discharge(1, HydroSpan)
+var perMM = discharge(1, TileSpan)
 
 // airOf is a hand-made valley's air, with its rain multiplied by wetness.
 func airOf(g *Grid, wetness float64) {
