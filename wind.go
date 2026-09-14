@@ -207,7 +207,7 @@ type airEnv struct {
 	wrap       bool
 
 	lat  []float64 // the latitude of each row of cells on the planet, degrees
-	hemi []float64 // how much of the temperate year's swing a row's sun has, signed by hemisphere: see solarSwing
+	hemi []float64 // how much of the temperate year's swing a row's air has, signed by hemisphere
 	mean []float64 // the year's mean temperature at sea level on each row
 	dx   []float64 // metres across a cell along each row
 	dy   float64   // and down one
@@ -264,7 +264,15 @@ func newAirEnv(g *Grid) *airEnv {
 		}
 		k := float64(cell)
 		lat, mean, dx = lat/k, mean/k, dx/k
-		e.hemi[cy] = solarSwing(lat)
+		// The wind keeps the year its rivers were calibrated on, the temperate
+		// swing capped at Temperate's, and not solarSwing's: read at the
+		// growing swing, the high latitudes' continents drove thermal lows
+		// hard enough to move the rain, and the small globe at twice the
+		// resolution cut its channels to a concavity of 0.14 against 0.24,
+		// breaking the resolution yardstick. The ground's year and the air's
+		// share seasonTemp and differ only in this factor poleward of
+		// Temperate; bringing them together is a question for the water.
+		e.hemi[cy] = math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
 		if !g.Wrap {
 			// A valley is one latitude's weather, but the planet under it
 			// is still round: the pressure the belts lay down still falls
