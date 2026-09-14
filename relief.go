@@ -56,8 +56,8 @@ const Relief = 60.0
 // lives, and what makes it liveable is measured in metres and not in tiles:
 // FloodDepth says the valley floor is the ground within fourteen metres of its
 // river, and the soil reads off that. Stretching the lowland to match a wider
-// map would put most of it above the flood and take its soil down to the floor
-// of 0.15, which is the thing that went wrong when the valley and the
+// map would put most of it above the flood and take its soil down toward the
+// floor of 0.15, which is the thing that went wrong when the valley and the
 // mountains were one field scaled together.
 //
 // The share is what keeps a map habitable, and it is a share rather than a
@@ -202,26 +202,72 @@ const bankRise = 0.0
 // what the weather gives it.
 const FloodDepth = 14.0
 
-// SoilAt is what the land at p will hold: good on the damp flat of a valley
-// facing the sun, over a mixture that keeps what it is given; poor on a steep
-// dry hillside, and poor on sand however well it lies. It is read off the
-// drainage and the soil's own make-up rather than stored, so that when the
-// ground moves the soil that the ground can carry moves with it. The map is
-// made with it and every age of weather pulls the soil that is actually
-// there toward it.
+// SoilAt is what the land at p will hold: good where there is depth of soil,
+// water in it, a mixture that keeps what it is given and something growing to
+// put back into it; poor on a skin of soil over rock, on a dry shoulder, and
+// on sand however well it lies. It is read off the soil, the drainage and the
+// climate rather than stored, so that when the ground moves the soil that the
+// ground can carry moves with it. The map is made with it, and every age of
+// weather moves what a tile holds by as much as it moves this.
 //
-// The mixture enters as a multiplier and not as a term of its own, because
-// that is what it is: a loam on a dry shoulder is still a dry shoulder, and
-// the best-lying ground in the valley grows little if it is sand that will
-// not hold water or clay that will not give it up. It is centred on a middling
-// loam, so that a map's soils average to what they averaged before there was
-// any such thing as a mixture.
+// It is Jenny's (1941) five factors, each as the part of the soil it decides:
+// the climate, as the warmth and water organic matter builds up under; the
+// organisms, as that organic matter; the relief, as how deep the soil is and
+// how near the water stands under it and which way it faces; the parent
+// material, as the mixture; and the time, as the depth again, which is what
+// the rock has had time to make less what has been taken. Each enters as a
+// multiplier and not as a term of its own, because that is what each is: a
+// loam on bare rock grows nothing, and a metre of soil in a desert grows
+// little.
+//
+// It used to be the lie of the ground alone - how near the water, how steep,
+// how sunny - over the mixture, and above FloodDepth it read the floor of
+// 0.15 everywhere, however deep or dry. How steep is now the depth, which is
+// what steepness takes away; how near the water is still here, because a
+// valley floor is wetter than a shoulder however deep both are.
 func (g *Grid) SoilAt(p geom.Pos) float64 {
-	t := g.At(p)
+	i := g.Index(p)
+	t := &g.Tiles[i]
+	// Relief and time: how much of a root's reach there is soil to fill.
+	depth := -math.Expm1(-float64(t.Soil) / rootReach)
+	// Water: the valley floor has the river's; a shoulder has what the rain
+	// leaves in it.
 	damp := clamp01(1 - t.Drain/FloodDepth)
-	steep := clamp01(g.Slope(p) / 0.25)
-	lie := damp * (1 - 0.7*steep) * (0.75 + 0.5*g.Sunlight(p))
-	return clamp01(0.15 + 0.85*lie*(0.75+0.5*t.Loam()))
+	wet := damp + (1-damp)*shoulderWater*g.wetOf(i)
+	lie := wet * (0.75 + 0.5*g.Sunlight(p))
+	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*t.Loam())*g.organic(i))
+}
+
+// rootReach is how deep the soil a crop's roots fill is, in metres: most of
+// the roots of a field crop are in the top half metre (Jackson and others
+// 1996, over the world's croplands, have most of them in the top thirty
+// centimetres). A soil this deep grows two thirds of what one as deep as
+// roots go would.
+const rootReach = 0.5
+
+// shoulderWater is how much of the valley floor's water a shoulder above the
+// flood holds, where the rain runs through it freely: the difference between
+// ground fed from below and ground fed only from above. It is not measured.
+// It is set so that a valley's shoulders, which read the floor of 0.15 before
+// the soil was kept, come out a little over it where the soil is deep: at 0.3
+// of the floor's water, a quarter of a valley's dry ground read as good as a
+// field wants against a thirtieth before; at 0.12, one tile in eighteen.
+const shoulderWater = 0.12
+
+// organic is the organic matter in tile i's soil, against the map's middling
+// climate at one: what grows there to put back into it, over how fast the
+// soil's life eats it. Growth is the growing weather of the year's mean, cut
+// off below freezing and by the water there is; decay doubles with every ten
+// degrees, which is the Q10 of two that soil respiration has the world over
+// (Raich and Schlesinger 1992). So a cold wet soil keeps its peat and a hot
+// one burns through what falls on it. It is held within half again either
+// way, because it multiplies what the soil holds and not what a soil is.
+func (g *Grid) organic(i int) float64 {
+	t := g.meanTempOf(i)
+	input := growthOf(t) * ramp(t, -5, 5) * g.wetOf(i)
+	decay := math.Pow(2, (t-MeanTemp)/10)
+	middle := growthOf(MeanTemp) * ramp(MeanTemp, -5, 5) * (1 - math.Exp(-middleRunoff/weatherRunoff))
+	return math.Max(0.5, math.Min(1.5, input/decay/middle))
 }
 
 // clamp01 holds a share inside [0,1].
@@ -397,17 +443,40 @@ func (g *Grid) Aspect(p geom.Pos) geom.Pos {
 }
 
 // Sunlight is how much of the day's warmth a tile's face catches, in [0,1].
-// North is up the map, so ground that falls away southward looks at the sun
-// and ground that falls away northward stands in its own shadow. Level ground
-// is halfway between. Steep ground makes more of whichever it is.
+// North is up the map, and the sun stands over the equator, so ground that
+// falls away toward the equator looks at the sun and ground that falls away
+// from it stands in its own shadow: southward in the north, northward in the
+// south. Level ground is halfway between. Steep ground makes more of whichever
+// it is.
+//
+// Every face used to be read as if it were in the north, which put the sunny
+// side of every hill in a globe's southern half on the wrong side of it. In the
+// tropics the sun is north of the zenith half the year and south of it the
+// other half, so what a face gains over the year fades out toward the equator;
+// a valley is in the temperate north.
 func (g *Grid) Sunlight(p geom.Pos) float64 {
 	a := g.Aspect(p)
 	if a == (geom.Pos{}) {
 		return 0.5
 	}
-	// a.Y is positive southward, and a southward-facing slope is the sunny one.
+	// a.Y is positive southward, and in the north a southward-facing slope is
+	// the sunny one.
 	lean := float64(a.Y) / math.Sqrt(float64(a.X*a.X+a.Y*a.Y))
-	return 0.5 + 0.5*lean*math.Min(1, g.Slope(p)/0.3)
+	return 0.5 + 0.5*lean*g.equatorward(p.Y)*math.Min(1, g.Slope(p)/0.3)
+}
+
+// tropic is the latitude of the tropics, in degrees: where the sun stands
+// overhead at the solstice.
+const tropic = 23.44
+
+// equatorward is which way the sun lies from row y, as the southward share of
+// it: one in the north outside the tropics, minus one in the south, and
+// between the two inside them.
+func (g *Grid) equatorward(y int) float64 {
+	if !g.Wrap || g.air == nil || y < 0 || y >= len(g.air.lat) {
+		return 1
+	}
+	return math.Max(-1, math.Min(1, g.air.lat[y]/tropic))
 }
 
 // raise builds the height field. The land is made of two things, because a

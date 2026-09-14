@@ -17,12 +17,18 @@ import (
 // sleeps longer than a season.
 //
 // Catching up is the same arithmetic as the day's pass with a season's
-// growing weather in place of a day's, so it is deterministic, but it is
-// not the pass taken a day at a time to the last bit: a stand that would
-// have been held back by its age one day and let go the next comes out a
-// hair different. So the map a settlement is measured on must never have
-// a chunk asleep, and on the default map none ever is - the market's chunk
-// is always occupied and the other is beside it. A test says so.
+// growing weather in place of a day's, and it comes to what the days would
+// have come to: every filling is a closed form in the growing weather - see
+// fillStand and logistic - so a season of it at once is a season of days of it,
+// to the rounding of the sums. It used to be a straight filling held under a
+// ceiling, and a stand that would have been held back by its age one day and
+// let go the next came out a hair different; that is gone, and a test holds
+// it to a millionth of a millionth.
+//
+// It is still not the days to the last bit, which the map a settlement is
+// measured on is held to, so that map must never have a chunk asleep - and on
+// the default map none ever is: the market's chunk is always occupied and the
+// other is beside it. A test says so.
 
 // Growing is the growing weather the world has had since it was made, in
 // growing days: the sum over every day of what that day let green things

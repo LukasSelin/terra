@@ -53,7 +53,7 @@ func (w *Land) Generate(cfg Terms) {
 	// And the soft beds taken down against the hard ones, which is where the
 	// ridges and the scarps of layered country come from. See denude.
 	g.denude()
-	g.landslide()
+	g.landslide(false)
 	// The ground has moved into the beds under it, so the rock it is made of
 	// has too. See strata.go.
 	g.expose()
@@ -212,13 +212,16 @@ func (w *Land) Generate(cfg Terms) {
 	})
 
 	// What the soil is made of, before what it will grow is asked: the
-	// fertility below reads the mixture, so the mixture has to be there.
+	// fertility below reads the mixture, so the mixture has to be there. And
+	// how much of it there is, which reads what grows on the ground, so the
+	// woods and the outcrops come first. See soil.go.
 	g.soilTexture()
+	g.laySoil()
 
-	// Good soil is where the water has been and stopped: the flat of a valley,
-	// damp from what drains through it, facing the sun, over a mixture that
-	// will hold what it is given. See Grid.SoilAt, which is the same reading
-	// the weather takes every age.
+	// Good soil is deep soil with water in it: the flat of a valley, damp from
+	// what drains through it, facing the sun, over a mixture that will hold
+	// what it is given, in a climate that grows something to feed it. See
+	// Grid.SoilAt, which is the same reading the weather takes every age.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() || t.Terrain.Tidal() {
