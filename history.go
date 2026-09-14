@@ -409,9 +409,18 @@ const (
 // ground, which is handed the drawn map's spread at the end, and they are
 // set against the lift of a range in an epoch - see orogeny - because what
 // makes a scarp is a bed as thick as a hillside is high: a pile of beds a
-// hand's breadth thick is one rock to anything the weather can do. They were
-// tuned as 9, 6, 20 and 30 metres against a lift of 45; the lift is real now,
-// and they are held in that proportion to it.
+// hand's breadth thick is one rock to anything the weather can do.
+//
+// They were 9 and 6 metres an epoch against a lift of 45, and they are real
+// rates now, as the lift is: a basin's fill at fillRate, four hundred metres an
+// epoch, and lime at a fifth of that, which is what a carbonate shelf keeps
+// over millions of years (Schlager 1981 has 0.01 to 0.1 mm/yr at that span).
+// Held in proportion to the lift instead - 3.6 and 2.4 kilometres an epoch -
+// sixteen epochs of them were deeper than the history's whole relief, which
+// real erosion keeps to kilometres and not to what the plates lift, and every
+// tile on a made valley was the last epoch's fill. The depths the fire and the
+// crushing reach are real too: greenschist from some eight kilometres down,
+// and plutons set at five to fifteen.
 //
 // sandyBed is the sand a fill needs to be laid as sandstone while the
 // history runs, before settleRock ranks the fills against each other.
@@ -424,13 +433,13 @@ const (
 // collision has squeezed the pile into schist and an arc melted it into
 // granite: what lies shallower is what the weather has yet to take off it.
 const (
-	bedPerFill  = orogeny * 9 / 45
-	limeBed     = orogeny * 6 / 45
+	bedPerFill  = fillRate * epochYears
+	limeBed     = 0.02 * mm / yr * epochYears
 	sandyBed    = 0.45
 	foldShare   = 0.5
 	foldWave    = 5.0
-	cookDepth   = orogeny * 20 / 45
-	plutonDepth = orogeny * 30 / 45
+	cookDepth   = 8 * km
+	plutonDepth = 12 * km
 )
 
 // Deep time: how long an epoch is, and how big a tile is while it lasts.
