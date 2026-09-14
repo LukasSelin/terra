@@ -122,10 +122,14 @@ func TestRiversHeadInTheHighGround(t *testing.T) {
 // The lakes are not in it. How big they are is how big the hollows are, which
 // is a fact about the ground and not about the rain once the rain fills them;
 // on seed 2 of the valley they are another eight tiles in a hundred.
+//
+// Eleven in a hundred and not ten. Seed 1 stood at 9.9 before the rock was
+// laid in beds, and a valley whose soft beds are hollowed out between hard
+// ones floods a little more of its floor: it came out at 10.4 with them.
 func TestAValleyHasTheWaterItsRainGives(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := NewLand(seed, DefaultTerms()).Grid
-		if share := riverShare(g); share < 0.02 || share > 0.10 {
+		if share := riverShare(g); share < 0.02 || share > 0.11 {
 			t.Errorf("seed %d came out %.1f%% water", seed, 100*share)
 		}
 	}

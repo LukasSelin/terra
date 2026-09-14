@@ -101,6 +101,9 @@ const (
 	fPlateau
 	fMountain
 	fPeak
+	fEscarpment
+	fMesa
+	fHogback
 	formClasses
 )
 
@@ -115,6 +118,55 @@ var formClass = [formClasses - waterClasses]class{
 	fPlateau - waterClasses:    {"plateau", color.RGBA{196, 132, 82, 255}},
 	fMountain - waterClasses:   {"mountains", color.RGBA{128, 104, 92, 255}},
 	fPeak - waterClasses:       {"peaks and ridges", color.RGBA{236, 232, 228, 255}},
+	fEscarpment - waterClasses: {"escarpment", color.RGBA{170, 60, 44, 255}},
+	fMesa - waterClasses:       {"mesa or butte", color.RGBA{222, 120, 60, 255}},
+	fHogback - waterClasses:    {"hogback", color.RGBA{110, 70, 130, 255}},
+}
+
+// softer is how much softer a rock has to be than the one above it for the
+// edge between them to be a scarp rather than a change of soil.
+const softer = 0.2
+
+// scarp says whether the ground at p is the steep edge of a hard bed over a
+// softer one: steep, and above a neighbour whose rock is softer.
+func scarp(g *terra.Grid, p geom.Pos, slope, steepAt float64) bool {
+	if slope < steepAt {
+		return false
+	}
+	t := g.At(p)
+	for _, d := range terra.Dirs {
+		q := g.Norm(geom.Pos{X: p.X + d.X, Y: p.Y + d.Y})
+		if !g.In(q) {
+			continue
+		}
+		if b := g.At(q); !b.Wet() && b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+			return true
+		}
+	}
+	return false
+}
+
+// hogback says whether the ground at p is a ridge of hard rock with softer,
+// lower ground on both sides of it: a tipped hard bed the weather has left
+// standing out of the soft ones either side.
+func hogback(g *terra.Grid, p geom.Pos) bool {
+	t := g.At(p)
+	for _, d := range terra.Dirs[:4] {
+		sides := 0
+		for _, s := range []int{1, -1} {
+			q := g.Norm(geom.Pos{X: p.X + s*d.X, Y: p.Y + s*d.Y})
+			if !g.In(q) {
+				break
+			}
+			if b := g.At(q); b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+				sides++
+			}
+		}
+		if sides == 2 {
+			return true
+		}
+	}
+	return false
 }
 
 func biomeOf(k uint8) class {
@@ -251,6 +303,18 @@ func classify(land *terra.Land) classes {
 	roughAt, veryRoughAt := quant(dryRelief, 0.55), quant(dryRelief, 0.8)
 	flatAt, steepAt, cliffAt := quant(drySlope, 0.4), quant(drySlope, 0.7), quant(drySlope, 0.85)
 
+	// Where the edges of the hard beds stand, and the flat hard ground a few
+	// tiles in from one: a mesa is a table of hard rock with a scarp round it.
+	edge := make([]float64, n)
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			if !g.Tiles[i].Wet() && scarp(g, g.PosOf(i), slope[i], steepAt) {
+				edge[i] = 1
+			}
+		}
+	})
+	nearEdge := boxMean(edge, g.W, g.H, 3, g.Wrap)
+
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
@@ -282,10 +346,16 @@ func classify(land *terra.Land) classes {
 				c.Form[i] = fCliff
 			case atSea:
 				c.Form[i] = fCoast
+			case edge[i] > 0:
+				c.Form[i] = fEscarpment
+			case above > 0 && slope[i] >= flatAt && hogback(g, p):
+				c.Form[i] = fHogback
 			case high && above > 0.5*spread && relief[i] >= roughAt:
 				c.Form[i] = fPeak
 			case byRiver:
 				c.Form[i] = fFloodplain
+			case height[i] >= upAt && slope[i] < flatAt && nearEdge[i] > 0 && t.Hard() >= 0.8:
+				c.Form[i] = fMesa
 			case high && slope[i] < flatAt && math.Abs(above) < 0.25*spread:
 				c.Form[i] = fPlateau
 			case high:

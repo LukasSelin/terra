@@ -171,6 +171,7 @@ type summary struct {
 	Flats                           share
 	SeaPct                          float64
 	AgeMax                          int
+	Waterfalls                      int
 	Biomes, Forms                   []share
 }
 
@@ -253,11 +254,34 @@ func measure(land *terra.Land) summary {
 	for _, b := range terra.Bedrocks() {
 		s.Bedrock = append(s.Bedrock, shareOf(b.String(), rock[b], land0, hex(rockColor[b])))
 	}
+	// Waterfalls: running water that leaves a hard bed for a softer one down a
+	// real fall, which is where a river drops over the edge of the rock.
+	for i := range g.Tiles {
+		t := &g.Tiles[i]
+		if t.Terrain != terra.Water || t.Flow <= riverFlow {
+			continue
+		}
+		p := g.PosOf(i)
+		var low *terra.Tile
+		for _, d := range terra.Dirs {
+			q := g.Norm(geom.Pos{X: p.X + d.X, Y: p.Y + d.Y})
+			if g.In(q) && (low == nil || g.At(q).Height < low.Height) {
+				low = g.At(q)
+			}
+		}
+		if low != nil && low.Hard() <= t.Hard()-softer && t.Height-low.Height >= waterfallDrop {
+			s.Waterfalls++
+		}
+	}
 	s.Plates = len(plates)
 	s.Frozen = shareOf("permafrost", frozen, land0, "")
 	s.Rivers = shareOf("flowing water", rivers, n, "")
 	return s
 }
+
+// waterfallDrop is how many metres a river has to fall in one tile, off a
+// hard bed onto a softer one, to be counted a waterfall.
+const waterfallDrop = 2.0
 
 // riverFlow is how much water, in cubic metres a second, a channel has to
 // carry to be drawn as running water rather than standing.
@@ -286,7 +310,7 @@ func (s summary) print() {
 	for _, x := range s.Forms {
 		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
-	fmt.Printf("\npermafrost %.1f%% of land, flowing water %.1f%% of map\n", s.Frozen.Pct, s.Rivers.Pct)
+	fmt.Printf("\npermafrost %.1f%% of land, flowing water %.1f%% of map, %d waterfalls\n", s.Frozen.Pct, s.Rivers.Pct, s.Waterfalls)
 	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
 	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
 		s.Moon, 2*(terra.TideM2+terra.TideS2), 2*(terra.TideM2-terra.TideS2), s.RangeP50, s.RangeP90, s.RangeMax, s.Flats.Pct)

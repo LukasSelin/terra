@@ -32,6 +32,11 @@ func digest(l *Land) string {
 			t.Height, t.Flow, t.Drain, t.Bedrock, t.Sand, t.Clay, t.Plate, t.Formed,
 			g.Age[i], t.Fenced, g.Traffic[i], g.Rain(i), g.Runoff(i), u, v, g.PressureOn(i, Year/4))
 	}
+	// And the piles under the tiles, bed by bed.
+	for i := range g.strata {
+		c := &g.strata[i]
+		fmt.Fprintf(h, "%v%v%v%v", c.n, c.top[:c.n], c.rock[:c.n], c.formed[:c.n])
+	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
