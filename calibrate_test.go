@@ -23,6 +23,10 @@ func TestCalibrate(t *testing.T) {
 		t.Skip("set TERRA_CALIBRATE=1 to print the calibration table")
 	}
 
+	// Where the map stands against real ground, before where it stands
+	// against itself: see yardstick_test.go.
+	printYardsticks()
+
 	fmt.Println("valley, seeds 1-5, as made:")
 	fmt.Println("  seed  wet%   upland%  broken%  ribs%   maxQ       landP   landR")
 	for seed := uint64(1); seed <= 5; seed++ {
