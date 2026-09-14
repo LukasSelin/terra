@@ -51,13 +51,19 @@ import (
 // search found. Of the yardsticks, only the small globes' hypsometric integral
 // at seed 6 falls outside, at 0.338.
 const (
-	shapeFloor   = 0.6473611255017592 // the least uplift, against the most
-	shapeRounds  = 3
-	shapeFall    = 0.8 // the fall at a channel head, before uplift and scale
-	shapeHead    = 4.0 // tiles a channel head drains
-	shapeOcean   = 1   // tiles a body of sea has to be for the ground to be graded to it
-	shapeLift    = 2.6523767491920225
-	shapeRough   = 1.2763006735954712 // metres of roughness each tile is given before the water is routed
+	shapeFloor  = 0.6473611255017592 // the least uplift, against the most
+	shapeRounds = 3
+	shapeFall   = 0.8 // the fall at a channel head, before uplift and scale
+	shapeHead   = 4.0 // tiles a channel head drains
+	shapeOcean  = 1   // tiles a body of sea has to be for the ground to be graded to it
+	shapeLift   = 2.6523767491920225
+	shapeRough  = 1.2763006735954712 // metres of roughness each tile is given before the water is routed
+	// shapeRock is how much steeper a channel stands for the rock it cuts:
+	// its fall goes as the rock's hardness to this power (Whipple and Tucker
+	// 1999: a steady channel's slope goes as its erodibility to -1/n, with n
+	// near one). Held under one, because a tile is a whole reach of river
+	// and not one step down it.
+	shapeRock    = 0.5
 	shapeTop     = 0.5233050488643692
 	shapeConcave = 0.5119282740307869
 )
@@ -98,6 +104,11 @@ func (g *Grid) shape() (area []float64) {
 		uplift[i] = shapeFloor + (1-shapeFloor)*clamp01((h[i]-lo)/(hi-lo))
 	}
 	g.fillFrom(h, root)
+	// The rock charges each fall against the map's middling rock, so that a
+	// map of one rock is shaped exactly as it was before there were beds. See
+	// shapeRock.
+	soft := 1 / g.meanHard()
+	was := g.heights()
 
 	recv := make([]int32, n)
 	run := make([]float64, n)
@@ -143,9 +154,22 @@ func (g *Grid) shape() (area []float64) {
 			}
 			gathered := math.Max(area[i], shapeHead) / shapeHead
 			fall := shapeFall / math.Sqrt(shapeHead) * uplift[i] * math.Pow(gathered, -shapeConcave)
+			// A channel over hard rock has to stand steeper to cut as fast as
+			// the ground rises, and one over soft rock less: so a river
+			// crossing from a hard bed onto a soft one drops over its edge.
+			// The rock is the rock the channel is cutting, half way up the
+			// fall it would have over middling rock.
+			if g.strata != nil {
+				mid := h[r] + 0.5*math.Min(Repose, fall)*run[i]
+				fall *= math.Pow(g.hardAt(int(i), mid)*soft, shapeRock)
+			}
 			h[i] = h[r] + math.Min(Repose, fall)*run[i]
 			base[i] = base[r]
 		}
+		// The beds are carried onto the ground this round laid, as they are
+		// through every pass that hands the ground its heights by rank.
+		g.restrata(was, h, nil)
+		copy(was, h)
 	}
 
 	top, most := math.Inf(-1), math.Inf(-1)
@@ -165,6 +189,7 @@ func (g *Grid) shape() (area []float64) {
 		x := clamp01((h[i] - base[i]) / top)
 		g.Tiles[i].Height = base[i] + shapeTop*most*(1-math.Pow(1-x, shapeLift))
 	}
+	g.restrata(was, g.heights(), nil)
 	return area
 }
 
