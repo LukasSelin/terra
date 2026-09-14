@@ -568,8 +568,7 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 	// what the epochs then do is sort it, which is what makes the fill of one
 	// basin coarse and the next one fine - and so which of them becomes
 	// sandstone and which shale.
-	g.fill()
-	g.drain()
+	g.drainAged()
 	g.soilTexture()
 	plates, mids := w.firstPlates(g, sea)
 	warpX, warpY := w.warp(g, spacing(g, len(mids)))
@@ -599,8 +598,7 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		// and shale come from.
 		g.wear(deepWeather)
 		g.meander(deepWeather)
-		g.fill()
-		g.drain()
+		g.drainAged()
 		g.keepBook(book, e)
 		plates, mids = w.reshape(g, plates, mids, touch, weld)
 		drift(plates, mids, through)
@@ -611,8 +609,23 @@ func (w *Land) history(g *Grid, epochs int, sea float64) {
 		g.soften()
 	}
 	w.normalise(g)
-	g.fill()
+	g.drainAged()
+}
+
+// drainAged works the water out in the middle of a history, with the sea
+// standing where the history floods itself to - see historySea, which is
+// where keepBook reads the sea bed from too. A young world has no sea of its
+// own until it is handed over, and without one every ocean floor on it was a
+// hollow to be filled: filled in for good, when filling meant raising the
+// ground, and now a lake the size of an ocean.
+func (g *Grid) drainAged() {
+	h := make([]float64, len(g.Tiles))
+	for i := range g.Tiles {
+		h[i] = g.Tiles[i].Height
+	}
+	g.sea = quantile(h, historySea)
 	g.drain()
+	g.sea = -1
 }
 
 // molten is the world before it had a crust. Each churn is a new surface half

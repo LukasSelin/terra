@@ -1,6 +1,8 @@
 package terra
 
 import (
+	"slices"
+
 	"github.com/LukasSelin/terra/geom"
 )
 
@@ -14,6 +16,8 @@ const (
 	Field
 	Rock // an outcrop: stone to cut, nothing to grow
 	Ice  // sea that never thaws: nothing to take, and walked over, not swum
+	Salt // a lake with no outlet, where the air takes all the water brings
+	Pan  // the dry floor of one: a crust of salt nothing grows on
 	// TerrainCount is how many kinds of ground there are. It sizes the
 	// tables that have to carry a row for each; see kind.go.
 	TerrainCount
@@ -174,6 +178,24 @@ type Grid struct {
 	// flood in relief.go.
 	sea float64
 
+	// The standing water, and the way all the water goes. rain and evap are
+	// what falls on each tile and what open water there would give back to
+	// the air, in millimetres a year, and aridity is how much drier than its
+	// latitude this map was asked to be. level is the surface of the lake a
+	// tile lies under, below zero where it lies under none; lakeOf says which
+	// lake that is and pans which tiles are the dry salt floor of one. down is
+	// the tile each tile's water goes to next, -1 where it goes no further,
+	// and route is every tile in an order that has each one after the tile
+	// its water goes to. See lake.go.
+	rain, evap []float64
+	aridity    float64
+	level      []float64
+	lakeOf     []int32
+	pans       []bool
+	Lakes      []Lake
+	down       []int32
+	route      []int32
+
 	// regions is which laden-walkable ground each tile is part of, and
 	// regionsStale whether the water has moved since it was worked out.
 	// See region.go.
@@ -240,7 +262,9 @@ func (g *Grid) At(p geom.Pos) *Tile {
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea}
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea,
+		aridity: g.aridity, level: slices.Clone(g.level), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
+		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.lenders = make([]uint8, len(g.Tiles))
 	c.layChunks()
@@ -410,7 +434,7 @@ func (g *Grid) Freezing(p geom.Pos) bool {
 		return false
 	}
 	i := g.Index(p)
-	return g.Tiles[i].Wet() && g.Tiles[i].Height > g.frost[i]+Icefall
+	return g.Tiles[i].Wet() && g.Surface(i) > g.frost[i]+Icefall
 }
 
 // freeze turns the water that never thaws to ice, and gives back to the water
@@ -429,10 +453,14 @@ func (g *Grid) freeze() {
 			i := y*g.W + x
 			t := &g.Tiles[i]
 			switch frozen := g.Freezing(p); {
-			case frozen && t.Terrain == Water:
+			case frozen && (t.Terrain == Water || t.Terrain == Salt):
 				t.Terrain, g.Fish[i] = Ice, 0
 			case !frozen && t.Terrain == Ice:
+				// A salt lake thaws back into a salt lake.
 				t.Terrain, g.Fish[i] = Water, 0
+				if g.closedLake(i) {
+					t.Terrain = Salt
+				}
 			}
 		}
 	})

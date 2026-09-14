@@ -114,7 +114,6 @@ func (w *Land) Erode() {
 	// And sideways: a river cuts the outside of its bends while the weather
 	// takes the hillsides down. See meander.go.
 	g.meander(1)
-	g.fill()
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
@@ -168,6 +167,12 @@ func (g *Grid) wear(by float64) {
 		p := geom.Pos{X: int(i) % g.W, Y: int(i) / g.W}
 		slope := g.Slope(p)
 
+		// Still water - a lake, or the flat a lake dries back to - stops the
+		// water, and everything the water was carrying goes down in it. That
+		// is how a lake silts up and how a basin fills, and it is the one
+		// place the load has to go when there is nowhere lower for it.
+		still := g.standing(int(i))
+
 		// What the water lays down here: more of it the gentler the ground,
 		// and more of the coarse than of the fine, which is the sorting. A
 		// tile takes the mixture the water had left to give it, not the
@@ -177,9 +182,12 @@ func (g *Grid) wear(by float64) {
 			slack := clamp01(1 - slope/SettleSlope)
 			for k := range settled {
 				settled[k] = load[i][k] * settleOf[k] * slack
+				if still {
+					settled[k] = load[i][k]
+				}
 				load[i][k] -= settled[k]
 			}
-			if t.Wet() {
+			if t.Wet() && !still {
 				// A river in flood puts most of its silt over the bank. That
 				// is what a flood plain is: not ground the river spared, but
 				// ground the river made. Without it the silt stays in the
@@ -215,6 +223,9 @@ func (g *Grid) wear(by float64) {
 		// water carries off the mixture that was there, and the sorting
 		// happens where it puts it down again rather than where it picks it
 		// up.
+		if still {
+			continue
+		}
 		stripped := by * Wash * math.Sqrt(t.Flow) * slope * hold(t)
 		change[i] -= stripped
 		was := parts(t)
@@ -224,7 +235,16 @@ func (g *Grid) wear(by float64) {
 
 		a := g.Aspect(p)
 		if a == (geom.Pos{}) {
-			continue // the water and everything in it leaves the map here
+			// Off the map, or into the sea, the water and everything in it
+			// leaves. Anywhere else it is the bottom of a hollow, and what it
+			// carried stays there.
+			if !g.underSea(int(i)) && !g.outlet(p.X, p.Y) {
+				for k := range load[i] {
+					change[i] += load[i][k]
+					gained[i][k] += load[i][k]
+				}
+			}
+			continue
 		}
 		down := int32(g.Index(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}))
 		for k := range load[i] {
@@ -266,8 +286,8 @@ func (g *Grid) resoil() {
 	const toward = 0.08
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() {
-			continue
+		if t.Wet() || t.Terrain == Pan {
+			continue // salt does not weather back into soil
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		// The rock underneath goes on making soil out of itself, so ground

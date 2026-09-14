@@ -14,7 +14,7 @@ func bends(g *Grid) (float64, int) {
 	best := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		d := g.Aspect(p)
+		d := g.flowStep(i)
 		if d == (geom.Pos{}) {
 			continue
 		}
@@ -31,7 +31,7 @@ func bends(g *Grid) (float64, int) {
 		if !g.Tiles[i].Wet() || from[i] == (geom.Pos{}) {
 			continue
 		}
-		out := g.Aspect(geom.Pos{X: i % g.W, Y: i / g.W})
+		out := g.flowStep(i)
 		if out == (geom.Pos{}) {
 			continue
 		}

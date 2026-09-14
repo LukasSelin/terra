@@ -8,37 +8,62 @@ import (
 
 // Every tile must have somewhere to send its water, or the drainage that
 // everything else is read from would be built on a landscape with holes in it.
+// Somewhere is the edge of the map, the sea, or a lake the air empties: never
+// a hollow in dry ground, and never round in a circle.
 func TestAllGroundDrainsSomewhere(t *testing.T) {
-	w := NewLandSized(4, 60, 40)
-	g := w.Grid
-	for y := 1; y < g.H-1; y++ {
-		for x := 1; x < g.W-1; x++ {
-			p := geom.Pos{X: x, Y: y}
-			if g.Aspect(p) == (geom.Pos{}) {
-				t.Fatalf("the ground at %v has nowhere lower to go; a hollow was left unfilled", p)
+	g := NewLandSized(4, 60, 40).Grid
+	drainsSomewhere(t, g)
+}
+
+// drainsSomewhere follows every tile's water to wherever it stops, and fails
+// if that is anywhere but the sea, the edge of the map, a closed lake or a
+// salt flat.
+func drainsSomewhere(t *testing.T, g *Grid) {
+	t.Helper()
+	for i := range g.Tiles {
+		p := g.PosOf(i)
+		for steps := 0; ; steps++ {
+			if steps > len(g.Tiles) {
+				t.Fatalf("the water from %v goes round in a circle", g.PosOf(i))
 			}
+			q, ok := g.Downstream(p)
+			if !ok {
+				break
+			}
+			p = q
+		}
+		j := g.Index(p)
+		edge := g.outlet(p.X, p.Y)
+		if !edge && !g.underSea(j) && !g.closedLake(j) && !g.pans[j] {
+			t.Fatalf("the water from %v stops at %v, in a hollow with nowhere to go", g.PosOf(i), p)
 		}
 	}
 }
 
 // Water gathers as it goes: a tile carries everything its uphill neighbours
 // sent it, so flow only ever grows downstream. That is what makes the rivers
-// come out where they do rather than where they were put.
+// come out where they do rather than where they were put. The one place it
+// thins is the outlet of a lake, which passes on what the lake was given less
+// what its surface gave the air.
 func TestFlowOnlyGathers(t *testing.T) {
-	w := NewLandSized(5, 50, 40)
-	g := w.Grid
-	for y := 0; y < g.H; y++ {
-		for x := 0; x < g.W; x++ {
-			p := geom.Pos{X: x, Y: y}
-			a := g.Aspect(p)
-			if a == (geom.Pos{}) {
-				continue
-			}
-			down := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.At(down).Flow < g.At(p).Flow-1e-9 {
-				t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
-					p, g.At(p).Flow, down, g.At(down).Flow)
-			}
+	g := NewLandSized(5, 50, 40).Grid
+	flowOnlyGathers(t, g)
+}
+
+func flowOnlyGathers(t *testing.T, g *Grid) {
+	t.Helper()
+	for i := range g.Tiles {
+		if g.lakeOf[i] >= 0 {
+			continue
+		}
+		p := g.PosOf(i)
+		down, ok := g.Downstream(p)
+		if !ok {
+			continue
+		}
+		if g.At(down).Flow < g.At(p).Flow-1e-9 {
+			t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
+				p, g.At(p).Flow, down, g.At(down).Flow)
 		}
 	}
 }
@@ -63,14 +88,14 @@ func TestRiversRunOffTheMap(t *testing.T) {
 	}
 	p := start
 	for step := 0; step < len(g.Tiles); step++ {
-		a := g.Aspect(p)
-		if a == (geom.Pos{}) {
+		q, ok := g.Downstream(p)
+		if !ok {
 			if p.X == 0 || p.Y == 0 || p.X == g.W-1 || p.Y == g.H-1 {
 				return // it reached the edge and left
 			}
 			t.Fatalf("the river stops at %v, which is not the edge of the map", p)
 		}
-		p = geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
+		p = q
 	}
 	t.Fatal("following the river downhill never ended")
 }

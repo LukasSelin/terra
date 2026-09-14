@@ -71,22 +71,23 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if share := float64(sea) / float64(len(g.Tiles)); share < 0.25 || share > 0.35 {
 		t.Fatalf("a third of the globe should be sea; %.2f is", share)
 	}
-	// Follow the water down from every watercourse: it ends in the sea, and
-	// nowhere else. A pole is not an outlet - see Grid.outlet - so a river
-	// that ends at one has been left hanging over the top of the map, and a
-	// river that ends anywhere else is in a hollow the flood should have
-	// filled.
+	// Follow the water down from every watercourse: it ends in the sea, or
+	// in a lake with no outlet, and nowhere else. A pole is not an outlet -
+	// see Grid.outlet - so a river that ends at one has been left hanging over
+	// the top of the map, and a river that ends anywhere else is in a hollow
+	// the water should have filled.
 	stranded, poleward := 0, 0
 	for i := range g.Tiles {
 		if !g.Tiles[i].Wet() || g.underSea(i) {
 			continue
 		}
 		p := g.PosOf(i)
-		for steps := 0; steps < g.W+g.H; steps++ {
-			a := g.Aspect(p)
-			if a == (geom.Pos{}) {
+		for steps := 0; steps < len(g.Tiles); steps++ {
+			q, ok := g.Downstream(p)
+			if !ok {
+				j := g.Index(p)
 				switch {
-				case g.underSea(g.Index(p)):
+				case g.underSea(j), g.closedLake(j), g.pans[j]:
 				case p.Y == 0 || p.Y == g.H-1:
 					poleward++
 				default:
@@ -94,7 +95,7 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 				}
 				break
 			}
-			p = g.Norm(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y})
+			p = q
 		}
 	}
 	if stranded > 0 {

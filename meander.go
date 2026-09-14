@@ -89,7 +89,7 @@ func (g *Grid) meander(by float64) {
 	best := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		d := g.Aspect(p)
+		d := g.flowStep(i)
 		if d == (geom.Pos{}) {
 			continue
 		}
@@ -116,7 +116,7 @@ func (g *Grid) meander(by float64) {
 			continue // nothing above it: a spring has no bend to cut
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		out := g.Aspect(p)
+		out := g.flowStep(i)
 		if out == (geom.Pos{}) {
 			continue
 		}

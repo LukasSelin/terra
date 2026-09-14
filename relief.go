@@ -17,11 +17,12 @@ import (
 // rivers follow it by being recomputed rather than by being redrawn.
 //
 // The order is the one a landscape actually obeys. Raise the ground; fill the
-// hollows that have no outlet, because a hollow either fills until it spills
-// or it is a lake; send every tile's water to its lowest neighbour; add up
-// what passes through each tile; and call the tiles that carry enough of it a
-// river. Fertility, woods and outcrops then read off the finished land
-// instead of being scattered over it.
+// hollows, each until it spills or until the air takes off it what runs into
+// it, which is a lake or a salt lake; send every tile's water down the
+// steepest fall and every lake's out of its outlet; add up what passes
+// through each tile; and call the tiles that carry enough of it a river.
+// Fertility, woods and outcrops then read off the finished land instead of
+// being scattered over it.
 
 // TileSpan is how wide a tile is on the ground, in metres. It is what turns a
 // difference in height into a slope, and so the only reason heights and
@@ -718,6 +719,9 @@ func (g *Grid) incise() {
 	}
 	cut := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
+		if g.standing(i) {
+			continue // still water cuts nothing: it is where the cutting stops
+		}
 		// Charged by the water, and paid by the rock: the same river cuts a
 		// gorge through shale and is turned aside by granite.
 		cut[i] = Incise * math.Sqrt(g.Tiles[i].Flow/most) / g.Tiles[i].Hard()
@@ -760,7 +764,8 @@ func (g *Grid) spread(v []float64) []float64 {
 
 // outlet reports whether water leaves the map at a tile: the edge of a
 // valley, and on a globe nothing at all, because a globe has no edge to leave
-// by. Its water leaves at the sea, which fill already starts from.
+// by. Its water leaves at the sea, which the drainage already counts as
+// somewhere water leaves.
 //
 // The poles used to count. They are the two rows a cylinder stops at, so they
 // looked like edges and were treated as ones - which made every tile of them
@@ -769,10 +774,10 @@ func (g *Grid) spread(v []float64) []float64 {
 // whichever of them was nearer. The sea was put in to stop rivers running to
 // a pole and cutting the country in two; this stops them wanting to.
 //
-// A globe with no sea has nowhere else for its water to go, and a map with no
-// outlet anywhere cannot be filled at all - every tile would be raised to the
-// height of the highest ground on it. So that map, and only that map, still
-// drains at its poles.
+// A globe with no sea has nowhere else for its water to go, and on a map with
+// no outlet anywhere every drop that falls stays on it - the whole of it one
+// basin, standing as full as the weather keeps it. So that map, and only that
+// map, still drains at its poles.
 func (g *Grid) outlet(x, y int) bool {
 	if !g.Wrap {
 		return x == 0 || y == 0 || x == g.W-1 || y == g.H-1
@@ -780,146 +785,12 @@ func (g *Grid) outlet(x, y int) bool {
 	return g.sea < 0 && (y == 0 || y == g.H-1)
 }
 
-// fill raises every hollow to the level at which it would spill, so that all
-// ground drains somewhere and water is never asked to run uphill. It works
-// inward from the sea and from the edges of the map, always from the lowest
-// ground reached so far, which is the order water itself would fill a
-// landscape in.
-func (g *Grid) fill() {
-	filled := make([]float64, len(g.Tiles))
-	done := make([]bool, len(g.Tiles))
-	q := &heightQueue{}
-	for y := 0; y < g.H; y++ {
-		for x := 0; x < g.W; x++ {
-			edge := g.outlet(x, y)
-			i := y*g.W + x
-			if !edge && !g.underSea(i) {
-				continue
-			}
-			filled[i], done[i] = g.Tiles[i].Height, true
-			q.push(heightNode{h: filled[i], idx: int32(i)})
-		}
-	}
-	// A hair of fall per tile, so that a filled flat still has a direction to
-	// send its water and does not become a puddle with no outlet.
-	const seep = 1e-4
-	for q.len() > 0 {
-		n := q.pop()
-		p := geom.Pos{X: int(n.idx) % g.W, Y: int(n.idx) / g.W}
-		for _, off := range Dirs {
-			c := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-			if !g.In(c) {
-				continue
-			}
-			j := g.Index(c)
-			if done[j] {
-				continue
-			}
-			filled[j] = math.Max(g.Tiles[j].Height, filled[n.idx]+seep)
-			done[j] = true
-			q.push(heightNode{h: filled[j], idx: int32(j)})
-		}
-	}
-	for i := range g.Tiles {
-		g.Tiles[i].Height = filled[i]
-	}
-}
-
-// drain sends every tile's water to its lowest neighbour and adds up what
-// passes through, so that Flow is the share of the map draining through each
-// tile. Tiles are settled from the highest down, which is the only order in
-// which a tile's own total is complete before it is passed on.
-func (g *Grid) drain() {
-	n := len(g.Tiles)
-	// Which way the water leaves each tile, read before any of it moves.
-	// The aspect is a reading of the heights and the heights do not change
-	// here, so it is the same answer taken now as taken in the walk below.
-	// Taken now it is eight neighbours read row by row over the goroutines;
-	// taken there it was eight neighbours read in the order the tiles happen
-	// to sort into, which as far as the memory is concerned is no order at
-	// all. -1 is the edge of the map, where the water leaves.
-	down := make([]int32, n)
-	g.EachRow(func(y int) {
-		for i := y * g.W; i < (y+1)*g.W; i++ {
-			p := geom.Pos{X: i % g.W, Y: i / g.W}
-			a := g.Aspect(p)
-			if a == (geom.Pos{}) {
-				down[i] = -1
-				continue
-			}
-			down[i] = int32(g.Index(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}))
-		}
-	})
-	rain := g.rainfall()
-	order := make([]heightNode, n)
-	for i := range order {
-		order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
-		g.Tiles[i].Flow = rain[i]
-	}
-	// Highest first, ties by position, which is a total order: every tile
-	// sits in exactly one place and no two of them may be swapped, so what
-	// comes out does not depend on how it was sorted.
-	//
-	// Each height travels beside its tile's number rather than being looked
-	// up through it. A comparison used to be two reads at random into
-	// seventy megabytes of ground; it is now two reads of eight bytes lying
-	// beside each other, and the sort has a tenth of the ground to walk.
-	slices.SortFunc(order, func(a, b heightNode) int {
-		if a.h != b.h {
-			return cmp.Compare(b.h, a.h)
-		}
-		return cmp.Compare(a.idx, b.idx)
-	})
-	for _, nd := range order {
-		if down[nd.idx] < 0 {
-			continue
-		}
-		g.Tiles[down[nd.idx]].Flow += g.Tiles[nd.idx].Flow
-	}
-}
-
-// rainfall is what each tile has to send somewhere, as a share of the whole
-// map's water, so that the flows still add to one and every threshold read off
-// them means what it meant. See rainFlat.
-//
-// How high the ground stands is read against the map's own ground and not
-// against a fixed height, because this runs in the middle of a history as well
-// as at the end of one, where the heights are whatever the last epoch left and
-// not yet anything a constant would recognise. The ends are quantiles rather
-// than the lowest and highest tiles for the usual reason - the highest tile is
-// one tile, and how extreme one tile in half a million gets is a fact about
-// how many tiles there are.
-func (g *Grid) rainfall() []float64 {
-	dry := make([]float64, 0, len(g.Tiles))
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			dry = append(dry, g.Tiles[i].Height)
-		}
-	}
-	rain := make([]float64, len(g.Tiles))
-	if len(dry) == 0 {
-		// A map wholly under water: nothing runs off it, and the flows may
-		// not all be zero or every threshold read off them is meaningless.
-		for i := range rain {
-			rain[i] = 1 / float64(len(rain))
-		}
-		return rain
-	}
-	q := quantiles(dry, 0.05, 0.95)
-	foot, reach := q[0], math.Max(1e-9, q[1]-q[0])
-	total := 0.0
-	for i := range g.Tiles {
-		if g.underSea(i) {
-			continue
-		}
-		rain[i] = rainFlat + (rainHigh-rainFlat)*clamp01((g.Tiles[i].Height-foot)/reach)
-		total += rain[i]
-	}
-	for i := range rain {
-		rain[i] /= total
-	}
-	return rain
-}
+// Where the water stands and which way it goes are worked out in lake.go:
+// see Grid.drain. How high the ground stands is read into the rain against
+// the map's own ground and not against a fixed height, because the drainage
+// is taken in the middle of a history as well as at the end of one, where the
+// heights are whatever the last epoch left and not yet anything a constant
+// would recognise.
 
 // carve puts the water where the flow says it goes: the wettest waterShare of
 // the map is river, and the heaviest of it spreads onto the lower bank beside
@@ -936,10 +807,12 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// river is the share it always was - this decides which tiles those are,
 	// and not how many.
 	cutting := make([]float64, len(g.Tiles))
-	flows := make([]float64, len(g.Tiles))
+	flows := make([]float64, 0, len(g.Tiles))
 	for i := range g.Tiles {
 		cutting[i] = g.Tiles[i].Flow * math.Pow(g.Slope(g.PosOf(i)), channelTheta)
-		flows[i] = g.Tiles[i].Flow
+		if !g.standing(i) {
+			flows = append(flows, g.Tiles[i].Flow)
+		}
 	}
 	cut := quantile(append([]float64(nil), cutting...), 1-waterShare)
 	// Whether a river is great enough to spread onto its banks is a question
@@ -973,10 +846,15 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// following all of it put nine tiles in a hundred of the default valley
 	// under water against the four and a half it asks for, because the
 	// followed-down trunks are tiles nobody counted.
+	//
+	// The lakes are water before any channel is laid, as the sea is, and a
+	// channel that reaches one stops there: what goes on is the river out of
+	// its outlet, which is a head of its own. They are not counted against
+	// the share, which is a share of watercourse.
 	wet := make([]bool, len(g.Tiles))
 	land := 0
 	for i := range g.Tiles {
-		if g.underSea(i) {
+		if g.underSea(i) || g.lakeOf[i] >= 0 {
 			wet[i] = true
 		} else {
 			land++
@@ -985,28 +863,20 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	want := int(waterShare * float64(len(g.Tiles)))
 	laid := 0
 	lay := func(from int) {
-		for j := from; !wet[j]; {
+		for j := from; !wet[j] && !g.pans[j]; {
 			wet[j], laid = true, laid+1
-			a := g.Aspect(g.PosOf(j))
-			if a == (geom.Pos{}) {
-				return // a hollow: the water stands here
-			}
-			p := g.PosOf(j)
-			q := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.Wrap {
-				q = g.Norm(q)
-			}
-			if !g.In(q) {
+			d := g.down[j]
+			if d < 0 {
 				return // off the map, which is where a valley's water goes
 			}
-			j = g.Index(q)
+			j = int(d)
 		}
 	}
 	// Hardest-working first, ties by position so that the same map comes out
 	// however the sort happened to run.
 	order := make([]heightNode, 0, land)
 	for i := range g.Tiles {
-		if !g.underSea(i) {
+		if !wet[i] && !g.pans[i] {
 			order = append(order, heightNode{h: cutting[i], idx: int32(i)})
 		}
 	}
@@ -1033,13 +903,13 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// The great rivers spread onto the ground beside them that the flood
 	// reaches: see bankRise.
 	for i := range g.Tiles {
-		if g.Tiles[i].Flow < big {
+		if g.Tiles[i].Flow < big || g.standing(i) {
 			continue
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		for _, off := range Dirs {
 			c := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-			if g.In(c) && g.Height(c) <= g.Height(p)+bankRise {
+			if g.In(c) && !g.pans[g.Index(c)] && g.Height(c) <= g.Height(p)+bankRise {
 				wet[g.Index(c)] = true
 			}
 		}
@@ -1047,11 +917,39 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		held := t.Mark != None || t.Owner != 0
+		// What the ground should be: a salt lake where a lake has no outlet,
+		// water wherever else the water is, a salt flat on the dry floor of a
+		// closed basin, and ground everywhere else.
+		want := Grass
 		switch {
-		case wet[i] && !t.Wet() && !held:
-			t.Terrain, g.Wood[i], g.Wild[i], g.Age[i] = Water, 0, 0, 0
-			g.Fish[i] = 0.7 + 0.3*rng.Float64()
-		case !wet[i] && t.Wet():
+		case g.closedLake(i):
+			want = Salt
+		case wet[i]:
+			want = Water
+		case g.pans[i]:
+			want = Pan
+		}
+		switch {
+		case want == t.Terrain:
+		case (want == Water || want == Salt) && t.Terrain == Ice:
+			// Frozen over; freeze says whether it still is.
+		case want == Water || want == Salt:
+			if !t.Wet() {
+				if held {
+					continue
+				}
+				g.Wood[i], g.Wild[i], g.Age[i] = 0, 0, 0
+			}
+			t.Terrain, g.Fish[i] = want, 0
+			if want == Water {
+				g.Fish[i] = 0.7 + 0.3*rng.Float64()
+			}
+		case want == Pan:
+			if held || t.Terrain == Field {
+				continue
+			}
+			t.Terrain, g.Fish[i], g.Wood[i], g.Wild[i], g.Age[i] = Pan, 0, 0, 0, 0
+		case t.Wet() || t.Terrain == Pan:
 			t.Terrain, g.Fish[i] = Grass, 0
 		}
 	}
@@ -1065,95 +963,37 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 // carry a whole gully's worth and still be dry as a bone. Flood plains sit at
 // nothing, terraces a few metres up, hillsides tens.
 //
-// It is computed by following each tile's water down to the river it joins and
-// adding up the fall on the way. Tiles are settled lowest first, so the tile
-// downstream is always finished before the one that drains into it.
+// It is computed by following each tile's water down to the water it joins and
+// adding up the fall on the way. Tiles are settled in the order the drainage
+// reached them, so the tile downstream is always finished before the one that
+// drains into it. A salt flat is where water stands when it stands at all, so
+// it is at its water; and ground lying in a hollow too shallow to hold a lake
+// is at the water that crosses it, and not below it.
 func (g *Grid) height() {
-	n := len(g.Tiles)
-	order := make([]int32, n)
 	lowest := math.Inf(1)
-	for i := range order {
-		order[i] = int32(i)
+	for i := range g.Tiles {
 		lowest = math.Min(lowest, g.Tiles[i].Height)
 	}
-	sort.Slice(order, func(a, b int) bool {
-		ha, hb := g.Tiles[order[a]].Height, g.Tiles[order[b]].Height
-		if ha != hb {
-			return ha < hb
-		}
-		return order[a] < order[b]
-	})
-	for _, i := range order {
+	for _, i := range g.route {
 		t := &g.Tiles[i]
-		if t.Wet() {
+		if t.Wet() || g.pans[i] {
 			t.Drain = 0
 			continue
 		}
-		p := geom.Pos{X: int(i) % g.W, Y: int(i) / g.W}
-		a := g.Aspect(p)
-		if a == (geom.Pos{}) {
+		d := g.down[i]
+		if d < 0 {
 			t.Drain = t.Height - lowest // the water leaves the map here
 			continue
 		}
-		down := g.At(geom.Pos{X: p.X + a.X, Y: p.Y + a.Y})
-		t.Drain = t.Height - down.Height + down.Drain
+		t.Drain = math.Max(0, t.Height-g.Surface(int(d))+g.Tiles[d].Drain)
 	}
 }
 
-// heightNode and heightQueue are a smallest-first heap of tiles by height,
-// for filling hollows.
+// heightNode is a tile with a number beside it to sort it by: its height, or
+// how hard the water is cutting it.
 type heightNode struct {
 	h   float64
 	idx int32
-}
-
-type heightQueue []heightNode
-
-func (q *heightQueue) len() int { return len(*q) }
-
-func (q *heightQueue) push(n heightNode) {
-	*q = append(*q, n)
-	i := len(*q) - 1
-	for i > 0 {
-		p := (i - 1) / 2
-		if !lower((*q)[i], (*q)[p]) {
-			break
-		}
-		(*q)[i], (*q)[p] = (*q)[p], (*q)[i]
-		i = p
-	}
-}
-
-func (q *heightQueue) pop() heightNode {
-	old := *q
-	top := old[0]
-	last := len(old) - 1
-	old[0] = old[last]
-	old = old[:last]
-	*q = old
-	i := 0
-	for {
-		l, best := 2*i+1, i
-		if l < len(old) && lower(old[l], old[best]) {
-			best = l
-		}
-		if r := l + 1; r < len(old) && lower(old[r], old[best]) {
-			best = r
-		}
-		if best == i {
-			break
-		}
-		old[i], old[best] = old[best], old[i]
-		i = best
-	}
-	return top
-}
-
-func lower(a, b heightNode) bool {
-	if a.h != b.h {
-		return a.h < b.h
-	}
-	return a.idx < b.idx
 }
 
 // The sea. A valley has none: its water leaves at the edges of the map. A

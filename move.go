@@ -33,6 +33,10 @@ var moveCost = [TerrainCount]float64{
 	// dearer than open grass and cheaper than anything with a slope on it.
 	// It is not water's 3.5 because nobody is swimming - see Tile.Deep.
 	Ice: 1.4,
+	// A salt lake is swum like any other water. A salt flat is level and
+	// firm, and costs what open grass does.
+	Salt: 3.5,
+	Pan:  1,
 }
 
 // Saving is what a road laid on p would take off each crossing of it, as a
@@ -140,7 +144,7 @@ func (g *Grid) StepCostFor(from, to geom.Pos, holder Holder) float64 {
 		return c
 	}
 	c += g.fenceCost(int32(from.Y*g.W+from.X), int32(to.Y*g.W+to.X), holder)
-	if d := g.Height(to) - g.Height(from); d > 0 {
+	if d := g.Surface(g.Index(to)) - g.Surface(g.Index(from)); d > 0 {
 		return c + Climb*d
 	} else {
 		return c - Descend*d

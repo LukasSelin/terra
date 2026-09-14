@@ -61,6 +61,15 @@ var terrains = [TerrainCount]terrain{
 	// not share with open water is that somebody can walk on it; that is
 	// Tile.Deep, which is the walker's question and not the map-maker's.
 	Ice: {name: "ice", wet: true, hold: 1},
+	// Salt is a lake with no way out: water that arrives and never leaves
+	// except into the air, and leaves what it carried behind. It is water in
+	// every sense the map-maker means and nothing lives in it.
+	Salt: {name: "salt lake", wet: true, hold: 1},
+	// Pan is the floor of a lake that the air keeps dry, or the ring a salt
+	// lake has shrunk back from: flat, crusted and bare. It is ground and not
+	// water, and a loose crust of silt and salt holds against the weather
+	// about as well as bare rock does.
+	Pan: {name: "salt flat", hold: 0.3},
 }
 
 // String is what this ground is called.

@@ -103,7 +103,7 @@ func tableCost(t *Tile) float64 {
 func tableStep(g *Grid, from, to int32) float64 {
 	t := &g.Tiles[to]
 	step := tableCost(t)
-	if d := t.Height - g.Tiles[from].Height; d > 0 {
+	if d := g.Surface(int(to)) - g.Surface(int(from)); d > 0 {
 		step += Climb * d
 	} else {
 		step -= Descend * d

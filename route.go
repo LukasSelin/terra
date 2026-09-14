@@ -427,14 +427,16 @@ func (r *Router) fromSurvey(to geom.Pos) float64 {
 }
 
 // stepInto is what entering one tile from a neighbour costs: the ground
-// being entered, and the climb or the descent into it.
+// being entered, and the climb or the descent into it. Over a lake the climb
+// is read off the water and not the bed: a swimmer does not go down to the
+// bottom and up again.
 func stepInto(g *Grid, from, to int32) float64 {
 	t := &g.Tiles[to]
 	step := moveCost[t.Terrain]
 	if t.Mark != None {
 		step = markCost[t.Mark]
 	}
-	if d := t.Height - g.Tiles[from].Height; d > 0 {
+	if d := g.Surface(int(to)) - g.Surface(int(from)); d > 0 {
 		step += Climb * d
 	} else {
 		step -= Descend * d

@@ -5,6 +5,10 @@ import (
 	"math"
 )
 
+// panSoil is what a salt flat will grow: next to nothing, because what the
+// water left behind on it is salt.
+const panSoil = 0.05
+
 // GenerateTerrain raises the ground, lets the water find its way down it, and
 // reads everything else off what that leaves: the woods where it is damp and
 // not too steep, the outcrops where it is high and bare, the good soil on the
@@ -19,6 +23,7 @@ func (w *Land) Generate(cfg Terms) {
 	width, height := cfg.Width, cfg.Height
 	g := NewGrid(width, height)
 	g.Wrap = cfg.Wrap
+	g.aridity = cfg.Aridity
 
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both
@@ -31,13 +36,11 @@ func (w *Land) Generate(cfg Terms) {
 		w.layBedrock(g)
 	}
 	g.flood(cfg.SeaShare, w.RNG)
-	g.fill()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
 	// goes: incise moves the ground, so the drainage has to be taken again on
 	// the ground it left. See Incise.
 	g.incise()
-	g.fill()
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
@@ -150,6 +153,10 @@ func (w *Land) Generate(cfg Terms) {
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() {
+			continue
+		}
+		if t.Terrain == Pan {
+			g.Fertility[i], g.Rich[i] = panSoil, panSoil
 			continue
 		}
 		g.Fertility[i] = g.SoilAt(geom.Pos{X: i % width, Y: i / width})

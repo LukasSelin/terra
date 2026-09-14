@@ -110,6 +110,12 @@ type Terms struct {
 	// over: 0 draws it, and anything else makes it out of its own history.
 	// See history.go.
 	Epochs int
+	// Aridity is how much drier than its latitude the land is, from nothing
+	// to all of it: 0 is the rain the latitude gives, and 0.7 takes seven
+	// tenths of that away, which is a dry steppe on a temperate valley and
+	// enough that most of its hollows keep their water to themselves. See
+	// lake.go.
+	Aridity float64
 }
 
 // DefaultTerms is the valley: the default size, with edges, drawn rather

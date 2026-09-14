@@ -23,7 +23,9 @@ for day := 0; ; day++ {
 ## What it knows
 
 The ground - height, flow, drainage, the rock under it and the sand and clay
-over that, which plate it rides and which age its rock dates from. The
+over that, which plate it rides and which age its rock dates from. The lakes
+standing in its hollows: full and running over where the rain keeps them so,
+salt and shrunk back, or dry pans, where the air takes what comes in. The
 weather over it, by latitude and by height and by season. What grows on it
 and how far along it has come. How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds

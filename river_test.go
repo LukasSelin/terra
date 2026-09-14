@@ -43,20 +43,12 @@ func TestARiverRunsAllTheWayDown(t *testing.T) {
 		g := NewLand(3, cfg).Grid
 		broken, rivers := 0, 0
 		for i := range g.Tiles {
-			if !g.Tiles[i].Wet() || g.underSea(i) {
-				continue
+			if !g.Tiles[i].Wet() || g.underSea(i) || g.lakeOf[i] >= 0 {
+				continue // the sea, and standing water, which a lake is
 			}
 			rivers++
-			p := g.PosOf(i)
-			a := g.Aspect(p)
-			if a == (geom.Pos{}) {
-				continue // standing water, which a filled hollow is
-			}
-			q := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.Wrap {
-				q = g.Norm(q)
-			}
-			if !g.In(q) {
+			q, ok := g.Downstream(g.PosOf(i))
+			if !ok {
 				continue // off the map, which is where a valley's water goes
 			}
 			if !g.At(q).Wet() {
@@ -119,10 +111,19 @@ func TestRiversHeadInTheHighGround(t *testing.T) {
 // have. Laying each channel from its head down to the sea adds tiles nobody
 // counted - the trunks - and counting only the heads put nine tiles in a
 // hundred of a valley under water against the four and a half it asks for.
+//
+// The lakes are not in the share. They are as big as the hollows the ground
+// has, which is a fact about the ground and not a figure asked for, and on
+// the default valley they are another three to eight tiles in a hundred.
 func TestAMapGetsTheWaterItAsksFor(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := NewLand(seed, DefaultTerms()).Grid
-		wet := g.Count(func(t *Tile) bool { return t.Wet() })
+		wet := 0
+		for i := range g.Tiles {
+			if g.Tiles[i].Wet() && g.lakeOf[i] < 0 {
+				wet++
+			}
+		}
 		share := float64(wet) / float64(len(g.Tiles))
 		if share < waterShare/2 || share > 2*waterShare {
 			t.Errorf("seed %d came out %.1f%% water, against the %.1f%% asked for",

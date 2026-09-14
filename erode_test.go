@@ -90,19 +90,8 @@ func TestTheDrainageSurvivesWeathering(t *testing.T) {
 	for age := 0; age < 25; age++ {
 		w.Erode()
 	}
-	for y := 1; y < g.H-1; y++ {
-		for x := 1; x < g.W-1; x++ {
-			p := geom.Pos{X: x, Y: y}
-			a := g.Aspect(p)
-			if a == (geom.Pos{}) {
-				t.Fatalf("weather left a hollow at %v with nowhere to drain", p)
-			}
-			down := geom.Pos{X: p.X + a.X, Y: p.Y + a.Y}
-			if g.At(down).Flow < g.At(p).Flow-1e-9 {
-				t.Fatalf("at %v the water thins going downhill", p)
-			}
-		}
-	}
+	drainsSomewhere(t, g)
+	flowOnlyGathers(t, g)
 }
 
 // A river may take a course it did not have, but it does not take the market
