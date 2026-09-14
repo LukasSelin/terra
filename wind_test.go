@@ -157,7 +157,7 @@ func TestALowTurnsTheOtherWaySouthOfTheEquator(t *testing.T) {
 		}
 		n := e.w * e.h
 		u, v, p := make([]float32, n), make([]float32, n), make([]float32, n)
-		e.solve(0, extra, nil, u, v, p)
+		e.solve(0, e.airTemp(0), extra, nil, u, v, p)
 		// East of the middle, a wind turning anticlockwise blows north, and
 		// one blowing in blows west.
 		i := cy*e.w + cx + int(math.Round(800e3/e.dx[cy]))

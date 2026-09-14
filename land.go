@@ -138,6 +138,36 @@ type Terms struct {
 	// as wet. Nothing, as a Terms written without it says, is the real world's.
 	// See weather.go.
 	Wetness float64
+	// Woods and Growth say whether where trees stand and how fast green things
+	// grow are read off the climate, the way the real world's are, or off the
+	// rules a settlement game was tuned on: a fixed share of the land wooded,
+	// and a growth that never stops in winter. The rules are what give a
+	// settlement open ground to farm and a winter it can live through; the
+	// climate is what gives a globe a desert with no forest in it and an
+	// Arctic that grows nothing in January. Left unsaid, each is the climate's
+	// on a globe and the rules' on a valley. See Rule.
+	Woods, Growth Rule
+}
+
+// Rule is which of two readings of the land a world is made with: its tuned
+// rules or its climate.
+type Rule uint8
+
+const (
+	// ByShape is the climate on a globe and the tuned rules on a valley.
+	ByShape Rule = iota
+	// Tuned is the rules a settlement game was tuned on. See woodsShare and
+	// WinterGrowth.
+	Tuned
+	// ByClimate is the climate: woods where the rain outruns what the air
+	// could take back, and growth by the warm days and the rain. See
+	// Grid.WoodsAt and climateGrowth.
+	ByClimate
+)
+
+// climate reports whether r, on a map that wraps or not, reads the climate.
+func (r Rule) climate(wrap bool) bool {
+	return r == ByClimate || (r == ByShape && wrap)
 }
 
 // DefaultTerms is the valley: the default size, with edges, drawn rather

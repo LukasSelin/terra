@@ -207,7 +207,7 @@ type airEnv struct {
 	wrap       bool
 
 	lat  []float64 // the latitude of each row of cells on the planet, degrees
-	hemi []float64 // how much of the year's swing a row has, signed by hemisphere
+	hemi []float64 // how much of the temperate year's swing a row's air has, signed by hemisphere
 	mean []float64 // the year's mean temperature at sea level on each row
 	dx   []float64 // metres across a cell along each row
 	dy   float64   // and down one
@@ -264,6 +264,14 @@ func newAirEnv(g *Grid) *airEnv {
 		}
 		k := float64(cell)
 		lat, mean, dx = lat/k, mean/k, dx/k
+		// The wind keeps the year its rivers were calibrated on, the temperate
+		// swing capped at Temperate's, and not solarSwing's: read at the
+		// growing swing, the high latitudes' continents drove thermal lows
+		// hard enough to move the rain, and the small globe at twice the
+		// resolution cut its channels to a concavity of 0.14 against 0.24,
+		// breaking the resolution yardstick. The ground's year and the air's
+		// share seasonTemp and differ only in this factor poleward of
+		// Temperate; bringing them together is a question for the water.
 		e.hemi[cy] = math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
 		if !g.Wrap {
 			// A valley is one latitude's weather, but the planet under it
@@ -536,7 +544,7 @@ func windsFor(g *Grid) *Winds {
 	// The two equinoxes are the same day to the air, so the autumn's is the
 	// spring's.
 	InParallel(phases-1, workers, func(k, _ int) {
-		e.solve(phaseSin[k], nil, nil, w.u[k], w.v[k], w.p[k])
+		e.solve(phaseSin[k], e.airTemp(phaseSin[k]), nil, nil, w.u[k], w.v[k], w.p[k])
 	})
 	copy(w.u[3], w.u[1])
 	copy(w.v[3], w.v[1])
@@ -550,29 +558,48 @@ func windsFor(g *Grid) *Winds {
 }
 
 // airTemp is the temperature of the air at sea level over each cell in an
-// ordinary year, sinT of the way into the north's summer.
+// ordinary year, sinT of the way into the north's summer. The phases of the
+// wind's year are its thermal seasons - the warmest, the coldest and the turn
+// between - so each cell is read at the crest of its own swing, whatever its
+// lag behind the sun. The swing is the one Land.TempAt reads: see seasonTemp.
 func (e *airEnv) airTemp(sinT float64) []float64 {
 	temp := make([]float64, e.w*e.h)
 	for cy := 0; cy < e.h; cy++ {
-		swing := e.hemi[cy] * Swing * sinT
 		for cx := 0; cx < e.w; cx++ {
 			i := cy*e.w + cx
-			temp[i] = e.mean[cy] + swing*(swingSea+(swingLand-swingSea)*e.cont[i])
+			temp[i] = e.mean[cy] + seasonTemp(e.hemi[cy], sinT, e.cont[i])
+		}
+	}
+	return temp
+}
+
+// airTempOn is airTemp on a day of the calendar: each cell at its own place in
+// its swing, lagging the sun by as much as the land round it makes it lag. A
+// valley's year has no lag, and is airTemp at the day's sun to the bit.
+func (e *airEnv) airTempOn(day int) []float64 {
+	if !e.wrap {
+		return e.airTemp(yearSin(day))
+	}
+	temp := make([]float64, e.w*e.h)
+	for cy := 0; cy < e.h; cy++ {
+		for cx := 0; cx < e.w; cx++ {
+			i := cy*e.w + cx
+			temp[i] = e.mean[cy] + seasonTemp(e.hemi[cy], seasonAt(day, lagAt(e.cont[i])), e.cont[i])
 		}
 	}
 	return temp
 }
 
 // solve works out the wind over the cells with the year sinT of the way into
-// the north's summer. extra is pressure added to what the climate lays down,
+// the north's summer, over air at sea level of temp degrees. extra is pressure added to what the climate lays down,
 // in hPa, and warm the degrees the day's weather has carried in; either may be
 // nil. The wind and the pressure are written to u, v and p.
-func (e *airEnv) solve(sinT float64, extra, warm []float64, u, v, p []float32) {
+func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []float32) {
 	n := e.w * e.h
 
 	// The warmth of the air at sea level, and the pressure it and the belts
 	// make between them.
-	temp := e.airTemp(sinT)
+	temp = append([]float64(nil), temp...)
 	if warm != nil {
 		for i := range temp {
 			temp[i] += warm[i] * warmGain / thermalGain

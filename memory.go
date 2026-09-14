@@ -59,6 +59,9 @@ func (t Terms) Check() error {
 	if t.Wrap && t.Width%ChunkSide != 0 {
 		return fmt.Errorf("terra: a globe must be a whole number of chunks round: width %d is not a multiple of %d", t.Width, ChunkSide)
 	}
+	if t.Woods > ByClimate || t.Growth > ByClimate {
+		return fmt.Errorf("terra: no such rule: woods %d, growth %d", t.Woods, t.Growth)
+	}
 	if t.Water < 0 {
 		return fmt.Errorf("terra: a world cannot have less than no water: %v", t.Water)
 	}

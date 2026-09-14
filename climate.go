@@ -70,6 +70,10 @@ type Climate struct {
 	// has everywhere.
 	rows  int
 	globe bool
+	// tick is the day the weather was last advanced to. A globe's seasons lag
+	// the sun by different amounts on different ground, so the day, and not
+	// just how far into its swing Temp is, is what a globe is read by.
+	tick int
 }
 
 // NewClimate is the weather a world is founded in: an ordinary early spring,
@@ -88,8 +92,8 @@ func NewClimateOn(cfg Terms) Climate {
 // The globe's weather. Temperate is the latitude the default map's weather
 // is the weather of; a globe reads that weather there, warmer toward the
 // middle and colder toward the poles by LatSwing across the whole of the
-// curve, with the year's swing turning over in the south and fading out
-// at the equator.
+// curve, with the year's swing turning over in the south, fading out at the
+// equator and growing toward the poles. See solarSwing.
 const (
 	Temperate = 45.0
 	LatSwing  = 30.0
@@ -108,14 +112,18 @@ func warmth(lat float64) float64 {
 
 // TempAt is this tick's temperature on row y. On a valley it is Temp
 // everywhere, to the bit.
+//
+// On a globe it is the row's year read on ground of middling continentality,
+// since a row is not a place: the swing its latitude has and the lag that
+// ground has behind the sun. Where a place is known, Land.TempAt reads the
+// ground's own.
 func (c Climate) TempAt(y int) float64 {
 	if !c.globe {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	hemi := math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
-	season := c.Temp - MeanTemp - c.Drift - c.Spell
-	return MeanTemp + hemi*season + c.Drift + c.Spell + warmth(lat)
+	season := swingAt(lat, contMiddling) * seasonAt(c.tick, lagAt(contMiddling))
+	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
 // MeanAt is the mean temperature of row y over a year.
@@ -153,12 +161,18 @@ func (c *Climate) Advance(tick int, rng *rand.Rand) {
 	c.Drift = driftKeep*c.Drift + driftShock*rng.NormFloat64()
 	c.Spell = spellKeep*c.Spell + spellShock*rng.NormFloat64()
 	c.Temp = seasonal(tick) + c.Drift + c.Spell
+	c.tick = tick
 }
 
 // The thresholds the living world reads temperature by. Green things grow
 // at their slowest below Frost and at their fullest from Thrive up. Cold
 // begins to be felt below Mild and presses as hard as it ever does at
 // Bitter.
+//
+// Frost is a threshold of growth and of nothing else. It was the line the
+// ground froze at too, which put the permafrost under ground with a mean of
+// four degrees - the latitude of Oslo - and the tundra with it. The frozen
+// ground has its own line now; see Permafrost and the tree line in year.go.
 const (
 	Frost  = 4.0
 	Thrive = 14.0
@@ -241,24 +255,74 @@ const Lapse = 0.0065
 // standing on a tile or living on it should ask; Climate.TempAt is the
 // weather of the row, which is that reading at the foot of the map.
 //
-// On a globe whose day's weather has been asked for, the warmth the day's
-// wind has carried in is added: a cold snap behind a low, a warm spell in a
-// southerly. And the currents off its coast are added, which is the one part
-// of the sea's moderation that is felt in what grows and not only in what
-// freezes: a coast in a warm current is mild the year round. A valley's
-// weather is one temperature for everywhere - see Climate - and is left to
-// its own spells.
+// On a globe the year is the ground's own: the swing and the lag of a place
+// with as much land round it as p has (see swingAt and lagAt), so the middle of
+// a continent has a hotter summer, a colder winter and an earlier midsummer
+// than a coast at the same latitude. The currents off its coast are added,
+// which is the one part of the sea's moderation that is felt in what grows and
+// not only in what freezes: a coast in a warm current is mild the year round.
+//
+// And where the day's weather has been asked for, the warmth the day's wind
+// has carried in is added - a cold snap behind a low, a warm spell in a
+// southerly - in place of the climate's own spell, not on top of it: the two
+// are the same week's weather told twice, once as a number drawn for the
+// whole planet and once as the air that actually moved. The slow drift is
+// kept, since no day's wind carries a decade. A valley's weather is one
+// temperature for everywhere - see Climate - and is left to its own spells.
 func (w *Land) TempAt(p geom.Pos) float64 {
-	t := w.Climate.TempAt(p.Y) - Lapse*w.Grid.At(p).Height
-	if w.Grid.Wrap {
-		t += w.WarmthAt(p) + w.Grid.CoastWarmth(p.Y*w.Grid.W+p.X)
+	g, c := w.Grid, w.Climate
+	h := g.At(p).Height
+	if !c.globe {
+		t := c.TempAt(p.Y) - Lapse*h
+		if g.Wrap {
+			t += w.WarmthAt(p) + g.CoastWarmth(p.Y*g.W+p.X)
+		}
+		return t
+	}
+	i := p.Y*g.W + p.X
+	cont := g.contAt(i)
+	t := c.MeanAt(p.Y) + swingAt(c.latitude(p.Y), cont)*seasonAt(c.tick, lagAt(cont)) + c.Drift - Lapse*h
+	if g.Wrap {
+		t += g.CoastWarmth(i)
+	}
+	if w.today() {
+		t += w.WarmthAt(p)
+	} else {
+		t += c.Spell
 	}
 	return t
 }
 
+// yearAt is the shape of an ordinary year on the ground at tile i: its mean,
+// and half the distance from its coldest day to its warmest. It is TempAt's
+// climate with the day's weather taken out.
+func (w *Land) yearAt(i int) (mean, swing float64) {
+	g, c := w.Grid, w.Climate
+	y := i / g.W
+	mean = c.MeanAt(y) - Lapse*g.Tiles[i].Height
+	if !c.globe {
+		return mean, Swing
+	}
+	if g.Wrap {
+		mean += g.CoastWarmth(i)
+	}
+	return mean, swingAt(c.latitude(y), g.contAt(i))
+}
+
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt
-// how hard the cold presses on a body there.
-func (w *Land) GrowthAt(p geom.Pos) float64 { return growthOf(w.TempAt(p)) }
+// how hard the cold presses on a body there. Under the tuned rules it is the
+// ramp between Frost and Thrive; under the climate's, the day's share of the
+// place's growing degree-days and what its warmth and rain let a year grow.
+// See Terms.Growth.
+func (w *Land) GrowthAt(p geom.Pos) float64 {
+	temp := w.TempAt(p)
+	if !w.Terms.Growth.climate(w.Grid.Wrap) {
+		return growthOf(temp)
+	}
+	i := w.Grid.Index(p)
+	mean, swing := w.yearAt(i)
+	return climateGrowth(temp, mean, swing, w.Grid.Rain(i))
+}
 
 // ChillAt is Chill at p.
 func (w *Land) ChillAt(p geom.Pos) float64 { return chillOf(w.TempAt(p)) }
@@ -274,27 +338,18 @@ func (w *Land) ChillAt(p geom.Pos) float64 { return chillOf(w.TempAt(p)) }
 // gives every sea tile its fish, so row zero of a globe was 440 tiles of
 // water carrying an average of 0.85 fish each, at eleven degrees below
 // freezing. The best fishing on the map was on the ice cap.
+//
+// Water is ice where the year's mean at its surface is under SeaFreeze. See
+// Grid.Freezing.
 const SeaFreeze = -1.8
 
-// Icefall is how much higher than the frostline a place has to stand for its
-// water, and not merely its ground, to be frozen the year round: the fall
-// from Frost down to SeaFreeze, written as a height. Ground stops growing
-// well before water stops flowing, so the ice is always the smaller cap, and
-// a globe has a broad belt of bare rock with unfrozen water running through
-// it before it has any ice at all.
-const Icefall = (Frost - SeaFreeze) / Lapse
-
-// frostline is the height at which the year's mean on row y falls to Frost:
-// the height above which the ground never thaws. It is a constant of the map
-// rather than of the day, because the year's mean is - the drift and the
-// spell wander around it and average out. Where the row is warm enough that
-// no ground on any map could be that high, it is simply a great height.
-func (c Climate) frostline(y int) float64 { return c.frostlineAt(y, 0) }
-
-// frostlineAt is the frostline on row y for ground the sea is worth warm
-// degrees to. See Maritime.
-func (c Climate) frostlineAt(y int, warm float64) float64 {
-	return (c.MeanAt(y) + warm - Frost) / Lapse
+// seaMeanAt is the year's mean at sea level on row y for ground the sea and
+// its currents are worth warm degrees to. It is a constant of the map rather
+// than of the day, because the drift and the spell wander around it and
+// average out; every line the ground freezes or stops growing trees at is
+// read off it and the height. See Maritime.
+func (c Climate) seaMeanAt(y int, warm float64) float64 {
+	return c.MeanAt(y) + warm
 }
 
 // The sea's moderation. Water is a store of heat that land is not, so ground

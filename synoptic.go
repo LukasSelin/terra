@@ -304,7 +304,7 @@ func (e *airEnv) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e
 func (e *airEnv) seaTempAt(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
 	cont := e.sample(e.cont, fx, fy)
-	t := e.mean[cy] + e.hemi[cy]*Swing*sinT*(swingSea+(swingLand-swingSea)*cont)
+	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, cont)
 	if e.coast != nil {
 		t += e.sample(e.coast, fx, fy)
 	}
@@ -315,7 +315,7 @@ func (e *airEnv) seaTempAt(fx, fy, sinT float64) float64 {
 // it, with the sea's own small swing and what the currents have brought.
 func (e *airEnv) seaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	t := e.mean[cy] + e.hemi[cy]*Swing*sinT*swingSea
+	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, 0)
 	if e.warm != nil {
 		t += e.sample(e.warm, fx, fy)
 	}
@@ -373,7 +373,7 @@ func (wx *Weather) solve(day int) {
 			}
 		}
 	}
-	e.solve(sinT, extra, wx.warm, wx.u, wx.v, wx.p)
+	e.solve(sinT, e.airTempOn(day), extra, wx.warm, wx.u, wx.v, wx.p)
 }
 
 // carry moves the warmth of the air on by a day of yesterday's wind, and lets
@@ -383,7 +383,7 @@ func (wx *Weather) solve(day int) {
 func (wx *Weather) carry(day int) {
 	e := wx.env
 	n := e.w * e.h
-	clim := e.airTemp(yearSin(day))
+	clim := e.airTempOn(day)
 	// The climate's own wind today, to be taken from the day's.
 	cu, cv := make([]float32, n), make([]float32, n)
 	for k, m := range seasonWeights(day) {
