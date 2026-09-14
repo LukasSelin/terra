@@ -566,8 +566,8 @@ const meanderReach = 32
 // cubic metres.
 func meanderingSlope(q float64) float64 { return 0.0125 * math.Pow(math.Max(q, 1e-9), -0.44) }
 
-// meanders reads the rivers great enough to wander - meanderFlow of the map's
-// greatest - reach by reach along the way the model sends their water, on
+// meanders reads the rivers great enough to wander - meanderFlow and more -
+// reach by reach along the way the model sends their water, on
 // reaches of meanderReach steps gentle enough by meanderingSlope to meander.
 // Sinuosity is the length along the river over the straight line between the
 // ends of the reach. Wavelength is read off the river's offset from that line,
@@ -577,9 +577,8 @@ func meanders(gs []*Grid) meanderReading {
 	return remember(fmt.Sprintf("meanders/%p/%d", gs[0], len(gs)), func() meanderReading {
 		var wl, sn []float64
 		for _, g := range gs {
-			most := maxFlow(g)
 			river := func(i int) bool {
-				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow*most
+				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow
 			}
 			next := func(i int) int {
 				d := g.flowStep(i)

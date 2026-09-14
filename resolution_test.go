@@ -18,8 +18,8 @@ import (
 // rain falls on it - are the same laws. So each is read at one size and at
 // twice, and asked to agree to within what real ground scatters by.
 
-// resolutionSizes are the two maps each reading is taken on, and the seeds.
-const resolutionSeeds = 3
+// twiceSeeds is how many seeds each size is read over.
+const twiceSeeds = 3
 
 type resolutionReading struct {
 	hack, concavity, hypsometry, rain, rainSpread float64
@@ -93,8 +93,8 @@ func concavity(gs []*Grid) float64 {
 }
 
 // TestTheSameGroundAtTwiceTheSize reads the valley at its default size and at
-// twice as many tiles each way, and a small globe at its size and twice, over
-// the same seeds, and asks the two to agree.
+// twice as many tiles each way, over the same seeds, and asks the two to agree.
+// The small globe's are read in realism_test.go, with the gaps it has marked.
 //
 // The tolerances are what real ground scatters by, and not what the map
 // happens to: Hack's exponent is 0.57 +- 0.03 across real networks (Rigon et
@@ -105,7 +105,7 @@ func concavity(gs []*Grid) float64 {
 // is a fact about its latitude and its ranges, not its size, so to a fifth.
 func TestTheSameGroundAtTwiceTheSize(t *testing.T) {
 	if testing.Short() {
-		t.Skip("makes twelve worlds, two of them at four times a small globe")
+		t.Skip("makes six valleys")
 	}
 	const (
 		hackTol  = 0.06
@@ -113,19 +113,16 @@ func TestTheSameGroundAtTwiceTheSize(t *testing.T) {
 		hypsoTol = 0.10
 		rainTol  = 0.20
 	)
-	small := smallGlobe()
-	big := small
-	big.Width, big.Height = 2*small.Width, 2*small.Height
 	valley := DefaultTerms()
 	wide := valley
 	wide.Width, wide.Height = 2*valley.Width, 2*valley.Height
 	for _, c := range []struct {
 		name     string
 		one, two Terms
-	}{{"valley", valley, wide}, {"small globe", small, big}} {
+	}{{"valley", valley, wide}} {
 		t.Run(c.name, func(t *testing.T) {
 			var ones, twos []*Grid
-			for seed := uint64(1); seed <= resolutionSeeds; seed++ {
+			for seed := uint64(1); seed <= twiceSeeds; seed++ {
 				ones = append(ones, NewLand(seed, c.one).Grid)
 				twos = append(twos, NewLand(seed, c.two).Grid)
 			}
