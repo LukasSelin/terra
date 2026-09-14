@@ -277,3 +277,83 @@ func TestTheWeatherBaresTheBedsBeneath(t *testing.T) {
 		t.Errorf("forty ages of weather bared no new rock anywhere")
 	}
 }
+
+// Tipped beds wear into ridges that run the way the beds strike: the hard beds
+// stand proud of the soft ones either side of them, and the ground along a
+// hard bed is the same bed and stays level with it. The same dome is made with
+// its beds striking north and then east, so that whatever the drainage of the
+// dome does to one it does to the other, and only the beds are turned.
+func TestHogbacksRunAlongTheStrike(t *testing.T) {
+	dome := func(strikeNorth bool) *Grid {
+		const side = 64
+		g := NewGrid(side, side)
+		g.strata = make([]column, len(g.Tiles))
+		for i := range g.Tiles {
+			x, y := float64(i%side), float64(i/side)
+			dx, dy := (x-side/2)/(side/2), (y-side/2)/(side/2)
+			h := 20 + 200*math.Max(0, 1-(dx*dx+dy*dy)/2)
+			g.Tiles[i].Height = h
+			across := x
+			if !strikeNorth {
+				across = y
+			}
+			// Basalt and shale by turns, dipping at 0.8 across the strike,
+			// laid only where the dome's ground can reach them so that no
+			// pile has to fold its beds together.
+			c := basement(Shale, 0, h)
+			at := -4000 + 0.8*across*TileSpan
+			for k := 0; at < 240; k++ {
+				rock, thick := Shale, 50.0
+				if k%2 == 0 {
+					rock, thick = Basalt, 30.0
+				}
+				if at+thick > 0 {
+					c.lay(rock, 0, 0, at, at+thick)
+				}
+				at += thick
+			}
+			g.strata[i] = c
+			g.Tiles[i].Bedrock = c.rockAt(h)
+		}
+		g.shape()
+		g.denude()
+		g.landslide()
+		g.expose()
+		return g
+	}
+	// How far the hard tiles stand above their neighbours east and west, and
+	// north and south.
+	proud := func(g *Grid) (ew, ns float64) {
+		n := 0
+		for y := 1; y < g.H-1; y++ {
+			for x := 1; x < g.W-1; x++ {
+				i := y*g.W + x
+				if g.Tiles[i].Bedrock != Basalt {
+					continue
+				}
+				h := g.Tiles[i].Height
+				ew += h - (g.Tiles[i-1].Height+g.Tiles[i+1].Height)/2
+				ns += h - (g.Tiles[i-g.W].Height+g.Tiles[i+g.W].Height)/2
+				n++
+			}
+		}
+		if n == 0 {
+			t.Fatal("no basalt came to the surface")
+		}
+		return ew / float64(n), ns / float64(n)
+	}
+	for _, c := range []struct {
+		name        string
+		strikeNorth bool
+	}{{"north", true}, {"east", false}} {
+		ew, ns := proud(dome(c.strikeNorth))
+		across, along := ew, ns
+		if !c.strikeNorth {
+			across, along = ns, ew
+		}
+		if across < 1.5 || across < 2*along {
+			t.Errorf("beds striking %s: the hard beds stand %.2f m over the ground across the strike and %.2f m along it",
+				c.name, across, along)
+		}
+	}
+}

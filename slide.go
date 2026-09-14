@@ -56,7 +56,7 @@ const (
 // tile is a wall and not a hillside, and a scarp a tile wide is steeper than
 // the grid can say anything true about.
 const (
-	standRock  = 0.45
+	standRock  = 0.3
 	standMost  = 1.35 / Critical
 	standLeast = 0.7
 )

@@ -241,6 +241,77 @@ func (g *Grid) expose() {
 	})
 }
 
+// Denuding: what the ages take off the soft rock and leave on the hard.
+//
+// The water shapes a channel steeper where it crosses a hard bed, but a
+// channel runs down the country and a bed may run across it, so what that
+// makes is a step in a river and not a ridge along the bed. Real ground gets
+// its ridges from the whole surface coming down, over far longer than any
+// age a map is made or played in: the soft beds go faster wherever they come
+// to the surface, rivers find the lines they make and hollow them out, and
+// the hard beds between are left standing - a hogback where the beds are
+// tipped, a scarp where they lie flat and end, and a mesa where a flat cap
+// is all that is left. None of the passes that make a map runs long enough
+// for that at the rates the yardsticks hold them to, so it is done here as
+// what it adds up to.
+//
+// Each tile comes down by how much softer its rock is than its own pile over
+// the next denudeWindow metres down, and goes up by as much where it is
+// harder, so what the pass moves is one bed against the beds it lies among
+// and not one country against the next: a soft bed is hollowed along its
+// whole outcrop, a hard one stands proud of it, and ground of one rock all
+// the way down is left where it was. Read against the ground round a tile
+// instead, the edge of every province of one rock became a step, and on a
+// made globe the drainage came apart along them. It is taken in denudePasses
+// steps, reading the bed each step bares, because what lies under a soft bed
+// that has come down is the next bed along.
+//
+// denudeDepth is how many metres, over all the passes, a rock as soft again
+// as its pile comes down. It is small, because it is paid for in slope: at
+// six metres the made small globes' mean slope came out at 0.60, over the
+// thirty degrees they had been held to, while hard beds on a test dome stood
+// two metres proud of their strike valleys; see TestHogbacksRunAlongTheStrike
+// and the yardsticks it loosened.
+const (
+	denudeDepth  = 6.0
+	denudePasses = 4
+	denudeWindow = 60.0
+	denudeFall   = 0.002 // the least fall, as rise over run, left down a way the water went
+)
+
+// denude takes the soft rock down against the hard. See denudeDepth.
+func (g *Grid) denude() {
+	if g.strata == nil {
+		return
+	}
+	// The water keeps the way it had. A soft bed hollowed out across a river
+	// would otherwise be a pit the river ends in, and the network the ground
+	// was shaped to would come apart into a basin at every outcrop: so no
+	// tile comes down below a hair's fall over the tile its water went to.
+	recv, run := g.receivers()
+	stack := stackOf(recv)
+	for pass := 0; pass < denudePasses; pass++ {
+		for i := range g.Tiles {
+			if g.underSea(i) {
+				continue
+			}
+			by := denudeDepth / denudePasses * (1/g.Tiles[i].Hard()/g.strata[i].soft(g.Tiles[i].Height) - 1)
+			t := &g.Tiles[i]
+			t.Height -= by
+			if g.sea >= 0 && by > 0 {
+				t.Height = math.Max(t.Height, math.Min(g.sea, t.Height+by))
+			}
+		}
+		for _, i := range stack {
+			if r := recv[i]; r != i {
+				t := &g.Tiles[i]
+				t.Height = math.Max(t.Height, g.Tiles[r].Height+denudeFall*run[i])
+			}
+		}
+		g.expose()
+	}
+}
+
 // restrata carries the beds through a pass that hands the ground new heights
 // by rank - normalise, basins, shape - so that they keep their place against
 // the ground. A height of the old ground is taken to the height of the new
@@ -314,4 +385,19 @@ func (g *Grid) heights() []float64 {
 		h[i] = g.Tiles[i].Height
 	}
 	return h
+}
+
+// soft is how soft the pile is, on average through its thickness, over the
+// denudeWindow metres below h: what the ground at h is weathering down into.
+func (c *column) soft(h float64) float64 {
+	sum, top := 0.0, h
+	for k := c.at(h); k < int(c.n) && top > h-denudeWindow; k++ {
+		floor := h - denudeWindow
+		if k+1 < int(c.n) {
+			floor = math.Max(floor, float64(c.top[k+1]))
+		}
+		sum += (top - floor) / hardness[c.rock[k]]
+		top = floor
+	}
+	return sum / denudeWindow
 }

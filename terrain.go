@@ -50,6 +50,9 @@ func (w *Land) Generate(cfg Terms) {
 	// down. See shape.go and slide.go.
 	area := g.shape()
 	w.texture(g, area)
+	// And the soft beds taken down against the hard ones, which is where the
+	// ridges and the scarps of layered country come from. See denude.
+	g.denude()
 	g.landslide()
 	// The ground has moved into the beds under it, so the rock it is made of
 	// has too. See strata.go.
