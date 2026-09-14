@@ -224,7 +224,12 @@ func TestRealNumbers(t *testing.T) {
 func printYardsticks() {
 	fmt.Println("against the world:")
 	fmt.Printf("  %-48s %-6s %10s  %-19s %s\n", "", "scale", "got", "real", "")
+	// The planet's yardsticks follow the ground's: see realism_test.go.
+	var all []realYardstick
 	for _, y := range yardsticks {
+		all = append(all, realYardstick{yardstick: y})
+	}
+	for _, y := range append(all, realYardsticks...) {
 		got := y.measure()
 		verdict := "IN"
 		switch {
@@ -234,6 +239,9 @@ func printYardsticks() {
 			verdict = "HIGH"
 		case math.IsNaN(got):
 			verdict = "NaN"
+		}
+		if y.gap != "" && verdict != "IN" {
+			verdict += " (gap)"
 		}
 		fmt.Printf("  %-48s %-6s %10.4g  %-19s %-4s %s\n", y.name, y.scale, got,
 			fmt.Sprintf("%.4g-%.4g %s", y.lo, y.hi, y.unit), verdict, y.source)

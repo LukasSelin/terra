@@ -84,6 +84,9 @@ func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 // world down through a long tail of small ones, and a world of middles set
 // down evenly and each given the ground nearest it is a world of equal rooms:
 // its largest plate is not two of its middling ones.
+//
+// This is only the floor. How the sizes fall off past the great plates is held
+// to Bird's power law in realism_test.go.
 func TestPlatesAreNotAllOneSize(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
