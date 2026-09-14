@@ -224,6 +224,11 @@ type airEnv struct {
 	// in metres, whichever way the wind comes: no wind faster than buoyancy
 	// times this is blocked there, and the looking ahead is spared.
 	climb []float64
+
+	// warm is how many degrees the sea over each cell stands over its
+	// latitude's mean for the currents, and coast what that is worth to the
+	// country round it: see currents. Both are nil on a valley.
+	warm, coast []float64
 }
 
 // airCell is how many tiles a side the air cells over g are.
@@ -536,6 +541,11 @@ func windsFor(g *Grid) *Winds {
 	copy(w.u[3], w.u[1])
 	copy(w.v[3], w.v[1])
 	copy(w.p[3], w.p[1])
+	// The water under the year's wind, on a globe. See ocean.go.
+	if e.wrap {
+		e.warm = e.currents(w.u, w.v)
+		e.coast = e.coastal(e.warm)
+	}
 	return w
 }
 

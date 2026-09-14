@@ -172,9 +172,14 @@ func (g *Grid) weather() {
 		g.rain = make([]float64, len(g.Tiles))
 		g.runoff = make([]float64, len(g.Tiles))
 	}
+	g.winds = windsFor(g)
+	g.rainOn()
+}
+
+// rainOn is the rain and the runoff of g under the winds it has.
+func (g *Grid) rainOn() {
 	a := g.air
-	w := windsFor(g)
-	g.winds = w
+	w := g.winds
 	e := w.airEnv
 
 	// The ground the air rises over, tile by tile and cell by cell, in metres a
@@ -209,7 +214,13 @@ func (g *Grid) weather() {
 			belt := a.wetness * beltRain(e.rainLat(a, cy)-beltShift*phaseSin[k])
 			for cx := 0; cx < e.w; cx++ {
 				i := cy*e.w + cx
-				carried[k][i] = float32(q[i] * conv[i] * belt)
+				stable := 1.0
+				if e.coast != nil {
+					// Cold water offshore holds the air down, and it does not
+					// rise to rain whatever it carries.
+					stable = inversion(e.coast[i])
+				}
+				carried[k][i] = float32(q[i] * conv[i] * belt * stable)
 			}
 		}
 	})
@@ -296,6 +307,9 @@ func (e *airEnv) rainLat(a *Air, cy int) float64 {
 // can blow in until what they carry settles: a sweep in the order the wind
 // blows settles all of that wind in one pass. Air coming in over the edge of a
 // valley comes straight off the sea.
+//
+// Where the currents have made the sea warmer or colder than its latitude,
+// the sea's fill is that much more or less: see damp.
 func (e *airEnv) moisture(u, v []float32, gx, gy []float64) []float64 {
 	n := e.w * e.h
 	// Each cell's equation, written once: what it is given whatever its
@@ -312,8 +326,12 @@ func (e *airEnv) moisture(u, v []float32, gx, gy []float64) []float64 {
 		for cx := 0; cx < e.w; cx++ {
 			i := cy*e.w + cx
 			sea := e.sea[i]
+			fill := 1.0
+			if e.warm != nil {
+				fill = damp(e.warm[i])
+			}
 			gain := sea/seaReach + (1-sea)/landReach
-			f := sea/seaReach + (1-sea)*inlandShare/landReach
+			f := sea*fill/seaReach + (1-sea)*inlandShare/landReach
 			upwind[2*i], upwind[2*i+1] = none, none
 			if ex, ny, ok := unitWind(u[i], v[i]); ok {
 				if rise := ex*gx[i] + ny*gy[i]; rise > 0 {

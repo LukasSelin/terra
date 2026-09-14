@@ -573,6 +573,25 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			},
 		},
 		{
+			file: "currents", title: "Sea warmth",
+			about: "How much warmer (red) or colder (blue) than its latitude the currents make the sea, and the coast beside it, over the year: ±8 C at full colour.",
+			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+				warm := g.CoastWarmth(i)
+				if t.Wet() {
+					warm = g.SeaWarmth(i)
+				}
+				k := clamp(math.Abs(warm)/8, 0, 1)
+				c := lerpRGB(color.RGBA{240, 240, 236, 255}, color.RGBA{200, 40, 36, 255}, k)
+				if warm < 0 {
+					c = lerpRGB(color.RGBA{240, 240, 236, 255}, color.RGBA{36, 80, 200, 255}, k)
+				}
+				if !t.Wet() {
+					c = scaleRGB(c, 0.8)
+				}
+				return c
+			},
+		},
+		{
 			file: "woods", title: "Woods",
 			about: "How well each tile suits trees (WoodsAt), with the woods standing now outlined dark.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {

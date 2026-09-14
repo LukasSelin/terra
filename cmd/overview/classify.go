@@ -239,7 +239,7 @@ func classify(land *terra.Land) classes {
 	}
 	seaShare = boxMean(seaShare, g.W, g.H, g.Span()/6, g.Wrap)
 	for i := range g.Tiles {
-		c.MeanTemp[i] = land.Climate.MeanAt(i/g.W) - terra.Lapse*height[i] + terra.Maritime*seaShare[i]
+		c.MeanTemp[i] = land.Climate.MeanAt(i/g.W) - terra.Lapse*height[i] + terra.Maritime*seaShare[i] + g.CoastWarmth(i)
 	}
 	c.LandDist = distance(g, func(i int) bool { return !g.Tiles[i].Wet() })
 
