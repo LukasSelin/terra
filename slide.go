@@ -49,11 +49,35 @@ const (
 	Repose   = 0.7
 )
 
+// standRock is how much steeper ground stands for the rock it is made of, as
+// a power of its hardness against the map's middling rock, and standMost and
+// standLeast the most and least that may make of Critical and Repose. The
+// most is held to the top of Roering's range, 1.35 over 1.2: past that a
+// tile is a wall and not a hillside, and a scarp a tile wide is steeper than
+// the grid can say anything true about.
+const (
+	standRock  = 0.45
+	standMost  = 1.35 / Critical
+	standLeast = 0.7
+)
+
+// stand is what the rock makes of the slopes ground fails at and is left at,
+// given its hardness against the map's middling rock.
+func stand(hard float64) float64 {
+	return math.Max(standLeast, math.Min(standMost, math.Pow(hard, standRock)))
+}
+
 // landslide brings down every tile standing more than Critical above a
 // neighbour to Repose above it. Taken from the lowest ground up, each tile is
 // final by the time it is reached - a tile is only ever lowered by one below
 // it - so one pass over the tiles in order of their heights settles the whole
 // map, however far up a slope the failing runs.
+//
+// What stands steep depends on what it is made of. The slope a tile fails at
+// and the slope it is left at go with the rock at its surface against the
+// map's middling rock - see stand - so a cap of hard rock holds a cliff over
+// the soft beds beneath it, and those beds slump back to a gentler foot. That
+// is the whole shape of a scarp and of the rim of a mesa.
 func (g *Grid) landslide() {
 	n := len(g.Tiles)
 	h := make([]float64, n)
@@ -63,6 +87,7 @@ func (g *Grid) landslide() {
 		h[i] = g.Tiles[i].Height
 		q.push(h[i], int32(i))
 	}
+	soft := 1 / g.meanHard()
 	for len(q.at) > 0 {
 		i := q.pop()
 		if done[i] {
@@ -83,8 +108,17 @@ func (g *Grid) landslide() {
 			if off.X != 0 && off.Y != 0 {
 				run *= math.Sqrt2
 			}
-			if h[j] > h[i]+Critical*run {
-				h[j] = h[i] + Repose*run
+			critical, repose := Critical, Repose
+			if g.strata != nil {
+				// Whether the edge fails is the rock the edge is made of;
+				// what it is left at is the rock the failure bares.
+				s := stand(g.hardAt(int(j), h[j]) * soft)
+				critical, repose = critical*s, repose*s
+				left := h[i] + repose*run
+				repose = Repose * stand(g.hardAt(int(j), left)*soft)
+			}
+			if h[j] > h[i]+critical*run {
+				h[j] = h[i] + repose*run
 				q.push(h[j], j)
 			}
 		}

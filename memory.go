@@ -33,9 +33,15 @@ import (
 // is - and an air cell is several tiles, so all of it comes to some forty
 // bytes a tile. Measured on a 1024 by 512 globe, the peak heap rose by five
 // and a half per cent when the wind came in, which these figures cover.
+//
+// The rock became a pile of beds under every tile - see strata.go - which is
+// sixty bytes a tile kept, a second copy of it while the plates move, and the
+// sorted heights the beds are carried through each rescaling on. Measured
+// against the same worlds before it, the peak heap of a drawn 1024 by 512
+// globe rose by 36 per cent and a made one's by 8, which these are raised by.
 const (
-	bytesDrawn = 256
-	bytesRun   = 512
+	bytesDrawn = 384
+	bytesRun   = 576
 )
 
 // ErrTooBig is what MakeLand wraps when a world would not fit in the memory

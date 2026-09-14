@@ -51,11 +51,15 @@ func (w *Land) Generate(cfg Terms) {
 	area := g.shape()
 	w.texture(g, area)
 	g.landslide()
+	// The ground has moved into the beds under it, so the rock it is made of
+	// has too. See strata.go.
+	g.expose()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
 	// goes: incise moves the ground, so the drainage has to be taken again on
 	// the ground it left. See Incise.
 	g.incise()
+	g.expose()
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
 	if poured {
