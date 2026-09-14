@@ -243,12 +243,15 @@ const Lapse = 0.0065
 //
 // On a globe whose day's weather has been asked for, the warmth the day's
 // wind has carried in is added: a cold snap behind a low, a warm spell in a
-// southerly. A valley's weather is one temperature for everywhere - see
-// Climate - and is left to its own spells.
+// southerly. And the currents off its coast are added, which is the one part
+// of the sea's moderation that is felt in what grows and not only in what
+// freezes: a coast in a warm current is mild the year round. A valley's
+// weather is one temperature for everywhere - see Climate - and is left to
+// its own spells.
 func (w *Land) TempAt(p geom.Pos) float64 {
 	t := w.Climate.TempAt(p.Y) - Lapse*w.Grid.At(p).Height
 	if w.Grid.Wrap {
-		t += w.WarmthAt(p)
+		t += w.WarmthAt(p) + w.Grid.CoastWarmth(p.Y*w.Grid.W+p.X)
 	}
 	return t
 }
@@ -317,7 +320,8 @@ func (c Climate) frostlineAt(y int, warm float64) float64 {
 // every seed, because there is coast at every latitude on a globe and every
 // yard of it was worth the same.
 //
-// It moderates what freezes and not what grows: Climate.TempAt is the weather
+// It moderates what freezes and not what grows (the currents, which are a
+// different thing, are felt in both: see Grid.CoastWarmth): Climate.TempAt is the weather
 // of a latitude at a height and is read every tick by everything alive, and
 // the sea is a fact about where the permafrost stops. A map with no sea - the
 // valley, and every map measured on it - is untouched to the bit, because

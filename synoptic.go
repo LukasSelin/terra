@@ -304,14 +304,22 @@ func (e *airEnv) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e
 func (e *airEnv) seaTempAt(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
 	cont := e.sample(e.cont, fx, fy)
-	return e.mean[cy] + e.hemi[cy]*Swing*sinT*(swingSea+(swingLand-swingSea)*cont)
+	t := e.mean[cy] + e.hemi[cy]*Swing*sinT*(swingSea+(swingLand-swingSea)*cont)
+	if e.coast != nil {
+		t += e.sample(e.coast, fx, fy)
+	}
+	return t
 }
 
 // seaTemp is the warmth of the sea at a place among the cells: the air's over
-// it, with the sea's own small swing.
+// it, with the sea's own small swing and what the currents have brought.
 func (e *airEnv) seaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	return e.mean[cy] + e.hemi[cy]*Swing*sinT*swingSea
+	t := e.mean[cy] + e.hemi[cy]*Swing*sinT*swingSea
+	if e.warm != nil {
+		t += e.sample(e.warm, fx, fy)
+	}
+	return t
 }
 
 // smoothstep is 0 below lo, 1 above hi, and a smooth step between.
