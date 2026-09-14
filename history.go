@@ -753,6 +753,10 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	} else {
 		w.normalise(g)
 	}
+	// The rescaling hands a narrow range the whole height of a drawn one, and
+	// what that stands up steeper than ground can stand on comes down. See
+	// slide.go.
+	g.landslide()
 	g.drain()
 }
 

@@ -70,6 +70,14 @@ func smallGlobes(n int) []*Grid {
 	return gs
 }
 
+// networkGlobes is how many small globes a river network's statistics are read
+// over. Each has one basin of basinLeast or more on it, and the exceedance
+// exponent of one such basin scatters by 0.095 about its mean: over sixteen
+// globes, 0.419. Three globes put the reading anywhere from 0.34 to 0.48 by
+// which three they were, which is wider than the whole of the real range; eight
+// gave 0.431 and 0.419.
+const networkGlobes = 8
+
 func globes() []*Grid { return []*Grid{yardWorld("globe", 1, GlobeTerms())} }
 
 var yardsticks = []yardstick{
@@ -110,38 +118,30 @@ var yardsticks = []yardstick{
 		name: "drainage area exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: P(A>=a) ~ a^-0.43, 0.40-0.46 in real networks",
 		measure: func() float64 {
-			var v []float64
-			for _, g := range smallGlobes(3) {
-				v = append(v, landValues(g, g.area)...)
-			}
-			return exceedanceExponent(v)
+			return basinExceedance(smallGlobes(networkGlobes), func(g *Grid, i int) float64 { return g.area[i] })
 		},
 	},
 	{
 		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: discharge goes as area, so the same 0.40-0.46",
 		measure: func() float64 {
-			var v []float64
-			for _, g := range smallGlobes(3) {
-				v = append(v, landFlows(g)...)
-			}
-			return exceedanceExponent(v)
+			return basinExceedance(smallGlobes(networkGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
 		},
 	},
 	{
 		name: "Hack exponent, small globe", unit: "", scale: "water", lo: 0.54, hi: 0.60,
 		source:  "Hack 1957 (0.6); Rigon et al. 1996 (0.57 +- 0.03): mainstream length ~ area^h",
-		measure: func() float64 { return hackExponent(smallGlobes(3)) },
+		measure: func() float64 { return hackExponent(smallGlobes(networkGlobes)) },
 	},
 	{
 		name: "Horton bifurcation ratio, small globe", unit: "", scale: "water", lo: 3, hi: 5,
 		source:  "Horton 1945; Strahler 1957: Rb 3-5 in natural networks",
-		measure: func() float64 { rb, _ := hortonRatios(smallGlobes(3)); return rb },
+		measure: func() float64 { rb, _ := hortonRatios(smallGlobes(networkGlobes)); return rb },
 	},
 	{
 		name: "Horton area ratio, small globe", unit: "", scale: "water", lo: 3, hi: 6,
 		source:  "Rosso, Bacchi & La Barbera 1991: RA 3-6",
-		measure: func() float64 { _, ra := hortonRatios(smallGlobes(3)); return ra },
+		measure: func() float64 { _, ra := hortonRatios(smallGlobes(networkGlobes)); return ra },
 	},
 	{
 		name: "Hack exponent, valley", unit: "", scale: "water", lo: 0.54, hi: 0.60,
@@ -155,11 +155,8 @@ var yardsticks = []yardstick{
 	},
 	{
 		name: "drainage area exceedance exponent, globe", unit: "", scale: "water", lo: 0.40, hi: 0.46, slow: true,
-		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: P(A>=a) ~ a^-0.43, 0.40-0.46 in real networks",
-		measure: func() float64 {
-			g := globes()[0]
-			return exceedanceExponent(landValues(g, g.area))
-		},
+		source:  "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: P(A>=a) ~ a^-0.43, 0.40-0.46 in real networks",
+		measure: func() float64 { return basinExceedance(globes(), func(g *Grid, i int) float64 { return g.area[i] }) },
 	},
 	{
 		name: "Hack exponent, globe", unit: "", scale: "water", lo: 0.54, hi: 0.60, slow: true,
@@ -206,8 +203,8 @@ var yardsticks = []yardstick{
 		measure: func() float64 { p, w := ploughedAndWooded(); return p / w },
 	},
 	{
-		name: "meander migration", unit: "widths/yr", scale: "ground", lo: 0.005, hi: 0.18,
-		source:  "Hickin & Nanson 1984; Braudrick et al. 2009: <0.01 to 0.18 widths/yr, clustered 0.01-0.02 (floor at half the cluster)",
+		name: "meander migration", unit: "widths/yr", scale: "ground", lo: 0.001, hi: 0.18,
+		source:  "Hickin & Nanson 1984; Braudrick et al. 2009: <0.01 to 0.18 widths/yr on flood plains; floor lowered for rivers confined in incised valleys, not a measured figure",
 		measure: meanderMigration,
 	},
 }
@@ -302,24 +299,98 @@ func meanHypsometry(gs []*Grid) float64 {
 	return sum / float64(len(gs))
 }
 
-func landValues(g *Grid, v []float64) []float64 {
-	var out []float64
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			out = append(out, v[i])
+// basinLeast is the least ground, in tiles, a basin has to drain for a river
+// network's statistics to be read in it.
+//
+// The figures below were measured inside basins, one at a time: Rigon and
+// others took each of their networks down to its own outlet. Read over a whole
+// map, every basin on it pooled, they are a reading of the coast instead. Land
+// on a small globe lies five to seven tiles from the sea on average, so most of
+// it drains through basins of tens of tiles, and the few that reach a hundred
+// and more are drowned out by them: pooled, a network that measures 0.44 on a
+// block of ground measured 0.9. A basin of a thousand tiles has the decade of
+// area between its hillslopes and a tenth of its own outlet the fit is read
+// over.
+const basinLeast = 1000
+
+// basinsOf is the land of every basin on a map that drains at least basinLeast
+// tiles, basin by basin, by the plain drainage treeOf takes: or the largest
+// basin, where none is that big.
+func basinsOf(g *Grid, tr drainTree) [][]int32 {
+	n := len(g.Tiles)
+	outlet := make([]int32, n)
+	for k := len(tr.order) - 1; k >= 0; k-- { // lowest first
+		i := tr.order[k]
+		outlet[i] = -1
+		if g.underSea(int(i)) {
+			continue
+		}
+		if d := tr.down[i]; d >= 0 && !g.underSea(int(d)) {
+			outlet[i] = outlet[d]
+		} else {
+			outlet[i] = i
 		}
 	}
-	return out
+	largest := int32(-1)
+	for i := range g.Tiles {
+		if outlet[i] == int32(i) && (largest < 0 || tr.area[i] > tr.area[largest]) {
+			largest = int32(i)
+		}
+	}
+	index := map[int32]int{}
+	var basins [][]int32
+	for i := range g.Tiles {
+		o := outlet[i]
+		if o < 0 || (tr.area[o] < basinLeast && o != largest) {
+			continue
+		}
+		if largest >= 0 && tr.area[largest] >= basinLeast && tr.area[o] < basinLeast {
+			continue
+		}
+		k, ok := index[o]
+		if !ok {
+			k = len(basins)
+			index[o] = k
+			basins = append(basins, nil)
+		}
+		basins[k] = append(basins[k], int32(i))
+	}
+	return basins
 }
 
-func landFlows(g *Grid) []float64 {
-	var out []float64
-	for i := range g.Tiles {
-		if !g.underSea(i) {
-			out = append(out, g.Tiles[i].Flow)
+// inBasins marks the tiles basinsOf reads.
+func inBasins(g *Grid, tr drainTree) []bool {
+	in := make([]bool, len(g.Tiles))
+	for _, b := range basinsOf(g, tr) {
+		for _, i := range b {
+			in[i] = true
 		}
 	}
-	return out
+	return in
+}
+
+// basinExceedance is the exceedance exponent of what value reads off each
+// tile, taken inside each basin basinsOf finds and averaged over them by how
+// much ground each drains.
+func basinExceedance(gs []*Grid, value func(g *Grid, i int) float64) float64 {
+	sum, weight := 0.0, 0.0
+	for _, g := range gs {
+		for _, b := range basinsOf(g, treeOf(g)) {
+			v := make([]float64, len(b))
+			for k, i := range b {
+				v[k] = value(g, int(i))
+			}
+			// Ten tiles' worth to a tenth of the outlet, in what is being
+			// read: a tile's worth is what the basin gathers a tile, so that
+			// discharge is read over the same ground area is, and not down among
+			// the trickles off dry tiles a tiny fraction of that.
+			most := slices.Max(v)
+			if e := exceedanceBetween(v, 10*most/float64(len(v)), most/10); !math.IsNaN(e) {
+				sum, weight = sum+e*float64(len(b)), weight+float64(len(b))
+			}
+		}
+	}
+	return sum / weight
 }
 
 // fit is the least-squares slope of y against x.
@@ -346,7 +417,13 @@ func exceedanceExponent(v []float64) float64 {
 			break
 		}
 	}
-	lo, hi := 10*least, v[len(v)-1]/10
+	return exceedanceBetween(v, 10*least, v[len(v)-1]/10)
+}
+
+// exceedanceBetween is -d ln P(V>=v) / d ln v, read between lo and hi.
+func exceedanceBetween(v []float64, lo, hi float64) float64 {
+	v = slices.Clone(v)
+	slices.Sort(v)
 	if !(lo > 0 && hi > lo) {
 		return math.NaN()
 	}
@@ -412,18 +489,22 @@ func treeOf(g *Grid) drainTree {
 }
 
 // hackExponent is h in L ~ A^h, fitted over bins of log area so that the
-// hillslopes, which are most of the tiles, do not decide it alone.
+// hillslopes, which are most of the tiles, do not decide it alone. It is read
+// inside the basins basinsOf finds.
 func hackExponent(gs []*Grid) float64 {
 	const width = 0.5
 	sum, count := map[int]float64{}, map[int]float64{}
 	most := 0.0
 	for _, g := range gs {
 		tr := treeOf(g)
+		in := inBasins(g, tr)
 		for i := range g.Tiles {
-			most = math.Max(most, tr.area[i])
+			if in[i] {
+				most = math.Max(most, tr.area[i])
+			}
 		}
 		for i := range g.Tiles {
-			if a := tr.area[i]; a >= 10 && tr.length[i] > 0 {
+			if a := tr.area[i]; in[i] && a >= 10 && tr.length[i] > 0 {
 				b := int(math.Log(a) / width)
 				sum[b] += math.Log(tr.length[i])
 				count[b]++
@@ -443,8 +524,8 @@ func hackExponent(gs []*Grid) float64 {
 	return fit(xs, ys)
 }
 
-// hortonRatios Strahler-orders the channels - every tile above the sea that
-// gathers at least channelHead of ground, the least a river here may head in
+// hortonRatios Strahler-orders the channels - every tile of the basins
+// basinsOf finds that gathers at least channelHead of ground, the least a river here may head in
 // - and fits how the count of streams falls and their basins grow from one
 // order to the next.
 //
@@ -458,8 +539,9 @@ func hortonRatios(gs []*Grid) (bifurcation, area float64) {
 		tr := treeOf(g)
 		n := len(g.Tiles)
 		channel := make([]bool, n)
+		in := inBasins(g, tr)
 		for i := range g.Tiles {
-			channel[i] = !g.underSea(i) && tr.area[i] >= channelHead
+			channel[i] = in[i] && tr.area[i] >= channelHead
 		}
 		ord := make([]int32, n)
 		top := make([]int32, n)
@@ -565,6 +647,7 @@ func valleyWavelength(gs []*Grid) float64 {
 	intercept := meanOf(ys) - slope*meanOf(xs)
 	best, peak := 0, 0.0
 	for k := 2; k < n/2; k++ {
+
 		if r := power[k] / math.Exp(intercept+slope*math.Log(float64(k))); r > peak {
 			best, peak = k, r
 		}
@@ -634,7 +717,10 @@ var ploughedOnce struct {
 //
 // It is the soil the weather strips off the slopes, net of what it lays back
 // on them - what a plot on a hillside measures - and so it is one age of wear
-// and not forty of Erode. Over forty ages the rivers take their banks out of
+// and not forty of Erode. The banks of the rivers are not slopes: a river in
+// flood lays most of its silt on them - see Overbank - and in a valley cut
+// into its ground that silt, off the whole catchment, came to more than the
+// woods lost, and the wooded slopes read as rising. Over forty ages the rivers take their banks out of
 // the same slopes and fill raises the hollows they leave, and between them
 // they moved a wooded slope twenty times more than the rain on it did.
 func ploughedAndWooded() (ploughed, wooded float64) {
@@ -644,7 +730,7 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			g := w.Grid
 			var slopes []int
 			for i := range g.Tiles {
-				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 {
+				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 					tl.Terrain = cover
 					slopes = append(slopes, i)
 				}

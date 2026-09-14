@@ -808,13 +808,29 @@ const (
 // land desert or ice - comes out with a river network about a quarter as
 // dense, which is what the drier world should have.
 //
+// Shaped - see shape.go - the valley's lowland stands higher and steeper, and
+// every tile that gathers water falls toward its river at the fall that water
+// holds a channel at, so more of the ground cuts a bed at the same power. At
+// fifteen hundred the first valley came out 12.2 in a hundred water; asked the
+// same of the first three valleys, by power:
+//
+//	power    seed 1   old river turning, seed 1   migration, widths a year
+//	 1500    12.2%            0.468                      0.0015
+//	 1800    11.1%            0.414                      0.0023
+//	 2100     9.9%            0.414                      0.0034
+//	 2400      -              0.445                      0.0038
+//
+// Twenty-one hundred is the least that keeps the first valley a valley and not
+// a marsh; at twenty-four hundred the third seed's river came out with fewer
+// bends after forty ages than it started with.
+//
 // The head is counted in ground because it guards against the grid and not
 // against the weather: see spreadUntil. At sixteen tiles, and a power of 800,
 // the high fifth of five valleys held a thousandth of their river: the water
 // spread over a hillside rarely gathers from that many before it reaches the
 // foot.
 const (
-	channelPower = 1500.0
+	channelPower = 2100.0
 	channelHead  = 8.0
 )
 
