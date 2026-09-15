@@ -71,6 +71,179 @@ a free speedup. It would need the full suite as its judge.
 
 ---
 
+## 2026-09-15 - Precompute in `airEnv.vapour` and `fluvial.solve`
+
+The same idea as the sea-warmth links: take the work that is constant during
+a solve out of the sweep, keep the sweep order, and keep the bits. The world
+digests for valley, glacial valley, ancient and globe128 are identical
+before and after.
+
+**`airEnv.vapour`** already built its upwind links once. What was left per
+visit:
+
+- The rain slope's constant factor `rainScale·rainSteep·toStep·rainMost/rainSteps`:
+  three multiplies and a divide on every visit. It is now computed once per
+  cell as `slope`, in the same order.
+- `math.Max`/`math.Min`: out-of-line assembly calls on amd64 (`archMax`/`archMin`
+  were 3.9 s + 2.1 s flat on the globe). The builtin `max`/`min` have the
+  same NaN and signed-zero rules and compile inline.
+- Locality: each cell's `give`, `lose`, `toStep`, `rainScale`, `slope`, four
+  sources and four shares now sit in one `vapourCell`, so a visit reads one
+  run of memory instead of eight scattered arrays. `zonalCorrection` reads
+  the same cells.
+
+**`fluvial.solve`:**
+
+- Every step of a history has no settling anywhere (deep tiles skip it; see
+  `waterStep`). The per-tile settle sums (`Σ settle·parts`,
+  `Σ settle·(load+supply)`) and the `·(1−settle)` on what is passed on are
+  now skipped when `settles()` finds nothing to settle. Leaving them out
+  gives the same bits for any finite load: +0 times something finite added
+  to +0 is +0, and multiplying by 1 changes nothing.
+- The builtin `max` replaces `math.Max` in `rate`, `below` and `cutAt`.
+- A precomputed `share` array for valleys was tried and dropped. It cost
+  n x 8 bytes per solve and pushed the budget over, while history, the
+  target, doesn't use it.
+
+**CPU, full globe profile** (one run each; wall clock too noisy to read, see
+below):
+
+| function | before (cum) | after (cum) | |
+|---|---|---|---|
+| `airEnv.vapour` | 15.09 s | 9.82 s | -35% |
+| `fluvial.solve` | 10.59 s | 5.06 s | -52% |
+| `airEnv.zonalCorrection` | 1.96 s | 1.05 s | -46% |
+| `math.archMax` + `archMin` | 5.98 s | 3.31 s | the rest is outside these passes |
+
+**World** (old and new binaries interleaved, n=6; quiet run, CIs ±2-6%):
+
+| world | before | after | |
+|---|---|---|---|
+| ancient | 0.467 s ± 6% | 0.468 s ± 4% | ~ |
+| globe256 | 6.61 s ± 2% | 6.24 s ± 2% | **-5.63% (p=0.002)** |
+| globe (2 runs each) | 76.9, 76.4 s | 82.8, 69.9 s | inconclusive |
+
+The globe's two new runs are 13 s apart, so load noise swamps the effect at
+n=2. `fluvial.solve`'s saving is serial and should show up on the clock. It
+needs a quiet count-6 globe run to confirm.
+
+**Memory: the budget was rewritten on purpose.** globe128 came out +1.30%
+bytes against the budget, over the 1% slack. `vapourCell` holds one more
+float per air cell than the arrays it replaced (`slope`), across every
+vapour call of every drain. I judged a divide per visit worth 8 bytes per
+air cell and rewrote `budget.json` with `TERRA_PERF_UPDATE=1`: valley
++0.41%, ancient +0.33%, globe128 +1.30% (this includes the +0.3% from the
+sea links). Allocation counts went down 3-3.5% (fewer separate arrays).
+
+---
+
+## 2026-09-15 - Jacobi for the sea's warmth: tried, rejected; the equations precomputed instead
+
+The sea-warmth solve in `airEnv.currents` was the largest serial pass left
+on globe256 (4.5 of 27 profiled s). It sweeps each cell's upwind equation in
+four orders, Gauss-Seidel style. The question was whether Jacobi ordering,
+where every cell reads the round before, would make it vectorizable and
+parallel.
+
+**First, the constant work.** The equation for each cell does not change
+during the solve, but the sweep recomputed it every time: the upwind cell
+along the row, the corner search down the column within `cornerReach`, and
+the weights. `seaLinks` now builds the equations once and the sweep only
+reads them. Sums are taken in the same order as before, so worlds are
+bit-identical (ancient and globe128 digests unchanged).
+
+**Jacobi, measured** (sweeps summed over the whole world, not the time of
+one solve):
+
+| world | Gauss-Seidel rounds (x4 sweeps) | Jacobi rounds | world time GS / Jacobi |
+|---|---|---|---|
+| globe128 | 369 (1476 sweeps) | 3169 | 3.32 s / 3.50 s |
+| globe256 | 775 (3100 sweeps) | 14571 | 7.27 s / 7.77 s |
+
+The Jacobi rounds were spread over rows with `InParallel`. It still lost, for
+three reasons:
+
+1. Warmth moves one cell per Jacobi round, whereas one Gauss-Seidel sweep in
+   the current's direction carries it the length of an ocean. It took 4.7x
+   the sweeps. AVX2 is at most 4 lanes and needs a gather for the upwind
+   reads, so vectors cannot win that back.
+2. The air grid is coarse, so a row is too little work to be worth a
+   goroutine.
+3. It changes the world a lot. At globe256, 6.5% of tiles have different
+   terrain, the maximum height difference is 75 m, and sea warmth on a tile
+   is up to 3.7 C apart (7.6 C at globe128). Part of that is chaos over 16
+   epochs. Part is that the same "settled" threshold (1e-3 C change in a
+   round) stops a slow Jacobi solve while it is still far from the answer,
+   so it would also need a different stopping rule.
+
+Jacobi was removed. A note on it stays in `gaussSeidel`'s comment.
+
+**The precompute, measured** (old and new binaries interleaved, n=6):
+
+| world | before | after | |
+|---|---|---|---|
+| ancient | 0.542 s ± 13% | 0.522 s ± 22% | ~ (no sea currents) |
+| globe256 | 8.24 s ± 6% | 7.70 s ± 5% | **-6.51% (p=0.009)** |
+| globe256 B/op | 2.398 GiB | 2.406 GiB | +0.32% |
+
+In the profile, `currents` went from 4.50 to 2.09 CPU s cumulative (-54%).
+
+The first version allocated six new tile arrays per solve and failed
+`TestWorldCreationBudget` at +1.58% bytes on globe128, which is the budget
+test doing its job. The links now write over `cu`, `cv`, `rise` and `deep`,
+which are dead once the solve starts, and only the two int32 index arrays
+are new.
+
+**Takeaway for the other serial sweeps** (`airEnv.vapour`, `fluvial.solve`):
+before reordering a Gauss-Seidel sweep, pull the constant per-cell work out
+of it. That keeps the world bit-identical and is where the time actually
+was. Reordering pays only if the transport is local (diffusion-like);
+upwind transport along a flow is exactly what Gauss-Seidel in flow order
+does fast.
+
+---
+
+## 2026-09-15 - SIMD for the transform's butterflies
+
+**Change:** `fft_simd_amd64.go` does the FFT butterflies two complex numbers
+per AVX2 vector under `GOEXPERIMENT=simd` (following `pass_simd_amd64.go`).
+The complex product is written as `x*p + swap(x)*q`, which gives the same
+bits as Go's complex multiply. `TestTheButterfliesAreTheScalarOnes` checks
+every length from 1 to 4096 in both directions, including negative zeros and
+values of very different sizes. The whole-world digests (ancient, globe128)
+match between the two builds.
+
+**Kernel** (`BenchmarkFFT`, forward and inverse together):
+
+| length | scalar | simd | |
+|---|---|---|---|
+| 64 | 1212 ns | 1050 ns | -13% |
+| 256 | 7837 ns | 4320 ns | -45% |
+| 1024 | 34701 ns | 17698 ns | -49% |
+
+**World** (scalar and simd binaries interleaved, n=6 each):
+
+| world | scalar | simd | |
+|---|---|---|---|
+| ancient | 0.491 s ± 17% | 0.459 s ± 12% | ~ (p=0.093) |
+| globe256 | 7.33 s ± 3% | 7.24 s ± 4% | ~ (p=0.065) |
+
+The kernel is twice as fast, but world creation gains 1-4%, which is not
+significant. This is Finding 1 of the first entry again: the FFT runs on
+the `InParallel` workers, and wall-clock time is set by the serial passes.
+On globe256 the main goroutine does 19 of the 27 profiled seconds, and the
+largest serial pieces are `airEnv.currents` (17% of wall), the rest of
+`rainOn`, `windsFor`, `slideQueue`, `pool`/`flow` and the priority floods.
+
+**Why the serial passes are not vectorized:** `currents`, `airEnv.vapour`,
+`fluvial.solve` and the floods are Gauss-Seidel sweeps or priority-queue
+walks. Each tile reads the value its neighbour was just given in the same
+sweep, so doing four at once changes the result. Making them vectorizable
+(Jacobi or red-black ordering) would also make them parallel, but it changes
+the world and moves the realism tests. That decision needs an owner.
+
+---
+
 ## 2026-09-15 - Drift guards
 
 **Heap budget in the suite.** `TestWorldCreationBudget` holds `valley`,

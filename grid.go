@@ -34,6 +34,16 @@ const (
 type Tile struct {
 	Terrain Terrain
 	Mark    Mark
+	// Leached, Exposed, Lime, Salt and Carbon are what time has made of the
+	// soil, beyond how deep it is and what it is made of: how long the
+	// surface has been forming soil, in years; how much of the bases the
+	// rock gave it the water has since carried off, out of 65535; the
+	// carbonate and the salt the dry years have left in it, in hundredths
+	// and thousandths of a kilogram a square metre; and its organic carbon,
+	// in kilograms a square metre. Each sits in padding the tile already
+	// had, which is why they lie where they do. See pedogenesis.go.
+	Leached uint16
+	Exposed float32
 	Owner   Holder
 
 	// Height is metres above the lowest ground on the map, and Flow is the
@@ -64,9 +74,17 @@ type Tile struct {
 	// read to a tenth of a millimetre, and because it sits in the padding
 	// after Bedrock and so costs a tile nothing. See soil.go.
 	Bedrock Bedrock
-	Soil    float32
-	Sand    float64
-	Clay    float64
+	// Fenced is whether this tile lies inside a fence: a strip of a block of
+	// worked ground large enough that somebody hedged it. It is not a
+	// structure and not a terrain - the ground under it is still field, and
+	// the fence itself is the line round the block rather than anything
+	// standing on a tile. See fence.go. It lies here, in the byte after
+	// Bedrock, so that the soil's Lime can have the two after it.
+	Fenced bool
+	Lime   uint16
+	Soil   float32
+	Sand   float64
+	Clay   float64
 
 	// Plate is which piece of the crust this tile rides, and Formed the
 	// epoch its rock dates from. Both are written by a world made from its
@@ -76,13 +94,8 @@ type Tile struct {
 	// which plate and how old, and neither can be worked out afterwards.
 	Plate  uint8
 	Formed uint8
-
-	// Fenced is whether this tile lies inside a fence: a strip of a block of
-	// worked ground large enough that somebody hedged it. It is not a
-	// structure and not a terrain - the ground under it is still field, and
-	// the fence itself is the line round the block rather than anything
-	// standing on a tile. See fence.go.
-	Fenced bool
+	Salt   uint16
+	Carbon float32
 }
 
 // Buildable reports whether a tile is open ground nobody has claimed. A road
@@ -215,6 +228,11 @@ type Grid struct {
 	// and nothing otherwise: see span and deepSpan.
 	deep float64
 
+	// pedons says the soil's age and chemistry have been laid and are kept
+	// from here on, which they are from the end of the making of a map. See
+	// pedogenesis.go.
+	pedons bool
+
 	// tide is the day's sea the map is read against: see tide.go. tidal is,
 	// for each tile, how many times the open ocean's tide it has, and ebb, on
 	// a flat, how far under mean sea it lies in those tides. Both are laid
@@ -341,6 +359,7 @@ func (g *Grid) Clone() *Grid {
 	c.swing = append([]float32(nil), g.swing...)
 	c.rainWarm = append([]float32(nil), g.rainWarm...)
 	c.climateWoods = g.climateWoods
+	c.pedons = g.pedons
 	c.tidal = append([]float32(nil), g.tidal...)
 	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)

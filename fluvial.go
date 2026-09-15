@@ -341,7 +341,7 @@ func (c *fluvial) rate(i int32, above float64) float64 {
 	}
 	f := c.f[i]
 	lasts := 1.0
-	if cut := f * math.Max(0, above); cut > c.soil[i] {
+	if cut := f * max(0, above); cut > c.soil[i] {
 		lasts = c.soil[i] / cut
 		f = lasts*f + (1-lasts)*c.rock[i]
 	}
@@ -378,7 +378,7 @@ func (c *fluvial) cutAt(next []float64, i int32) float64 {
 	if r == i {
 		return 0
 	}
-	return c.booked(i) * math.Max(0, next[i]-c.below(next, i, r))
+	return c.booked(i) * max(0, next[i]-c.below(next, i, r))
 }
 
 // below is the height the water at tile i, draining into r, cuts toward: its
@@ -388,7 +388,7 @@ func (c *fluvial) cutAt(next []float64, i int32) float64 {
 func (c *fluvial) below(next []float64, i, r int32) float64 {
 	h := next[r]
 	if c.floor != nil {
-		h = math.Max(h, c.floor[r])
+		h = max(h, c.floor[r])
 	}
 	if c.drop != nil {
 		lasts := 1.0
@@ -416,12 +416,16 @@ func (c *fluvial) solve(iters int) []float64 {
 	next := append([]float64(nil), c.h...)
 	cut := make([]float64, n)
 	load := make([][Grains]float64, n)
+	// A step where nothing settles anywhere - every step of a history, whose
+	// tiles are too wide for their rivers to lay anything down (see
+	// waterStep) - has no settling to take: a share of nought times what is
+	// carried is nought, and keeping all of it is keeping it, so leaving the
+	// sums out gives the same bits for every load a river can carry.
+	settles := c.settles()
 	for it := 0; it < iters; it++ {
 		// What arrives at each tile, from the ridges down, off the last
 		// sweep's cutting and settling.
-		for i := range load {
-			load[i] = [Grains]float64{}
-		}
+		clear(load)
 		for k := len(c.stack) - 1; k >= 0; k-- {
 			i := c.stack[k]
 			r := c.recv[i]
@@ -430,7 +434,10 @@ func (c *fluvial) solve(iters int) []float64 {
 			}
 			for gr := range load[i] {
 				carried := load[i][gr] + c.supplied(i, gr) + cut[i]*c.parts[i][gr]
-				c.pass(load, i, r, gr, carried*(1-c.settle[i][gr]))
+				if settles {
+					carried *= 1 - c.settle[i][gr]
+				}
+				c.pass(load, i, r, gr, carried)
 			}
 		}
 		// The heights, from the sea up, with what arrives held where the last
@@ -449,10 +456,12 @@ func (c *fluvial) solve(iters int) []float64 {
 			// next[i] is still the last sweep's here, which is what says how
 			// much of the step the soil lasts.
 			f := c.rate(i, next[i]-hr)
-			var share, laid float64
-			for gr := range load[i] {
-				share += c.settle[i][gr] * c.parts[i][gr]
-				laid += c.settle[i][gr] * (load[i][gr] + c.supplied(i, gr))
+			var settling, laid float64
+			if settles {
+				for gr := range load[i] {
+					settling += c.settle[i][gr] * c.parts[i][gr]
+					laid += c.settle[i][gr] * (load[i][gr] + c.supplied(i, gr))
+				}
 			}
 			if c.h[i]+laid <= hr {
 				// At or under the water it runs into, even with what settles on
@@ -464,12 +473,22 @@ func (c *fluvial) solve(iters int) []float64 {
 				next[i], cut[i] = c.h[i]+laid, 0
 				continue
 			}
-			fa := f * (1 - share)
+			fa := f * (1 - settling)
 			next[i] = (c.h[i] + fa*hr + laid) / (1 + fa)
-			cut[i] = f * math.Max(0, next[i]-hr)
+			cut[i] = f * max(0, next[i]-hr)
 		}
 	}
 	return next
+}
+
+// settles reports whether anything settles anywhere in the step.
+func (c *fluvial) settles() bool {
+	for i := range c.settle {
+		if c.settle[i] != [Grains]float64{} {
+			return true
+		}
+	}
+	return false
 }
 
 // account books the step: with the heights solve settled on, what each tile
