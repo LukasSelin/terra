@@ -556,7 +556,7 @@ type meanderReading struct {
 }
 
 // meanderReach is how many steps of a river a meander is read over.
-const meanderReach = 32
+const meanderReach = 16
 
 // minMeanderReaches is the fewest reaches a meander reading may rest on:
 // fewer, and it reads as NaN rather than as one river's chance bends.
