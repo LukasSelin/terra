@@ -178,6 +178,9 @@ type summary struct {
 	AgeMax                          int
 	Waterfalls                      int
 	Biomes, Forms                   []share
+	// FloorMin is the deepest ground under the water, which on a watered
+	// globe is kilometres below the dry ground HeightMin reads.
+	FloorMin float64
 }
 
 type share struct {
@@ -190,7 +193,7 @@ type share struct {
 func measure(land *terra.Land) summary {
 	g := land.Grid
 	n := len(g.Tiles)
-	s := summary{Tiles: n, HeightMin: math.Inf(1), HeightMax: math.Inf(-1), TempMin: math.Inf(1), TempMax: math.Inf(-1)}
+	s := summary{Tiles: n, HeightMin: math.Inf(1), HeightMax: math.Inf(-1), FloorMin: math.Inf(1), TempMin: math.Inf(1), TempMax: math.Inf(-1)}
 	terr := make([]int, terra.TerrainCount)
 	rock := make([]int, terra.BedrockCount)
 	plates := map[uint8]bool{}
@@ -203,12 +206,13 @@ func measure(land *terra.Land) summary {
 		if !t.Wet() {
 			rock[t.Bedrock]++
 			heights = append(heights, t.Height)
+			s.HeightMin = math.Min(s.HeightMin, t.Height)
 			s.LandRain += g.Rain(i)
 			s.LandRunoff += g.Runoff(i)
 			dry++
 		}
 		plates[t.Plate] = true
-		s.HeightMin = math.Min(s.HeightMin, t.Height)
+		s.FloorMin = math.Min(s.FloorMin, t.Height)
 		s.HeightMax = math.Max(s.HeightMax, t.Height)
 		s.FlowMax = math.Max(s.FlowMax, t.Flow)
 		s.AgeMax = max(s.AgeMax, int(t.Formed))
@@ -436,10 +440,10 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		},
 		{
 			file: "height", title: "Height",
-			about: fmt.Sprintf("Metres above the lowest ground, %.0f to %.0f, hillshaded. Water in blue.", s.HeightMin, s.HeightMax),
+			about: fmt.Sprintf("Metres, the dry ground from %.0f to %.0f, hillshaded. Water in blue, to %.0f.", s.HeightMin, s.HeightMax, s.FloorMin),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				if t.Wet() {
-					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (t.Height-s.HeightMin)/span)
+					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (t.Height-s.FloorMin)/math.Max(s.HeightMax-s.FloorMin, 1))
 				}
 				return scaleRGB(ramp(elevation, (t.Height-s.HeightMin)/span), shade(p))
 			},

@@ -228,8 +228,9 @@ func (w *Land) Generate(cfg Terms) {
 	slopes := make([]float64, len(g.Tiles))
 	g.EachRow(func(y int) {
 		for i := y * width; i < (y+1)*width; i++ {
-			heights[i] = g.Tiles[i].Height
-			slopes[i] = g.Slope(geom.Pos{X: i % width, Y: i / width})
+			// Read as the map stood before its deep floor was laid: see laidHeight.
+			heights[i] = g.laidHeight(i)
+			slopes[i] = g.laidSlope(geom.Pos{X: i % width, Y: i / width})
 		}
 	})
 	highAt := quantile(heights, 0.6)

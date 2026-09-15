@@ -228,6 +228,14 @@ type Grid struct {
 	// and nothing otherwise: see span and deepSpan.
 	deep float64
 
+	// abyss is, for each tile of the deep sea floor, the height it stood at
+	// before its crust's age laid it kilometres lower, and NaN on every other
+	// tile; uplift is how fast a history left each tile's rock
+	// rising, in metres a year. Both are a watered history's, and nil on any
+	// other map. See abyss.go.
+	abyss  []float64
+	uplift []float64
+
 	// pedons says the soil's age and chemistry have been laid and are kept
 	// from here on, which they are from the end of the making of a map. See
 	// pedogenesis.go.
@@ -256,6 +264,9 @@ type Grid struct {
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See wind.go.
 	winds *Winds
+	// aired is the ground the weather was last read over: see weatherStale.
+	// A copy of the map starts without it, and reads its weather afresh.
+	aired []float32
 	// area is how many tiles drain through each tile, and water is how much
 	// the whole map runs off, in cubic metres a second. Both are drain's.
 	area  []float64
@@ -352,6 +363,7 @@ func (g *Grid) Clone() *Grid {
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
+	c.abyss, c.uplift = g.abyss, g.uplift // laid once, and never written again
 	c.warm = append([]float32(nil), g.warm...)
 	c.swing = append([]float32(nil), g.swing...)
 	c.rainWarm = append([]float32(nil), g.rainWarm...)

@@ -303,7 +303,7 @@ func newAirEnv(g *Grid) *airEnv {
 	g.EachRow(func(y int) {
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
-			above[i] = math.Max(0, g.Tiles[i].Height-base)
+			above[i] = math.Max(0, g.laidHeight(i)-base) // see laidHeight
 			if g.sunk(i) {
 				wet[i] = 1
 			}

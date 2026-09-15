@@ -1,0 +1,24 @@
+goos: windows
+goarch: amd64
+pkg: github.com/LukasSelin/terra
+cpu: AMD Ryzen 9 3900X 12-Core Processor            
+BenchmarkNewLand/valley-24         	      12	  99133025 ns/op	     34421 ns/tile	14808301 B/op	    1544 allocs/op
+BenchmarkNewLand/valley-24         	      10	 106452870 ns/op	     36963 ns/tile	14807519 B/op	    1540 allocs/op
+BenchmarkNewLand/valley-24         	      12	  92561725 ns/op	     32139 ns/tile	14807416 B/op	    1540 allocs/op
+BenchmarkNewLand/valley-24         	      14	  97833043 ns/op	     33970 ns/tile	14806889 B/op	    1539 allocs/op
+BenchmarkNewLand/valley-24         	      13	  91043615 ns/op	     31612 ns/tile	14807003 B/op	    1540 allocs/op
+BenchmarkNewLand/valley-24         	      13	  86653208 ns/op	     30088 ns/tile	14806880 B/op	    1539 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 414169067 ns/op	    143809 ns/tile	84106728 B/op	   12353 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 364877033 ns/op	    126693 ns/tile	84106178 B/op	   12348 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 426572033 ns/op	    148115 ns/tile	84106664 B/op	   12353 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 376532800 ns/op	    130741 ns/tile	84105858 B/op	   12345 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 410018000 ns/op	    142367 ns/tile	84106632 B/op	   12352 allocs/op
+BenchmarkNewLand/ancient-24        	       3	 393942667 ns/op	    136786 ns/tile	84106370 B/op	   12350 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5715565200 ns/op	    174425 ns/tile	1958716464 B/op	  199566 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5522700100 ns/op	    168539 ns/tile	1957858840 B/op	  198408 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5636119300 ns/op	    172001 ns/tile	1958214232 B/op	  198455 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5594645500 ns/op	    170735 ns/tile	1958462904 B/op	  198467 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5590483700 ns/op	    170608 ns/tile	1958212472 B/op	  198443 allocs/op
+BenchmarkNewLand/globe256-24       	       1	5634574200 ns/op	    171954 ns/tile	1958063656 B/op	  198420 allocs/op
+PASS
+ok  	github.com/LukasSelin/terra	49.051s

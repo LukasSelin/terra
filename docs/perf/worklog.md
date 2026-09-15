@@ -118,6 +118,76 @@ first table (8.3 to 4.6 s), from the `currents` precompute.
 ---
 
 
+## 2026-09-15 - drain reads the weather only when the ground has moved
+
+**Change:** `drain` used to call `weather()` (winds for every phase, then the
+vapour budget and orographic rain) every time. It now calls it only when
+`weatherStale` says the ground the air reads has drifted since the last
+reading: more than 0.5% of tiles have gone under the air's sea or come out of
+it (`weatherFlips`), or the height over that sea has changed by more than 1% of
+its total, summed tile by tile (`weatherDrift`). The drift is measured against
+the last *reading*, not the last drain, so small changes cannot pile up
+unnoticed. `weather()` stores the snapshot (`Grid.aired`, one float32 per
+tile).
+
+**Why these limits:** I probed how much the ground moves between consecutive
+drains on `globe256`:
+
+| drain site | calls | tiles flipped | height drift |
+|---|---|---|---|
+| history, per epoch | 16 | 20-35% | 45-99% |
+| history end, Generate after pour | 2 | 35-64% | large |
+| cutValleys | 4 | 0.03-0.48% | 0.2-0.4% |
+| Generate after relevel | 1 | 0% | 0% |
+| silt | 6 | 0-0.35% | ~0% |
+
+The limits sit well above what valley cutting and silt do and far below what
+an epoch of the plates does. With them, `globe256` refreshes 20 of its 30
+drains (all 18 history drains, the first after pour and one in
+cutValleys); `ancient` refreshes 19 of 24; `valley` 1 of 6.
+
+**What it bought** (benchstat, count 6, against
+[baseline/2026-09-15-2230-small.txt](baseline/2026-09-15-2230-small.txt)):
+
+| world | sec/op | B/op | allocs/op |
+|---|---|---|---|
+| `valley` | 135 ms -> 95 ms, **-29.5%** (p=0.002) | -41.7% | -52.2% |
+| `ancient` | 420 ms -> 402 ms, ~ (p=0.093) | -11.2% | -11.9% |
+| `globe256` | 7.34 s -> 5.62 s, **-23.5%** (p=0.002) | -24.0% | -28.6% |
+| `globe` (count 2) | 81.5 s -> 67.3 / 68.5 s, ~-17% | 18.5 -> 16.5 GiB | 932 k -> 686 k |
+
+`ancient` hardly moves because its drains are almost all history drains.
+Other sessions' test binaries were running on the machine during these runs,
+so the new timings are, if anything, pessimistic.
+New baselines: [baseline/2026-09-15-2333-small.txt](baseline/2026-09-15-2333-small.txt),
+[baseline/2026-09-15-2333-globe.txt](baseline/2026-09-15-2333-globe.txt).
+`budget.json` was rewritten (globe128: 614 -> 480 MiB).
+
+**Realism:** full suite before (33c942b) and after:
+
+- `TestRealNumbers/Hack_exponent,_globe` fails both times (after: 0.6005
+  against 0.54-0.6). This is the known failure on main.
+- `TestTheRealWorld/meander_wavelength,_small_globe` now reads 13.6 widths,
+  **inside** 10-14. Its known-gap marker (B, 14.6) therefore fails with "the
+  gap has closed". This yardstick rests on about 21 reaches (see the
+  yardstick sample-size notes), so a one-width move is within its noise. At the
+  user's call the marker was taken off, and the yardstick now passes.
+- After merging main's soil work (a60e3a5): `valley floor over hillslope
+  soil depth, small globe` read 3.015x against 3-50. That is past its
+  known-gap marker (I, 2.96x on main without this change). At the user's call
+  it was taken off like the meander one. The margin is 0.5%, so the next
+  change to soils or rain may put it back.
+- Everything else passes. `TestMakingAWorldDoesNotDependOnTheGoroutines`
+  passes: the gate is serial arithmetic and draws nothing.
+
+**Where the weather time is now:** 18 of the globe's remaining ~20 weather
+readings are the per-epoch history drains. Each epoch really does move the
+ground a lot, so skipping more there is a model decision (for example,
+reading winds every other epoch while keeping rain every epoch) rather than
+a free speedup. It would need the full suite as its judge.
+
+---
+
 ## 2026-09-15 - Precompute in `airEnv.vapour` and `fluvial.solve`
 
 The same idea as the sea-warmth links: take the work that is constant during
@@ -319,7 +389,7 @@ The first real `check` on unchanged code came back 26-33% *faster* than the
 committed baseline (valley 0.199 -> 0.135 s, ancient 0.631 -> 0.420 s,
 globe256 9.90 -> 7.34 s), and its confidence intervals narrowed from
 ±6-16% to ±4-6%. Other sessions were running on this desktop while the first
-baseline was taken. `baseline/2026-09-15-small.txt` now holds the quieter
+baseline was taken. `baseline/2026-09-15-2230-small.txt` now holds the quieter
 run, and the table below uses it.
 
 The lesson for the tool: a baseline taken under load hides regressions of up
@@ -334,8 +404,8 @@ are wide.
 
 **Commit:** 7dca920 (main, after globe crust balance)
 **Machine:** AMD Ryzen 9 3900X, 12 cores / 24 threads, Windows 11, go1.27.0
-**Raw output:** [baseline/2026-09-15-small.txt](baseline/2026-09-15-small.txt) (count 6),
-[baseline/2026-09-15-globe.txt](baseline/2026-09-15-globe.txt) (count 3)
+**Raw output:** [baseline/2026-09-15-2230-small.txt](baseline/2026-09-15-2230-small.txt) (count 6),
+[baseline/2026-09-15-2230-globe.txt](baseline/2026-09-15-2230-globe.txt) (count 3)
 
 ### Baseline (benchstat)
 
@@ -484,5 +554,5 @@ Smaller observations:
 ### Next entry should
 
 - Pick item 1 or 2, change it, and record `globe256` count 6 benchstat
-  against [baseline/2026-09-15-small.txt](baseline/2026-09-15-small.txt), plus
+  against [baseline/2026-09-15-2230-small.txt](baseline/2026-09-15-2230-small.txt), plus
   the globe count 3, plus whether the realism/climate tests still pass.

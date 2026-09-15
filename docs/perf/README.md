@@ -80,7 +80,7 @@ To take a new baseline after a deliberate change (or on a new machine):
 scripts/perf.sh baseline
 ```
 
-That writes `docs/perf/baseline/<today>-small.txt`. Commit it with a
+That writes `docs/perf/baseline/<date>-<HHMM>-small.txt`. Commit it with a
 work-log entry that says why the baseline moved.
 
 Why 10%: a quiet run on the 2026-09-15 machine has confidence intervals of
@@ -111,7 +111,7 @@ not a proof.
 To compare against the committed baseline instead of a fresh `old.txt`:
 
 ```bash
-go run golang.org/x/perf/cmd/benchstat@latest docs/perf/baseline/2026-09-15-small.txt new.txt
+go run golang.org/x/perf/cmd/benchstat@latest docs/perf/baseline/2026-09-15-2230-small.txt new.txt
 ```
 
 Baselines are only comparable on the same machine (see the `cpu:` line).
