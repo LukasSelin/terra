@@ -26,11 +26,14 @@ import (
 // where the ground still shakes - can then be asked of what happened rather
 // than painted on afterwards.
 //
-// It runs behind Config.Epochs and no preset uses it yet. The constants the
-// whole settlement model is tuned against - the sixty metres of lowland, the
-// share of a map that can be ploughed - were measured on the picture, so a
-// history has to be shown to hand them the same kind of map before it can be
-// allowed to make the only one. See normalise, which is where that join is.
+// It runs behind Terms.Epochs. The globe is made by sixteen epochs of it,
+// because a world that size has no picture that passes for it, and so is
+// AncientTerms, which is the valley arrived at rather than composed; the
+// default valley is still drawn. The constants the whole settlement model is
+// tuned against - the sixty metres of lowland, the share of a map that can be
+// ploughed - were measured on the picture, so a history has to be shown to
+// hand a valley the same kind of map before it can be allowed to make the
+// default one too. See normalise, which is where that join is.
 
 // The three eras. Molten is a world with no rigid crust at all, where the
 // surface is convection and nothing that forms outlasts the forming of it;
@@ -913,6 +916,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		g.drain()
 		g.wear(epochYears)
 		g.keepBook(book, e)
+		// What the epoch floored with lava, filled or silted over is a new
+		// surface, and its soil starts from nothing. See pedogenesis.go.
+		g.restartBuried(e)
 		// And the weather next epoch meets the rock this one has bared.
 		g.expose()
 		plates = w.reshape(g, plates, fl, touch, weld)
@@ -2032,72 +2038,100 @@ func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int
 // front can be eaten through where the front is narrow - and a piece left on
 // the far side is a scrap of one plate adrift in another. Every piece of a
 // plate but its largest goes to the plate it borders most.
+//
+// Borders most among the pieces that stay where they are, and not among
+// everything round it, because the scraps are all handed out at once and a
+// scrap can border another scrap that is going somewhere else. The second
+// globe of TestEveryPlateIsOnePiece did exactly that on its last epoch: a
+// single tile of plate 22 was cut off against a piece of plate 3 nine hundred
+// tiles big, five of its neighbours on that piece and three on plate 23, so it
+// was given to 3 - in the same pass as the piece of 3 was given to 23. What
+// was left was one tile of plate 3 on the far side of plate 23, and since the
+// last epoch has no move after it and so no joinUp, the world ended with it.
+// Counting only the largest pieces, a scrap always joins ground that is going
+// to stay its plate's; one whose every neighbour is another scrap waits until
+// those have been handed out, and is handed out the time after.
 func (g *Grid) joinUp(fl *flooding) {
 	piece := fl.dist // the distances are spent; the space is reused for labels
-	for i := range piece {
-		piece[i] = -1
-	}
+	largest := make([]int, plateCap)
 	var sizes []int
 	var stack []int32
-	for s := range g.Tiles {
-		if piece[s] >= 0 {
-			continue
+	for {
+		for i := range piece {
+			piece[i] = -1
 		}
-		label, of := float32(len(sizes)), g.Tiles[s].Plate
-		piece[s], stack = label, append(stack[:0], int32(s))
-		n := 0
-		for len(stack) > 0 {
-			i := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			n++
-			g.eachNear(int(i), func(j int) {
-				if piece[j] < 0 && g.Tiles[j].Plate == of {
-					piece[j] = label
-					stack = append(stack, int32(j))
+		sizes = sizes[:0]
+		for s := range g.Tiles {
+			if piece[s] >= 0 {
+				continue
+			}
+			label, of := float32(len(sizes)), g.Tiles[s].Plate
+			piece[s], stack = label, append(stack[:0], int32(s))
+			n := 0
+			for len(stack) > 0 {
+				i := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				n++
+				g.eachNear(int(i), func(j int) {
+					if piece[j] < 0 && g.Tiles[j].Plate == of {
+						piece[j] = label
+						stack = append(stack, int32(j))
+					}
+				})
+			}
+			sizes = append(sizes, n)
+		}
+		for i := range largest {
+			largest[i] = -1
+		}
+		for s := range g.Tiles {
+			l, of := int(piece[s]), g.Tiles[s].Plate
+			if largest[of] < 0 || sizes[l] > sizes[largest[of]] {
+				largest[of] = l
+			}
+		}
+		// The pieces cut off, and which of the pieces that stay each of them
+		// borders; and whether any of them borders another that does not.
+		border := map[int]map[uint8]int{}
+		waiting := false
+		for i := range g.Tiles {
+			l, of := int(piece[i]), g.Tiles[i].Plate
+			if largest[of] == l {
+				continue
+			}
+			g.eachNear(i, func(j int) {
+				o := g.Tiles[j].Plate
+				switch {
+				case o == of:
+				case largest[o] != int(piece[j]):
+					waiting = true
+				default:
+					if border[l] == nil {
+						border[l] = map[uint8]int{}
+					}
+					border[l][o]++
 				}
 			})
 		}
-		sizes = append(sizes, n)
-	}
-	largest := make([]int, plateCap)
-	for i := range largest {
-		largest[i] = -1
-	}
-	for s := range g.Tiles {
-		l, of := int(piece[s]), g.Tiles[s].Plate
-		if largest[of] < 0 || sizes[l] > sizes[largest[of]] {
-			largest[of] = l
-		}
-	}
-	// The pieces cut off, and which plates each of them borders.
-	border := map[int]map[uint8]int{}
-	for i := range g.Tiles {
-		l, of := int(piece[i]), g.Tiles[i].Plate
-		if largest[of] == l {
-			continue
-		}
-		g.eachNear(i, func(j int) {
-			if o := g.Tiles[j].Plate; o != of {
-				if border[l] == nil {
-					border[l] = map[uint8]int{}
+		to := map[int]uint8{}
+		for l, near := range border {
+			best, most := uint8(0), -1
+			for o, n := range near {
+				if n > most || (n == most && o < best) {
+					best, most = o, n
 				}
-				border[l][o]++
 			}
-		})
-	}
-	to := map[int]uint8{}
-	for l, near := range border {
-		best, most := uint8(0), -1
-		for o, n := range near {
-			if n > most || (n == most && o < best) {
-				best, most = o, n
+			to[l] = best
+		}
+		for i := range g.Tiles {
+			if o, ok := to[int(piece[i])]; ok {
+				g.Tiles[i].Plate = o
 			}
 		}
-		to[l] = best
-	}
-	for i := range g.Tiles {
-		if o, ok := to[int(piece[i])]; ok {
-			g.Tiles[i].Plate = o
+		// A map always has a piece that stays, and so a scrap beside one, so
+		// every pass hands out at least one and this ends.
+		if !waiting {
+			return
 		}
 	}
 }
