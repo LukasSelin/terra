@@ -179,7 +179,7 @@ func (g *Grid) Recount() {
 	g.landmarks.moved()
 	g.wet()
 	for i := range g.Tiles {
-		g.Chunks[g.ChunkOf(i)].Height += g.Tiles[i].Height
+		g.Chunks[g.ChunkOf(i)].Height += g.laidHeight(i) // the sea's, over the deep floor: see laidHeight
 		g.Chunks[g.ChunkOf(i)].count(&g.Tiles[i], 1)
 		if g.Tiles[i].lends() {
 			g.lend(i, 1)

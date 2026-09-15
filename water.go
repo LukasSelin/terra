@@ -31,7 +31,10 @@ import (
 // them. The ocean floor never had any: a drawn map has no sea floor, only its
 // lowest ground. So the floor is laid below the land by its place in the
 // history's order, from the foot of the continents down to BasinDepth under
-// it, and the water is enough to all but fill it.
+// it, and the water is enough to all but fill it. That is the shelves and the
+// margins; past them the floor goes on down to the depth its age puts it at,
+// kilometres, and holds its own water - see abyss.go - so Water is what stands
+// over the shelves, and it is that which says where the coast is.
 //
 // The floor is laid by rank and not by how far below the continents the
 // history left it. A plate's edge is a ramp a few tiles wide from the floor up
@@ -89,7 +92,7 @@ func (g *Grid) level(water float64) float64 {
 	}
 	h := make([]float64, n)
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.laidHeight(i)
 	}
 	slices.Sort(h)
 	want := water * float64(n)
@@ -113,6 +116,14 @@ func (g *Grid) level(water float64) float64 {
 // reads the sea level off where it stood. It is flood's other half: the same
 // tiles go under and draw their fish in the same order, and only how the level
 // is found differs. See seaAt.
+//
+// The deep sea floor holds its own water besides, all of the room it was
+// deepened by, since it lies wholly under the level: so the level is found
+// over the ground as it stood before that floor was laid, which is the same
+// level to the last bit of rounding. Found over the floor itself, with its
+// water added, it came out a millionth of a metre off, and that was enough to
+// put a handful of tiles of coast on the other side of the sea and move every
+// river network measured on a small globe. See abyss.go and laidHeight.
 func (g *Grid) pour(water float64, rng interface{ Float64() float64 }) {
 	g.seaAt(g.level(water), rng)
 }

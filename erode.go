@@ -538,7 +538,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			}
 			j := g.Index(q)
 			b := &g.Tiles[j]
-			if a.Mark != None || b.Mark != None {
+			if a.Mark != None || b.Mark != None || g.abyssal(i) || g.abyssal(j) {
 				continue
 			}
 			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {

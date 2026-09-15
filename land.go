@@ -125,7 +125,10 @@ type Terms struct {
 	// Water is how much water a world made from its history has, as the
 	// depth in metres it would stand to spread evenly over the whole map. It
 	// fills the basins the plates made, so how much of the world is sea is the
-	// ground's to decide. Nothing is no water, and the sea is SeaShare's. A map
+	// ground's to decide. It is the water over the shelves and the low ground:
+	// the deep sea floor such a world lays, kilometres down, is filled with
+	// water of its own besides - see abyss.go. Nothing is no water, and the
+	// sea is SeaShare's. A map
 	// that was drawn has no plates to decide anything, and takes SeaShare
 	// whatever this says.
 	Water float64

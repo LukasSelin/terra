@@ -49,7 +49,7 @@ var realYardsticks = []realYardstick{
 		source:  "Wegener 1915; Amante & Eakins 2009 (ETOPO1): the second peak of the earth's elevations near -4.4 km",
 		measure: func() float64 { _, lo := hypsometricModes(globes()); return lo },
 	},
-		gap: "known gap: D - basins() lays the ocean floor 0-BasinDepth (20 m) under the continents, so every tile lies within a kilometre of the sea",
+		gap: "known gap: T5 - the floor sinks with its age now (abyss.go), but half of it is the first plates' crust, dated from the start of a 64 Myr history and all 5.3 km down; the earth's is spread over 0-180 Myr",
 	},
 
 	// 2. The sea floor sinks as it cools. New floor at a ridge stands two and a
@@ -60,16 +60,12 @@ var realYardsticks = []realYardstick{
 		name: "ridge crest depth, globe", unit: "km", scale: "ground", lo: 2.0, hi: 3.0, slow: true,
 		source:  "Parsons & Sclater 1977: d = 2500 + 350 sqrt(t) m; Stein & Stein 1992 (GDH1): 2600 m at the ridge",
 		measure: func() float64 { return seafloorSubsidence(globes()).ridge / 1000 },
-	},
-		gap: "known gap: D - the whole ocean floor lies within BasinDepth (20 m) of the sea, so no reading of it can be kilometres",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "sea floor subsidence to 70 Myr, globe", unit: "m/sqrt(Myr)", scale: "ground", lo: 250, hi: 450, slow: true,
 		source:  "Parsons & Sclater 1977: d = 2500 + 350 sqrt(t) m to ~70 Myr; Stein & Stein 1992: 365 sqrt(t)",
 		measure: func() float64 { return seafloorSubsidence(globes()).young },
-	},
-		gap: "known gap: D - basins() lays the floor by its rank in the history's heights, and nothing reads crust age (-0.9 m/sqrt(Myr) of 350, on the 4 Myr epoch)",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "sea floor flattening past 70 Myr, globe", unit: "old/young", scale: "ground", lo: -0.2, hi: 0.6, slow: true,
 		source: "Parsons & Sclater 1977; Stein & Stein 1992 (GDH1): depth goes as sqrt(age) to ~70 Myr and flattens after",
@@ -82,7 +78,7 @@ var realYardsticks = []realYardstick{
 			return s.old / s.young
 		},
 	},
-		gap: "known gap: D - no sqrt(age) subsidence to flatten, and sixteen 4 Myr epochs leave no floor past 64 Myr to read; see the subsidence yardstick",
+		gap: "known gap: T5 - a globe's history is 64 Myr, so no floor on it is old enough to have flattened",
 	},
 
 	// 3. Plate sizes. Past the handful of great plates the earth's plates
@@ -108,7 +104,7 @@ var realYardsticks = []realYardstick{
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(smallGlobes(networkGlobes)); return th },
 	},
-		gap: "known gap: B - profiles are less concave than stream power carves them: theta 0.28",
+		gap: "known gap: B - profiles are less concave than stream power carves them, and the reading swings by seed and by small changes to the coast: 0.367 with the deep floor laid, 0.29 with the warm-sea limestone as well",
 	},
 	{yardstick: yardstick{
 		name: "Flint's law fit R2, valley", unit: "", scale: "water", lo: 0.85, hi: 1,
@@ -353,11 +349,32 @@ type subsidence struct {
 // seafloorSubsidence reads how deep the sea floor lies against how old its
 // rock is: the tiles under the sea still basalt, dated by the epoch their rock
 // was made in, the mean depth of each epoch's floor fitted against the root of
-// its age in two halves either side of seventy million years.
+// its age in two halves either side of seventy million years. A rock's age is
+// the middle of its epoch, to the end of the last: the youngest floor is two
+// million years old and not new.
 //
-// Formed is the date of a tile's rock and not strictly of its crust - mud laid
-// on a floor off a shore redates it - which is why only floor that is still
-// basalt is read.
+// The ridge is where the young half's line meets no age, which is what
+// Parsons and Sclater's 2500 m is. Read as the youngest epoch's mean, it was
+// the depth of floor two million years old, three hundred metres under the
+// crest, and it was the depth of every tile of that epoch's floor however
+// near a continent's shelf it lay.
+//
+// The age is the crust's: the date of the basalt at the foot of the pile under
+// the tile, which is what a drill that went down through the ooze to the
+// basement would read (the Deep Sea Drilling Project dated the floor so). It
+// was read off the rock at the surface, floor that was still basalt, but the
+// sea lays its limestone and its mud on the floor every epoch - see keepBook -
+// and on a small globe four tiles of eighteen thousand of the deep floor came
+// out bare.
+//
+// And it is the ocean's floor that is read, not the shelves': ground under less
+// water than a shelf's edge stands at, some two hundred metres (Shepard 1963
+// has 130 on the mean), is a continent's margin whatever crust it rides, as it
+// was for Parsons and Sclater, who fitted the deep floor. Read with them, a
+// globe's floor sank 173 m per root Myr, the mean of each epoch dragged toward
+// the shelf by the tiles a rift had floored in the middle of a continent.
+const shelfBreak = 200.0
+
 func seafloorSubsidence(gs []*Grid) subsidence {
 	return remember(fmt.Sprintf("subsidence/%p", gs[0]), func() subsidence {
 		const epochs = 256
@@ -366,26 +383,27 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 		for _, g := range gs {
 			for i := range g.Tiles {
 				t := &g.Tiles[i]
-				if !g.underSea(i) || t.Bedrock != Basalt {
+				if g.sea-t.Height < shelfBreak || g.strata == nil {
 					continue
 				}
-				e := int(t.Formed)
+				c := &g.strata[i]
+				foot := int(c.n) - 1
+				if c.rock[foot] != Basalt {
+					continue
+				}
+				e := int(c.formed[foot])
 				sum[e] += g.sea - t.Height
 				n[e]++
 				last = max(last, e)
 			}
 		}
 		var xy, xo, yy, yo []float64
-		ridge := math.NaN()
 		for e := last; e >= 0; e-- {
 			if n[e] < 20 {
 				continue
 			}
-			age := float64(last-e) * epochMyr
+			age := (float64(last-e) + 0.5) * epochMyr
 			d := sum[e] / n[e]
-			if math.IsNaN(ridge) {
-				ridge = d
-			}
 			if age <= 70 {
 				xy, yy = append(xy, math.Sqrt(age)), append(yy, d)
 			}
@@ -393,9 +411,10 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 				xo, yo = append(xo, math.Sqrt(age)), append(yo, d)
 			}
 		}
-		s := subsidence{ridge: ridge, young: math.NaN(), old: math.NaN()}
+		s := subsidence{ridge: math.NaN(), young: math.NaN(), old: math.NaN()}
 		if len(xy) >= 3 {
 			s.young = fit(xy, yy)
+			s.ridge = meanOf(yy) - s.young*meanOf(xy)
 		}
 		if len(xo) >= 3 {
 			s.old = fit(xo, yo)
@@ -690,6 +709,9 @@ func meanders(gs []*Grid) meanderReading {
 		}
 		if len(sn) < minMeanderReaches {
 			return meanderReading{math.NaN(), math.NaN(), len(sn)}
+		}
+		if len(wl) == 0 { // reaches gentle enough, and not one of them bending
+			return meanderReading{math.NaN(), meanOf(sn), len(sn)}
 		}
 		return meanderReading{quantile(wl, 0.5), meanOf(sn), len(sn)}
 	})
