@@ -6,6 +6,45 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-15 - Drift guards
+
+**Heap budget in the suite.** `TestWorldCreationBudget` holds `valley`,
+`ancient` and `globe128` to [budget.json](budget.json) (1% bytes, 3% allocs,
+Workers pinned to 4). Before settling on those limits I measured the spread
+at Workers 1/4/24, two runs each:
+
+| world    | bytes spread | allocs spread | time |
+|----------|--------------|---------------|------|
+| valley   | 25.41-25.42 MB (0.05%) | 3219-3243 (0.7%) | 0.13 s |
+| ancient  | 94.708-94.715 MB (<0.01%) | 14025-14045 (0.1%) | 0.43 s |
+| globe128 | 643.50-643.67 MB (0.03%) | 45871-46698 (1.8%, most of it from the worker count) | 3.2 s |
+
+To check it catches something, I lowered valley's budget by 5.6%: the test
+failed with `+5.93%`, then passed again once the file was restored. It adds
+~4 s to the suite.
+
+**Timing drift by script.** `scripts/perf.sh check` compares 6 runs against
+the newest baseline with benchstat and fails at a significant +10%. I tested
+it on a synthetic run with `ancient` and `globe256` scaled by 1.25: both were
+flagged at `+25.00%` (p=0.004 / p=0.002) and the script exited 1. The
+unchanged baseline passed with "no significant change" on every world.
+
+**The first baseline was taken on a loaded machine, and has been replaced.**
+The first real `check` on unchanged code came back 26-33% *faster* than the
+committed baseline (valley 0.199 -> 0.135 s, ancient 0.631 -> 0.420 s,
+globe256 9.90 -> 7.34 s), and its confidence intervals narrowed from
+±6-16% to ±4-6%. Other sessions were running on this desktop while the first
+baseline was taken. `baseline/2026-09-15-small.txt` now holds the quieter
+run, and the table below uses it.
+
+The lesson for the tool: a baseline taken under load hides regressions of up
+to the load's size, and a check run under load fails on nothing. Before
+taking a baseline or trusting a failed check, close other heavy work, look
+at the CIs (a quiet run on this machine is ±4-6%), and run it again if they
+are wide.
+
+---
+
 ## 2026-09-15 - First baseline and where the time goes
 
 **Commit:** 7dca920 (main, after globe crust balance)
@@ -17,9 +56,9 @@ measurements is in [README.md](README.md).
 
 | world      | sec/op        | ns/tile | B/op      | allocs/op |
 |------------|---------------|---------|-----------|-----------|
-| `valley`   | 0.199 ± 14%   | 69 k    | 24.2 MiB  | 3.2 k     |
-| `ancient`  | 0.631 ± 16%   | 219 k   | 90.3 MiB  | 14.0 k    |
-| `globe256` | 9.90 ± 6%     | 302 k   | 2.39 GiB  | 277 k     |
+| `valley`   | 0.135 ± 6%    | 47 k    | 24.2 MiB  | 3.2 k     |
+| `ancient`  | 0.420 ± 4%    | 146 k   | 90.3 MiB  | 14.0 k    |
+| `globe256` | 7.34 ± 5%     | 224 k   | 2.39 GiB  | 277 k     |
 | `globe`    | 81.5 (81-112 over 5 runs) | 155 k | 18.5 GiB | 932 k |
 
 - The globe is noisy: five single runs through the day read 93.5, 111.5,
