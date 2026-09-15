@@ -134,6 +134,29 @@ fails exactly `drainage_area_exceedance_exponent,_small_globe` (0.4894)
 and `discharge_exceedance_exponent,_small_globe` (0.4912), main's own. The
 branch's list is main's list.
 
+**Rebased a third time, onto main at 3cf543d.** Main took the plan branch
+and the clock by pass (3cf543d) and the sea's warmth read against its row
+(b8d3856), which moved globe128 again; the rebase dropped the plan branch's
+commit as already upstream. Digest rewritten (0bddde9) and equal to main's
+own; the budget rewritten on the same commit, differing from main's by a few
+hundred bytes of allocation noise, and passing here where main's memory
+says it fails on globe128 since b8d3856. The laidHeight read is checked
+digest-identical on this main too. The clock by pass now counts the gate:
+`weather` calls against `drain` calls, one seed, `go run ./cmd/overview`
+with `TERRA_PHASES=1` (one weather call on each world is closedBasins'
+own, not a drain's):
+
+| world | drains | weather calls | rebuilt by drain | skipped |
+|---|---|---|---|---|
+| valley | 6 | 2 | 1 | 5 |
+| ancient | 24 | 20 | 19 | 5 |
+| globe256 | 30 | 21 | 20 | 10 |
+| globe | 30 | 21 | 20 | 10 |
+
+The full suite was not run again on this base: the branch's only code
+against main is the two-line read proven a no-op, so its list is main's
+at 3cf543d by construction, and that is the morning's `perf.sh check`.
+
 ---
 
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
