@@ -40,8 +40,11 @@ func TestWaterLeavesDownTheSteepestFall(t *testing.T) {
 // reading a channel is chosen by cannot promise on its own: a trunk crossing
 // its own flood plain carries all the water on the map and has no fall at all.
 func TestARiverRunsAllTheWayDown(t *testing.T) {
-	for _, cfg := range []Terms{DefaultTerms(), smallGlobe()} {
-		g := NewLand(3, cfg).Grid
+	for _, c := range []struct {
+		name string
+		cfg  Terms
+	}{{"valley", DefaultTerms()}, {"small", smallGlobe()}} {
+		g := yardWorld(c.name, 3, c.cfg) // read only, so shared
 		broken, rivers := 0, 0
 		for i := range g.Tiles {
 			if !g.Tiles[i].Wet() || g.underSea(i) || g.lakeOf[i] >= 0 {

@@ -84,7 +84,7 @@ var realYardsticks = []realYardstick{
 	// 3. Plate sizes. Past the handful of great plates the earth's plates
 	// follow a power law in area.
 	{yardstick: yardstick{
-		name: "plate area cumulative exponent, plate world", unit: "", scale: "ground", lo: 0.15, hi: 0.35,
+		name: "plate area cumulative exponent, plate world", unit: "", scale: "ground", lo: 0.15, hi: 0.35, slow: true,
 		source:  "Bird 2003 Fig. 19: N(>=A) ~ A^-0.25 for plates of 0.002-1 sr; Sornette & Pisarenko 2003",
 		measure: func() float64 { return plateAreaExponent(plateWorlds(3)) },
 	}},
@@ -100,7 +100,7 @@ var realYardsticks = []realYardstick{
 		gap: "known gap: B - valleys cut two thousand years by stream power with no lift fall less concave than they were shaped: theta 0.30, and 0.34 uncut (see valleyYears)",
 	},
 	{yardstick: yardstick{
-		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60,
+		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60, slow: true,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(smallGlobes(networkGlobes)); return th },
 	},
@@ -112,7 +112,7 @@ var realYardsticks = []realYardstick{
 		measure: func() float64 { _, r2 := flint(valleys(5)); return r2 },
 	}},
 	{yardstick: yardstick{
-		name: "Flint's law fit R2, small globe", unit: "", scale: "water", lo: 0.85, hi: 1,
+		name: "Flint's law fit R2, small globe", unit: "", scale: "water", lo: 0.85, hi: 1, slow: true,
 		source:  "Flint 1974; Wobus et al. 2006: binned log S against log A is a straight line in steady channels",
 		measure: func() float64 { _, r2 := flint(smallGlobes(networkGlobes)); return r2 },
 	}},
@@ -122,7 +122,7 @@ var realYardsticks = []realYardstick{
 		measure: func() float64 { return chiLinearity(valleys(5)) },
 	}},
 	{yardstick: yardstick{
-		name: "chi-plot linearity R2, small globe", unit: "", scale: "water", lo: 0.90, hi: 1,
+		name: "chi-plot linearity R2, small globe", unit: "", scale: "water", lo: 0.90, hi: 1, slow: true,
 		source:  "Perron & Royden 2013: a steady trunk profile is linear in chi (theta_ref 0.45)",
 		measure: func() float64 { return chiLinearity(smallGlobes(networkGlobes)) },
 	}},
@@ -130,12 +130,12 @@ var realYardsticks = []realYardstick{
 	// 5. Meanders. A river wandering on its flood plain bends at ten to fourteen
 	// of its own widths and runs a good deal longer than its valley.
 	{yardstick: yardstick{
-		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14,
+		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14, slow: true,
 		source:  "Leopold & Wolman 1960: meander wavelength 10-14 channel widths",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).wavelength },
 	}},
 	{yardstick: yardstick{
-		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3,
+		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3, slow: true,
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).sinuosity },
 	}},

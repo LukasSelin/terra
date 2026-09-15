@@ -6,6 +6,119 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
+
+Session C of the overnight briefs (`briefs/C-guards.md`), on
+`claude/perf-guards`. Nothing here changes how a world is made: the digest
+for valley, ancient and globe128 is as `digest.json` says before and after.
+Every timing below was taken with sessions A and B running on the same
+machine at `GOMAXPROCS=8`; they are under load and are not the point.
+
+**Scaling.** `BenchmarkNewLand` gains `globe128` and `globe512` beside
+`globe256` and `globe`, and `scripts/perf.sh scaling` reads the median
+`ns/tile` of three runs of each against the next, failing when 512 is more
+than 1.3x 256. First run, under load:
+
+| world | ns/tile (median of 3) |
+|---|---|
+| globe128 | 480 615 |
+| globe256 | 238 907 |
+| globe512 | 275 553 |
+
+512/256 = 1.153, ok. 256/128 = 0.50: the bottom rung is still mostly the
+constant each world carries, which is why the check reads 512 against 256.
+An n log n pass costs 1.13 per doubling of width, so the limit is a
+tripwire for a quadratic step, not a proof of linearity; a slower constant
+moves every rung alike and is `check`'s to catch.
+
+**Peak.** `TestWorldCreationBudget` samples the heap's live-objects metric
+every millisecond while each world is made and writes the highest reading
+over the pre-world baseline as `peak` in `budget.json`. It is logged
+against the budget like the time and not held to a slack. Three runs of
+each reading, under load, in MiB:
+
+| world | sampled HeapAlloc | live at the pacer's marks | live at a forced mark every MiB |
+|---|---|---|---|
+| valley | 3.8, 3.8, 6.1 | 1.8, 2.1, 2.7 | 2.1, 3.8, 2.1 |
+| ancient | 6.2, 14.1, 8.3 | 3.3, 6.3, 8.2 | 7.2, 6.7, 4.1 |
+| globe128 | 21.0, 21.6, 22.1 | 11.3, 11.3, 15.8 | 20.7, 16.4, 15.0 |
+
+A spread of 40-130% however it is read, and the same with the collector's
+percent at 25 and 10 (which also cost globe128 two seconds and a few
+hundred allocations). The cause is the concurrent collector: what the world
+allocates during a mark is counted live, and a mark takes longer when the
+machine is busy. On a quiet run the sampled figure was within 1-5%, so it is
+the one kept. A steady peak needs the world to hold still while the heap is
+read, which is a hook at each pass boundary; see "needs session 0's file"
+below. Chosen slack: none, until then.
+
+**Pass counts.** `TestPassCountsArePinned` holds valley, ancient and
+globe128 to a table of how many times `drain`, `weather`, `wear` and
+`landslide` run, read from `claude/perf-instrument` at e946062:
+
+| world | drain | weather | wear | landslide |
+|---|---|---|---|---|
+| valley | 6 | 7 | 4 | 5 |
+| ancient | 24 | 25 | 20 | 6 |
+| globe128 | 30 | 31 | 20 | 6 |
+
+`phases.go` is not on main, so the reader is nil and the test skips; the
+top of `passes_test.go` says the one line that turns it on.
+
+**CLAUDE.md.** Fifty-nine lines at the root: the determinism contract, the
+merge checklist, the timeout, the stash rule, and where these docs are.
+
+**The suite in two tiers.** `go test -json` of the whole root package,
+under load: 1701 s for 226 tests, the one failure main has (`TestRealNumbers/Hack exponent, globe`). The thirty slowest are in `suite.md`; the top ten:
+
+| # | seconds | test |
+|---|---|---|
+| 1 | 339.4 | `TestThePolarSeaIsIce` |
+| 2 | 315.4 | `TestTheIceEdgeIsNotALineOfLatitude` |
+| 3 | 258.2 | `TestTheRealWorld` |
+| 4 | 111.5 | `TestTheColdKeepsToThePoles` |
+| 5 | 90.4 | `TestAGlobeHasASeaItsRiversReach` |
+| 6 | 77.4 | `TestSaltLakesStandInDryCountry` |
+| 7 | 71.7 | `TestRealNumbers` |
+| 8 | 62.6 | `TestMakingAWorldDoesNotDependOnTheGoroutines` |
+| 9 | 50.3 | `TestTheSeaIsTheWorldsToSay` |
+| 10 | 29.9 | `TestTheUplandMaskIsFinerThanTheMap` |
+
+Where the time goes is worlds: a full globe is a minute and a half here,
+a small one seven to nine seconds, and the slowest tests were the ones
+that happened to make a world first, or made one the registry already
+held. So:
+
+- `yardWorlds` holds the whole `Land` now (`yardLand`), and the plate
+  tests, the two polar tests, the climate's globe, the sea test, the river,
+  rain, runoff and tide tests take their small globe or globe from it
+  rather than making their own. `TestAGlobeHasASeaItsRiversReach` still
+  makes its globe, because it times the making, and keeps it
+  (`keepLand`) for the rest. That is three full globes and some twenty small ones not made twice, about eight minutes of the run under load.
+- Under `-short`, everything that makes a globe is skipped: the
+  goroutine-independence test (five small globes), the salt-lake and sea
+  tests (eight and six), and every yardstick that reads small globes
+  (`slow: true`, eighteen of them, which until now meant the full globe
+  only). Nothing asserts differently; it runs later.
+
+The short tier: 128 s under load (227 tests, 17
+skipped), against 326 s before the gates. What is left in it is the plate
+tests' three small globes (27 s under load, shared among five tests and
+under the 60 s line each), the tidal-coast test (one small globe it must
+wear itself, 20 s), the tide test's small globe 4 (8 s), the settlement
+history (11 s), and the drawn valleys.
+
+**Needs session 0's file (`phases.go`).**
+
+1. A pass-boundary hook for the peak: when the budget test asks (a
+   package-level `func(name string)` set from the test, or a callback on
+   the phase timer's stop), run `runtime.GC()` and read `HeapAlloc` at the
+   end of every pass. The largest reading is the peak with nothing
+   allocating, the same on any machine; then `peakSlack` in
+   `budget_test.go` turns the check on at 1% like the bytes.
+2. `TestPassCountsArePinned` wants `passCounts` and `resetPassCounts` set
+   to read `Phases()` and `ResetPhases()`, and `TERRA_PHASES=1 -count=1`
+   when run.
 ## 2026-09-16 - Session B: the hydrology, exactly as it was, cheaper
 
 The four items of [briefs/B-hydrology.md](briefs/B-hydrology.md), on branch

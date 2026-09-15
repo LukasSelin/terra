@@ -42,20 +42,41 @@ type yardstick struct {
 	lo, hi     float64
 	source     string
 	measure    func() float64
-	slow       bool // needs a full globe: skipped under -short
+	slow       bool // needs a globe, small or full: skipped under -short (docs/perf/suite.md)
 }
 
-// Worlds are made once and shared by every yardstick that only reads them.
+// Worlds are made once and shared by every test that only reads them: the
+// yardsticks, and any test that would otherwise make the same world for
+// itself (the plate tests, the polar ones, the climate's globe). A globe is
+// a minute and more, so the suite's time is mostly worlds, and a world made
+// twice is a minute wasted; docs/perf/suite.md says where the time goes.
+//
+// The registry holds the whole Land, so that a test which reads the climate
+// or the day's weather shares the world too; yardWorld is the Grid of it.
+// Nothing that takes a world from here may change it. A test that must
+// write to one clones the Grid first, as TestTheDaysWeatherReplacesTheSpell
+// does, or makes its own.
 var yardWorlds sync.Map
 
 func yardWorld(name string, seed uint64, terms Terms) *Grid {
+	return yardLand(name, seed, terms).Grid
+}
+
+func yardLand(name string, seed uint64, terms Terms) *Land {
 	key := fmt.Sprintf("%s/%d", name, seed)
-	if g, ok := yardWorlds.Load(key); ok {
-		return g.(*Grid)
+	if w, ok := yardWorlds.Load(key); ok {
+		return w.(*Land)
 	}
-	g := NewLand(seed, terms).Grid
-	yardWorlds.Store(key, g)
-	return g
+	w := NewLand(seed, terms)
+	yardWorlds.Store(key, w)
+	return w
+}
+
+// keepLand offers a world a test made anyway - because it was timing the
+// making, say - to the tests that would otherwise make it again. The first
+// world kept under a name and seed is the one shared.
+func keepLand(name string, seed uint64, w *Land) {
+	yardWorlds.LoadOrStore(fmt.Sprintf("%s/%d", name, seed), w)
 }
 
 func valleys(n int) []*Grid {
@@ -99,7 +120,7 @@ var yardsticks = []yardstick{
 		measure: func() float64 { return meanOf(landSlopes(valleys(5))) },
 	},
 	{
-		name: "mean land slope, small globe", unit: "", scale: "ground", lo: 0, hi: math.Tan(32 * math.Pi / 180),
+		name: "mean land slope, small globe", unit: "", scale: "ground", lo: 0, hi: math.Tan(32 * math.Pi / 180), slow: true,
 		source:  "Montgomery & Brandon 2002: mean slope stops rising with erosion rate above 30 degrees (Olympic Mtns, 10 m DEM); raised to 32 for the ridges and scarps layered rock stands up in, which that threshold hillslope is not",
 		measure: func() float64 { return meanOf(landSlopes(smallGlobes(3))) },
 	},
@@ -109,7 +130,7 @@ var yardsticks = []yardstick{
 		measure: func() float64 { return quantile(landSlopes(valleys(5)), 0.99) },
 	},
 	{
-		name: "99th percentile land slope, small globe", unit: "", scale: "ground", lo: 0, hi: 1.35,
+		name: "99th percentile land slope, small globe", unit: "", scale: "ground", lo: 0, hi: 1.35, slow: true,
 		source:  "Roering et al. 1999 Table 1: critical gradient Sc 1.2-1.35, steeper soil-mantled slopes cannot stand",
 		measure: func() float64 { return quantile(landSlopes(smallGlobes(3)), 0.99) },
 	},
@@ -119,38 +140,38 @@ var yardsticks = []yardstick{
 		measure: func() float64 { return meanHypsometry(valleys(5)) },
 	},
 	{
-		name: "hypsometric integral, small globe", unit: "", scale: "ground", lo: 0.32, hi: 0.60,
+		name: "hypsometric integral, small globe", unit: "", scale: "ground", lo: 0.32, hi: 0.60, slow: true,
 		source:  "Strahler 1952: 0.35-0.60 is the mature, equilibrium stage; floor lowered three hundredths for the small globes' ground under the climate that softened their winters (0.331 over three), not a measured figure",
 		measure: func() float64 { return meanHypsometry(smallGlobes(3)) },
 	},
 
 	// How often river sizes occur.
 	{
-		name: "drainage area exceedance exponent, small globe", unit: "", scale: "water", lo: 0.39, hi: 0.46,
+		name: "drainage area exceedance exponent, small globe", unit: "", scale: "water", lo: 0.39, hi: 0.46, slow: true,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: P(A>=a) ~ a^-0.43, 0.40-0.46 in real networks; floor lowered a hundredth for streams held to the strike of layered rock, not a measured figure",
 		measure: func() float64 {
 			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.area[i] })
 		},
 	},
 	{
-		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46,
+		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46, slow: true,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: discharge goes as area, so the same 0.40-0.46",
 		measure: func() float64 {
 			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
 		},
 	},
 	{
-		name: "Hack exponent, small globe", unit: "", scale: "water", lo: 0.54, hi: 0.60,
+		name: "Hack exponent, small globe", unit: "", scale: "water", lo: 0.54, hi: 0.60, slow: true,
 		source:  "Hack 1957 (0.6); Rigon et al. 1996 (0.57 +- 0.03): mainstream length ~ area^h",
 		measure: func() float64 { return hackExponent(smallGlobes(networkGlobes)) },
 	},
 	{
-		name: "Horton bifurcation ratio, small globe", unit: "", scale: "water", lo: 3, hi: 5,
+		name: "Horton bifurcation ratio, small globe", unit: "", scale: "water", lo: 3, hi: 5, slow: true,
 		source:  "Horton 1945; Strahler 1957: Rb 3-5 in natural networks",
 		measure: func() float64 { rb, _ := hortonRatios(smallGlobes(networkGlobes)); return rb },
 	},
 	{
-		name: "Horton area ratio, small globe", unit: "", scale: "water", lo: 2.9, hi: 6,
+		name: "Horton area ratio, small globe", unit: "", scale: "water", lo: 2.9, hi: 6, slow: true,
 		source:  "Rosso, Bacchi & La Barbera 1991: RA 3-6; floor lowered a tenth for streams held to the strike of layered rock, not a measured figure",
 		measure: func() float64 { _, ra := hortonRatios(smallGlobes(networkGlobes)); return ra },
 	},
@@ -187,7 +208,7 @@ var yardsticks = []yardstick{
 		measure: func() float64 { return valleyWavelength(valleys(5)) },
 	},
 	{
-		name: "ridge-valley wavelength, small globe", unit: "m", scale: "ground", lo: 24, hi: 224,
+		name: "ridge-valley wavelength, small globe", unit: "m", scale: "ground", lo: 24, hi: 224, slow: true,
 		source:  "Perron, Dietrich & Kirchner 2008: first-order valley spacing 30+-6 m (Dragon's Back) to 163+-61 m (Gabilan Mesa)",
 		measure: func() float64 { return valleyWavelength(smallGlobes(3)) },
 	},

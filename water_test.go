@@ -56,9 +56,12 @@ func TestHighContinentsDrownLess(t *testing.T) {
 // did. The deep floor holds its own water besides - see abyss.go - and that
 // is kilometres of it and not metres.
 func TestTheSeaIsTheWorldsToSay(t *testing.T) {
+	if testing.Short() {
+		t.Skip("six small globes; see docs/perf/suite.md")
+	}
 	var shares []float64
 	for seed := uint64(1); seed <= 6; seed++ {
-		g := NewLand(seed, smallGlobe()).Grid
+		g := yardWorld("small", seed, smallGlobe())
 		deep := g.abyssWater()
 		if got := g.room() - deep; math.Abs(got-DefaultWater) > 1e-6 {
 			t.Errorf("seed %d holds %v m of water over its deep floor, given %v", seed, got, DefaultWater)

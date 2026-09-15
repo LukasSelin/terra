@@ -2,7 +2,6 @@ package terra
 
 import (
 	"math"
-	"sync"
 	"testing"
 
 	"github.com/LukasSelin/terra/geom"
@@ -96,15 +95,10 @@ func TestAYearOfClimateGrowthIsItsNPP(t *testing.T) {
 	}
 }
 
-var (
-	climateGlobeOnce sync.Once
-	climateGlobeLand *Land
-)
-
-// climateGlobe is the globe the climate tests read, made once.
+// climateGlobe is the globe the climate tests read: the yardsticks' globe,
+// made once for the whole suite.
 func climateGlobe() *Land {
-	climateGlobeOnce.Do(func() { climateGlobeLand = NewLand(1, GlobeTerms()) })
-	return climateGlobeLand
+	return yardLand("globe", 1, GlobeTerms())
 }
 
 // A globe's frozen ground, its tundra and its ice keep to the high latitudes,

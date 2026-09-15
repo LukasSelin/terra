@@ -64,6 +64,10 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	start := time.Now()
 	w := NewLand(1, GlobeTerms())
 	made := time.Since(start)
+	// Made here rather than taken from the registry, because the making is
+	// what is timed below; kept, so that the yardsticks and the climate's
+	// tests read this one rather than make it again.
+	keepLand("globe", 1, w)
 	g := w.Grid
 	sea := 0
 	for i := range g.Tiles {
@@ -242,7 +246,7 @@ func TestTheIceEdgeIsNotALineOfLatitude(t *testing.T) {
 	// of them begin.
 	seen := map[int]int{}
 	for _, seed := range []uint64{1, 2, 3} {
-		g := NewLand(seed, GlobeTerms()).Grid
+		g := yardWorld("globe", seed, GlobeTerms())
 		for _, north := range []bool{true, false} {
 			first, most := edge(g, north)
 			if most > 300 {
@@ -269,7 +273,7 @@ func TestThePolarSeaIsIce(t *testing.T) {
 		t.Skip("a globe takes a second or two to make")
 	}
 	for _, seed := range []uint64{1, 2, 3} {
-		g := NewLand(seed, GlobeTerms()).Grid
+		g := yardWorld("globe", seed, GlobeTerms())
 		for _, y := range []int{0, g.H - 1} {
 			open, ice := 0, 0
 			for x := 0; x < g.W; x++ {
