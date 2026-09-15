@@ -172,3 +172,45 @@ func TestADrawnWorldIsUntouched(t *testing.T) {
 		}
 	}
 }
+
+// A quiet sea floor is lime where the water is warm and mud where it is cold,
+// and on a globe that is a matter of latitude: limestone across the tropics
+// and the temperate seas, a thicker bed of it the warmer the water, and shale
+// beyond the polar front, which quietFloor puts near sixty degrees. A
+// valley's sea is a temperate one, and keeps its limestone.
+func TestLimestoneIsLaidInWarmSeas(t *testing.T) {
+	g := NewGrid(4, 90)
+	g.air = Climate{rows: g.H, globe: true}.airFor(g, 1)
+	var equator, forty float64
+	for y := 0; y < g.H; y++ {
+		lat := g.air.lat[y]
+		rock, bed := g.quietFloor(y * g.W)
+		want := Limestone
+		if lat > 66 || lat < -66 {
+			want = Shale
+		}
+		if (lat > 50 && lat < 66) || (lat < -50 && lat > -66) {
+			continue // the polar front falls somewhere in here
+		}
+		if rock != want {
+			t.Errorf("a quiet floor at %.0f degrees, %.1f degrees warm, lays %s", lat, g.air.mean[y], rock)
+		}
+		if bed <= 0 {
+			t.Errorf("a quiet floor at %.0f degrees lays nothing", lat)
+		}
+		if lat > 0 && lat < 2 {
+			equator = bed
+		}
+		if lat > 40 && lat < 42 {
+			forty = bed
+		}
+	}
+	if !(equator > forty) {
+		t.Errorf("the equator's lime is %.0f m an epoch and forty degrees' %.0f", equator, forty)
+	}
+	v := NewGrid(4, 10)
+	v.air = defaultAir(v)
+	if rock, _ := v.quietFloor(0); rock != Limestone {
+		t.Errorf("a valley's temperate sea lays %s", rock)
+	}
+}
