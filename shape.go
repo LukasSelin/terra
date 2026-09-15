@@ -399,7 +399,9 @@ func (g *Grid) openSea(root []bool) {
 // roots inward, so that every tile has somewhere lower to send its water.
 func (g *Grid) fillFrom(h []float64, root []bool) {
 	const hair = 1e-4
-	done := make([]bool, len(h))
+	g.fillScratch = sized(g.fillScratch, len(h))
+	done := g.fillScratch
+	clear(done)
 	q := slideQueue{at: g.slideScratch[:0]}
 	roots := 0
 	for i := range h {

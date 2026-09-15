@@ -3,7 +3,6 @@ package terra
 import (
 	"github.com/LukasSelin/terra/geom"
 	"math"
-	"slices"
 )
 
 // Weathering: the land does not hold still.
@@ -521,10 +520,13 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		{geom.Pos{X: 1, Y: 1}, 0.5, span * math.Sqrt2},
 	}
 	n := len(g.Tiles)
-	nb := make([]int32, len(pairs)*n)
-	k := make([]float64, len(pairs)*n)
-	diag := make([]float64, n)
-	z := make([]float64, n)
+	// The creep's scratch is the Grid's, kept between ages: see creepScratch.
+	// nb, diag and z are written on every tile below; k is only written on
+	// the pairs that creep and only read on them, and is cleared anyway.
+	cs := &g.creepScratch
+	cs.fit(n, len(pairs))
+	nb, k, diag, z := cs.nb, cs.k, cs.diag, cs.z
+	clear(k)
 	for i := range g.Tiles {
 		z[i], diag[i] = g.Tiles[i].Height, 1
 	}
@@ -564,8 +566,8 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		}
 	}
 	// Jacobi sweeps on (1 + Σk)·z'_i − Σ k·z'_j = z_i.
-	next := slices.Clone(z)
-	sum := make([]float64, n)
+	next, sum := cs.next, cs.sum
+	copy(next, z)
 	for s := 0; s < creepSweeps; s++ {
 		copy(sum, z)
 		for at, j := range nb {
@@ -581,7 +583,8 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		}
 	}
 	// What each tile would give, and how much of that its soil covers.
-	gives := make([]float64, n)
+	gives := cs.gives
+	clear(gives)
 	for at, j := range nb {
 		if j < 0 {
 			continue
@@ -617,6 +620,24 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			gained[lo][gr] += moved * was[gr]
 		}
 	}
+}
+
+// creepScratch is creep's working memory, kept on the Grid between ages: see
+// fit. nb and k are the pairs, four to a tile; the rest are by tile.
+type creepScratch struct {
+	nb                           []int32
+	k, diag, z, next, sum, gives []float64
+}
+
+// fit gives the scratch its size for n tiles with pairs pairs each.
+func (s *creepScratch) fit(n, pairs int) {
+	s.nb = sized(s.nb, pairs*n)
+	s.k = sized(s.k, pairs*n)
+	s.diag = sized(s.diag, n)
+	s.z = sized(s.z, n)
+	s.next = sized(s.next, n)
+	s.sum = sized(s.sum, n)
+	s.gives = sized(s.gives, n)
 }
 
 // soils is what SoilAt reads on every tile, for resoil to read the age's
@@ -696,22 +717,33 @@ func blend(t *Tile, held float64, laid [Grains]float64) {
 func (g *Grid) waterStep(years float64) fluvial {
 	defer phase("waterStep")()
 	n := len(g.Tiles)
-	recv, run := g.receivers()
+	// The step's slices are the Grid's scratch, kept from step to step: see
+	// stepScratch. h, soil and parts are written on every tile below; the
+	// rest are only written where the water cuts, and are cleared first.
+	s := &g.stepScratch
+	s.fit(n)
+	recv, run := g.receiversInto(s.recv, s.run)
 	c := fluvial{
-		h:      make([]float64, n),
+		h:      s.h,
 		recv:   recv,
-		stack:  stackOf(recv),
-		f:      make([]float64, n),
-		drop:   make([]float64, n),
-		settle: make([][Grains]float64, n),
-		parts:  make([][Grains]float64, n),
+		stack:  stackInto(recv, &s.stack),
+		f:      s.f,
+		drop:   s.drop,
+		settle: s.settle,
+		parts:  s.parts,
 		supply: g.bankLoad,
-		soil:   make([]float64, n),
-		rock:   make([]float64, n),
-		eff:    make([]float64, n),
-		abrade: make([]float64, n),
-		lasts:  make([]float64, n),
+		soil:   s.soil,
+		rock:   s.rock,
+		eff:    s.eff,
+		abrade: s.abrade,
+		lasts:  s.lasts,
 	}
+	clear(c.f)
+	clear(c.drop)
+	clear(c.settle)
+	clear(c.rock)
+	clear(c.eff)
+	clear(c.abrade)
 	for i := range c.lasts {
 		c.lasts[i] = 1
 	}

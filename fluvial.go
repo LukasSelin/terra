@@ -108,12 +108,16 @@ const settleIters = 4
 // the sea, still water - is its own receiver and is a root: its height is what
 // everything above it is cut down toward.
 func (g *Grid) receivers() (recv []int32, run []float64) {
-	if g.deep > 0 {
-		return g.deepReceivers()
-	}
 	n := len(g.Tiles)
-	recv = make([]int32, n)
-	run = make([]float64, n)
+	return g.receiversInto(make([]int32, n), make([]float64, n))
+}
+
+// receiversInto is receivers written into recv and run, which are the tile
+// count long; every entry of both is written.
+func (g *Grid) receiversInto(recv []int32, run []float64) ([]int32, []float64) {
+	if g.deep > 0 {
+		return g.deepReceiversInto(recv, run)
+	}
 	span := g.span()
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
@@ -156,11 +160,18 @@ func (g *Grid) receivers() (recv []int32, run []float64) {
 // to uncut, so the floor of a filled hollow is only ever built up.
 func (g *Grid) deepReceivers() (recv []int32, run []float64) {
 	n := len(g.Tiles)
-	recv = make([]int32, n)
-	run = make([]float64, n)
+	return g.deepReceiversInto(make([]int32, n), make([]float64, n))
+}
+
+// deepReceiversInto is deepReceivers written into recv and run. The filled
+// ground it routes over is the Grid's stepScratch.
+func (g *Grid) deepReceiversInto(recv []int32, run []float64) ([]int32, []float64) {
+	n := len(g.Tiles)
 	span := g.span()
-	h := make([]float64, n)
-	root := make([]bool, n)
+	s := &g.stepScratch
+	s.fill, s.root = sized(s.fill, n), sized(s.root, n)
+	h, root := s.fill, s.root
+	clear(root)
 	for i := range g.Tiles {
 		h[i] = g.Tiles[i].Height
 		if p := g.PosOf(i); g.sunk(i) || g.outlet(p.X, p.Y) {
@@ -203,8 +214,21 @@ func (g *Grid) deepReceivers() (recv []int32, run []float64) {
 // into each, breadth first. Walked forward it goes from the sea upstream;
 // walked backward, from the ridges down.
 func stackOf(recv []int32) []int32 {
+	return stackInto(recv, &stackScratch{})
+}
+
+// stackScratch is stackOf's working memory: the tally of donors by receiver,
+// the donors laid out by it, a cursor into them, and the stack itself.
+type stackScratch struct {
+	count, donors, next, stack []int32
+}
+
+// stackInto is stackOf on the scratch given; the stack returned is s.stack.
+func stackInto(recv []int32, s *stackScratch) []int32 {
 	n := len(recv)
-	count := make([]int32, n+1)
+	s.count = sized(s.count, n+1)
+	count := s.count
+	clear(count)
 	for i, r := range recv {
 		if int(r) != i {
 			count[r+1]++
@@ -213,15 +237,17 @@ func stackOf(recv []int32) []int32 {
 	for i := 0; i < n; i++ {
 		count[i+1] += count[i]
 	}
-	donors := make([]int32, count[n])
-	next := append([]int32(nil), count[:n]...)
+	s.donors = sized(s.donors, int(count[n]))
+	donors := s.donors
+	s.next = append(s.next[:0], count[:n]...)
+	next := s.next
 	for i, r := range recv {
 		if int(r) != i {
 			donors[next[r]] = int32(i)
 			next[r]++
 		}
 	}
-	stack := make([]int32, 0, n)
+	stack := s.stack[:0]
 	for i, r := range recv {
 		if int(r) == i {
 			stack = append(stack, int32(i))
@@ -231,7 +257,40 @@ func stackOf(recv []int32) []int32 {
 		i := stack[k]
 		stack = append(stack, donors[count[i]:count[i+1]]...)
 	}
+	s.stack = stack
 	return stack
+}
+
+// stepScratch is waterStep's working memory, kept on the Grid between steps:
+// see sized. It is the tile-sized slices of the fluvial it sets up, the
+// receivers and their stack, the filled ground deepReceivers routes over,
+// and the edge, keep and room that edgeWork and stillWork fill in. A fluvial
+// set up by waterStep holds these until the next step; nothing keeps one
+// longer.
+type stepScratch struct {
+	recv                                            []int32
+	run, h, f, drop, soil, rock, eff, abrade, lasts []float64
+	settle, parts                                   [][Grains]float64
+	stack                                           stackScratch
+	fill                                            []float64
+	root                                            []bool
+	edge, keep, room                                []float64
+}
+
+// fit gives every tile-sized slice of the scratch length n.
+func (s *stepScratch) fit(n int) {
+	s.recv = sized(s.recv, n)
+	s.run = sized(s.run, n)
+	s.h = sized(s.h, n)
+	s.f = sized(s.f, n)
+	s.drop = sized(s.drop, n)
+	s.soil = sized(s.soil, n)
+	s.rock = sized(s.rock, n)
+	s.eff = sized(s.eff, n)
+	s.abrade = sized(s.abrade, n)
+	s.lasts = sized(s.lasts, n)
+	s.settle = sized(s.settle, n)
+	s.parts = sized(s.parts, n)
 }
 
 // fluvial is one step of the water's work on a column of ground: the heights,
@@ -621,7 +680,8 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 		return
 	}
 	n := len(g.Tiles)
-	c.edge = make([]float64, n)
+	g.stepScratch.edge = sized(g.stepScratch.edge, n)
+	c.edge = g.stepScratch.edge
 	base := math.Max(0, g.base)
 	for i := range n {
 		c.edge[i] = math.Inf(1)
@@ -653,7 +713,11 @@ func (g *Grid) stillWork(c *fluvial, recv []int32) {
 			continue
 		}
 		if c.keep == nil {
-			c.keep, c.room = make([]float64, n), make([]float64, n)
+			s := &g.stepScratch
+			s.keep, s.room = sized(s.keep, n), sized(s.room, n)
+			c.keep, c.room = s.keep, s.room
+			clear(c.keep)
+			clear(c.room)
 		}
 		c.keep[i], c.room[i] = 1, math.Inf(1)
 	}
