@@ -58,8 +58,8 @@ New baselines: [baseline/2026-09-15-2333-small.txt](baseline/2026-09-15-2333-sma
 - `TestTheRealWorld/meander_wavelength,_small_globe` now reads 13.6 widths,
   **inside** 10-14. Its known-gap marker (B, 14.6) therefore fails with "the
   gap has closed". This yardstick rests on about 21 reaches (see the
-  yardstick sample-size notes), so a one-width move is within its noise. The
-  marker is left alone pending the user's decision.
+  yardstick sample-size notes), so a one-width move is within its noise. At the
+  user's call the marker was taken off, and the yardstick now passes.
 - Everything else passes. `TestMakingAWorldDoesNotDependOnTheGoroutines`
   passes: the gate is serial arithmetic and draws nothing.
 
