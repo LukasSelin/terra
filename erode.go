@@ -724,19 +724,20 @@ func (g *Grid) waterStep(years float64) fluvial {
 	s.fit(n)
 	recv, run := g.receiversInto(s.recv, s.run)
 	c := fluvial{
-		h:      s.h,
-		recv:   recv,
-		stack:  stackInto(recv, &s.stack),
-		f:      s.f,
-		drop:   s.drop,
-		settle: s.settle,
-		parts:  s.parts,
-		supply: g.bankLoad,
-		soil:   s.soil,
-		rock:   s.rock,
-		eff:    s.eff,
-		abrade: s.abrade,
-		lasts:  s.lasts,
+		h:       s.h,
+		recv:    recv,
+		stack:   stackInto(recv, &s.stack),
+		f:       s.f,
+		drop:    s.drop,
+		settle:  s.settle,
+		parts:   s.parts,
+		supply:  g.bankLoad,
+		soil:    s.soil,
+		rock:    s.rock,
+		eff:     s.eff,
+		abrade:  s.abrade,
+		lasts:   s.lasts,
+		scratch: &s.solve,
 	}
 	clear(c.f)
 	clear(c.drop)
