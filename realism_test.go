@@ -149,9 +149,7 @@ var realYardsticks = []realYardstick{
 		name: "annual mean temperature, equator, globe", unit: "C", scale: "water", lo: 24, hi: 28, slow: true,
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992 Fig. 7.4: zonal mean surface air ~26 C at 0-5 deg",
 		measure: func() float64 { return zonalTemp(globes(), 0, 5) },
-	},
-		gap: "known gap: A - MeanAt is 10 + 30(cos lat - cos 45), which is 18.8 C at the equator",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "annual mean temperature, 60 deg, globe", unit: "C", scale: "water", lo: -4, hi: 4, slow: true,
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992 Fig. 7.4: zonal mean surface air ~0 C at 60 deg",
@@ -162,7 +160,7 @@ var realYardsticks = []realYardstick{
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992: -18 C over the Arctic, -50 C over Antarctica; both poles under -20",
 		measure: func() float64 { return zonalTemp(globes(), 80, 90) },
 	},
-		gap: "known gap: A - the cosine curve bottoms out at -11 C at the poles, and the currents warm it from there",
+		gap: "known gap: G - the energy balance's poles are -11 C: one column a band has no polar inversion and no ice sheet standing kilometres high",
 	},
 	{yardstick: yardstick{
 		name: "equatorial over subtropical rain, globe", unit: "x", scale: "water", lo: 1.8, hi: 4, slow: true,
