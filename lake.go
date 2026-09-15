@@ -654,7 +654,7 @@ func (g *Grid) flow() {
 		g.down, g.route = make([]int32, n), make([]int32, 0, n)
 	}
 	g.route = g.route[:0]
-	var q floodQueue
+	q := floodQueue(g.floodScratch[:0])
 	seq := int32(0)
 	for i := range g.Tiles {
 		p := g.PosOf(i)
@@ -683,6 +683,7 @@ func (g *Grid) flow() {
 			seq++
 		}
 	}
+	g.floodScratch = q[:0]
 
 	exit := make([]int32, len(g.Lakes))
 	for k := range exit {
@@ -833,7 +834,13 @@ func (g *Grid) flow() {
 	}
 }
 
-// floodQueue is a smallest-first heap of floodNodes.
+// floodQueue is a smallest-first heap of floodNodes: a 4-ary one, because
+// each pop of a binary heap walks a log2 n ladder and asks two neighbours at
+// every rung, and a 4-ary heap walks half the ladder for four neighbours a
+// rung that sit in one cache line. Which order the nodes come out in does not
+// depend on the heap's shape: floodBefore is a total order, by height and
+// then by when the node was pushed, so every pop is the one least node. Its
+// backing is kept on the Grid between floods, see floodScratch.
 type floodQueue []floodNode
 
 func (q *floodQueue) len() int { return len(*q) }
@@ -846,39 +853,48 @@ func floodBefore(a, b floodNode) bool {
 }
 
 func (q *floodQueue) push(n floodNode) {
+	i := len(*q)
 	*q = append(*q, n)
-	i := len(*q) - 1
+	h := *q
 	for i > 0 {
-		p := (i - 1) / 2
-		if !floodBefore((*q)[i], (*q)[p]) {
+		p := (i - 1) / 4
+		if !floodBefore(n, h[p]) {
 			break
 		}
-		(*q)[i], (*q)[p] = (*q)[p], (*q)[i]
+		h[i] = h[p]
 		i = p
 	}
+	h[i] = n
 }
 
 func (q *floodQueue) pop() floodNode {
-	old := *q
-	top := old[0]
-	last := len(old) - 1
-	old[0] = old[last]
-	old = old[:last]
-	*q = old
+	h := *q
+	top := h[0]
+	last := len(h) - 1
+	x := h[last]
+	h = h[:last]
+	*q = h
+	if last == 0 {
+		return top
+	}
 	i := 0
 	for {
-		l, best := 2*i+1, i
-		if l < len(old) && floodBefore(old[l], old[best]) {
-			best = l
-		}
-		if r := l + 1; r < len(old) && floodBefore(old[r], old[best]) {
-			best = r
-		}
-		if best == i {
+		first := 4*i + 1
+		if first >= last {
 			break
 		}
-		old[i], old[best] = old[best], old[i]
+		best := first
+		for c := first + 1; c < first+4 && c < last; c++ {
+			if floodBefore(h[c], h[best]) {
+				best = c
+			}
+		}
+		if !floodBefore(h[best], x) {
+			break
+		}
+		h[i] = h[best]
 		i = best
 	}
+	h[i] = x
 	return top
 }

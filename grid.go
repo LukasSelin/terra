@@ -311,6 +311,16 @@ type Grid struct {
 	// from. Taken by RefreshLandmarks; see landmark.go.
 	landmarks Landmarks
 
+	// Scratch: the working memory of the passes that make and wear the
+	// ground, kept between calls so that a pass called thirty times over a
+	// history does not make its slices afresh each time. None of it means
+	// anything between two calls; every pass fills or clears what it reads
+	// before it reads it, and Clone leaves it nil for the pass to remake.
+	// floodScratch backs the queue flow floods the map from, and slideScratch
+	// the one cutBack and fillFrom do.
+	floodScratch []floodNode
+	slideScratch []slideAt
+
 	// islanded is set on a view of the map an island acts on for a day,
 	// which mends no reading of its own - the water's labels are read as
 	// they stood when the day's acting began. See island.go.
@@ -376,6 +386,8 @@ func (g *Grid) Clone() *Grid {
 	c.area = append([]float64(nil), g.area...)
 	c.water = g.water
 	c.lenders = make([]uint8, len(g.Tiles))
+	// The scratch fields - floodScratch, slideScratch - are left nil: they
+	// mean nothing between calls, and the pass that needs one remakes it.
 	c.layChunks()
 	c.layPatches()
 	c.Recount()
