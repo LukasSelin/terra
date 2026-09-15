@@ -314,23 +314,43 @@ func TestOverflowIsCountedWhereItLands(t *testing.T) {
 }
 
 // A globe has its deserts where the air comes down dry: a salt lake stands
-// only where the air takes more off open water than falls.
+// only where the air takes more off its open water than falls on it and runs
+// in.
+//
+// That is a balance over the lake, not over each tile of it. A lake of a
+// hundred tiles reaches from the dry side of its basin toward the wet one,
+// and the tiles of its wetter shore give the air less than runs off them;
+// what closes the lake is that its surface as a whole gives back all it is
+// given. What falls on the lake's own water is some of that, and what runs
+// in from the ground round it the rest, so the surface's whole loss is more
+// than what runs off the water alone. Read on every closed lake of eight
+// small globes, since one globe's few can all sit in the middle of a desert.
 func TestSaltLakesStandInDryCountry(t *testing.T) {
-	g := NewLand(2, smallGlobe()).Grid
 	closed := 0
-	for i := range g.Tiles {
-		if !g.closedLake(i) {
-			continue
+	for s, g := range smallGlobes(networkGlobes) {
+		loss := make([]float64, len(g.Lakes))
+		runoff := make([]float64, len(g.Lakes))
+		for i := range g.Tiles {
+			if !g.closedLake(i) {
+				continue
+			}
+			k := g.lakeOf[i]
+			loss[k] += g.loss(i)
+			runoff[k] += g.runoff[i]
 		}
-		closed++
-		// The air could take up more than falls where what it takes off open
-		// water is more than what runs off the ground.
-		if g.loss(i) <= g.runoff[i] {
-			t.Fatalf("a salt lake at %v, where %.0f falls and %.0f runs off", g.PosOf(i), g.rain[i], g.runoff[i])
+		for k, l := range g.Lakes {
+			if !l.Closed || l.Tiles == 0 {
+				continue
+			}
+			closed++
+			if loss[k] <= runoff[k] {
+				t.Fatalf("seed %d: a salt lake of %d tiles at %.1f m gives the air %.0f and %.0f runs off its own water",
+					s+1, l.Tiles, l.Level, loss[k], runoff[k])
+			}
 		}
 	}
 	if closed == 0 {
-		t.Fatal("a globe with dry belts on it has no salt lake anywhere")
+		t.Fatal("globes with dry belts on them have no salt lake anywhere")
 	}
 	// And the default valley, at the temperate latitude, has none at all.
 	for _, seed := range []uint64{1, 2, 3} {
