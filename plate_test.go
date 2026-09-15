@@ -106,12 +106,11 @@ func TestPlatesAreNotAllOneSize(t *testing.T) {
 // through where its front is narrow, and a piece left on the far side is a
 // scrap of one plate adrift inside another.
 //
-// Known gap: D - with the history on its real clock and belts 550 km wide,
-// the second world leaves plate 3 in two pieces. It is skipped as a gap while it
-// does, and fails once it does not, so the marker comes off.
+// The second world was a known gap for a while, and ended with a single tile
+// of plate 3 on the far side of plate 23: joinUp handed out its scraps all at
+// once, and gave one of them to a piece of plate 3 that was itself being given
+// away. See joinUp.
 func TestEveryPlateIsOnePiece(t *testing.T) {
-	const gapSeed = 2
-	gapOpen := false
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
 		seen := make([]bool, len(g.Tiles))
@@ -136,18 +135,10 @@ func TestEveryPlateIsOnePiece(t *testing.T) {
 			}
 		}
 		for at, n := range parts {
-			switch {
-			case n > 1 && seed == gapSeed:
-				gapOpen = true
-			case n > 1:
+			if n > 1 {
 				t.Errorf("seed %d: plate %d is in %d pieces", seed, at, n)
 			}
 		}
-	}
-	if !gapOpen {
-		t.Errorf("seed %d: every plate is one piece: the gap has closed, take the marker off", gapSeed)
-	} else if !t.Failed() {
-		t.Skipf("known gap: D - seed %d leaves a plate in two pieces", gapSeed)
 	}
 }
 

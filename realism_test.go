@@ -68,7 +68,7 @@ var realYardsticks = []realYardstick{
 		source:  "Parsons & Sclater 1977: d = 2500 + 350 sqrt(t) m to ~70 Myr; Stein & Stein 1992: 365 sqrt(t)",
 		measure: func() float64 { return seafloorSubsidence(globes()).young },
 	},
-		gap: "known gap: D - basins() lays the floor by its rank in the history's heights, and nothing reads crust age (1 m/sqrt(Myr) of 350)",
+		gap: "known gap: D - basins() lays the floor by its rank in the history's heights, and nothing reads crust age (-0.9 m/sqrt(Myr) of 350, on the 4 Myr epoch)",
 	},
 	{yardstick: yardstick{
 		name: "sea floor flattening past 70 Myr, globe", unit: "old/young", scale: "ground", lo: -0.2, hi: 0.6, slow: true,
@@ -82,7 +82,7 @@ var realYardsticks = []realYardstick{
 			return s.old / s.young
 		},
 	},
-		gap: "known gap: D - no sqrt(age) subsidence to flatten; see the subsidence yardstick",
+		gap: "known gap: D - no sqrt(age) subsidence to flatten, and sixteen 4 Myr epochs leave no floor past 64 Myr to read; see the subsidence yardstick",
 	},
 
 	// 3. Plate sizes. Past the handful of great plates the earth's plates
@@ -332,12 +332,19 @@ func hypsometricModes(gs []*Grid) (continent, ocean float64) {
 	return mode(split, len(count)), mode(0, split)
 }
 
-// epochMyr is how long an epoch of a globe's history is taken to be, in
-// millions of years, for reading its sea floor against the earth's. Nothing
-// in the history says; the earth's oldest floor still in place is some 180
-// Myr old (Müller et al. 2008), so a history's oldest floor is taken to be
-// that.
-var epochMyr = 180.0 / float64(GlobeTerms().Epochs)
+// epochMyr is how long an epoch of a globe's history is, in millions of years,
+// for reading its sea floor against the earth's.
+//
+// It was taken to be 180 Myr over the globe's sixteen epochs, eleven and a
+// quarter each, on the grounds that nothing in the history said how long an
+// epoch was and that the earth's oldest floor still in place is some 180 Myr
+// old (Müller et al. 2008). The history says now - an epoch is epochYears,
+// four million years, and every rate in it is quoted on that clock - so the
+// reading was dating every floor two and four fifths times as old as the
+// history made it, and a sixteen-epoch globe's oldest floor is 64 Myr and not
+// 180. Past seventy there is then no floor at all to read, which is a truth
+// about how long a globe's history runs and not about how its floor sinks.
+var epochMyr = epochYears / myr
 
 type subsidence struct {
 	ridge float64 // metres under the sea at the youngest floor
