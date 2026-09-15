@@ -20,6 +20,48 @@ func TestEveryRockWeathersToAMixture(t *testing.T) {
 	}
 }
 
+// Every rock says what it gives a soil, and says it as shares of itself: the
+// quartz and the carbonate are minerals and cannot come to more than the rock
+// between them, and a rock with no bases and no phosphorus is no rock a soil
+// has ever come out of. And the table has to rank the rocks the way the
+// analyses do - limestone the carbonate one, sandstone the quartz one, basalt
+// the richest of the silicate rocks in both bases and phosphorus - or it is a
+// table of numbers and not of rocks.
+func TestEveryRockHasAChemistry(t *testing.T) {
+	for _, b := range Bedrocks() {
+		c := b.Chemistry()
+		if c.Quartz < 0 || c.Carbonate < 0 || c.Quartz+c.Carbonate > 1 || c.Bases <= 0 || c.Bases > 1 ||
+			c.Phosphorus <= 0 || c.Phosphorus > 0.01 {
+			t.Errorf("%s has chemistry %+v, which is not a rock's", b, c)
+		}
+	}
+	most := func(of func(Chemistry) float64, among []Bedrock) Bedrock {
+		best := among[0]
+		for _, b := range among {
+			if of(b.Chemistry()) > of(best.Chemistry()) {
+				best = b
+			}
+		}
+		return best
+	}
+	silicate := []Bedrock{Granite, Sandstone, Shale, Basalt, Schist}
+	for _, c := range []struct {
+		what  string
+		of    func(Chemistry) float64
+		among []Bedrock
+		want  Bedrock
+	}{
+		{"carbonate", func(c Chemistry) float64 { return c.Carbonate }, Bedrocks(), Limestone},
+		{"quartz", func(c Chemistry) float64 { return c.Quartz }, Bedrocks(), Sandstone},
+		{"bases among the silicate rocks", func(c Chemistry) float64 { return c.Bases }, silicate, Basalt},
+		{"phosphorus", func(c Chemistry) float64 { return c.Phosphorus }, Bedrocks(), Basalt},
+	} {
+		if got := most(c.of, c.among); got != c.want {
+			t.Errorf("the most %s is %s's and not %s's", c.what, got, c.want)
+		}
+	}
+}
+
 // The lines are cut at each lattice's own middle, so a map gets some of all
 // four of the rocks a lattice lays however its noise happened to fall. A map
 // with one rock on it is a map with one soil on it, which is what all this is

@@ -356,65 +356,13 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 		depth[cy] = mixedTropic + (mixedPolar-mixedTropic)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
 		relax[cy] = seaExchange / (seaHeat * depth[cy])
 	}
-	dy := e.dy
-	type order struct{ x0, x1, dx, y0, y1, dy int }
-	orders := [4]order{
-		{0, e.w, 1, 0, e.h, 1}, {e.w - 1, -1, -1, 0, e.h, 1},
-		{0, e.w, 1, e.h - 1, -1, -1}, {e.w - 1, -1, -1, e.h - 1, -1, -1},
-	}
-	for round := 0; round < seaRounds; round++ {
-		most := 0.0
-		for _, o := range orders {
-			for cy := o.y0; cy != o.y1; cy += o.dy {
-				row := cy * e.w
-				for cx := o.x0; cx != o.x1; cx += o.dx {
-					i := row + cx
-					if !wet(i) {
-						continue
-					}
-					r := rise[i] / depth[cy]
-					sum := relax[cy]*e.mean[cy] + r*deep[i]
-					take := relax[cy] + r
-					if a := math.Abs(cu[i]) / e.dx[cy]; a > 0 {
-						ux := cx - int(math.Copysign(1, cu[i]))
-						if e.wrap || (ux >= 0 && ux < e.w) {
-							if j := e.at(ux, cy); wet(j) {
-								sum, take = sum+a*temp[j], take+a
-							}
-						}
-					}
-					// Toward the north is up the map, so water going north
-					// comes from the row below.
-					// A current running along a coast that does not run due
-					// north and south comes in round the corner of it: from the
-					// nearest sea along the row behind it, within cornerReach.
-					if b := math.Abs(cv[i]) / dy; b > 0 {
-						if uy := cy + int(math.Copysign(1, cv[i])); uy >= 0 && uy < e.h {
-							reach := int(math.Ceil(cornerReach / e.dx[uy]))
-							for side := 0; side <= reach; side++ {
-								if j := e.at(cx+side, uy); wet(j) {
-									sum, take = sum+b*temp[j], take+b
-									break
-								}
-								if j := e.at(cx-side, uy); side > 0 && wet(j) {
-									sum, take = sum+b*temp[j], take+b
-									break
-								}
-							}
-						}
-					}
-					next := sum / take
-					if d := math.Abs(next - temp[i]); d > most {
-						most = d
-					}
-					temp[i] = next
-				}
-			}
-		}
-		if most < seaSettled {
-			break
-		}
-	}
+	// Each cell's equation does not change while it is solved - the currents,
+	// the coast and the upwelling are what they are - so where its water comes
+	// from and how hard is found once: the pull toward the latitude and up from
+	// under, the cell upstream along the row, and the nearest sea upstream down
+	// the column. Land takes nothing.
+	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
+	sea.gaussSeidel(temp)
 
 	warm := make([]float64, n)
 	for i := range warm {
@@ -465,6 +413,131 @@ const (
 	seaRounds  = 40
 	seaSettled = 1e-3
 )
+
+// seaLinks is each cell's equation for the water's warmth,
+//
+//	take·t_i = base + wa·t_ja + wb·t_jb
+//
+// with ja and jb -1 where no water comes in that way, and take nought on land.
+type seaLinks struct {
+	w, h       int
+	base, take []float64
+	wa, wb     []float64
+	ja, jb     []int32
+}
+
+// seaLinks writes each cell's equation down. It takes over cu, cv, rise and
+// deep for its own, since nothing reads them once the warmth is being solved:
+// each cell's base and take are written over its rise and deep water, and its
+// weights over its currents, after they are read. A cell's are the only ones
+// it reads.
+func (e *airEnv) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
+	n := e.w * e.h
+	l := &seaLinks{
+		w: e.w, h: e.h,
+		base: rise, take: deep,
+		wa: cu, wb: cv,
+		ja: make([]int32, n), jb: make([]int32, n),
+	}
+	dy := e.dy
+	for cy := 0; cy < e.h; cy++ {
+		for cx := 0; cx < e.w; cx++ {
+			i := cy*e.w + cx
+			l.ja[i], l.jb[i] = -1, -1
+			if e.sea[i] <= 0.5 {
+				l.take[i] = 0
+				continue
+			}
+			r := rise[i] / depth[cy]
+			sum := relax[cy]*e.mean[cy] + r*deep[i]
+			take := relax[cy] + r
+			a := math.Abs(cu[i]) / e.dx[cy]
+			b := math.Abs(cv[i]) / dy
+			cvi := cv[i]
+			if a > 0 {
+				ux := cx - int(math.Copysign(1, cu[i]))
+				if e.wrap || (ux >= 0 && ux < e.w) {
+					if j := e.at(ux, cy); e.sea[j] > 0.5 {
+						take += a
+						l.ja[i], l.wa[i] = int32(j), a
+					}
+				}
+			}
+			// Toward the north is up the map, so water going north comes from
+			// the row below. A current running along a coast that does not run
+			// due north and south comes in round the corner of it: from the
+			// nearest sea along the row behind it, within cornerReach.
+			if b > 0 {
+				if uy := cy + int(math.Copysign(1, cvi)); uy >= 0 && uy < e.h {
+					reach := int(math.Ceil(cornerReach / e.dx[uy]))
+					for side := 0; side <= reach; side++ {
+						if j := e.at(cx+side, uy); e.sea[j] > 0.5 {
+							take += b
+							l.jb[i], l.wb[i] = int32(j), b
+							break
+						}
+						if j := e.at(cx-side, uy); side > 0 && e.sea[j] > 0.5 {
+							take += b
+							l.jb[i], l.wb[i] = int32(j), b
+							break
+						}
+					}
+				}
+			}
+			l.base[i], l.take[i] = sum, take
+		}
+	}
+	return l
+}
+
+// at is cell i's warmth from the warmths t round it.
+func (l *seaLinks) at(i int, t []float64) float64 {
+	sum := l.base[i]
+	if j := l.ja[i]; j >= 0 {
+		sum += l.wa[i] * t[j]
+	}
+	if j := l.jb[i]; j >= 0 {
+		sum += l.wb[i] * t[j]
+	}
+	return sum / l.take[i]
+}
+
+// gaussSeidel settles t in place, swept in the four orders a current can run
+// in, each cell reading the warmth its neighbours were given earlier in the
+// same sweep: a western current carries its warmth the length of an ocean in
+// one. Read from the round before instead (Jacobi), so that a round could be
+// spread over goroutines and vectors, the warmth moves a cell a round: on a
+// quarter globe that took 4.7 times the sweeps, was slower all told, and
+// settled on warmths up to 7.6 degrees apart. See docs/perf/worklog.md.
+func (l *seaLinks) gaussSeidel(t []float64) {
+	type order struct{ x0, x1, dx, y0, y1, dy int }
+	orders := [4]order{
+		{0, l.w, 1, 0, l.h, 1}, {l.w - 1, -1, -1, 0, l.h, 1},
+		{0, l.w, 1, l.h - 1, -1, -1}, {l.w - 1, -1, -1, l.h - 1, -1, -1},
+	}
+	for round := 0; round < seaRounds; round++ {
+		most := 0.0
+		for _, o := range orders {
+			for cy := o.y0; cy != o.y1; cy += o.dy {
+				row := cy * l.w
+				for cx := o.x0; cx != o.x1; cx += o.dx {
+					i := row + cx
+					if l.take[i] == 0 {
+						continue
+					}
+					next := l.at(i, t)
+					if d := math.Abs(next - t[i]); d > most {
+						most = d
+					}
+					t[i] = next
+				}
+			}
+		}
+		if most < seaSettled {
+			return
+		}
+	}
+}
 
 // coastal is the sea's warmth as the country round each cell feels it: the
 // mean warmth of the sea within coastReach of it, felt in full where a third
