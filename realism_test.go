@@ -549,10 +549,18 @@ func chiLinearity(gs []*Grid) float64 {
 	})
 }
 
-type meanderReading struct{ wavelength, sinuosity float64 }
+type meanderReading struct {
+	wavelength, sinuosity float64
+	// reaches is how many reaches the reading rests on.
+	reaches int
+}
 
 // meanderReach is how many steps of a river a meander is read over.
 const meanderReach = 32
+
+// minMeanderReaches is the fewest reaches a meander reading may rest on:
+// fewer, and it reads as NaN rather than as one river's chance bends.
+const minMeanderReaches = 8
 
 // meanderingSlope is the steepest a river carrying q cubic metres a second
 // can fall and still meander rather than braid: Leopold & Wolman 1957's line,
@@ -571,21 +579,20 @@ func meanders(gs []*Grid) meanderReading {
 	return remember(fmt.Sprintf("meanders/%p/%d", gs[0], len(gs)), func() meanderReading {
 		var wl, sn []float64
 		for _, g := range gs {
+			// A lake is no reach of a river, but an open one is no end of it
+			// either: the river goes on from where the lake lets it out.
 			river := func(i int) bool {
-				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow
+				return !g.underSea(i) && g.lakeOf[i] < 0 && g.Tiles[i].Flow >= meanderFlow
 			}
 			next := func(i int) int {
-				d := g.flowStep(i)
-				if d.X == 0 && d.Y == 0 {
+				j := int(g.down[i])
+				for n := 0; j >= 0 && g.lakeOf[j] >= 0 && n < len(g.Lakes); n++ {
+					j = int(g.Lakes[g.lakeOf[j]].Outlet)
+				}
+				if j >= 0 && g.lakeOf[j] >= 0 {
 					return -1
 				}
-				p := g.PosOf(i)
-				p.X, p.Y = p.X+d.X, p.Y+d.Y
-				p = g.Norm(p)
-				if !g.In(p) {
-					return -1
-				}
-				return g.Index(p)
+				return j
 			}
 			// The rivers as streams: each walked up from its mouth along the
 			// inflow carrying the most, its other inflows mouths of their own.
@@ -628,8 +635,10 @@ func meanders(gs []*Grid) meanderReading {
 				x, y := float64(stem[0]%g.W), float64(stem[0]/g.W)
 				for k, i := range stem {
 					xs[k], ys[k], hs[k], qs[k] = x, y, g.Tiles[i].Height, g.Tiles[i].Flow
-					d := g.flowStep(i)
-					x, y = x+float64(d.X), y+float64(d.Y)
+					if k+1 < len(stem) {
+						d := g.Delta(g.PosOf(i), g.PosOf(stem[k+1]))
+						x, y = x+float64(d.X), y+float64(d.Y)
+					}
 				}
 				for s := 0; s+meanderReach < len(xs); s += meanderReach / 2 {
 					e := s + meanderReach
@@ -665,10 +674,10 @@ func meanders(gs []*Grid) meanderReading {
 				}
 			}
 		}
-		if len(sn) == 0 {
-			return meanderReading{math.NaN(), math.NaN()}
+		if len(sn) < minMeanderReaches {
+			return meanderReading{math.NaN(), math.NaN(), len(sn)}
 		}
-		return meanderReading{quantile(wl, 0.5), meanOf(sn)}
+		return meanderReading{quantile(wl, 0.5), meanOf(sn), len(sn)}
 	})
 }
 
