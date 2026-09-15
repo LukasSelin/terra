@@ -234,7 +234,15 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	damp := clamp01(1 - t.Drain/FloodDepth)
 	wet := damp + (1-damp)*shoulderWater*g.wetOf(i)
 	lie := wet * (0.75 + 0.5*g.Sunlight(p))
-	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*t.Loam())*g.organic(i))
+	// Organisms and time again: the carbon the soil holds, and what the rain,
+	// the dry years and the rock have made of its chemistry. See humus and
+	// soilChemistry; on a grid whose soil state was never laid, the climate's
+	// organic matter alone, as it was.
+	chem := 1.0
+	if g.pedons {
+		chem = t.soilChemistry()
+	}
+	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*t.Loam())*g.humus(i)*chem)
 }
 
 // rootReach is how deep the soil a crop's roots fill is, in metres: most of

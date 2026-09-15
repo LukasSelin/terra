@@ -286,7 +286,7 @@ func (w *Land) Generate(cfg Terms) {
 	// how much of it there is, which reads what grows on the ground, so the
 	// woods and the outcrops come first. See soil.go.
 	g.soilTexture()
-	g.laySoil()
+	g.laySoil(cfg.Epochs > 0)
 
 	// Good soil is deep soil with water in it: the flat of a valley, damp from
 	// what drains through it, facing the sun, over a mixture that will hold
