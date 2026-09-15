@@ -45,7 +45,7 @@ var soilYardsticks = []realYardstick{
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment",
 		measure: func() float64 { return soilDepths(smallGlobes(networkGlobes)).floor },
 	},
-		gap: "known gap: I - a made map's soil is laid at its steady depth, which production holds under ~2 m (soilDeepest), and what its water laid on the floors is height, not soil: 0.68 m",
+		gap: "known gap: I - a made map's soil is laid at its steady depth, which production holds under ~2 m (soilDeepest), and what its water laid on the floors is height, not soil: 0.70 m",
 	},
 	{yardstick: yardstick{
 		name: "valley floor over hillslope soil depth, valley", unit: "x", scale: "ground", lo: 3, hi: 50,
@@ -57,7 +57,7 @@ var soilYardsticks = []realYardstick{
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
 	},
-		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only 2.9x deeper",
+		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only 2.96x deeper, just short of 3x",
 	},
 
 	// 10. Clay against the climate. On the same rock a soil formed warm holds
