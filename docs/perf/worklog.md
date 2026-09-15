@@ -17,7 +17,10 @@ digests no longer match the file, and the valley's still does: main's
 deep-floor merge (cb2fa77) moved them, and `digest.json`, written on the
 plan branch before it, wants rewriting on main when the plan branch lands.
 The budget still holds on the rebased branch (globe128 +0.06% bytes,
-+0.24% allocations).
++0.24% allocations). The short tier on the rebased branch is 116 s under
+load with one failure, `TestTheTideLaysFlatsOnlyWhereItReaches` ("small
+globe 4 has no flats"), which main at 59cdb90 fails the same way on its
+own: the world moved, and the test reads it as it did.
 Every timing below was taken with sessions A and B running on the same
 machine at `GOMAXPROCS=8`; they are under load and are not the point.
 
