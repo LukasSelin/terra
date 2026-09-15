@@ -192,7 +192,8 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 			p := g.PosOf(i)
 			for _, off := range Dirs {
 				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-				if !g.In(q) {
+				// The deep sea floor is none of the slides' business. See abyssal.
+				if !g.In(q) || g.abyssal(i) || g.abyssal(g.Index(q)) {
 					continue
 				}
 				run := TileSpan
