@@ -9,8 +9,15 @@ measurements is in [README.md](README.md).
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
 
 Session C of the overnight briefs (`briefs/C-guards.md`), on
-`claude/perf-guards`. Nothing here changes how a world is made: the digest
-for valley, ancient and globe128 is as `digest.json` says before and after.
+`claude/perf-guards`. Nothing here changes how a world is made: no `.go`
+file without `_test` in its name differs from main, and the digest for
+valley, ancient and globe128 was as `digest.json` says before and after
+every item. After the rebase onto main at 59cdb90 the ancient and globe128
+digests no longer match the file, and the valley's still does: main's
+deep-floor merge (cb2fa77) moved them, and `digest.json`, written on the
+plan branch before it, wants rewriting on main when the plan branch lands.
+The budget still holds on the rebased branch (globe128 +0.06% bytes,
++0.24% allocations).
 Every timing below was taken with sessions A and B running on the same
 machine at `GOMAXPROCS=8`; they are under load and are not the point.
 
