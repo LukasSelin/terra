@@ -2265,6 +2265,22 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// world had of it fell from eight thousand tiles to six hundred,
 			// because the rock was still being recorded where the lift no
 			// longer was.
+			//
+			// And where the crushing is, which for an arc is in front of the
+			// fire and not under it: the ground between the trench and the
+			// arc is squeezed by the plate going down and never gets hot,
+			// while the ground under the arc gets hot and is not squeezed -
+			// the paired belts of Miyashiro 1961, schist to seaward and
+			// granite to landward. Recorded under the arc with the fire, the
+			// crushing was always the lesser two parts in three and could not
+			// once come out as rock, so a world whose continents never met
+			// head on - seed 10 of the ancient terms carries its two on past
+			// each other for the whole age - had no schist on it at all. It is as
+			// much crushing as the arc's crest takes, since it is fed by the
+			// same floor going down.
+			if s.makes == arc && s.away <= math.Max(0, axisOf(arc, gap, grain[i])-axisWidth) {
+				book[i].crush += math.Abs(s.lift*grain[i]) / 3
+			}
 			if math.Abs(s.away-axisOf(s.makes, gap, grain[i])) <= axisWidth {
 				switch s.makes {
 				case crushed:
@@ -2275,8 +2291,8 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// to one of crushing, where a collision is all crushing
 					// and no fire at all. Split evenly, an arc could never
 					// come out as anything but the crushed rock, and the
-					// granite it should leave had nowhere to come from.
-					book[i].crush += math.Abs(by) / 3
+					// granite it should leave had nowhere to come from. The
+					// one part of crushing is laid in front of it: see above.
 					book[i].pluton += 2 * math.Abs(by) / 3
 				case melt:
 					book[i].melt = math.Max(book[i].melt, math.Abs(by))
