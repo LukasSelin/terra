@@ -215,6 +215,14 @@ type Grid struct {
 	// and nothing otherwise: see span and deepSpan.
 	deep float64
 
+	// abyss is, for each tile of the deep sea floor, the height it stood at
+	// before its crust's age laid it kilometres lower, and NaN on every other
+	// tile; uplift is how fast a history left each tile's rock
+	// rising, in metres a year. Both are a watered history's, and nil on any
+	// other map. See abyss.go.
+	abyss  []float64
+	uplift []float64
+
 	// tide is the day's sea the map is read against: see tide.go. tidal is,
 	// for each tile, how many times the open ocean's tide it has, and ebb, on
 	// a flat, how far under mean sea it lies in those tides. Both are laid
@@ -334,6 +342,7 @@ func (g *Grid) Clone() *Grid {
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
+	c.abyss, c.uplift = g.abyss, g.uplift // laid once, and never written again
 	c.warm = append([]float32(nil), g.warm...)
 	c.swing = append([]float32(nil), g.swing...)
 	c.rainWarm = append([]float32(nil), g.rainWarm...)

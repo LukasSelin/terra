@@ -481,7 +481,10 @@ const (
 // shape.go then lays again at TileSpan as the water would have worn it. That
 // rank, and the rock, are all a 25 metre tile keeps of its history; which is
 // honest, since a 25 metre tile's worth of anything is below what an epoch on
-// a 37 kilometre tile can say.
+// a 37 kilometre tile can say. A watered history hands on two things more,
+// which are a planet's and not a hillside's: the depth of its sea floor, from
+// the age of the crust, and how fast its rock was rising, which the shaping
+// grades the land's rivers to. See abyss.go.
 //
 // The river's wandering is not run in deep time. A bend is metres to hundreds
 // of metres across, which is inside one of these tiles, and a height moved
@@ -908,6 +911,13 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
 	}
 
+	// The ages of the floor and how fast the ground is rising are read while
+	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
+	var depths, shares, uplift []float64
+	if water > 0 {
+		depths, shares = g.floorDepths(cr, epochs)
+		uplift = g.upliftOf(cr)
+	}
 	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean)
 	for k := 0; k < smoothing; k++ {
@@ -920,6 +930,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	if water > 0 {
 		w.basins(g, cr.ocean)
 		g.restrata(was, g.heights(), cr.ocean)
+		g.uplift = uplift
 	} else {
 		w.normalise(g)
 		g.restrata(was, g.heights(), nil)
@@ -928,6 +939,11 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	// what that stands up steeper than ground can stand on comes down. See
 	// slide.go.
 	g.landslide(false)
+	// And the deep sea floor is laid at the depth its age puts it, below the
+	// ground the slides reach. See abyss.
+	if depths != nil {
+		g.layAbyss(depths, shares)
+	}
 	g.expose()
 	g.drain()
 }
@@ -1402,6 +1418,11 @@ type crust struct {
 	// ocean crust, in metres over the whole history. Enough of it and the
 	// crust is continent. See accrete.
 	built []float64
+	// rise is how fast each tile's rock has lately been rising, in metres a
+	// year, carried with the crust; lifted is what the epoch being run has
+	// raised it by, in metres. See upliftOf.
+	rise, nrise []float64
+	lifted      []float64
 	// fed is how many tiles of crust went down, or were crumpled up, at each
 	// place this epoch. It is what feeds the arcs and the ranges: see
 	// tectonics.
@@ -1475,6 +1496,7 @@ func newCrust(g *Grid) *crust {
 		born: make([]uint8, n), fed: make([]float64, n),
 		ocean: make([]bool, n), nocean: make([]bool, n),
 		built: make([]float64, n), nbuilt: make([]float64, n),
+		rise: make([]float64, n), nrise: make([]float64, n), lifted: make([]float64, n),
 		plate: make([]uint8, n), nplate: make([]uint8, n),
 		org: make([]int32, n), norg: make([]int32, n),
 		fresh: make([]bool, n), nfresh: make([]bool, n),
@@ -1659,7 +1681,7 @@ func (cr *crust) land(plates []Plate, i, j int) {
 		}
 	}
 	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i]
-	cr.nocean[j], cr.nbuilt[j] = cr.ocean[i], cr.built[i]
+	cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[i], cr.built[i], cr.rise[i]
 	cr.noff[j] = cr.off[i]
 }
 
@@ -1673,6 +1695,7 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 	cr.born, cr.nborn = cr.nborn, cr.born
 	cr.ocean, cr.nocean = cr.nocean, cr.ocean
 	cr.built, cr.nbuilt = cr.nbuilt, cr.built
+	cr.rise, cr.nrise = cr.nrise, cr.rise
 	cr.off, cr.noff = cr.noff, cr.off
 }
 
@@ -1797,7 +1820,7 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 					continue
 				}
 				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = k, cr.org[best], cr.fresh[best], cr.born[best]
-				cr.nocean[j], cr.nbuilt[j] = cr.ocean[best], cr.built[best]
+				cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[best], cr.built[best], cr.rise[best]
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
@@ -1884,7 +1907,7 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 		}
 		for r, j := range ring {
 			cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.nocean[j] = picks[r].plate, picks[r].from, true, cr.now, true
-			cr.nbuilt[j] = 0
+			cr.nbuilt[j], cr.nrise[j] = 0, 0
 			cr.noff[j] = [2]float32{}
 		}
 		next = next[:0]
@@ -2298,6 +2321,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		t := &g.Tiles[i]
 		col := &g.strata[i]
 		t.Height += rise[i]
+		cr.lifted[i] = rise[i]
 		// What floats the ground up floats the beds under it with it.
 		col.lift(rise[i])
 
@@ -2318,6 +2342,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			}
 			by := s.lift * grain[i] * profile(s.makes, s.away, wide, gap*grain[i])
 			t.Height += by
+			cr.lifted[i] += by
 			// And the beds go up with it, by as much as the ground over them.
 			// A belt is raised most at its axis and least at its feet, so the
 			// beds on its flanks are left tipped away from it: the hogbacks
@@ -2388,6 +2413,12 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	}
 	w.hotspot(g, book, cr)
 	cr.accrete()
+	// What the epoch raised, folded into how fast the ground has lately been
+	// rising. See upliftMemory.
+	keep := math.Exp(-epochYears / upliftMemory)
+	for i, by := range cr.lifted {
+		cr.rise[i] = keep*cr.rise[i] + (1-keep)*by/epochYears
+	}
 }
 
 // reshape is the crust answering for itself at the end of an epoch: what has
@@ -2961,6 +2992,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 				lift := hotspotLift * smooth(1-d/reach)
 				j := g.Index(q)
 				g.Tiles[j].Height += lift
+				cr.lifted[j] += lift
 				book[j].melt += lift
 				// The cone is lava laid on whatever was there.
 				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Tiles[j].Height-lift, g.Tiles[j].Height)

@@ -53,13 +53,18 @@ func TestHighContinentsDrownLess(t *testing.T) {
 
 // A made world keeps the water it was given however its valleys were cut,
 // and how much of it is sea differs from one world to the next, as the plates
-// did.
+// did. The deep floor holds its own water besides - see abyss.go - and that
+// is kilometres of it and not metres.
 func TestTheSeaIsTheWorldsToSay(t *testing.T) {
 	var shares []float64
 	for seed := uint64(1); seed <= 6; seed++ {
 		g := NewLand(seed, smallGlobe()).Grid
-		if got := g.room(); math.Abs(got-DefaultWater) > 1e-6 {
-			t.Errorf("seed %d holds %v m of water, given %v", seed, got, DefaultWater)
+		deep := g.abyssWater()
+		if got := g.room() - deep; math.Abs(got-DefaultWater) > 1e-6 {
+			t.Errorf("seed %d holds %v m of water over its deep floor, given %v", seed, got, DefaultWater)
+		}
+		if deep < 1000 || deep > 5000 {
+			t.Errorf("seed %d's deep floor holds %.0f m of water; the earth's oceans spread over the whole earth come to some 2,600", seed, deep)
 		}
 		under := 0
 		for i := range g.Tiles {

@@ -147,6 +147,11 @@ func (g *Grid) landslide(keep bool) {
 			if !g.In(q) {
 				continue
 			}
+			// The deep sea floor is no neighbour of anything a slide does:
+			// nothing fails off it and nothing runs out onto it. See abyssal.
+			if j := g.Index(q); g.abyssal(j) || g.abyssal(int(i)) {
+				continue
+			}
 			run := TileSpan
 			if off.X != 0 && off.Y != 0 {
 				run *= math.Sqrt2
@@ -339,7 +344,8 @@ func (g *Grid) cutBack() {
 				continue
 			}
 			j := int32(g.Index(nb))
-			if done[j] {
+			// Nothing is cut back off the deep sea floor. See abyssal.
+			if done[j] || g.abyssal(int(i)) || g.abyssal(int(j)) {
 				continue
 			}
 			run := TileSpan
