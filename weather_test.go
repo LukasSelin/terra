@@ -168,3 +168,65 @@ func TestAValleyHasOneLatitude(t *testing.T) {
 		}
 	}
 }
+
+// What the air rains out over a globe it took up somewhere: the evaporation
+// and the rain of each phase, over the whole planet, come to the same within
+// a part in a hundred (a planet's water cycle closes: Trenberth and others,
+// 2007).
+func TestTheWaterTheAirTakesUpFallsAgain(t *testing.T) {
+	for _, g := range []*Grid{oceanGlobe(256, 128), twoOceans(), continent(25)} {
+		g.weather()
+		e := g.winds.airEnv
+		for k := range phases {
+			b := g.winds.budget[k]
+			var evap, rain float64
+			for cy := 0; cy < e.h; cy++ {
+				area := e.dx[cy] * e.dy
+				for cx := 0; cx < e.w; cx++ {
+					i := cy*e.w + cx
+					evap += area * b.evap[i]
+					rain += area * (b.rain[i] + b.oro[i])
+				}
+			}
+			if math.Abs(rain/evap-1) > 0.01 {
+				t.Errorf("phase %d: the air takes up %.4g kg/s and rains %.4g", k, evap, rain)
+			}
+			// And a planet's worth: some two and a half to three and a half mm
+			// a day (Trenberth and others, 2007: 2.7).
+			var area float64
+			for cy := 0; cy < e.h; cy++ {
+				area += e.dx[cy] * e.dy * float64(e.w)
+			}
+			if mm := evap / area * 86400; mm < 2 || mm > 4 {
+				t.Errorf("phase %d: the planet evaporates %.2f mm a day", k, mm)
+			}
+		}
+	}
+}
+
+// The shadow goes on past the crest: the lee's rain is less than the plain's
+// upwind all the way down the far side and some way beyond its foot, because
+// the air that comes over has left its water on the windward face.
+func TestTheShadowReachesPastTheFootOfTheRange(t *testing.T) {
+	g := ridged(800)
+	g.weather()
+	plain := meanRain(g, 0, 20)
+	// The ridge's crest is column 60, and its foot some three widths - 24
+	// columns - east of it; the lee is read from just over the top to eight
+	// columns past the foot.
+	for x := 64; x <= 88; x += 4 {
+		if r := meanRain(g, x, x+3); r >= plain {
+			t.Errorf("column %d, %d past the crest, has %.0f mm against the plain's %.0f", x, x-60, r, plain)
+		}
+	}
+}
+
+// A dry continent's day swings further than a humid coast's, and the air over
+// it takes up more for it: Hargreaves's evaporation goes as the root of the
+// range, six degrees on a humid coast and sixteen in a dry interior.
+func TestADryInteriorsDaySwingsWider(t *testing.T) {
+	coast, desert := diurnal(0, 0.5), diurnal(1, 10)
+	if math.Abs(coast-math.Sqrt(0.6)) > 1e-9 || math.Abs(desert-math.Sqrt(1.6)) > 1e-9 {
+		t.Errorf("a humid coast evaporates %.3f of the table and a dry interior %.3f", coast, desert)
+	}
+}

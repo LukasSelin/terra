@@ -47,7 +47,10 @@ func TestGrowthIsSlowerTowardThePoles(t *testing.T) {
 		c.Temp, c.tick = seasonal(tick), tick
 		lo, hi = min(lo, c.TempAt(equator)), max(hi, c.TempAt(equator))
 	}
-	if hi-lo > 1 {
+	// The sun crosses the equator twice a year and stands nearly as high all
+	// of it: the energy balance's equator swings a degree or two, as the real
+	// one's monthly means do (Hartmann, 2016, ch. 2: 1-3 C).
+	if hi-lo > 3 {
 		t.Fatalf("the equator swings %.1f degrees over the year", hi-lo)
 	}
 }
