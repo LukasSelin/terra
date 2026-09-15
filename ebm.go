@@ -77,8 +77,13 @@ const (
 	// landSeaExchange is how many W/m² a degree the land and the sea of a band
 	// trade for the difference between them: the sea breeze and the monsoon,
 	// the transient eddies that cross a coast. A few W/m²K, as in North, Short
-	// and Mengel's (1983) two-dimensional model.
-	landSeaExchange = 3.0
+	// and Mengel's (1983) two-dimensional model. At three the land's year swung
+	// twenty-eight degrees either side of its mean at fifty-five and twenty-one
+	// at forty-five - a globe's midlatitude land, some three quarters land
+	// round about, came out at twenty-two, where the real continents' zonal
+	// mean is some fifteen - and the winters that left were too cold for any
+	// temperate coast poleward of forty-five. At six they are 21.5 and 16.
+	landSeaExchange = 6.0
 	// ebmLand is how much of each band is land. The earth's is some three
 	// tenths; a globe's own varies with its seed, and the continentality of a
 	// place is read off the ground about it instead.

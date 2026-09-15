@@ -54,13 +54,26 @@ func seasonTemp(solar, phase, cont float64) float64 {
 
 // contMiddling is the continentality at which a place keeps exactly the
 // temperate swing: the ground a latitude's weather is the weather of when
-// nothing is known about the ground. A valley's year, and Climate.TempAt's,
-// are read at it.
-var contMiddling = func() float64 {
-	e := ebm()
+// nothing is known about the ground. Climate.TempAt's year is read at it.
+var contMiddling = middlingOf(ebm())
+
+// contValley is the same for a valley, which has no ground round it to be
+// continental or not and reads its day's range at it: see rangeCont. It is
+// the balance's at the land and the sea's old exchange, valleyExchange,
+// because a valley's rivers and lakes were tuned on the day's range that
+// gave, and the stronger exchange a globe's winters want is a fact about
+// continents a valley does not have.
+var contValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}))
+
+// valleyExchange is landSeaExchange as it stood when the valley was tuned.
+const valleyExchange = 3.0
+
+// middlingOf is the continentality at which balance e keeps the temperate
+// swing at Temperate.
+func middlingOf(e *ebmClimate) float64 {
 	sea, land := e.at(&e.swingS, Temperate), e.at(&e.swingL, Temperate)
 	return clamp01((Swing - sea) / (land - sea))
-}()
+}
 
 // The lag of the seasons. Ground heated by a sun that swings sinusoidally warms
 // with the same period and lags it: for a surface of heat capacity C losing
