@@ -6,6 +6,72 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-15 - Jacobi for the sea's warmth: tried, rejected; the equations precomputed instead
+
+The sea-warmth solve in `airEnv.currents` was the largest serial pass left
+on globe256 (4.5 of 27 profiled s). It sweeps each cell's upwind equation in
+four orders, Gauss-Seidel style. The question was whether Jacobi ordering,
+where every cell reads the round before, would make it vectorizable and
+parallel.
+
+**First, the constant work.** The equation for each cell does not change
+during the solve, but the sweep recomputed it every time: the upwind cell
+along the row, the corner search down the column within `cornerReach`, and
+the weights. `seaLinks` now builds the equations once and the sweep only
+reads them. Sums are taken in the same order as before, so worlds are
+bit-identical (ancient and globe128 digests unchanged).
+
+**Jacobi, measured** (sweeps summed over the whole world, not the time of
+one solve):
+
+| world | Gauss-Seidel rounds (x4 sweeps) | Jacobi rounds | world time GS / Jacobi |
+|---|---|---|---|
+| globe128 | 369 (1476 sweeps) | 3169 | 3.32 s / 3.50 s |
+| globe256 | 775 (3100 sweeps) | 14571 | 7.27 s / 7.77 s |
+
+The Jacobi rounds were spread over rows with `InParallel`. It still lost, for
+three reasons:
+
+1. Warmth moves one cell per Jacobi round, whereas one Gauss-Seidel sweep in
+   the current's direction carries it the length of an ocean. It took 4.7x
+   the sweeps. AVX2 is at most 4 lanes and needs a gather for the upwind
+   reads, so vectors cannot win that back.
+2. The air grid is coarse, so a row is too little work to be worth a
+   goroutine.
+3. It changes the world a lot. At globe256, 6.5% of tiles have different
+   terrain, the maximum height difference is 75 m, and sea warmth on a tile
+   is up to 3.7 C apart (7.6 C at globe128). Part of that is chaos over 16
+   epochs. Part is that the same "settled" threshold (1e-3 C change in a
+   round) stops a slow Jacobi solve while it is still far from the answer,
+   so it would also need a different stopping rule.
+
+Jacobi was removed. A note on it stays in `gaussSeidel`'s comment.
+
+**The precompute, measured** (old and new binaries interleaved, n=6):
+
+| world | before | after | |
+|---|---|---|---|
+| ancient | 0.542 s ± 13% | 0.522 s ± 22% | ~ (no sea currents) |
+| globe256 | 8.24 s ± 6% | 7.70 s ± 5% | **-6.51% (p=0.009)** |
+| globe256 B/op | 2.398 GiB | 2.406 GiB | +0.32% |
+
+In the profile, `currents` went from 4.50 to 2.09 CPU s cumulative (-54%).
+
+The first version allocated six new tile arrays per solve and failed
+`TestWorldCreationBudget` at +1.58% bytes on globe128, which is the budget
+test doing its job. The links now write over `cu`, `cv`, `rise` and `deep`,
+which are dead once the solve starts, and only the two int32 index arrays
+are new.
+
+**Takeaway for the other serial sweeps** (`airEnv.vapour`, `fluvial.solve`):
+before reordering a Gauss-Seidel sweep, pull the constant per-cell work out
+of it. That keeps the world bit-identical and is where the time actually
+was. Reordering pays only if the transport is local (diffusion-like);
+upwind transport along a flow is exactly what Gauss-Seidel in flow order
+does fast.
+
+---
+
 ## 2026-09-15 - SIMD for the transform's butterflies
 
 **Change:** `fft_simd_amd64.go` does the FFT butterflies two complex numbers
