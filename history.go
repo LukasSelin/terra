@@ -444,9 +444,20 @@ const (
 // cookDepth and plutonDepth are how far below the finished ground a
 // collision has squeezed the pile into schist and an arc melted it into
 // granite: what lies shallower is what the weather has yet to take off it.
+//
+// limeWarm and limeCold are the sea's yearly mean, in degrees, at which a
+// quiet floor makes all of limeBed and none of it, and quietMud the rate the
+// fine mud reaches it at whatever the warmth: see quietFloor. Five millimetres
+// a thousand years is between the millimetre of the red clay of the deep
+// ocean and the centimetres of the hemipelagic mud off a margin (Kennett,
+// Marine Geology, 1982), and a history's quiet floor is a tile - tens of
+// kilometres - from the nearest land.
 const (
 	bedPerFill  = fillRate * epochYears
 	limeBed     = 0.02 * mm / yr * epochYears
+	limeWarm    = 20.0
+	limeCold    = -8.0
+	quietMud    = 0.005 * mm / yr
 	sandyBed    = 0.45
 	foldShare   = 0.5
 	foldWave    = 5.0
@@ -3035,14 +3046,17 @@ func (g *Grid) keepBook(book []record, epoch int) {
 			// quiet and what settles is what lived there, which makes
 			// limestone. Nothing here knows how far the shore is, only
 			// whether it is next door, which is enough to tell a bed that
-			// silts up from one that does not.
+			// silts up from one that does not. Out there it is the warmth
+			// of the water that decides whether what settles is lime or
+			// mud: see quietFloor.
 			if g.offshore(geom.Pos{X: i % g.W, Y: i / g.W}, sea) {
 				book[i].laid[Clay] += marineMud * 0.7 * fill
 				book[i].laid[Silt] += marineMud * 0.3 * fill
 				t.Formed = uint8(epoch)
 				g.strata[i].bury(Shale, uint8(epoch), 0, t.Height, marineMud*bedPerFill)
 			} else {
-				g.strata[i].bury(Limestone, uint8(epoch), 0, t.Height, limeBed)
+				rock, thick := g.quietFloor(i)
+				g.strata[i].bury(rock, uint8(epoch), 0, t.Height, thick)
 			}
 			continue
 		}
@@ -3063,6 +3077,72 @@ func (g *Grid) keepBook(book []record, epoch int) {
 			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(t.Sand))), t.Height, bedPerFill)
 		}
 	}
+}
+
+// quietFloor is the bed an epoch leaves on sea floor no land is near enough
+// to send mud to, and how many metres thick it is.
+//
+// It was limestone at limeBed everywhere, from the equator to the ice, and a
+// history's valley came out 37 per cent limestone and a small globe's land 30,
+// the same in every band of latitude. Carbonate rock is a tenth to an eighth
+// of the land (13.4 per cent, Amiotte Suchet, Probst and Ludwig 2003; 10.4 in
+// the GLiM map of Hartmann and Moosdorf 2012), and where it is made is set by
+// the warmth of the water. The reefs and the lime muds of the tropical
+// shelves stop where the coldest month of the sea falls below about 18
+// degrees (Kleypas, McManus and Meñez 1999), which is near thirty degrees of
+// latitude; the cool-water carbonates of shells and bryozoa go on beyond
+// that, made more slowly than a reef makes its lime, as far as the polar
+// shelves (James 1997); and out in the open ocean the lime ooze of the
+// plankton gives way to diatom ooze and glacial mud under the polar fronts,
+// at fifty to sixty degrees.
+//
+// So the lime an epoch makes is limeBed where the sea's year averages
+// limeWarm or more, and falls in proportion to nothing at limeCold, and it
+// settles into the fine mud that reaches every floor however quietly, at
+// quietMud. What is laid is limestone while lime is most of it - which is
+// what limestone is, a rock more than half carbonate (Pettijohn 1975) - and
+// shale once it is not. The line falls where the lime is a quarter of its
+// warmest, a degree below freezing: some sixty degrees of latitude on a globe,
+// the cold side of the polar front, and a valley's temperate sea at ten
+// degrees keeps its limestone, seven parts lime in ten.
+//
+// Where between the front's fifty and sixty the line is drawn is a choice
+// made on the whole of the suite. With limeCold at nothing the line lay at
+// fifty-two degrees, and the small globes' land came out 14 per cent
+// limestone, 27 in the tropics and none beyond sixty-seven; their drainage and
+// discharge exponents came nearer the real range and their sinuosity,
+// hypsometry and meander migration into it. But the one full globe's drainage
+// area exponent fell from 0.409 to 0.315, out of the 0.40 to 0.46 of real
+// networks. At limeCold of eight below, with the line at sixty, it reads 0.457
+// over much the same shale - 24 per cent of the land against 28 - so the
+// reading is the luck of where the soft rock fell on one seed more than the
+// amount of it, and it is one globe: count its samples before moving it.
+//
+// Depth is not asked. The factory of a carbonate shelf is the lit water of its
+// top hundred metres, but the plankton's ooze lays lime on the floor under it
+// at about the same long rate - one to three centimetres a thousand years
+// against the 0.01 to 0.1 mm a year Schlager (1981) has for shelves - down
+// to the depth where the deep water dissolves it, four to five kilometres,
+// and a history's quiet floors lie at a tenth of a kilometre to two and a
+// half. The floor's depth would change nothing it can say.
+//
+// Nor are evaporites laid, the salt and gypsum of a dry, closed sea. They are
+// a real rock and a climate's rock, and the arid belts are where they are
+// found, but they are under half a per cent of the land, and a rock on this
+// map has to show on every history's valley and make a fiftieth of them - see
+// TestEveryRockAHistoryMakesTurnsUp - which a valley of one temperate sea
+// could only meet by making salt where no salt is made.
+func (g *Grid) quietFloor(i int) (Bedrock, float64) {
+	warm := MeanTemp
+	if g.air != nil && i/g.W < len(g.air.mean) {
+		warm = g.air.mean[i/g.W]
+	}
+	lime := limeBed * clamp01((warm-limeCold)/(limeWarm-limeCold))
+	mud := quietMud * epochYears
+	if lime >= mud {
+		return Limestone, lime + mud
+	}
+	return Shale, lime + mud
 }
 
 // settleRock is the history read back as geology. The beds each epoch laid
