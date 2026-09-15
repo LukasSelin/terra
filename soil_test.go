@@ -102,7 +102,7 @@ func ridge(soil float32) *Grid {
 // carries the flux in proportion to how much of it there is (Johnstone and
 // Hilley 2015).
 func TestACrestIsAsRoundAsItsLoweringOverItsDiffusivity(t *testing.T) {
-	const lift = 2e-6 // m/yr: a crest gentle enough that its flanks creep near linearly
+	const lift = 2e-6             // m/yr: a crest gentle enough that its flanks creep near linearly
 	const years = 1000 * ageYears // a step: the creep is taken implicitly
 	crest := func(soil float32) float64 {
 		g := ridge(soil)
