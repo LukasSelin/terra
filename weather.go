@@ -100,8 +100,9 @@ func defaultAir(g *Grid) *Air {
 }
 
 // weather reads the air over the map as it now lies: how much rain each tile
-// has in a year, and how much of it runs off. It is read afresh whenever the
-// drainage is, because the ground the air crosses is part of what it does.
+// has in a year, and how much of it runs off. The drainage reads it afresh
+// whenever the ground has moved far enough to matter, because the ground the
+// air crosses is part of what it does: see weatherStale.
 //
 // The wind is worked out first, for each phase of the year - see wind.go -
 // and the water is carried along it as a budget on the air cells: taken up
@@ -129,6 +130,68 @@ func (g *Grid) weather() {
 		g.winds.budget = was.budget
 	}
 	g.rainOn()
+	g.aired = g.airedGround(g.aired)
+}
+
+// The weather is the dearest thing the drainage asks for - the winds and the
+// rain over every phase of the year, the better part of making a globe - and
+// most of the times it is asked the air would not know the difference. An
+// epoch of the plates moves a fifth of the coast and half the relief, and the
+// air has to be read again; a round of valley cutting, or of mud laid on the
+// flats, moves a few tiles' shore and a few decimetres of ground, and the
+// winds and the rain it gave are the same winds and rain to well within what
+// either is known to. So the ground the air was last read over is kept, and
+// the weather is only read again once the ground has moved from it by more
+// than these: weatherFlips of the tiles gone under the water or come out of
+// it, or weatherDrift of the height the air rises over, measured tile by tile
+// against the last reading and not the last drainage, so that small moves
+// cannot add up unseen.
+const (
+	weatherFlips = 0.005
+	weatherDrift = 0.01
+)
+
+// airedGround is the ground as the air reads it, tile by tile - the height
+// over the water the air takes its fill from, and -1 where the tile is under
+// that water - written into into where it has room.
+func (g *Grid) airedGround(into []float32) []float32 {
+	if len(into) != len(g.Tiles) {
+		into = make([]float32, len(g.Tiles))
+	}
+	base := math.Max(0, g.base)
+	for i := range g.Tiles {
+		into[i] = -1
+		if !g.sunk(i) {
+			into[i] = float32(math.Max(0, g.Tiles[i].Height-base))
+		}
+	}
+	return into
+}
+
+// weatherStale reports whether the ground has moved far enough from where the
+// air was last read over it that the weather has to be read again. See
+// weatherFlips.
+func (g *Grid) weatherStale() bool {
+	if len(g.aired) != len(g.Tiles) || len(g.rain) != len(g.Tiles) || g.winds == nil {
+		return true
+	}
+	base := math.Max(0, g.base)
+	var flips int
+	var moved, stood float64
+	for i := range g.Tiles {
+		was := g.aired[i]
+		if g.sunk(i) != (was < 0) {
+			flips++
+			continue
+		}
+		if was < 0 {
+			continue
+		}
+		h := math.Max(0, g.Tiles[i].Height-base)
+		moved += math.Abs(h - float64(was))
+		stood += h
+	}
+	return float64(flips) > weatherFlips*float64(len(g.Tiles)) || moved > weatherDrift*stood
 }
 
 // rainOn is the rain and the runoff of g under the winds it has.
