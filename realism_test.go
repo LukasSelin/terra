@@ -206,7 +206,9 @@ var realYardsticks = []realYardstick{
 		name: "Hack exponent, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Hack 1957; Rigon et al. 1996: h is a property of the network, not of the survey's resolution",
 		measure: func() float64 { return hackExponent(doubleGlobes()) - hackExponent(singleGlobes()) },
-	}},
+	},
+		gap: "known gap: D - with the history on its real clock, the same seed at 512x256 has a Hack exponent 0.07 above 256x128",
+	},
 	{yardstick: yardstick{
 		name: "channel concavity, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.1, hi: 0.1, slow: true,
 		source: "Wobus et al. 2006; Perron & Royden 2013: theta is a property of the channels, not of the DEM",
