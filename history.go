@@ -861,7 +861,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	g.drain()
 	g.soilTexture()
 	fl := w.flood(g, spacing(g, plateTotal(g)))
-	plates := w.firstPlates(g, sea, fl)
+	plates := w.firstPlates(g, sea, water > 0, fl)
 	cr := newCrust(g)
 	for i := range g.Tiles {
 		cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
@@ -970,7 +970,7 @@ func (w *Land) molten(g *Grid) {
 // and each plate's rate put right until the plates hold the ground they were
 // drawn at, since where two floods meet depends on every other flood as well
 // as on those two.
-func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
+func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Plate {
 	n := plateTotal(g)
 	ocean := clamp01(oceanFloor + oceanPerSea*sea)
 	plates := make([]Plate, n, plateCap)
@@ -1020,7 +1020,9 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 		}
 	}
 	g.partition(plates, mids, fl)
-	w.balanceCrust(g, plates, ocean)
+	if poured {
+		w.balanceCrust(g, plates, ocean)
+	}
 	// A world has both kinds in it. Left to the draw, a valley - which asks
 	// for no sea and so for few ocean plates - came out on two seeds of five
 	// with nothing but continent, and a world with no floor anywhere has no
@@ -1069,6 +1071,12 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 // So the draw stands inside a band either side of the asked share, and is only
 // put right when it falls outside: inside it, how much continent a world has is
 // still its own luck, and the plates still decide where it goes.
+//
+// It is only done for a world given water. A world given a share of sea is
+// flooded to that share whatever its crust, so the draw does not decide how
+// much of it is drowned, and a made valley's ground is matched to the drawn
+// one's: put right there as well, the twelfth valley came out with nearly four
+// times the drawn map's water.
 const crustSlack = 0.15
 
 // balanceCrust turns plates of the kind there is too much of into the other,

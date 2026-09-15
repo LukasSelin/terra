@@ -1,22 +1,36 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"github.com/LukasSelin/terra"
 )
 
 // groups is the share of the dry land in each of Köppen's five groups.
+//
+// On a globe it is a share of the land's area and not of its tiles. The rows
+// are equal steps of latitude, so a tile near a pole covers less of the
+// planet than one at the equator by the cosine of its latitude, as the weather
+// reads it; counted a tile apiece, the land poleward of sixty stood for three
+// tenths of a globe's land against the eighth of a sphere it is, and the real
+// shares this is held to are shares of area.
 func groups(t *testing.T, land *terra.Land) map[byte]float64 {
 	c := classify(land)
+	g := land.Grid
 	out := map[byte]float64{}
 	n := 0.0
-	for _, k := range c.Koppen {
+	for i, k := range c.Koppen {
 		if k == "" {
 			continue
 		}
-		out[k[0]]++
-		n++
+		w := 1.0
+		if g.Wrap {
+			lat := 90 - 180*(float64(i/g.W)+0.5)/float64(g.H)
+			w = math.Cos(lat * math.Pi / 180)
+		}
+		out[k[0]] += w
+		n += w
 	}
 	if n == 0 {
 		t.Fatal("no dry land was classified")
