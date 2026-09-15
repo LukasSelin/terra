@@ -90,6 +90,9 @@ func (g *Grid) orographicPatch() int {
 // over the water the air takes its fill from.
 func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
 	a := g.air
+	if !g.Wrap {
+		return g.orographicWhole(e, u, v, temp, ground)
+	}
 	size := g.orographicPatch()
 	step := size / 2
 	out := make([]float32, len(g.Tiles))
@@ -156,23 +159,6 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 		// The air over the middle of the patch.
 		mx, my := pt.x0+step, min(max(pt.y0+step, 0), g.H-1)
 		fx, fy := e.cellAt(g, at(mx, my))
-		uu, vv := e.sample32(u, fx, fy), e.sample32(v, fx, fy)
-		speed := math.Hypot(uu, vv)
-		if speed < calm {
-			return
-		}
-		// The rain on a range falls from the storms that drive moist air at
-		// it, and not in the phase's mean wind: the waves and the drifting
-		// cloud are read at the storm's wind, the way the mean wind blows,
-		// and what they give is what the mean wind's flux up the slope gives.
-		storm := math.Max(1, stormWind/speed)
-		uu, vv = uu*storm, vv*storm
-		t := e.sample(temp, fx, fy)
-		tk := t + 273.15
-		cw := saturatedColumn(t) / vapourHeight * moistLapse(t) / Lapse
-		hw := vapourGas * tk * tk / (latentHeat * Lapse)
-		dxm, dym := a.dx[my]*km, a.dy*km
-
 		// The patch is laid in the middle of a field twice its size, so that
 		// what the waves and the drifting cloud carry past its edges is not
 		// carried round onto its other side.
@@ -188,39 +174,9 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 				buf[(dy+pad)*box+dx+pad] = complex(ground[at(pt.x0+dx, pt.y0+dy)]*taper[dx]*taper[dy], 0)
 			}
 		}
-		fft2(buf, box, box, false, col)
-		n2 := moistStability * moistStability
-		for r := 0; r < box; r++ {
-			rr := r
-			if rr >= box/2 {
-				rr -= box
-			}
-			// Down the rows is toward the south.
-			l := -2 * math.Pi * float64(rr) / (float64(box) * dym)
-			for c := 0; c < box; c++ {
-				cc := c
-				if cc >= box/2 {
-					cc -= box
-				}
-				k := 2 * math.Pi * float64(cc) / (float64(box) * dxm)
-				sigma := uu*k + vv*l
-				i := r*box + c
-				if math.Abs(sigma) < 1e-12 {
-					buf[i] = 0
-					continue
-				}
-				kk := k*k + l*l
-				var m complex128
-				if s2 := sigma * sigma; s2 < n2 {
-					m = complex(math.Copysign(math.Sqrt((n2-s2)/s2*kk), sigma), 0)
-				} else {
-					m = complex(0, math.Sqrt((s2-n2)/s2*kk))
-				}
-				den := (1 - 1i*m*complex(hw, 0)) * complex(1, sigma*cloudTime) * complex(1, sigma*fallTime)
-				buf[i] *= complex(0, cw*sigma/storm) / den
-			}
+		if !liftField(buf, col, box, box, e.sample32(u, fx, fy), e.sample32(v, fx, fy), e.sample(temp, fx, fy), a.dx[my]*km, a.dy*km) {
+			return
 		}
-		fft2(buf, box, box, true, col)
 		sum := make([]float32, box*box)
 		for i := range sum {
 			sum[i] = float32(real(buf[i]))
@@ -254,4 +210,123 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 		out[i] = float32(math.Max(0, p))
 	}
 	return out
+}
+
+// liftField turns buf, a field of ground bw by bh tiles of dxm by dym metres
+// laid row by row, into what its lift rains out of saturated air at temp
+// degrees in the wind uu, vv, in kg/m²/s, in place: Smith and Barstad's
+// transfer function between the transform and its inverse. col is room for a
+// column. It is false, and buf is left as it was, where there is no wind.
+func liftField(buf, col []complex128, bw, bh int, uu, vv, temp, dxm, dym float64) bool {
+	speed := math.Hypot(uu, vv)
+	if speed < calm {
+		return false
+	}
+	// The rain on a range falls from the storms that drive moist air at it,
+	// and not in the phase's mean wind: the waves and the drifting cloud are
+	// read at the storm's wind, the way the mean wind blows, and what they
+	// give is what the mean wind's flux up the slope gives.
+	storm := math.Max(1, stormWind/speed)
+	uu, vv = uu*storm, vv*storm
+	tk := temp + 273.15
+	cw := saturatedColumn(temp) / vapourHeight * moistLapse(temp) / Lapse
+	hw := vapourGas * tk * tk / (latentHeat * Lapse)
+	fft2(buf, bw, bh, false, col)
+	n2 := moistStability * moistStability
+	for r := 0; r < bh; r++ {
+		rr := r
+		if rr >= bh/2 {
+			rr -= bh
+		}
+		// Down the rows is toward the south.
+		l := -2 * math.Pi * float64(rr) / (float64(bh) * dym)
+		for c := 0; c < bw; c++ {
+			cc := c
+			if cc >= bw/2 {
+				cc -= bw
+			}
+			k := 2 * math.Pi * float64(cc) / (float64(bw) * dxm)
+			sigma := uu*k + vv*l
+			i := r*bw + c
+			if math.Abs(sigma) < 1e-12 {
+				buf[i] = 0
+				continue
+			}
+			kk := k*k + l*l
+			var m complex128
+			if s2 := sigma * sigma; s2 < n2 {
+				m = complex(math.Copysign(math.Sqrt((n2-s2)/s2*kk), sigma), 0)
+			} else {
+				m = complex(0, math.Sqrt((s2-n2)/s2*kk))
+			}
+			den := (1 - 1i*m*complex(hw, 0)) * complex(1, sigma*cloudTime) * complex(1, sigma*fallTime)
+			buf[i] *= complex(0, cw*sigma/storm) / den
+		}
+	}
+	fft2(buf, bw, bh, true, col)
+	return true
+}
+
+// orographicWhole is orographic on a map that is not a globe: a valley is a
+// few score kilometres, under one wind, and is taken whole, in a field with
+// room round it into which its edges fall away to nothing.
+func (g *Grid) orographicWhole(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
+	out := make([]float32, len(g.Tiles))
+	padX, padY := patchLeast, patchLeast
+	bw, bh := nextPowerOfTwo(g.W+2*padX), nextPowerOfTwo(g.H+2*padY)
+	fall := func(d, pad int) float64 {
+		if d <= 0 {
+			return 1
+		}
+		if d >= pad {
+			return 0
+		}
+		c := math.Cos(math.Pi / 2 * float64(d) / float64(pad))
+		return c * c
+	}
+	buf := make([]complex128, bw*bh)
+	top, bottom := 0.0, math.Inf(1)
+	for by := 0; by < bh; by++ {
+		y := by - padY
+		cy := min(max(y, 0), g.H-1)
+		wy := fall(max(-y, y-(g.H-1)), padY)
+		for bx := 0; bx < bw; bx++ {
+			x := bx - padX
+			cx := min(max(x, 0), g.W-1)
+			h := ground[cy*g.W+cx]
+			if x >= 0 && x < g.W && y >= 0 && y < g.H {
+				top, bottom = math.Max(top, h), math.Min(bottom, h)
+			}
+			buf[by*bw+bx] = complex(h*wy*fall(max(-x, x-(g.W-1)), padX), 0)
+		}
+	}
+	if top-bottom < reliefLeast {
+		return out
+	}
+	n := e.w * e.h
+	var uu, vv, t float64
+	for i := range n {
+		uu += float64(u[i]) / float64(n)
+		vv += float64(v[i]) / float64(n)
+		t += temp[i] / float64(n)
+	}
+	col := make([]complex128, max(bw, bh))
+	if !liftField(buf, col[:bh], bw, bh, uu, vv, t, g.air.dx[g.H/2]*km, g.air.dy*km) {
+		return out
+	}
+	for y := 0; y < g.H; y++ {
+		for x := 0; x < g.W; x++ {
+			out[y*g.W+x] = float32(math.Max(0, real(buf[(y+padY)*bw+x+padX])))
+		}
+	}
+	return out
+}
+
+// nextPowerOfTwo is the least power of two no less than n.
+func nextPowerOfTwo(n int) int {
+	p := 1
+	for p < n {
+		p *= 2
+	}
+	return p
 }

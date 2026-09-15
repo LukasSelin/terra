@@ -628,6 +628,8 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 		for i := range chi {
 			chi[i] = real(rows[i])
 		}
+	} else if !e.wrap && e.uniformRows() {
+		e.cosinePotential(chi, div, mean)
 	} else {
 		e.relaxPotential(chi, div, mean, cx, cn)
 	}
@@ -649,10 +651,89 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 	return gx, gy
 }
 
+// uniformRows reports whether every row of cells is as wide as every other.
+func (e *airEnv) uniformRows() bool {
+	for _, d := range e.dx {
+		if d != e.dx[0] {
+			return false
+		}
+	}
+	return true
+}
+
+// cosinePotential solves for χ on a lattice that is not a globe and whose
+// rows are all one width: no flux crosses its edges, and the cosines that
+// are flat at the edges are what the Laplacian there is made of, so each is
+// solved for on its own (the discrete cosine transform of type II).
+func (e *airEnv) cosinePotential(chi, div []float64, mean float64) {
+	w, h := e.w, e.h
+	cx := e.dy / e.dx[0]
+	cn := e.dx[0] / e.dy
+	table := func(n int) []float64 {
+		t := make([]float64, n*n)
+		for p := 0; p < n; p++ {
+			for x := 0; x < n; x++ {
+				t[p*n+x] = math.Cos(math.Pi * float64(p) * (float64(x) + 0.5) / float64(n))
+			}
+		}
+		return t
+	}
+	tx, ty := table(w), table(h)
+	norm := func(p, n int) float64 {
+		if p == 0 {
+			return float64(n)
+		}
+		return float64(n) / 2
+	}
+	// Along the rows, then down the columns.
+	rows := make([]float64, w*h)
+	for y := 0; y < h; y++ {
+		for p := 0; p < w; p++ {
+			var sum float64
+			for x := 0; x < w; x++ {
+				sum += (div[y*w+x] - mean) * tx[p*w+x]
+			}
+			rows[y*w+p] = sum / norm(p, w)
+		}
+	}
+	coef := make([]float64, w*h)
+	for p := 0; p < w; p++ {
+		for q := 0; q < h; q++ {
+			var sum float64
+			for y := 0; y < h; y++ {
+				sum += rows[y*w+p] * ty[q*h+y]
+			}
+			eig := cx*(2*math.Cos(math.Pi*float64(p)/float64(w))-2) + cn*(2*math.Cos(math.Pi*float64(q)/float64(h))-2)
+			if p == 0 && q == 0 {
+				continue
+			}
+			coef[q*w+p] = sum / norm(q, h) / eig
+		}
+	}
+	for y := 0; y < h; y++ {
+		for p := 0; p < w; p++ {
+			var sum float64
+			for q := 0; q < h; q++ {
+				sum += coef[q*w+p] * ty[q*h+y]
+			}
+			rows[y*w+p] = sum
+		}
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			var sum float64
+			for p := 0; p < w; p++ {
+				sum += rows[y*w+p] * tx[p*w+x]
+			}
+			chi[y*w+x] = sum
+		}
+	}
+}
+
 // relaxPotential solves for χ by over-relaxation, on a lattice the transform
 // does not fit.
 func (e *airEnv) relaxPotential(chi, div []float64, mean float64, cx, cn []float64) {
-	const rounds, over = 5000, 1.9
+	const rounds, over = 2000, 1.9
 	for range rounds {
 		most := 0.0
 		for cy := 0; cy < e.h; cy++ {
@@ -683,7 +764,11 @@ func (e *airEnv) relaxPotential(chi, div []float64, mean float64, cx, cn []float
 				most = math.Max(most, math.Abs(d))
 			}
 		}
-		if most < 1e-4*(1+math.Abs(mean)) {
+		big := 0.0
+		for _, c := range chi {
+			big = math.Max(big, math.Abs(c))
+		}
+		if most <= 1e-4*big {
 			return
 		}
 	}
