@@ -108,7 +108,11 @@ func (w *Land) Generate(cfg Terms) {
 	// The water cuts its valley before the valley is asked where the water
 	// goes: the cutting moves the ground, so the drainage has to be taken
 	// again on the ground it left. See valleyYears.
-	g.cutValleys(w.RNG)
+	if cfg.Glacial {
+		g.cutThroughCycle(w.RNG)
+	} else {
+		g.cutValleys(w.RNG)
+	}
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
 	if poured {

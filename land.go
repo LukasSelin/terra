@@ -147,6 +147,13 @@ type Terms struct {
 	// Arctic that grows nothing in January. Left unsaid, each is the climate's
 	// on a globe and the rules' on a valley. See Rule.
 	Woods, Growth Rule
+	// Glacial cuts a drawn map's valleys through the last glacial cycle, with
+	// the sea going down and coming back up as the ice took the ocean's water
+	// and gave it back, rather than through the last two thousand years at
+	// today's sea. It leaves drowned valleys at the coast and terraces over
+	// the rivers that cut down to the low sea, and a hundred thousand years of
+	// the water's work on all the rest of the ground. See sealevel.go.
+	Glacial bool
 }
 
 // Rule is which of two readings of the land a world is made with: its tuned
