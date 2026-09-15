@@ -242,6 +242,10 @@ type Grid struct {
 	// exported is what the last age of weather carried off the land into the
 	// sea or off the edge of the map, grain by grain, in metres over a tile.
 	exported [Grains]float64
+	// bankLoad is what the rivers took off the outside of their bends in the
+	// last meander and did not lay on the inside, by tile and grain, in metres
+	// over a tile: ground in the water, waiting for the next wear to carry it.
+	bankLoad [][Grains]float64
 
 	// The standing water, and the way all the water goes. level is the
 	// surface of the lake a tile lies under; lakeOf says which lake that is,

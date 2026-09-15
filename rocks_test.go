@@ -41,9 +41,15 @@ func TestEveryRockAHistoryMakesTurnsUp(t *testing.T) {
 	// for ground that asks for no sea at all, and see oceanFloor in history.go
 	// for why that may be the wrong reading rather than the wrong bar. This
 	// line is not the place to argue it.
+	//
+	// And a fiftieth and not a fortieth at the bottom. The soft beds are what the
+	// water takes first now that it pays for the rock by the rock's strength -
+	// see rockErodibility - and a basin's sandstone and shale are the softest
+	// rock a history makes: pooled over the twelve worlds the sandstone went
+	// from 2.5 per cent, where the lower bar had sat on it exactly, to 2.3.
 	for _, b := range Bedrocks() {
 		share := float64(pooled[b]) / float64(tiles)
-		if share > 2.0/3.0 || share < 0.025 {
+		if share > 2.0/3.0 || share < 0.02 {
 			t.Errorf("%s is %.1f%% of the ground pooled over five worlds", b, 100*share)
 		}
 	}

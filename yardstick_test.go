@@ -27,6 +27,13 @@ import (
 // "water" readings are exponents and ratios, which do not care about scale at
 // all; see TestTheSameGroundAtTwiceTheSize for whether the map agrees.
 
+// channelHead is the least ground, in tiles, a channel is read on by the
+// network statistics here and in realism_test.go and resolution_test.go: eight
+// tiles, where a river was allowed to head before the heads were read off A·S²
+// (see channelArea). A fixed line, so the readings do not move when the rule
+// for where the map draws its rivers does.
+const channelHead = 8.0
+
 // yardstick is one figure measured on real ground, and the reading of a map
 // that answers to it.
 type yardstick struct {

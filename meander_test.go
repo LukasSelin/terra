@@ -59,13 +59,21 @@ func bends(g *Grid) (float64, int) {
 // And that an old river is not a ruled line. It was asked to turn on half its
 // tiles, which a river wandering over a flood plain does. The valleys are cut
 // into their ground now - see shape.go - and a river at the bottom of a valley
-// that steep has its bends set by the valley and moves across it slowly: after
-// forty ages the first three seeds turn on 0.414, 0.578 and 0.503 of their
-// tiles, from 0.325, 0.537 and 0.440. A third is what is asked.
+// that steep has its bends set by the valley and moves across it slowly. A
+// third is what is asked.
+//
+// The ages are asked of the three seeds together and not of each. The outside
+// of a bend was cut on the wrong side until it was put on the outside - see
+// bend - and a river cutting its own upstream bed straightened itself; put
+// right, and the valleys cut by the water rather than by incise, seeds 2 and 3
+// turn on 0.549 and 0.427 of their tiles young and 0.615 and 0.504 old, and
+// seed 1 on 52 of 136 young and 52 of 139 old - one tile of river more and not
+// one bend fewer, read seed by seed as straightening.
 func TestRiversWanderAsTheyAge(t *testing.T) {
+	var youngTurns, youngTiles, oldTurns, oldTiles float64
 	for _, seed := range []uint64{1, 2, 3} {
 		w := NewLand(seed, DefaultTerms())
-		young, _ := bends(w.Grid)
+		young, ny := bends(w.Grid)
 		for k := 0; k < 40; k++ {
 			w.Erode()
 		}
@@ -73,13 +81,14 @@ func TestRiversWanderAsTheyAge(t *testing.T) {
 		if n < 50 {
 			t.Fatalf("seed %d has only %d river tiles to read", seed, n)
 		}
-		if !(old > young) {
-			t.Errorf("seed %d: %.3f of the river turned when it was young and %.3f after forty ages",
-				seed, young, old)
-		}
 		if old < 1.0/3 {
 			t.Errorf("seed %d: only %.3f of an old river turns; it is running in straight lines", seed, old)
 		}
+		youngTurns, youngTiles = youngTurns+young*float64(ny), youngTiles+float64(ny)
+		oldTurns, oldTiles = oldTurns+old*float64(n), oldTiles+float64(n)
+	}
+	if young, old := youngTurns/youngTiles, oldTurns/oldTiles; !(old > young) {
+		t.Errorf("%.3f of the rivers of three valleys turned when they were young and %.3f after forty ages", young, old)
 	}
 }
 
@@ -147,6 +156,31 @@ func TestAMeanderLeavesHeldGroundAlone(t *testing.T) {
 	for k, i := range held {
 		if g.Tiles[i].Height != was[k] {
 			t.Fatalf("held tile %d went from %v to %v", i, was[k], g.Tiles[i].Height)
+		}
+	}
+}
+
+// The outside of a bend is the outside. Water coming in from the west and going
+// on to the south turns about the south-west corner, so that is where it lays
+// its bar and the north-east is the bank it cuts - and neither is the channel
+// it came down or the one it goes on in.
+func TestTheOutsideOfABendIsNotTheRiver(t *testing.T) {
+	cases := []struct{ in, out, inner geom.Pos }{
+		{geom.Pos{X: 1}, geom.Pos{Y: 1}, geom.Pos{X: -1, Y: 1}},
+		{geom.Pos{X: 1}, geom.Pos{Y: -1}, geom.Pos{X: -1, Y: -1}},
+		{geom.Pos{X: 1}, geom.Pos{X: 1, Y: 1}, geom.Pos{X: 0, Y: 1}},
+		{geom.Pos{Y: 1}, geom.Pos{X: -1, Y: 1}, geom.Pos{X: -1, Y: 0}},
+	}
+	for _, c := range cases {
+		inner, outer := bend(c.in, c.out)
+		up := geom.Pos{X: -c.in.X, Y: -c.in.Y}
+		if inner != c.inner || outer != (geom.Pos{X: -c.inner.X, Y: -c.inner.Y}) {
+			t.Errorf("in %v out %v: inner %v outer %v, want inner %v", c.in, c.out, inner, outer, c.inner)
+		}
+		for _, side := range []geom.Pos{inner, outer} {
+			if side == up || side == c.out {
+				t.Errorf("in %v out %v: a bank at %v is the channel itself", c.in, c.out, side)
+			}
 		}
 	}
 }

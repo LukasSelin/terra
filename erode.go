@@ -23,13 +23,23 @@ import (
 // it. Nobody decides that; it falls out of where they chose to put their
 // fields.
 
-// SettleSlope is the slope above which water carries everything it has and
-// lays down nothing.
-const SettleSlope = 0.12
+// overbankDecay is the distance, in metres, over which what a river lays
+// down on its flood plain thins to a third (1/e) of what it lays at its own
+// channel. Pizzuto (1987), taking the silt a flood carries onto its plain as
+// diffusing away from the channel while it settles, has what is laid thinning
+// exponentially with the distance from it, which is how the deposits of floods
+// are found. How fast is a fact about a river and its plain, and fifty metres -
+// two tiles - is a choice, not a measurement.
+//
+// It was a share, seven tenths of everything laid, shared evenly among
+// whichever of the eight neighbours stood dry: a river with one dry tile of
+// bank beside it put the whole seven tenths on that tile, and nothing past the
+// tiles touching the channel got any.
+const overbankDecay = 50 * metre
 
-// Overbank is the share of what a river lays down that it lays down outside
-// its own channel, on the low ground either side.
-const Overbank = 0.7
+// overbankReach is how many tiles out from its channel a flood lays anything,
+// past which exp(-d/overbankDecay) is too little to book.
+const overbankReach = 3
 
 // Grain is which of the three a load of soil is, coarsest first. The order
 // is the order they come out of the water, which is the whole of what sorting
@@ -50,28 +60,14 @@ func parts(t *Tile) [Grains]float64 {
 	return [Grains]float64{Sand: t.Sand, Silt: t.Silt(), Clay: t.Clay}
 }
 
-// wearRock is how much faster a channel cuts soft rock than hard, as a power
-// of the rock's hardness against the map's middling rock. It is the water
-// taking a soft bed out from under a hard one faster than it can take the
-// hard one, which is how a scarp retreats and a mesa is left standing.
-const wearRock = 1.0
-
-// hold is how much of the soil on a tile moves in an age, by what is growing
-// or standing on it and by what the soil itself is made of.
+// hold is how much of the soil on a tile the creep moves in an age, by what is
+// growing or standing on it and by what the soil itself is made of. Roots are
+// what hold a hillside together against its own weight; a roof or a road takes
+// the ground it covers out of the weather altogether; and loose sand goes where
+// clay stays, whatever is growing on either.
 //
-// The rock underneath is deliberately not in it. Soil comes off a hillside at
-// a rate set by what is holding it down and what it is made of, and how hard
-// the rock beneath happens to be does not keep a ploughed slope's earth on
-// it. Dividing this by the rock was tried, and it took away the one cost the
-// whole model charges for clearing a hillside: over forty ages the ploughed
-// slopes on hard rock came out richer than they started, because the slow
-// weathering of the ground could no longer keep up with the soil going. What
-// the rock decides is what the water cuts - see incise, meander and wearRock -
-// which is where a difference in strength shows as a difference in shape.
-// Woods are what hold a hillside together; a ploughed field is bare earth by
-// another name; a roof or a road takes the ground it covers out of the weather
-// altogether; and loose sand goes where clay stays, whatever is growing on
-// either.
+// The water is charged differently: by the rock, which is rockErodibility, and
+// by what grows, as a stress to clear and not a share - see criticalFall.
 func hold(t *Tile) float64 {
 	if t.Mark != None {
 		return 0
@@ -79,14 +75,117 @@ func hold(t *Tile) float64 {
 	return t.Terrain.Hold() * t.Wash()
 }
 
-// rockErodibility is how hard the water cuts the rock under tile i once its
-// soil is gone, against Erodibility: K_b over K.
+// Water on the ground: how deep it runs, how wide, and the stress it puts on
+// its bed.
+const (
+	// waterDensity is ρ, in kilograms a cubic metre, and gravity is g.
+	waterDensity = 1000.0
+	gravity      = 9.81
+	// manning is the Manning roughness the depth of running water is read
+	// with: a natural channel, clean and winding (Chow 1959, 0.033 to 0.045).
+	manning = 0.035
+	// widthCoeff is α in W = α·Q^(3/8)·S^(-3/16), Finnegan and others' (2005)
+	// width of a channel cut into its bed. Their law gives the exponents; the
+	// coefficient is set so that ten cubic metres a second on a fall of one in
+	// a hundred is eleven metres across, which is what Leopold and Maddock's
+	// (1953) W = 3.5·Q^(1/2) gives a river that size.
+	widthCoeff = 2.0
+	// leastFall is the fall the width and the depth are read at on ground that
+	// falls less, so that a river on a dead flat is not read as infinitely
+	// wide or deep.
+	leastFall = 1e-4
+)
+
+// flowWidth is how wide q cubic metres a second crossing a tile span metres
+// across runs, in metres. On a channel it is Finnegan's width, never wider than
+// the tile; anywhere else the water is a sheet, and a sheet is as wide as the
+// ground it runs over.
+func flowWidth(t *Tile, q, fall, span float64) float64 {
+	if !t.Wet() {
+		return span
+	}
+	return math.Min(span, channelWidth(q, fall))
+}
+
+// channelWidth is Finnegan and others' (2005) width of a channel carrying q
+// cubic metres a second down a fall of s, in metres: see widthCoeff.
+func channelWidth(q, s float64) float64 {
+	return widthCoeff * math.Pow(q, 3.0/8) * math.Pow(math.Max(s, leastFall), -3.0/16)
+}
+
+// criticalFall is the fall at which q cubic metres a second, running w metres
+// wide, puts tc pascals on its bed: the fall the water has to be on before
+// what covers the ground lets it take anything.
 //
-// It is a placeholder, and it is to be deleted when the bedrock's own
-// erodibility is split from what is growing on the ground: until then the
-// rock is cut at the rate the ground over it always was, so that what the soil
-// changes is how much of the ground is soil and not how fast the ground goes.
-func rockErodibility(t *Tile) float64 { return hold(t) }
+// The stress is ρ·g·d·S, with the depth d by Manning, (n·q/(w·√S))^(3/5), so
+// τ = ρ·g·(n·q/w)^(3/5)·S^(7/10) and the fall that makes it tc is that turned
+// round. Istanbulluoglu and Bras (2005) write the water's work as
+// E = K(τ - τc)^a; with a at one, and read on the fall, that is
+// E = K·Q^m·(S - Sc) - stream power, less the fall the cover soaks up - which
+// is linear in the fall, so the implicit step takes it as it takes the rest:
+// the water cuts toward its receiver's height raised by Sc over the run.
+// Nothing growing, Sc is nothing, and it is Braun and Willett's step exactly.
+func criticalFall(q, w, tc float64) float64 {
+	if tc <= 0 {
+		return 0
+	}
+	if q <= 0 {
+		return math.Inf(1)
+	}
+	k := waterDensity * gravity * math.Pow(manning*q/w, 0.6)
+	return math.Pow(tc/k, 1/0.7)
+}
+
+// floodFlow is how many times its mean discharge a tile carries in the storms
+// that do the water's work, which is the discharge the stress on the ground,
+// the width of a channel and the settling of what the water carries are read
+// at. Stream power's K is set against the mean flow, because it is fitted to
+// rates over years; but whether grass lets go of a hillside, and whether silt
+// comes out of the water, is decided in the hour the water is running, and the
+// work is done by the floods (Wolman and Miller 1960).
+//
+// A thousand: fifty millimetres an hour running off a tile in a storm, against
+// the default valley's four hundred and fifty millimetres a year. Read at the
+// mean, the water on a hillside ran a millimetre deep and put a fifth of a
+// pascal on the ground, and nothing that grows would ever let go of it. By the
+// multiple, over seed 3's slopes with the cover at the grass and wood of the
+// time:
+//
+//	floodFlow   ploughed mm/yr   ploughed against wooded   valley lowering, mm/yr
+//	   300           0.27               366                        0.062
+//	  1000           0.46               339                        0.090
+//	  3000           0.60                28                        0.139
+//
+// A storm's runoff and not a flood's discharge off a catchment, which is a
+// smaller multiple of its mean the larger the catchment; the same multiple is
+// taken everywhere, which errs toward a great river's floods.
+const floodFlow = 1000.0
+
+// Settling velocities, in metres a second, of the three grains: fine sand,
+// silt and clay, from Ferguson and Church's (2004) law for natural grains of
+// quartz in water, read at 0.13, 0.01 and 0.001 millimetres across: a
+// centimetre a second, a tenth of a millimetre, and a thousandth of one.
+var fallSpeed = [Grains]float64{Sand: 1e-2, Silt: 1e-4, Clay: 1e-6}
+
+// settleShare is how much of a grain the water carries over a run of span
+// metres, w wide at q cubic metres a second, lets fall out: 1 - exp(-Vs·span·w/q).
+//
+// The load is spread through the water, so what crosses the bed in a second
+// is q of it and what falls on the bed is Vs·span·w, and the load decays as
+// it goes. It is Yuan and others' (2019) deposition, G·Qs/Q, taken over a
+// tile rather than a point; and because it is an exponential in the distance,
+// two tiles of half the span let fall what one tile of the whole did. How big
+// a tile is does not decide how far the sand gets.
+//
+// It was a share for each grain - 0.62, 0.33, 0.10 of what passed - faded
+// linearly to nothing on a fall of twelve in a hundred and held below nine
+// tenths: a tile's worth of settling, whatever the tile was worth.
+func settleShare(vs, span, w, q float64) float64 {
+	if q <= 0 {
+		return 1
+	}
+	return 1 - math.Exp(-vs*span*w/q)
+}
 
 // Erode weathers the map by one age and works the drainage out again. It is
 // the one thing that changes the shape of the land after the map is made, and
@@ -149,14 +248,21 @@ func (g *Grid) wear(years float64) {
 		recv:   recv,
 		stack:  stackOf(recv),
 		f:      make([]float64, n),
+		drop:   make([]float64, n),
 		settle: make([][Grains]float64, n),
 		parts:  make([][Grains]float64, n),
+		supply: g.bankLoad,
 		soil:   make([]float64, n),
 		rock:   make([]float64, n),
 		eff:    make([]float64, n),
 		abrade: make([]float64, n),
+		lasts:  make([]float64, n),
 	}
-	soft := 1 / g.meanHard()
+	for i := range c.lasts {
+		c.lasts[i] = 1
+	}
+	// What the rivers took off their banks is carried from here: see meander.
+	g.bankLoad = nil
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
@@ -169,37 +275,53 @@ func (g *Grid) wear(years float64) {
 				sand, clay := g.TextureAt(g.PosOf(i))
 				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
 			}
-			if int(recv[i]) == i {
+			// Ground somebody has built on is out of the water's reach: it is
+			// neither cut nor settled on.
+			if int(recv[i]) == i || t.Mark != None {
 				continue
 			}
-			// How hard the water cuts: stream power, charged to what holds
-			// the ground down for the soil and to the rock for the rock. See
-			// fluvial.go.
+			// How hard the water cuts: stream power, charged to what the soil
+			// is made of for the soil and to the rock for the rock. See
+			// fluvial.go and rockErodibility.
 			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
-			c.f[i] = power * hold(t)
+			c.f[i] = power * t.Wash()
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
-			// Where the water has gathered into a channel it is cutting rock
-			// and not stripping soil, and there the rock does pay: see hold
-			// for why it may not on a hillside. It is charged against the
-			// map's middling rock, so a map of one rock wears as it did.
-			if g.strata != nil && g.area != nil {
-				if ch := clamp01((g.area[i] - shapeHead) / (textureChannel - shapeHead)); ch > 0 {
-					pay := 1 + ch*(math.Pow(t.Hard()*soft, -wearRock)-1)
-					c.f[i] *= pay
-					c.rock[i] *= pay
-				}
-			}
-			// What it lets settle: more of it the gentler the ground, less of
-			// it the more water there is to keep it up, and nothing on ground
-			// somebody has built on.
-			if t.Mark != None {
+			// What grows on it holds its soil until the water's stress in a
+			// flood clears what it stands, and what settles is what a flood
+			// lets fall: see floodFlow, criticalFall and settleShare.
+			q := t.Flow * floodFlow
+			fall := (t.Height - g.Tiles[recv[i]].Height) / run[i]
+			w := flowWidth(t, q, fall, run[i])
+			if g.deep > 0 {
+				// A tile of a history is a piece of a planet, a hundred
+				// kilometres across, and its water runs in a network of
+				// channels too fine for it to draw. Read as a sheet that wide
+				// it put no stress on anything, and read as settling over the
+				// whole run it laid every grain of sand back where it was cut:
+				// either way the ranges rose for ever, to two hundred
+				// kilometres by the sixteenth epoch of a small globe. What a
+				// planet's rivers carry off a tile settles where they stop, in
+				// its basins and its seas - see stillWork - and the beds of its
+				// channels grow nothing.
 				continue
 			}
-			slack := clamp01(1 - g.Slope(g.PosOf(i))/SettleSlope)
-			held := math.Sqrt(settleFlow / math.Max(settleFlow, t.Flow))
-			for gr := range depositOf {
-				c.settle[i][gr] = math.Min(0.9, depositOf[gr]*slack*held)
+			c.drop[i] = math.Min(criticalFall(q, w, t.Terrain.Shear())*run[i], math.MaxFloat64)
+			// A river in flood is not the width of its channel. Its sand goes
+			// along the bed and settles there, over the channel; its silt and
+			// clay are held up in the water, which spreads over the ground
+			// beside it the flood reaches, and settle over all of that. See
+			// floodWidth and overbank.
+			plain := w
+			if t.Wet() && !g.standing(i) {
+				plain += g.floodWidth(i)
+			}
+			for gr := range fallSpeed {
+				over := plain
+				if Grain(gr) == Sand {
+					over = w
+				}
+				c.settle[i][gr] = settleShare(fallSpeed[gr], run[i], over, q)
 			}
 		}
 	})
@@ -207,40 +329,12 @@ func (g *Grid) wear(years float64) {
 	g.edgeWork(&c, recv, years)
 	g.stillWork(&c, recv)
 	next := c.solve(settleIters)
-
 	change := make([]float64, n)
 	gained := make([][Grains]float64, n)
 	g.exported = c.account(next, change, gained, func(i int32, laid [Grains]float64) {
-		t := &g.Tiles[i]
-		if t.Wet() && !g.standing(int(i)) {
-			// A river in flood puts most of its silt over the bank. That is
-			// what a flood plain is: not ground the river spared, but ground
-			// the river made. Without it the silt stays in the channel, the
-			// bed rises, and the good land beside it slowly washes away
-			// instead of being fed.
-			p := g.PosOf(int(i))
-			var bank [8]int
-			banks := 0
-			for _, off := range Dirs {
-				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-				if !g.In(q) {
-					continue
-				}
-				if b := g.At(q); !b.Wet() && b.Drain < FloodDepth {
-					bank[banks] = g.Index(q)
-					banks++
-				}
-			}
-			if banks > 0 {
-				for gr := range laid {
-					over := laid[gr] * Overbank
-					for _, j := range bank[:banks] {
-						change[j] += over / float64(banks)
-						gained[j][gr] += over / float64(banks)
-					}
-					laid[gr] -= over
-				}
-			}
+		if t := &g.Tiles[i]; t.Wet() && !g.standing(int(i)) {
+			g.overbank(int(i), laid, change, gained)
+			return
 		}
 		for gr := range laid {
 			change[i] += laid[gr]
@@ -285,6 +379,81 @@ func (g *Grid) wear(years float64) {
 			t.Soil = float32(h)
 		}
 	})
+}
+
+// overbank books what a river lays down at channel tile i: on its own bed, and
+// on the dry ground within the flood's reach around it, thinning away from the
+// channel as exp(-d/overbankDecay) with d the distance from it (Pizzuto 1987).
+// What goes over the bank is what the flood holds up in the water, its silt
+// and clay, which is what Pizzuto's diffusion is of; its sand goes along the
+// bed and is laid there, as the bars of the channel.
+// A river in flood puts its silt over the bank; that is what a flood plain is -
+// not ground the river spared, but ground the river made. Without it the silt
+// stays in the channel, the bed rises, and the good land beside it washes away
+// instead of being fed.
+//
+// The weights are shared out, so whatever is laid is booked whole: a river in a
+// gorge, with no dry ground low enough beside it, keeps all of it on its bed,
+// and one on a broad plain keeps a fifteenth.
+func (g *Grid) overbank(i int, laid [Grains]float64, change []float64, gained [][Grains]float64) {
+	p := g.PosOf(i)
+	var at [(2*overbankReach + 1) * (2*overbankReach + 1)]int32
+	var weight [len(at)]float64
+	at[0], weight[0] = int32(i), 1
+	k, total := 1, 1.0
+	for dy := -overbankReach; dy <= overbankReach; dy++ {
+		for dx := -overbankReach; dx <= overbankReach; dx++ {
+			q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
+			if (dx == 0 && dy == 0) || !g.In(q) {
+				continue
+			}
+			if b := g.At(q); b.Wet() || b.Drain >= FloodDepth || b.Mark != None {
+				continue
+			}
+			wt := math.Exp(-math.Hypot(float64(dx), float64(dy)) * g.span() / overbankDecay)
+			at[k], weight[k] = int32(g.Index(q)), wt
+			k++
+			total += wt
+		}
+	}
+	change[i] += laid[Sand]
+	gained[i][Sand] += laid[Sand]
+	for m := range k {
+		j := at[m]
+		share := weight[m] / total
+		for _, gr := range [...]Grain{Silt, Clay} {
+			change[j] += laid[gr] * share
+			gained[j][gr] += laid[gr] * share
+		}
+	}
+}
+
+// floodWidth is how wide, in metres, the ground beside channel tile i is that a
+// flood spreads over: the dry ground within overbankReach that stands within
+// FloodDepth of its water, as a width along the river - its area over the
+// length of river it lies along.
+//
+// It is what makes a flood plain a flood plain. The water in a channel runs
+// deep and fast and keeps its silt and clay up, which settle at a tenth of a
+// millimetre and a thousandth of one a second; spread a hundred metres wide
+// over a plain it runs shallow and slow, and they come out of it there. Read
+// over the channel alone, nothing finer than sand settled anywhere on a valley,
+// and over forty ages its low ground lost ground while its hills did.
+func (g *Grid) floodWidth(i int) float64 {
+	p := g.PosOf(i)
+	n := 0
+	for dy := -overbankReach; dy <= overbankReach; dy++ {
+		for dx := -overbankReach; dx <= overbankReach; dx++ {
+			q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
+			if (dx == 0 && dy == 0) || !g.In(q) {
+				continue
+			}
+			if b := g.At(q); !b.Wet() && b.Drain < FloodDepth && b.Mark == None {
+				n++
+			}
+		}
+	}
+	return float64(n) * g.span() / float64(2*overbankReach+1)
 }
 
 // Diffusivity is how fast the ground creeps, in square metres a year, on ground

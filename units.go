@@ -23,6 +23,12 @@ const (
 	mm    = metre / 1000
 )
 
+// Stresses, in pascals.
+const (
+	pascal     = 1.0
+	megapascal = 1e6 * pascal
+)
+
 // Durations, in years.
 const (
 	yr  = 1.0

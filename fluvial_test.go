@@ -277,3 +277,100 @@ func TestATidalCoastConservesTheGround(t *testing.T) {
 		}
 	}
 }
+
+// How far a grain gets before it settles is a fact about the river, not about
+// how big a tile is. A load let go at the head of a reach of two hundred metres
+// reaches the foot in the same share whether the reach is eight tiles of
+// twenty-five metres or sixty-four of three: exp(-Vs·L·W/Q), grain by grain,
+// through the solver and the books both.
+func TestHowFarAGrainGetsDoesNotDependOnTheTile(t *testing.T) {
+	const reach, width, q = 200.0, 10.0, 50.0
+	through := func(span float64) [Grains]float64 {
+		n := int(reach/span) + 2
+		c := fluvial{
+			h:      make([]float64, n),
+			recv:   make([]int32, n),
+			f:      make([]float64, n),
+			settle: make([][Grains]float64, n),
+			parts:  make([][Grains]float64, n),
+		}
+		for i := 0; i < n; i++ {
+			c.recv[i] = int32(max(0, i-1))
+			c.parts[i] = [Grains]float64{Sand: 0.4, Silt: 0.4, Clay: 0.2}
+			if i > 0 && i < n-1 {
+				for gr := range fallSpeed {
+					c.settle[i][gr] = settleShare(fallSpeed[gr], span, width, q)
+				}
+			}
+		}
+		// Only the head is cut, and it lets nothing settle where it is cut.
+		c.h[n-1], c.f[n-1] = 10, 1
+		c.stack = stackOf(c.recv)
+		next := c.solve(settleIters)
+		change := make([]float64, n)
+		gained := make([][Grains]float64, n)
+		exported := c.account(next, change, gained, nil)
+		cut := c.f[n-1] * (next[n-1] - next[n-2])
+		var share [Grains]float64
+		for gr := range share {
+			share[gr] = exported[gr] / (cut * c.parts[n-1][gr])
+		}
+		return share
+	}
+	coarse, fine := through(25), through(3.125)
+	for gr := range coarse {
+		want := math.Exp(-fallSpeed[gr] * reach * width / q)
+		if math.Abs(coarse[gr]-want) > 1e-9 || math.Abs(fine[gr]-want) > 1e-9 {
+			t.Errorf("grain %d: %.6f through tiles of 25 m, %.6f through tiles of 3 m, want %.6f", gr, coarse[gr], fine[gr], want)
+		}
+	}
+}
+
+// A hard band in a soft country is an escarpment. Raised steadily and cut
+// steadily, a river falls where it crosses the band as steeply as it must to
+// cut granite as fast as the ground rises - S = U/(K_b·√Q), and K_b for granite
+// is a twelfth of shale's - and eases again below and above it: the band holds
+// a knickpoint for as long as the river runs, and the break in the fall is at
+// the rock and nowhere else.
+func TestAHardBandHoldsAnEscarpment(t *testing.T) {
+	const uplift, k, by = 0.5, 2.0, 50.0
+	c, q := chain(150, k, by)
+	shale, granite := &Tile{Bedrock: Shale}, &Tile{Bedrock: Granite}
+	band := func(i int) bool { return i >= 60 && i < 90 }
+	for i := 1; i < len(c.h); i++ {
+		rock := shale
+		if band(i) {
+			rock = granite
+		}
+		c.f[i] = by * k * rockErodibility(rock) * math.Sqrt(q[i]) / TileSpan
+	}
+	for step := 0; step < 3000; step++ {
+		for i := 1; i < len(c.h); i++ {
+			c.h[i] += uplift
+		}
+		copy(c.h, c.solve(1))
+	}
+	slope := func(i int) float64 { return (c.h[i] - c.h[i-1]) / TileSpan }
+	mean := func(from, to int) float64 {
+		s := 0.0
+		for i := from; i < to; i++ {
+			s += slope(i)
+		}
+		return s / float64(to-from)
+	}
+	below, on, above := mean(50, 60), mean(60, 90), mean(90, 100)
+	ratio := rockErodibility(shale) / rockErodibility(granite)
+	if on < 0.8*ratio*math.Max(below, above) {
+		t.Errorf("the river falls %.4f across the granite and %.4f and %.4f on the shale either side; want about %.1f times as steep",
+			on, below, above, ratio)
+	}
+	steepest := 1
+	for i := 2; i < len(c.h); i++ {
+		if slope(i) > slope(steepest) {
+			steepest = i
+		}
+	}
+	if !band(steepest) {
+		t.Errorf("the steepest fall is at tile %d, off the granite band", steepest)
+	}
+}

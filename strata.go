@@ -207,10 +207,16 @@ func (g *Grid) piles() {
 // hardAt is how hard the rock is at height h under tile i. A map with no
 // strata answers with the tile's own rock.
 func (g *Grid) hardAt(i int, h float64) float64 {
+	return hardness[g.bedAt(i, h)]
+}
+
+// bedAt is the rock at height h under tile i. A map with no strata answers
+// with the tile's own rock.
+func (g *Grid) bedAt(i int, h float64) Bedrock {
 	if g.strata == nil {
-		return g.Tiles[i].Hard()
+		return g.Tiles[i].Bedrock
 	}
-	return hardness[g.strata[i].rockAt(h)]
+	return g.strata[i].rockAt(h)
 }
 
 // meanHard is how hard the map's exposed rock is on average. The rock charges

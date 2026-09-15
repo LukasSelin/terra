@@ -52,7 +52,12 @@ const greatFlow = 0.01
 func greatShare(q float64) float64 { return math.Min(1, q/greatFlow) }
 
 // bankCut is how much of the outer bank of a bend a great river - see
-// greatFlow - takes in an age of weather, in metres of height. A river migrating a
+// greatFlow - takes in an age of weather, in metres of height, off a bank as
+// readily worn as the soil is: a bank of rock pays what the rock pays, which
+// for a middling rock is bedShare of it, a quarter of a metre an age. That is
+// the order real banks go: a river five metres wide moving a twentieth of its
+// width a year past banks two metres high takes twelve cubic metres a year off
+// them, a fifth of a metre of a tile's height a decade. A river migrating a
 // metre or two an age across ground that is being cut by tens is what tips
 // the drainage into the new course rather than the old one.
 //
@@ -73,7 +78,16 @@ const bankCut = 2.5
 // does: the water is slow on the inside and drops what it is carrying there.
 // Without it a river digs its whole valley wider and lower every age instead
 // of moving across it, and the map sinks.
-const pointBar = 0.7
+//
+// Nine tenths. It was seven, when the rest was laid on the bed of the next tile
+// down and never left the valley. Given to the water instead - see bankLoad -
+// the rest is carried, and what does not settle goes to the sea, so the share
+// is a rate at which a valley's rivers export their own flood plain: at seven
+// the low fifth of seed 3's valley lost 29 metres over forty ages and at nine
+// tenths 13, nearly all of it the banks. At eight and seven the rivers of the
+// first three valleys moved under the thousandth of a width a year the
+// migration yardstick asks.
+const pointBar = 0.9
 
 // meanderFlow is the least discharge, in cubic metres a second, a channel has
 // to carry before it wanders at all: a fiftieth of a great river's, which is
@@ -82,24 +96,30 @@ const pointBar = 0.7
 // about in and no strength to make one.
 const meanderFlow = greatFlow / 50
 
-// turn is a quarter turn of a step, one way and the other. A bend's outer
-// bank is a quarter turn off the way the water is going, on the side it is
-// turning away from.
-func turn(d geom.Pos, left bool) geom.Pos {
-	if left {
-		return geom.Pos{X: d.Y, Y: -d.X}
-	}
-	return geom.Pos{X: -d.Y, Y: d.X}
+// bend is the inside and the outside of a bend, as steps off the tile it turns
+// at, for water that came in stepping in and goes on stepping out. The inside
+// is the corner between the two legs of it - back up the way the water came,
+// and on the way it goes - and the outside is the other way.
+//
+// It was a quarter turn off the way out, on the side the water turned from,
+// and that was the wrong side: on a bend of a right angle it named the tile
+// upstream as the outer bank. Every such bend took its bank cut out of its own
+// bed above it and laid its point bar on the outside, which is a river
+// straightening itself by digging up its own channel.
+func bend(in, out geom.Pos) (inner, outer geom.Pos) {
+	sign := func(v int) int { return min(1, max(-1, v)) }
+	inner = geom.Pos{X: sign(out.X - in.X), Y: sign(out.Y - in.Y)}
+	return inner, geom.Pos{X: -inner.X, Y: -inner.Y}
 }
 
 // meander walks every channel on the map and lets it cut the outside of its
 // bends. by is the same count of ages that wear takes, so a history's epoch
 // moves a river as far as it moves a hillside.
 //
-// It reads the drainage as it stands and writes only heights, so the caller
-// has to work the water out again afterwards - which is where the river
-// actually moves. Nothing here moves it; this only makes the ground it will
-// move into.
+// It reads the drainage as it stands and writes heights, and what the water
+// carries off - see bankLoad - so the caller has to work the water out again
+// afterwards, which is where the river actually moves. Nothing here moves it;
+// this only makes the ground it will move into.
 func (g *Grid) meander(by float64) {
 	// Where each tile's water comes from: of everything draining into it, the
 	// one carrying the most, which is the channel and not the hillside.
@@ -124,9 +144,12 @@ func (g *Grid) meander(by float64) {
 	}
 
 	change := make([]float64, len(g.Tiles))
+	if len(g.bankLoad) != len(g.Tiles) {
+		g.bankLoad = make([][Grains]float64, len(g.Tiles))
+	}
 	for i := range g.Tiles {
-		if g.Tiles[i].Flow < meanderFlow {
-			continue
+		if t := &g.Tiles[i]; t.Flow < meanderFlow || t.Mark != None || t.Owner != 0 {
+			continue // a trickle, or a reach somebody holds and has embanked
 		}
 		share := greatShare(g.Tiles[i].Flow)
 		in := from[i]
@@ -144,15 +167,24 @@ func (g *Grid) meander(by float64) {
 		if cross == 0 {
 			continue
 		}
-		outer := turn(out, cross < 0)
-		inner := turn(out, cross > 0)
+		inner, outer := bend(in, out)
 
 		// Charged by the water and paid by the rock: the same river takes a
 		// bend out of shale in an age and hardly marks a granite one. It is
 		// the bank's own rock that pays, not the channel's, which is what
 		// turns a river aside rather than letting it saw through.
-		took := by * bankCut * math.Sqrt(share) / g.rockAt(p, outer)
-		if !g.shift(p, outer, -took, change) {
+		took := by * bankCut * math.Sqrt(share) * g.rockAt(p, outer)
+		bank, ok := g.bankAt(p, outer)
+		if !ok {
+			continue
+		}
+		// A river takes its bank down to its own bed and no further: what is
+		// below the water is the bed, and the bed is the downward cutting's.
+		// Taken whole whatever stood there, the outside of a bend on a flood
+		// plain a metre above the water was dug metres below it, and the
+		// point bar opposite stood metres above the plain.
+		took = math.Min(took, math.Max(0, bank.Height-g.Tiles[i].Height))
+		if took <= 0 || !g.shift(p, outer, -took, change) {
 			continue
 		}
 		// Most of it goes straight onto the inside of the same bend, and the
@@ -161,14 +193,30 @@ func (g *Grid) meander(by float64) {
 		// the bottom of the map: a river would take a metre off its banks
 		// every age and put seven tenths of it back, and the world would
 		// quietly lose the difference for ever.
-		g.shift(p, inner, took*pointBar, change)
-		g.shift(p, out, took*(1-pointBar), change)
+		//
+		// Where the inside of the bend is not there to take it - held ground,
+		// or the edge of the map - the bar is laid on the channel where it was
+		// cut, which is where a bar the water could not put anywhere else ends
+		// up. Dropping it was the same hole again.
+		if !g.shift(p, inner, took*pointBar, change) {
+			change[i] += took * pointBar
+		}
+		// And what goes downstream goes into the water, to be carried and let
+		// settle by the next wear as it carries what it cuts. It was laid on
+		// the bed of the next tile down, which is not downstream with the
+		// water but a step in the river: a great river put a metre on its own
+		// bed at every bend every age, and on the valleys as they were when
+		// this was found, forty ages of it took the concavity of their rivers
+		// from 0.51 to 0.16, steep where they should have been gentle.
+		for gr, part := range parts(bank) {
+			g.bankLoad[i][gr] += took * (1 - pointBar) * part
+		}
 	}
 
+	// No floor under it. What a floor at nothing did was raise a bank the river
+	// had cut below sea level back up to it, out of nothing: see wear.
 	for i := range g.Tiles {
-		if change[i] != 0 {
-			g.Tiles[i].Height = math.Max(0, g.Tiles[i].Height+change[i])
-		}
+		g.Tiles[i].Height += change[i]
 	}
 }
 
@@ -192,15 +240,27 @@ func (g *Grid) shift(p, off geom.Pos, by float64, change []float64) bool {
 	return true
 }
 
-// rockAt is how hard the rock is one step off p, or a middling rock where
-// there is no tile there to ask.
+// bankAt is the tile one step off p, if there is one.
+func (g *Grid) bankAt(p, off geom.Pos) (*Tile, bool) {
+	q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+	if g.Wrap {
+		q = g.Norm(q)
+	}
+	if !g.In(q) {
+		return nil, false
+	}
+	return g.At(q), true
+}
+
+// rockAt is how readily the rock one step off p wears - see rockErodibility -
+// or a middling rock where there is no tile there to ask.
 func (g *Grid) rockAt(p, off geom.Pos) float64 {
 	q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
 	if g.Wrap {
 		q = g.Norm(q)
 	}
 	if !g.In(q) {
-		return 1
+		return bedShare
 	}
-	return g.At(q).Hard()
+	return rockErodibility(g.At(q))
 }

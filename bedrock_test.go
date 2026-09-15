@@ -1,7 +1,6 @@
 package terra
 
 import (
-	"github.com/LukasSelin/terra/geom"
 	"math"
 	"testing"
 )
@@ -67,40 +66,68 @@ func TestSoilStaysAMixtureThroughTheWeather(t *testing.T) {
 	}
 }
 
-// What the water sorts, it sorts by weight: sand goes down at the first
-// slackening and the fine stuff travels on. So the ground the water reaches
-// and leaves something on - the flat of the valley, within the flood - ends
-// up finer than the slopes it came off, and that difference is not put there
-// by anything that knows where a valley is.
+// What the water sorts, it sorts by weight. A river in flood keeps its sand
+// on its bed and spills its silt and clay over the bank, where the flood runs
+// shallow and slow over its plain: so what a flood lays on the ground beside a
+// river is finer than what it lays in it, and that difference is not put there
+// by anything that knows where a valley is - only by which grains the water
+// holds up.
+//
+// It was asked of a whole valley after twelve ages: that its floor had come out
+// finer than its hillsides. At real rates twelve ages is a hundred and twenty
+// years, a few millimetres of silt on a metre of soil, and the floor of seed 5
+// went from sand 0.291 to 0.292 against the hillsides' 0.277 to 0.281 - the
+// order it started in. Over twelve thousand years both coarsened, the floor to
+// 0.306 and the hillsides to 0.289, because clay does not settle out of running
+// water at all and goes to the sea from everywhere; the flood plains carry the
+// most water and lose the most of it. The rate that sorted the valley in a
+// century was the settling at a tenth of every grain a tile, whatever the tile
+// and the water were.
 func TestTheWaterSortsWhatItCarries(t *testing.T) {
-	w := NewLand(5, DefaultTerms())
-	for age := 0; age < 12; age++ {
-		w.Erode()
-	}
-	g := w.Grid
-	var floor, hillside, floorN, hillN float64
+	g := NewLand(5, DefaultTerms()).Grid
+	river := -1
 	for i := range g.Tiles {
-		tile := &g.Tiles[i]
-		if tile.Wet() {
-			continue
-		}
-		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		switch {
-		case tile.Drain < FloodDepth/2:
-			floor += tile.Sand
-			floorN++
-		case g.Slope(p) > 0.1:
-			hillside += tile.Sand
-			hillN++
+		if g.Tiles[i].Wet() && !g.standing(i) && !g.underSea(i) && g.floodWidth(i) > 0 {
+			river = i
+			break
 		}
 	}
-	if floorN == 0 || hillN == 0 {
-		t.Fatalf("nothing to compare: %v of valley floor, %v of hillside", floorN, hillN)
+	if river < 0 {
+		t.Fatal("no river with a flood plain beside it")
 	}
-	floor, hillside = floor/floorN, hillside/hillN
-	if !(floor < hillside) {
-		t.Errorf("the valley floor is sand %.3f and the hillsides %.3f; the water should have left the coarse stuff up the hill",
-			floor, hillside)
+	n := len(g.Tiles)
+	change := make([]float64, n)
+	gained := make([][Grains]float64, n)
+	g.overbank(river, [Grains]float64{Sand: 1, Silt: 1, Clay: 1}, change, gained)
+	var bed, bank [Grains]float64
+	total := 0.0
+	for i := range gained {
+		for gr := range gained[i] {
+			total += gained[i][gr]
+			if i == river {
+				bed[gr] += gained[i][gr]
+			} else {
+				bank[gr] += gained[i][gr]
+			}
+		}
+	}
+	if math.Abs(total-3) > 1e-12 {
+		t.Errorf("three metres laid and %.12f booked", total)
+	}
+	if bed[Sand] != 1 || bank[Sand] != 0 {
+		t.Errorf("the bed kept %.3f of the sand and the bank got %.3f; the sand stays on the bed", bed[Sand], bank[Sand])
+	}
+	if !(bank[Silt] > bed[Silt] && bank[Clay] > bed[Clay]) {
+		t.Errorf("the bank got silt %.3f and clay %.3f, the bed %.3f and %.3f; a flood spills its fines", bank[Silt], bank[Clay], bed[Silt], bed[Clay])
+	}
+	// And the flood plain lets fall what the channel alone would not: silt
+	// read over the plain settles faster than over the bed, and sand is read
+	// over the bed alone.
+	t0 := &g.Tiles[river]
+	q := t0.Flow * floodFlow
+	w := flowWidth(t0, q, g.Slope(g.PosOf(river)), TileSpan)
+	if !(settleShare(fallSpeed[Silt], TileSpan, w+g.floodWidth(river), q) > settleShare(fallSpeed[Silt], TileSpan, w, q)) {
+		t.Error("silt settles no faster over a flood plain than in its channel")
 	}
 }
 

@@ -138,27 +138,31 @@ const (
 	forestShare = 0.13
 )
 
-// channelSteep is the fall past which more fall stops helping the water cut a
-// channel and starts to hinder it. It is there for the flanks of a range.
+// channelSteep is the fall past which the ground does not head a stream at
+// all, however much it drains.
 //
-// The slope-area law is a law about soil-mantled hillsides. Past about two in
-// three the ground does not gather its water into a channel: it sheds it, and
-// its soil with it, straight down the face, and a slope that steep is a scree
-// and not a stream bed. Read without a limit, A·S made every tile of a
-// history's mountain wall - falls of three and six in one, against the six in
-// ten of the valley's own upland streams - out-score a river on the plain with
-// a hundred times its water, so every line of tiles down every flank became a
-// channel of its own. Laid side by side a tile apart and cutting as channels
-// cut, they combed each range into a row of parallel trenches.
+// Montgomery and Dietrich's (1992) threshold, A·S² - see channelArea - is a
+// law about soil-mantled hillsides, where the water gathers into a channel
+// once there is enough of it on a steep enough fall. Past a certain steepness
+// that stops being what happens. Stock and Dietrich (2003), reading the
+// slope-area plots of steep country, found the valleys above the fluvial
+// reach falling at a fall that hardly eases with the ground they drain - and
+// found them scoured by debris flows and not cut by streams. Water on ground
+// that steep does not keep a bed; it sheds, and its soil goes down the face
+// with it in pulses. Read without a limit, A·S² made every tile of a
+// history's mountain wall a channel head, and a range was combed into
+// parallel trenches.
 //
-// So above channelSteep the fall counts against the reading as fast as it
-// counted for it below, and a head needs some ground above it however steep it
-// is. The valley's upland streams run below the limit and drain more than the
-// floor, and are left as they were: over three seeds the share of the valley's
-// river in its high fifth goes from 20.7, 24.3 and 13.8 per cent to 14.6, 22.9
-// and 14.2. A half globe's high fifth, after sixty ages, goes from 13.4, 11.5
-// and 11.9 per cent river to 8.4, 4.8 and 8.5.
-const channelSteep = 0.7
+// So a head is not started above it: the ground there is a debris-flow valley,
+// and whatever water it gathers becomes a stream where the fall eases below
+// the limit and A·S² is asked of it there. A stream laid from a head below
+// runs on through steep ground as it finds it; that is a river in a gorge.
+//
+// The limit is read off the same slope-area plot C is: over ten valleys worn
+// twenty ages, the median fall of the smallest catchments, where it hardly
+// falls with area at all, is 0.63 and 0.56, and eases to 0.51 as the fluvial
+// fall begins to take over.
+const channelSteep = 0.6
 
 // bankRise is how far above its own channel a great river's flood reaches, in
 // metres. Nothing: a river spreads onto the ground beside it that is no higher
@@ -662,81 +666,6 @@ func (w *Land) lattice(g *Grid, span float64) []float64 {
 // facets: flat where it meets a corner, steepest halfway between.
 func smooth(t float64) float64 { return t * t * (3 - 2*t) }
 
-// Incise is how far the water has cut into the ground it has been running
-// over, in metres, along a great river: see greatFlow. It is what makes a
-// valley a valley rather than a dip: raised and left alone, a river lies on
-// the surface of the country like a line drawn on it, and the ground falls
-// away from the water at a slope nobody can see. Cut down, the river sits at
-// the bottom of something and the ground beside it is a bank.
-//
-// Twelve metres, and not more, because of what is beside the channel rather
-// than what is in it. FloodDepth says the valley floor is the ground within
-// fourteen metres of its river, which is where the soil is and where a
-// settlement feeds itself. Cut deeper than that and the river's own banks
-// stand above its flood plain: at thirty-four metres the soil on the gentle
-// ground of all five seeds tried sat on its floor of 0.15, which is a gorge
-// with nothing growing in it and not a valley.
-const Incise = 12.0
-
-// incise deepens the ways the water has already found. It runs on the first
-// drainage, before the rivers are drawn, so the channels are drawn into
-// ground that has been cut rather than onto ground that has not - and the
-// heights are settled again afterwards, because ground that has moved drains
-// differently.
-//
-// The cut is charged as the root of how much water crosses a tile: a gully
-// cuts nearly as deep as the river it feeds, and the difference between a
-// great river and a small one is far less than the difference in what they
-// carry.
-//
-// There is no fall in that and there should not be, which is worth setting
-// down because it looks like an omission and is not. The erosion in erode.go
-// is E = K·A^m·S^n, the stream power law, with m a half and n one - see wear -
-// and this is the same water on the same ground and takes only the A of it.
-// The difference is that wear runs an age at a time, over and over, and this
-// runs once. Stream power says how fast a channel is cutting now; a channel on
-// its own flood plain, carrying everything and falling nowhere, is cutting
-// nothing now and still lies at the bottom of a valley, because it spent ages
-// getting there. What this pass wants is the depth at the end of that and not
-// the rate at the start of it.
-//
-// Measured rather than argued: giving this the S term takes the mean cut on
-// the low half of a default valley from 2.49 metres to 0.60 and puts it on the
-// top fifth instead, from 1.42 to 2.83; and the valley's own trunk - the tile
-// where the river leaves the map, whose fall is exactly zero because there is
-// nothing below it - goes from 26.7 metres of cut to 0.03. The valley the
-// settlement lives in stops existing. A globe does the same, harder: 0.78 to
-// 0.10 on the low half and 1.22 to 4.96 on the top fifth.
-//
-// It is then spread over the ground either side before it is taken off, which
-// is what makes this a valley and not a trench. Applied where it was
-// computed, the whole depth landed in a channel one tile wide with walls
-// standing straight up out of the flood plain, and the map got steeper
-// everywhere without looking like anything.
-func (g *Grid) incise() {
-	cut := make([]float64, len(g.Tiles))
-	for i := range g.Tiles {
-		if g.standing(i) {
-			continue // still water cuts nothing: it is where the cutting stops
-		}
-		// Charged by the water, and paid by the rock: the same river cuts a
-		// gorge through shale and is turned aside by granite.
-		cut[i] = Incise * math.Sqrt(greatShare(g.Tiles[i].Flow)) / g.Tiles[i].Hard()
-	}
-	for pass := 0; pass < int(math.Round(tilesAcross(valleyWidth, TileSpan))); pass++ {
-		cut = g.spread(cut)
-	}
-	for i := range g.Tiles {
-		g.Tiles[i].Height -= cut[i]
-	}
-}
-
-// valleyWidth is how far the cut is carried out from the channel, in metres:
-// a pass of the blur below for every tile of it. Seventy-five metres either
-// side is a valley a few hundred metres across, with sides that can be walked
-// up.
-const valleyWidth = 75 * metre
-
 // spread is one pass of a blur: every tile becomes the mean of itself and the
 // eight around it, with the edge of the map reflecting rather than pulling
 // toward nothing.
@@ -801,116 +730,95 @@ func (g *Grid) outlet(x, y int) bool {
 // The share each lower neighbour takes goes as its fall, which is Quinn's
 // multiple-flow reading (Quinn and others, Hydrological Processes, 1991).
 // Freeman's power of 1.1 on the fall draws the same map and made a globe take a
-// sixth longer, all of it spent in the power. Sixty-four tiles is four hectares, past the one a channel
-// head needs - see channelHead - so a head is still picked from water that
+// sixth longer, all of it spent in the power. Sixty-four tiles is four hectares, past the few tiles a channel
+// heads on - see channelArea - so a head is still picked from water that
 // has come together rather than from a sheet. Over two half globes, wet tiles
 // with water on three corners and none beside them went from 12.0 and 10.5 in
 // a thousand to 2.4 and 5.3 with this alone, and to none with the corners of
 // diagonal steps filled in as well - see carve.
 const spreadUntil = 64.0
 
-// crowdSpace is how near, in metres, a small stream may start to another
-// channel it does not join, and crowdUntil is how much ground's rain, in
-// tiles, makes a stream no longer small.
+// channelArea is C in Montgomery and Dietrich's (1992) threshold for where a
+// channel heads, A·S² ≥ C, in square metres: where the ground above a point
+// drains A and falls S, the water gathered there has the stress to keep a bed
+// open against the soil creeping into it. They found heads in the Tennessee
+// Valley of California, southern Oregon and the Sierra Nevada falling on
+// that line, C set by the country - its rain, its soil and what grows on it.
 //
-// Nothing kept the streams apart, so a range whose flank fell evenly drew a
-// stream down every third or fourth line of tiles, each cut into the ground
-// beside the next: a mountain carved into ribs rather than drained. On the
-// ground a hillside between two streams sheds its water into one or the other,
-// and a third between them has no ground of its own to gather from - which is
-// what sets how far apart a range's streams stand.
+// A is read off the water and not the ground: the drainage area that would
+// gather a tile's discharge at the mean runoff of the default valley, a tile
+// of ground sending channelRunoff. Montgomery and Dietrich (1994) derive C
+// as going inversely with the runoff, so read this way a wet country heads
+// its streams on smaller catchments and a dry one on larger, and the ranges of
+// a desert stand dry.
 //
-// A stream that meets the other within three times the spacing is a
-// tributary, and those are left alone: a river's branches draw together
-// because they are going to the same place. And a stream that has gathered
-// crowdUntil has earned its bed wherever it is. Over two half globes, river
-// tiles with an unjoined channel within three tiles went from 41 and 34 per
-// cent of the river to 17 and 16.
-const (
-	crowdSpace = 75 * metre
-	crowdUntil = 256.0
-)
+// The figure is fitted to the map and not taken from California. On the
+// slope-area plot of ten valleys worn twenty ages, by the area each tile's
+// discharge would drain at channelRunoff, the slope hardly falls with area
+// below a catchment of a few tiles and falls as a river's does above it; the
+// break is where A·S² stands highest before the fluvial reach, and C is that:
+//
+//	A, m²      422    750    1334   2371   4217   7499
+//	S, median  0.630  0.559  0.514  0.404  0.270  0.179
+//	dlnS/dlnA         -0.21  -0.14  -0.42  -0.70  -0.72
+//	A·S²       168    234    352    387    306    239
+//
+// It replaces three rules: a stream power of 2100 watts a metre, tuned until
+// the first valley was not a marsh; a least catchment of eight tiles; and a
+// rule that kept a small stream from heading within three tiles of another it
+// did not join, because nothing else kept the flanks of a range from being
+// drawn as ribs.
+const channelArea = 400.0
 
-// channelPower is the power, in watts on each metre of bed, that water has to
-// spend on its bed to have cut one, and channelHead is the least ground, in
-// tiles, a channel's head has to drain. Between them they are where a river
-// starts: see carve.
+// channelRunoff is the runoff, in millimetres a year, a tile's discharge is read
+// at to be the area A in channelArea: the default valley's, which sheds about
+// four hundred and fifty of its eleven hundred millimetres of rain.
+const channelRunoff = 450.0
+
+// riverWidth is how wide, in metres, a channel has to run to be water on the
+// map: see flowWidth for the width.
 //
-// A river is not a share of the map. It is where the water running down the
-// ground has the power to keep a bed open against the soil creeping into it,
-// and that is rho*g*Q*S - stream power, the reading channel initiation and
-// incision are both measured in (Bagnold, 1966; Montgomery and Dietrich,
-// 1992). Read off real discharge it puts rivers where the rain runs off and
-// the ground falls, so a wet country has more of them and a dry one fewer, and
-// the ranges of a desert stand dry.
+// It has to be asked, because A·S² cannot say it here. The ground is shaped
+// graded - see shape.go - and on a graded river the fall eases as the root of
+// the ground it drains, which is the one concavity at which A·S² does not
+// change down the river at all: on the plot above it holds between 240 and 950
+// from a catchment of a few tiles to the trunk. So nearly every tile past the
+// break is a channel by Montgomery and Dietrich's reading, and on the ground it
+// is - a hollow of four tiles, a quarter of a hectare, heads a stream a stride
+// across. What a map twenty-five metres a tile draws as water is not that
+// stream; it is the ones wide enough to be worth drawing, and the width grows
+// down a river as the three-eighths power of its water, read in a storm - see
+// floodFlow. Read on A·S² alone, C moved a valley from a quarter of it river
+// to one part in fifty between 600 and 3000. By the width, when it was set,
+// over the first three valleys and seed 1 at half and twice the rain:
 //
-// Stream power and not bed shear, which was tried first. Shear goes as the
-// depth, which goes as the flow to the power 0.39, and a reading that weak in
-// the water turns rivers on and off like a switch: over five seeds of the
-// valley, with the threshold set to give eight tiles in a hundred of it river,
-// half the rain gave none at all.
+//	C     width, m    seed 1   seed 2   seed 3   half the rain   twice
+//	400     2.0        8.3%     7.5%     7.5%        1.8%        15.3%
+//	400     2.5        5.6%     5.7%     5.7%        0           11.6%
+//	400     3.0        4.1%     4.6%     4.9%        0            8.6%
+//	500     4.0        1.5%     3.7%     3.3%        0            5.2%
 //
-// The figures in the tables below were read with the water off twelve hundred
-// metres of catchment a tile, 2304 times the tile's own ground - see
-// weather.go - and the power goes as the water, so each is 2304 times the
-// power the same rivers spend at their real discharge. That real figure,
-// under a watt on a metre of bed, is a litre a second falling one in ten: the
-// order of the mean flow off the few thousand square metres a channel head in
-// soil-mantled country drains (Montgomery and Dietrich 1988, 1992). Over the
-// first five seeds of the valley, and three small globes, at a head of eight:
-//
-//	power    valley river   upland share   half the rain   twice   small globe
-//	  700       13.1%          17.2%           4.1%        22.6%      3.1%
-//	 1200        7.8%          12.3%           3.0%        17.6%      2.1%
-//	 1500        6.1%           7.1%           2.0%        15.8%      1.7%
-//	 2000        4.5%           1.5%           1.9%        13.9%      1.2%
-//
-// Fifteen hundred keeps the valley near the six in a hundred it had when the
-// rivers were a share, and a globe - far less of it steep, and a third of its
-// land desert or ice - comes out with a river network about a quarter as
-// dense, which is what the drier world should have.
-//
-// Shaped - see shape.go - the valley's lowland stands higher and steeper, and
-// every tile that gathers water falls toward its river at the fall that water
-// holds a channel at, so more of the ground cuts a bed at the same power. At
-// fifteen hundred the first valley came out 12.2 in a hundred water; asked the
-// same of the first three valleys, by power:
-//
-//	power    seed 1   old river turning, seed 1   migration, widths a year
-//	 1500    12.2%            0.468                      0.0015
-//	 1800    11.1%            0.414                      0.0023
-//	 2100     9.9%            0.414                      0.0034
-//	 2400      -              0.445                      0.0038
-//
-// Twenty-one hundred is the least that keeps the first valley a valley and not
-// a marsh; at twenty-four hundred the third seed's river came out with fewer
-// bends after forty ages than it started with.
-//
-// The head is counted in ground because it guards against the grid and not
-// against the weather: see spreadUntil. At sixteen tiles, and a power of 800,
-// the high fifth of five valleys held a thousandth of their river: the water
-// spread over a hillside rarely gathers from that many before it reaches the
-// foot.
-const (
-	channelPower = 2100.0 / 2304 // watts a metre
-	channelHead  = 8.0
-)
+// Two and a half metres: a stream that is waded rather than stepped over, and
+// the six in a hundred of the valley the rivers were set to when they were read
+// off stream power.
+const riverWidth = 2.5
+
+// headReading is A·S² at a tile carrying q cubic metres a second down a fall of
+// s, in square metres, or nothing above channelSteep: see channelArea. And how
+// wide the channel there runs, in metres: see riverWidth.
+func headReading(q, s float64) (area, width float64) {
+	if q <= 0 || s <= 0 || s > channelSteep {
+		return 0, 0
+	}
+	return q / discharge(channelRunoff, 1) * s * s, channelWidth(q*floodFlow, s)
+}
 
 // bankShare is how much of a map's river, by how much water it carries, is
 // great enough to spread onto its banks.
 const bankShare = 0.25
 
-// streamPower is the power the water spends on each metre of its bed where q
-// cubic metres a second run down a fall of s, in watts a metre: ρ·g·Q·S.
-func streamPower(q, s float64) float64 {
-	if q <= 0 || s <= 0 {
-		return 0
-	}
-	return 1000 * 9.81 * q * s
-}
-
 // carve puts the water where the flow says it goes: a river starts wherever the
-// water has the power to hold a bed open - see channelPower - and runs from
+// water gathers the stress to hold a bed open - see channelArea - and runs from
 // there to the sea, and the greatest of them spread onto the lower bank beside
 // them, as a river does. Ground the water has left goes back to grass.
 //
@@ -920,16 +828,13 @@ func streamPower(q, s float64) float64 {
 // river that swallowed the market would be the end of a run rather than an
 // event in it.
 func (g *Grid) carve(rng interface{ Float64() float64 }) {
-	// What the water has the power to do here: see channelPower.
+	// Whether the water heads a stream here: see channelArea.
 	cutting := make([]float64, len(g.Tiles))
+	wide := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		s := g.Slope(g.PosOf(i))
-		if s > channelSteep { // a scree, not a stream bed: see channelSteep
-			s = channelSteep * channelSteep / s
-		}
-		cutting[i] = streamPower(g.Tiles[i].Flow, s)
+		cutting[i], wide[i] = headReading(g.Tiles[i].Flow, g.Slope(g.PosOf(i)))
 	}
-	cut := channelPower
+	cut := channelArea
 	// Whether a river is great enough to spread onto its banks is a question
 	// about how much water it is carrying and not about how hard it is
 	// cutting, so it is read off the flow and not off the work. They are not
@@ -970,8 +875,6 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			land++
 		}
 	}
-	// The least ground a head may start from: see channelHead.
-	head := channelHead
 	lay := func(from int) {
 		for j := from; !wet[j] && !g.pans[j]; {
 			wet[j] = true
@@ -1010,54 +913,11 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
-	// Where each tile's water goes, for asking whether two streams meet. -1
-	// is nowhere: the sea, a salt flat, or off the map.
-	down := g.down
-	// crowded says whether a small stream starting at i would run beside a
-	// channel it does not join: see crowdSpace.
-	crowdFlow := crowdUntil
-	space := int(math.Round(tilesAcross(crowdSpace, TileSpan)))
-	reach := space * 3
-	path := make([]int32, 0, reach+1)
-	on := func(j int32) bool { return slices.Contains(path, j) }
-	crowded := func(i int32) bool {
-		if g.area[i] >= crowdFlow {
-			return false
-		}
-		path = path[:0]
-		for j, k := i, 0; j >= 0 && k <= reach; j, k = down[j], k+1 {
-			path = append(path, j)
-		}
-		p := g.PosOf(int(i))
-		for dy := -space; dy <= space; dy++ {
-			for dx := -space; dx <= space; dx++ {
-				q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
-				if !g.In(q) {
-					continue
-				}
-				w := int32(g.Index(q))
-				if !wet[w] || g.underSea(int(w)) || g.lakeOf[w] >= 0 || on(w) {
-					continue
-				}
-				joins := false
-				for j, k := w, 0; j >= 0 && k <= reach; j, k = down[j], k+1 {
-					if on(j) {
-						joins = true
-						break
-					}
-				}
-				if !joins {
-					return true
-				}
-			}
-		}
-		return false
-	}
 	// A channel does not flicker, so a bed that is still being cut at half
 	// the rate keeps its water whether or not it would be chosen afresh. See
 	// the remark on hysteresis above.
 	for _, nd := range order {
-		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && g.area[nd.idx] >= head && !crowded(nd.idx) {
+		if g.Tiles[nd.idx].Wet() && nd.h >= cut/2 && wide[nd.idx] >= riverWidth/2 {
 			lay(int(nd.idx))
 		}
 	}
@@ -1065,7 +925,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		if nd.h < cut {
 			break
 		}
-		if g.area[nd.idx] < head || wet[nd.idx] || crowded(nd.idx) {
+		if wet[nd.idx] || wide[nd.idx] < riverWidth {
 			continue
 		}
 		lay(int(nd.idx))
@@ -1257,14 +1117,15 @@ func (g *Grid) seaNear(reach int) []float64 {
 // relevel reads the sea level off the ground again, so that the share of the
 // map under it is the share asked for. flood takes it before the rivers have
 // cut their valleys, because the drainage the valleys are cut by needs a sea
-// to run to; incise then takes up to Incise metres off the ground either side
-// of every river, and where a lowland lies a few metres above the sea the
-// whole of it goes under.
+// to run to; the water then cuts its valleys - see valleyYears - taking metres
+// off the ground beside every river, and where a lowland lies a few metres
+// above the sea the whole of it goes under.
 //
 // That had always happened a little. It came to matter when the plates began
 // to grow rather than be measured, because they leave broad flat lowlands, and
 // on a flat lowland the sea's quantile falls in the middle of one. Measured
-// after flood and after incise, of seeds 1 to 3:
+// after flood and after the valleys were cut, when a pass called incise cut
+// them, of seeds 1 to 3:
 //
 //	                 after flood        after incise
 //	globe            .300 .300 .300     .354 .304 .304

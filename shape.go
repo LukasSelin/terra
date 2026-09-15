@@ -62,8 +62,12 @@ const (
 	// its fall goes as the rock's hardness to this power (Whipple and Tucker
 	// 1999: a steady channel's slope goes as its erodibility to -1/n, with n
 	// near one). Held under one, because a tile is a whole reach of river
-	// and not one step down it.
-	shapeRock    = 0.5
+	// and not one step down it. It was a half, on hardness ranked from 0.45 to
+	// 1.5; read off tensile strength basalt stands five times shale and not
+	// three, and at a half a river's fall over a basalt band ran into Repose and
+	// stood no steeper than over shale. 0.35 keeps the fall basalt holds over
+	// shale what it was: 5^0.35 is 3.1^0.5.
+	shapeRock    = 0.35
 	shapeTop     = 0.5233050488643692
 	shapeConcave = 0.5119282740307869
 )

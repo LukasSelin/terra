@@ -18,6 +18,53 @@ func (w *Land) GenerateTerrain(width, height int) {
 	w.Generate(Terms{Width: width, Height: height})
 }
 
+// valleyYears is how long a drawn map's valleys are cut for before anybody
+// lives in them, and valleyRounds how many times over the channels, the slides,
+// the rock and the drainage are worked out again in the course of it.
+//
+// A shaped map is graded as water wearing at the rate the land rises would
+// grade it - see shape.go - and nothing had cut into it: a river lay on the
+// surface of its country like a line drawn on it. It used to be cut by a pass
+// of its own, incise, that took twelve metres times the root of a tile's share
+// of a great river's flow off every tile, divided by a hardness, and blurred
+// seventy-five metres wide. Nothing in that was the water's work: it did not
+// know how steeply the river fell, how long it had had, or what grew beside it.
+//
+// Now the valleys are cut by the same water that wears them for the rest of the
+// run - stream power over the rock, less what grows, and the settling - and at
+// the real rate that water cuts at, which is slow. Two thousand years does
+// little, and what it does it does to the channels. Over five valleys and the
+// small globes, by the years, when it was set:
+//
+//	years     mean slope   Hack    Rb     small globes' valley spacing, m   seed 1 turning
+//	     0       0.463     0.589   3.17              133                          0.39
+//	  2000       0.466     0.591   3.29              146                          0.38
+//	 10000        -        0.599   3.46              320                          0.44
+//	 20000       0.463     0.578   4.54              320                          0.48
+//	100000       0.504     0.522   3.00              320                          0.56
+//
+// Past a few thousand years the small globes' first-order valleys came out
+// three hundred metres apart and the mainstreams too short for their basins.
+// Cutting without the lift the shaping assumed takes the grading out of the
+// ground, too: the valleys' concavity - see realism_test.go - goes from 0.34
+// uncut to 0.30 at two thousand years.
+const (
+	valleyYears  = 2000 * yr
+	valleyRounds = 4
+)
+
+// cutValleys runs valleyYears of weather over a freshly drawn map, working the
+// channels, the slides, the rock and the drainage out again each round.
+func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
+	for range valleyRounds {
+		g.carve(rng)
+		g.wear(valleyYears / float64(valleyRounds))
+		g.landslide(false)
+		g.expose()
+		g.drain()
+	}
+}
+
 // Generate is GenerateTerrain on the given terms.
 func (w *Land) Generate(cfg Terms) {
 	width, height := cfg.Width, cfg.Height
@@ -59,10 +106,9 @@ func (w *Land) Generate(cfg Terms) {
 	g.expose()
 	g.drain()
 	// The water cuts its valley before the valley is asked where the water
-	// goes: incise moves the ground, so the drainage has to be taken again on
-	// the ground it left. See Incise.
-	g.incise()
-	g.expose()
+	// goes: the cutting moves the ground, so the drainage has to be taken
+	// again on the ground it left. See valleyYears.
+	g.cutValleys(w.RNG)
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
 	if poured {

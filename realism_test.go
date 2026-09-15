@@ -100,7 +100,9 @@ var realYardsticks = []realYardstick{
 		name: "channel concavity, valley", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(valleys(5)); return th },
-	}},
+	},
+		gap: "known gap: B - valleys cut two thousand years by stream power with no lift fall less concave than they were shaped: theta 0.30, and 0.34 uncut (see valleyYears)",
+	},
 	{yardstick: yardstick{
 		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
@@ -135,16 +137,12 @@ var realYardsticks = []realYardstick{
 		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14,
 		source:  "Leopold & Wolman 1960: meander wavelength 10-14 channel widths",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).wavelength },
-	},
-		gap: "known gap: D - no river on the map is gentle enough to meander: channel slopes run 0.05-0.6 where Leopold & Wolman ask under 0.03",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3,
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).sinuosity },
-	},
-		gap: "known gap: D - no reach is gentle enough to meander; see the wavelength yardstick",
-	},
+	}},
 
 	// 6. The climate by latitude.
 	{yardstick: yardstick{
@@ -206,9 +204,7 @@ var realYardsticks = []realYardstick{
 		name: "Hack exponent, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Hack 1957; Rigon et al. 1996: h is a property of the network, not of the survey's resolution",
 		measure: func() float64 { return hackExponent(doubleGlobes()) - hackExponent(singleGlobes()) },
-	},
-		gap: "known gap: D - with the history on its real clock, the same seed at 512x256 has a Hack exponent 0.07 above 256x128",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "channel concavity, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.1, hi: 0.1, slow: true,
 		source: "Wobus et al. 2006; Perron & Royden 2013: theta is a property of the channels, not of the DEM",

@@ -2,6 +2,7 @@ package terra
 
 import (
 	"github.com/LukasSelin/terra/geom"
+	"math"
 	"testing"
 )
 
@@ -173,4 +174,51 @@ func smallGlobe() Terms {
 	cfg := GlobeTerms()
 	cfg.Width, cfg.Height = 256, 128
 	return cfg
+}
+
+// Rivers worn by their own water fall as rivers do. Flint's law: along a
+// channel the fall eases as a power of the ground it drains, S = ks·A^-θ, and
+// over the world's rivers the concavity θ sits between about 0.35 and 0.7
+// (Flint 1974; Whipple 2004, 0.4 to 0.6 in most). Read on the river tiles of
+// three valleys after forty ages of weather, binned by the ground they drain.
+func TestWornRiversKeepFlintsLaw(t *testing.T) {
+	sum, count := map[int]float64{}, map[int]float64{}
+	for _, seed := range []uint64{1, 2, 3} {
+		w := NewLand(seed, DefaultTerms())
+		for k := 0; k < 40; k++ {
+			w.Erode()
+		}
+		g := w.Grid
+		for i := range g.Tiles {
+			if !g.Tiles[i].Wet() || g.underSea(i) || g.lakeOf[i] >= 0 || g.down[i] < 0 {
+				continue
+			}
+			d := int(g.down[i])
+			run := TileSpan
+			if i%g.W != d%g.W && i/g.W != d/g.W {
+				run *= math.Sqrt2
+			}
+			s := (g.Tiles[i].Height - g.Tiles[d].Height) / run
+			if s <= 0 || g.area[i] <= 0 {
+				continue
+			}
+			a := math.Log(g.area[i] * TileSpan * TileSpan)
+			b := int(a / 0.5)
+			sum[b] += math.Log(s)
+			count[b]++
+		}
+	}
+	var xs, ys []float64
+	for b, n := range count {
+		if n >= 10 {
+			xs = append(xs, (float64(b)+0.5)*0.5)
+			ys = append(ys, sum[b]/n)
+		}
+	}
+	if len(xs) < 4 {
+		t.Fatalf("only %d bins of river to read", len(xs))
+	}
+	if theta := -fit(xs, ys); !(theta >= 0.35 && theta <= 0.7) {
+		t.Errorf("worn rivers fall as area^-%.3f; real rivers are 0.35 to 0.7", theta)
+	}
 }

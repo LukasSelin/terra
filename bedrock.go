@@ -83,32 +83,104 @@ var weathers = [BedrockCount]struct{ sand, clay float64 }{
 	Schist:    {0.35, 0.28},
 }
 
-// hardness is how well each rock stands up to weather and water, against a
-// middling rock at one. It is what makes a landscape have a shape at all:
-// where the rocks differ, the soft ones go and the hard ones are left
-// standing, so a scarp is a hard bed with a soft one under it and a gorge is
-// a river that found something it could cut. Everything on the map used to
-// wear at the same rate, whatever it was made of, and a country where
-// everything wears evenly wears flat.
+// tensile is each rock's tensile strength, in megapascals. It is what makes a
+// landscape have a shape at all: where the rocks differ, the soft ones go and
+// the hard ones are left standing, so a scarp is a hard bed with a soft one
+// under it and a gorge is a river that found something it could cut.
 //
-// The order is the order a quarryman would give: granite and basalt are what
-// people build with, schist splits, sandstone and limestone are soft enough
-// to cut and hard enough to stand, and shale is barely rock at all.
-var hardness = [BedrockCount]float64{
-	Granite:   1.5,
-	Basalt:    1.4,
-	Schist:    1.1,
-	Sandstone: 0.8,
-	Limestone: 0.65,
-	Shale:     0.45,
+// Tensile strength and not a ranking, because it is the one figure a river's
+// wear has been measured against. Sklar and Dietrich (2001) wore discs of
+// twenty-odd rocks under saltating gravel in a flume and found the wear going
+// as the inverse square of the rock's tensile strength, over more than two
+// orders of magnitude of it - from mudstones under a megapascal to quartzites
+// over ten. The figures here are middling values of the lithologies in their
+// range and the rock-mechanics tables it was drawn from: basalt and granite
+// the strongest, schist split along its foliation, limestone and sandstone
+// cemented well or badly, and shale barely rock at all.
+//
+// It was a hardness a quarryman would have ranked, 1.5 for granite down to
+// 0.45 for shale.
+var tensile = [BedrockCount]float64{
+	Basalt:    10 * megapascal,
+	Granite:   7 * megapascal,
+	Schist:    5 * megapascal,
+	Limestone: 4.5 * megapascal,
+	Sandstone: 3.5 * megapascal,
+	Shale:     2 * megapascal,
 }
 
+// tensileHard is the tensile strength a rock of hardness one has: what
+// hardness is read against. At five megapascals a drawn map's four rocks come
+// out at 1.4, 0.9, 0.7 and 0.4, near the 1.5, 0.65, 0.8 and 0.45 they were
+// ranked at, so the slopes the rock holds up - see stand - and the beds a
+// history lays keep the contrasts they had.
+const tensileHard = 5 * megapascal
+
+// hardness is each rock's tensile strength against tensileHard. Everything
+// that asks how hard the rock is asks it against the map's middling rock - see
+// meanHard - so it is the contrasts that count and not the scale.
+var hardness = func() (h [BedrockCount]float64) {
+	for b := range h {
+		h[b] = tensile[b] / tensileHard
+	}
+	return h
+}()
+
 // Hard is how well the rock under this tile stands up to being worn away. It
-// divides what a river cuts, holds up how steep the ground can stand, and
-// steepens the fall a channel is shaped to, so ground over shale comes down
-// three times as fast as ground over granite and the difference between them
-// is a hillside - and, where one lies over the other, a scarp.
+// holds up how steep the ground can stand and steepens the fall a channel is
+// shaped to, and it is what the water pays to cut the rock: see
+// rockErodibility.
 func (t *Tile) Hard() float64 { return hardness[t.Bedrock] }
+
+// tensileRef is the tensile strength at which a rock wears at Erodibility. It is
+// set so that the four rocks a drawn map lays, in the equal shares it lays
+// them in, wear on average at bedShare of it: the mean of (tensileRef/σ)²
+// over granite, limestone, sandstone and shale is bedShare.
+const tensileRef = 3.16 * megapascal * bedShareRoot
+
+// bedShare is how fast the water cuts a middling rock against the soil over
+// it: K_b over K for a drawn map's rocks on average. Read as the law on drainage
+// area, K for soil at the valley's runoff is 1.3e-4 a year, and this puts the
+// rock at 1.4e-5, inside the 1e-7 to 1e-4 real channels in rock are fitted at
+// (Stock and Montgomery 1999; Harel, Mudd and Attal 2016).
+//
+// Where in that range is set by what a history makes of it, because a history
+// is millions of years of the rock being cut and the drawn maps' decades are
+// not. At the soil's own K a small globe's ranges came out a quarter of the
+// height they had; at 0.06, what open grass held when it was what the rock was
+// cut at, their valleys came out 320 metres apart. Over the eight small globes
+// the drainage yardsticks read, by the share:
+//
+//	share   area exc.   Hack    hypsometry   valley spacing, m   mean slope
+//	0.030    0.404      0.553     0.345           133              0.463
+//	0.045    0.431      0.591     0.345           133              0.498
+//	0.060    0.453      0.527     0.349           320              0.577
+//	0.080    0.440      0.561     0.377           133              0.498
+//	0.100    0.431      0.577     0.379           146              0.492
+//	0.120    0.426      0.605     0.396           133              0.486
+//
+// Read against the whole of the suite, 0.11 was the one of those near it that
+// also brought the discharge exponent inside, and the meandering reaches of the
+// small globes to the wavelength and sinuosity Leopold and Wolman give.
+const (
+	bedShare     = 0.11
+	bedShareRoot = 0.33166247903554 // √bedShare
+)
+
+// rockErodibility is how hard the water cuts the rock under a tile once its
+// soil is gone, against Erodibility: K_b over K, (σ_ref/σ_T)², the inverse
+// square of the rock's tensile strength (Sklar and Dietrich 2001), which is
+// bedShare for the middling rock of a drawn map. Shale goes
+// twelve times as fast as granite under the same water, which is the
+// difference between a vale and the scarp above it.
+//
+// It is the rock's figure and nothing else: what grows on the ground holds the
+// soil and not the rock under it, and holds it as a stress the water has to
+// clear rather than as a share of what it takes - see criticalFall.
+func rockErodibility(t *Tile) float64 {
+	s := tensileRef / tensile[t.Bedrock]
+	return s * s
+}
 
 // String is what a rock is called.
 func (b Bedrock) String() string {

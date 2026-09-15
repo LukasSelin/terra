@@ -220,3 +220,24 @@ func TestSoilGoesWithTheGround(t *testing.T) {
 		t.Fatalf("ploughed slopes hold %.3f after forty ages of weather and held %.3f before; want them the poorer for it", a, b)
 	}
 }
+
+// The water charges the rock under a map for what it takes: the same valley,
+// all shale and bared of its soil, sends the sea several times what it sends
+// all granite in an age. With its soil on, an age takes the soil and not the
+// rock, and the rock under it does not come into it.
+func TestTheWaterWearsShaleBeforeGranite(t *testing.T) {
+	sent := func(rock Bedrock) float64 {
+		w := NewLandSized(3, 60, 40)
+		g := w.Grid
+		for i := range g.Tiles {
+			g.Tiles[i].Bedrock = rock
+			g.Tiles[i].Soil = 0
+		}
+		g.wear(ageYears)
+		return g.exported[Sand] + g.exported[Silt] + g.exported[Clay]
+	}
+	soft, hard := sent(Shale), sent(Granite)
+	if !(soft > 3*hard) {
+		t.Errorf("shale sent %.2f m to the sea and granite %.2f", soft, hard)
+	}
+}

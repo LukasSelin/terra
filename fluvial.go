@@ -26,7 +26,7 @@ import (
 // What the water carries it puts down again, and that is Yuan and others
 // (2019): the share of what passes a tile that settles there goes as how
 // quickly it falls out of the water against how much water there is to keep
-// it up. Each grain settles at its own rate - see depositOf - which is the
+// it up. Each grain settles at its own rate - see settleShare - which is the
 // sorting; and since what a tile receives depends on what settled above it,
 // the two are solved together, a few sweeps up and down the same order.
 // Everything the water takes is booked to where it lands or to the sea, grain
@@ -34,8 +34,9 @@ import (
 
 // Erodibility is K in E = K·Q^m·S: metres of ground a year takes off a tile
 // with one cubic metre a second running over it down a fall of one in one,
-// before what is growing on it and what it is made of - see hold - have their
-// say. It is not a rock's figure. The fall is read over a tile and the water
+// before the rock under it - see rockErodibility - what the soil is made of,
+// and what is growing on it - see criticalFall - have their say. It is a
+// middling rock's figure. The fall is read over a tile and the water
 // off the tile's own ground, and the size of it is set by what real ground
 // loses: a ploughed slope a millimetre and a half of soil a year, the median
 // of Montgomery's (2007) compilation, and a valley nobody farms a twentieth of
@@ -76,26 +77,17 @@ import (
 //
 // Read as the law on drainage area, E = K_A·A^m·S, it is K_A = K·r^m for
 // runoff r in metres a second: at the valley's four hundred millimetres a
-// year, 1.3e-4 a year, and times what grass holds, 8e-6 - inside the 1e-7 to
-// 1e-4 real channels in rock of every kind are fitted at (Stock and
-// Montgomery 1999; Harel, Mudd and Attal 2016). So a history, which is millions
-// of years of it, wears with the same K on the same clock: see epochYears.
+// year, 1.3e-4 a year for soil, and for a middling rock - see bedShare -
+// 1.4e-5, inside the 1e-7 to 1e-4 real channels in rock of every kind are
+// fitted at (Stock and Montgomery 1999; Harel, Mudd and Attal 2016). So a
+// history, which is millions of years of it, wears with the same K on the same
+// clock: see epochYears.
 const Erodibility = 1.2
 
-// depositOf is how readily each grain comes out of the water on ground that
-// lets it, as a share of what passes: sand at the first slackening, silt where
-// the river spills, clay hardly at all while there is water moving. The
-// figures are what the settling was before it was solved with the cutting,
-// kept so that a map sorts its soil as it did.
-//
-// Steep ground keeps its load moving whatever the grain: see SettleSlope.
-var depositOf = [Grains]float64{Sand: 0.62, Silt: 0.33, Clay: 0.10}
-
-// settleFlow is the discharge, in cubic metres a second, above which a river
-// has the water to keep more of its load up: the share it lets settle goes as
-// the root of settleFlow over its flow. Below it every trickle is the same.
-// It is Yuan's G/q with the flow taken per unit width of a bed as wide as the
-// root of its discharge, which is how the world's rivers widen.
+// settleFlow is the discharge, in cubic metres a second, of a stream a stride
+// across: the least river the tide keeps a creek open for - see tides. It was
+// the flow above which a river had the water to keep more of its load up, when
+// the settling was a share for each grain; see settleShare for what it is now.
 //
 // It was one, read off water gathered from 2304 times a tile's ground - see
 // weather.go - and it is the same line at the water the ground really sheds:
@@ -264,6 +256,14 @@ func stackOf(recv []int32) []int32 {
 // abrade is the share of the sand passing each tile that the passage wears
 // down to silt: see Sternberg. It is nil where nothing is worn.
 //
+// drop is how far above the ground it drains into the water has to stand a
+// tile's soil before it cuts it: the critical fall what grows there holds it
+// at, over the run - see criticalFall. It holds the soil and not the rock, so
+// over a step the soil does not last it is taken for the share of the step the
+// soil does. supply is ground already in the water at each tile before the
+// step, by grain: what a river took off the outside of its bends and did not
+// lay on the inside - see meander. Both are nil where there is none.
+//
 // edge is, in a history, the height a root on the map's edge cuts toward - the
 // lower ground its water leaves for - and +Inf where a root cuts toward
 // nothing. It is nil outside a history. See edgeWork.
@@ -282,6 +282,9 @@ type fluvial struct {
 	eff    []float64
 	abrade []float64
 	edge   []float64
+	drop   []float64
+	lasts  []float64
+	supply [][Grains]float64
 }
 
 // edgeCut is how much the water takes off root i, whose height at the end of
@@ -321,11 +324,15 @@ func (c *fluvial) rate(i int32, above float64) float64 {
 		return c.f[i]
 	}
 	f := c.f[i]
+	lasts := 1.0
 	if cut := f * math.Max(0, above); cut > c.soil[i] {
-		lasts := c.soil[i] / cut
+		lasts = c.soil[i] / cut
 		f = lasts*f + (1-lasts)*c.rock[i]
 	}
 	c.eff[i] = f
+	if c.lasts != nil {
+		c.lasts[i] = lasts
+	}
 	return f
 }
 
@@ -355,16 +362,34 @@ func (c *fluvial) cutAt(next []float64, i int32) float64 {
 	if r == i {
 		return 0
 	}
-	return c.booked(i) * math.Max(0, next[i]-c.below(next, r))
+	return c.booked(i) * math.Max(0, next[i]-c.below(next, i, r))
 }
 
-// below is the height the water at a tile draining into r cuts toward: its
-// receiver's, or the tide's high water there if that is higher.
-func (c *fluvial) below(next []float64, r int32) float64 {
-	if c.floor == nil {
-		return next[r]
+// below is the height the water at tile i, draining into r, cuts toward: its
+// receiver's, or the tide's high water there if that is higher - raised by the
+// drop what grows on tile i holds its soil at, for as much of the step as the
+// soil lasts. See criticalFall.
+func (c *fluvial) below(next []float64, i, r int32) float64 {
+	h := next[r]
+	if c.floor != nil {
+		h = math.Max(h, c.floor[r])
 	}
-	return math.Max(next[r], c.floor[r])
+	if c.drop != nil {
+		lasts := 1.0
+		if c.lasts != nil {
+			lasts = c.lasts[i]
+		}
+		h += c.drop[i] * lasts
+	}
+	return h
+}
+
+// supplied is the ground of grain gr already in the water at tile i.
+func (c *fluvial) supplied(i int32, gr int) float64 {
+	if c.supply == nil {
+		return 0
+	}
+	return c.supply[i][gr]
 }
 
 // solve is the heights at the end of the step, cut and filled together. With
@@ -388,7 +413,7 @@ func (c *fluvial) solve(iters int) []float64 {
 				continue
 			}
 			for gr := range load[i] {
-				carried := load[i][gr] + cut[i]*c.parts[i][gr]
+				carried := load[i][gr] + c.supplied(i, gr) + cut[i]*c.parts[i][gr]
 				c.pass(load, i, r, gr, carried*(1-c.settle[i][gr]))
 			}
 		}
@@ -404,19 +429,26 @@ func (c *fluvial) solve(iters int) []float64 {
 				}
 				continue
 			}
-			hr := c.below(next, r)
+			hr := c.below(next, i, r)
 			// next[i] is still the last sweep's here, which is what says how
 			// much of the step the soil lasts.
 			f := c.rate(i, next[i]-hr)
 			var share, laid float64
 			for gr := range load[i] {
 				share += c.settle[i][gr] * c.parts[i][gr]
-				laid += c.settle[i][gr] * load[i][gr]
+				laid += c.settle[i][gr] * (load[i][gr] + c.supplied(i, gr))
+			}
+			if c.h[i]+laid <= hr {
+				// At or under the water it runs into, even with what settles on
+				// it: nothing to cut toward. It was only the tile that was
+				// asked, and the cut was still booked off what settled - so a
+				// tile filling below its outlet sent on f times what it was
+				// given, and at a history's f, thousands of times an epoch, the
+				// load grew by that much at every such tile down a river.
+				next[i], cut[i] = c.h[i]+laid, 0
+				continue
 			}
 			fa := f * (1 - share)
-			if c.h[i] <= hr {
-				fa = 0 // at or under the water it runs into: nothing to cut toward
-			}
 			next[i] = (c.h[i] + fa*hr + laid) / (1 + fa)
 			cut[i] = f * math.Max(0, next[i]-hr)
 		}
@@ -435,6 +467,9 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 		i := c.stack[k]
 		r := c.recv[i]
 		if r == i {
+			for gr := range load[i] {
+				load[i][gr] += c.supplied(i, gr)
+			}
 			var kept [Grains]float64
 			if c.keep != nil && c.keep[i] > 0 {
 				total := load[i][Sand] + load[i][Silt] + load[i][Clay]
@@ -463,7 +498,7 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 		change[i] -= cut
 		var laid [Grains]float64
 		for gr := range load[i] {
-			carried := load[i][gr] + cut*c.parts[i][gr]
+			carried := load[i][gr] + c.supplied(i, gr) + cut*c.parts[i][gr]
 			laid[gr] = carried * c.settle[i][gr]
 			c.pass(load, i, r, gr, carried-laid[gr])
 		}
@@ -504,7 +539,7 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 			continue
 		}
 		c.edge[i] = base
-		c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * hold(t) / g.span()
+		c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * rockErodibility(t) / g.span()
 	}
 }
 

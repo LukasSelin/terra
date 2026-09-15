@@ -152,6 +152,12 @@ func (g *Grid) landslide(keep bool) {
 	}
 	runs := int32(0)
 	soft := 1 / g.meanHard()
+	// What each rock stands at, against the map's middling rock: asked of
+	// every edge of every tile the slides pass, and there are six rocks.
+	var stands [BedrockCount]float64
+	for b := range stands {
+		stands[b] = stand(hardness[b] * soft)
+	}
 	for head := 0; head < len(queue); head++ {
 		// Take back the front of the queue now and then, so that it does not
 		// grow for as long as the slides go on.
@@ -168,9 +174,9 @@ func (g *Grid) landslide(keep bool) {
 			if g.strata != nil {
 				// Whether the edge fails is the rock the edge is made of;
 				// what it is left at is the rock the failure bares.
-				s := stand(g.hardAt(int(i), h[i]) * soft)
+				s := stands[g.bedAt(int(i), h[i])]
 				critical = Critical * s
-				repose = Repose * stand(g.hardAt(int(i), h[j]+Repose*s*r)*soft)
+				repose = Repose * stands[g.bedAt(int(i), h[j]+Repose*s*r)]
 			}
 			if over := h[i] - h[j] - critical*r; over > worst {
 				to, run, worst, rests = j, r, over, repose

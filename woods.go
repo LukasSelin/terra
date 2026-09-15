@@ -243,7 +243,13 @@ func (g *Grid) readHolds() {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			p := geom.Pos{X: i % g.W, Y: i / g.W}
-			g.holds[i] = !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Treeless(p) && g.WoodsAt(p) >= g.woodsLine
+			// Ground nothing about suits trees is below the line wherever the
+			// line is: where less than woodsShare of the land suits trees at
+			// all, the line reads as nothing and every tile ties with it - seed
+			// 1 of the valley, cut by the water rather than by incise, came out
+			// four fifths wood.
+			suits := g.WoodsAt(p)
+			g.holds[i] = !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Treeless(p) && suits >= g.woodsLine && suits > 0
 		}
 	})
 }
