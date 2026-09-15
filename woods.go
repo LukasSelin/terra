@@ -171,7 +171,7 @@ func (g *Grid) readWoods() {
 	slopes := make([]float64, len(g.Tiles))
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			slopes[i] = g.Slope(geom.Pos{X: i % g.W, Y: i / g.W})
+			slopes[i] = g.laidSlope(geom.Pos{X: i % g.W, Y: i / g.W}) // see laidHeight
 		}
 	})
 	q := quantiles(slopes, 0.9, 1-woodsSteep)

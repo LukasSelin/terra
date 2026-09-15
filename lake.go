@@ -72,7 +72,7 @@ type Lake struct {
 // lies under a lake, and otherwise the ground. It is what a walker crossing
 // the tile stands on or swims at, and what the water running off it runs off.
 func (g *Grid) Surface(i int) float64 {
-	h := g.Tiles[i].Height
+	h := g.laidHeight(i) // over the deep floor, the sea's: see laidHeight
 	if len(g.lakeOf) == len(g.Tiles) && g.lakeOf[i] >= 0 && g.lakeLevel[i] > h {
 		return g.lakeLevel[i]
 	}

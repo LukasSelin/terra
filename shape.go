@@ -22,9 +22,12 @@ import (
 //
 // So the ground is laid again as a landscape wearing at the rate it rises
 // would lay it. The map as it came is the uplift: high ground rises fastest,
-// the lowland at shapeFloor of that. Every tile sends its water down the
-// steepest fall, and stands above the tile it drains to by the fall stream
-// power holds a channel at in steady state, which eases with the ground the
+// the lowland at shapeFloor of that. A watered history says how fast its rock
+// was rising, and there that says which ground rises fastest instead: the
+// ranges its seams were still pushing up are the steep country, and a range
+// they stopped pushing two epochs ago is not, however high it stands. See
+// upliftOf and shapeUplift. Every tile sends its water down the steepest
+// fall, and stands above the tile it drains to by the fall stream power holds a channel at in steady state, which eases with the ground the
 // channel drains as area^-shapeConcave (Whipple and Tucker 1999; the concavity
 // of real rivers is 0.4 to 0.6). Walked from the sea and the map's edges
 // upward that is every height on the map; taken a few times over, each time
@@ -106,6 +109,9 @@ func (g *Grid) shape() (area []float64) {
 			h[i] += shapeRough * roughAt(i, h[i])
 		}
 		uplift[i] = shapeFloor + (1-shapeFloor)*clamp01((h[i]-lo)/(hi-lo))
+	}
+	if g.uplift != nil {
+		g.shapeUplift(uplift, root)
 	}
 	g.fillFrom(h, root)
 	// The rock charges each fall against the map's middling rock, so that a
@@ -195,6 +201,56 @@ func (g *Grid) shape() (area []float64) {
 	}
 	g.restrata(was, g.heights(), nil)
 	return area
+}
+
+// shapeUplift hands each tile a history left rising - see upliftOf - the
+// uplift the heights would have given it, by rank: the tile whose rock was
+// rising fastest takes the most the map's heights give any tile, and so on
+// down. The history says where the ground rises and in what order; the spread
+// stays the one the constants above were searched on.
+//
+// The rate itself was tried, and two ways between, over the eight small
+// globes with the deep floor laid on all of them:
+//
+//	uplift given by                  area   discharge  Hack   concavity  Flint R2
+//	the heights, by rank (before)    .480   .533       .568   .345       .894
+//	the rate, over a collision's     .389   .339       .592   .344       .930
+//	the rate, over its 99th centile  .393   .445       .512   .381       .872
+//	the rate, by rank                .455   .493       .557   .367       .864
+//
+// Most of a continent rises at a twentieth of a collision's rate or less - the
+// plate settling, and the bow it rides in - and only the seams' belts faster,
+// so read as a rate the uplift was all but even over the land, the lowland
+// graded as steeply as the upland, and the discharge exponent fell to a third.
+// Over the 99th centile it came nearer, and the mainstreams fell short of
+// Hack's. By rank nothing is asked of the constants they were not searched
+// for, and the history still says which country is steep.
+//
+// What it cannot hand on is how high. At a 25 metre tile the shaping lays the
+// ground to the map's own scale whatever uplift it is given - see shapeTop -
+// and a range kilometres high is a wall there.
+func (g *Grid) shapeUplift(uplift []float64, root []bool) {
+	var order []int
+	var spread []float64
+	for i := range uplift {
+		if !root[i] {
+			order = append(order, i)
+			spread = append(spread, uplift[i])
+		}
+	}
+	slices.Sort(spread)
+	slices.SortFunc(order, func(a, b int) int {
+		switch ra, rb := g.uplift[a], g.uplift[b]; {
+		case ra < rb:
+			return -1
+		case ra > rb:
+			return 1
+		}
+		return a - b // ties by position, so a world repeats
+	})
+	for k, i := range order {
+		uplift[i] = spread[k]
+	}
 }
 
 // hollowDeep and hollowLeast are how deep, in metres, and how broad, in
@@ -428,7 +484,7 @@ func (w *Land) texture(g *Grid, area []float64) {
 	n := len(g.Tiles)
 	lie := make([]float64, n)
 	for i := range g.Tiles {
-		lie[i] = g.Tiles[i].Height
+		lie[i] = g.laidHeight(i) // the broad lie is the map's, not the deep floor's: see laidHeight
 	}
 	for k := 0; k < 3; k++ {
 		lie = g.spread(lie)

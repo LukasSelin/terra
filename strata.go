@@ -327,7 +327,10 @@ func (g *Grid) denude() {
 // ends of the order the spread of the whole is kept.
 //
 // group, where it is given, orders two kinds of ground apart, as basins does
-// the ocean floor and the continents.
+// the ocean floor and the continents. The deep sea floor is counted where it
+// was laid from, and its beds are not carried: no pass hands it heights by
+// rank, and counted at its kilometres, it moved the beds under every hill on
+// the map. See abyssal and laidHeight.
 func (g *Grid) restrata(from, to []float64, group []bool) {
 	if g.strata == nil {
 		return
@@ -340,7 +343,12 @@ func (g *Grid) restrata(from, to []float64, group []bool) {
 		}
 		a, b = a[:0], b[:0]
 		for i := range from {
-			if group == nil || group[i] == kind {
+			switch {
+			case group != nil && group[i] != kind:
+			case g.abyssal(i):
+				a = append(a, g.laidHeight(i))
+				b = append(b, g.laidHeight(i))
+			default:
 				a = append(a, from[i])
 				b = append(b, to[i])
 			}
@@ -372,7 +380,7 @@ func (g *Grid) restrata(from, to []float64, group []bool) {
 		}
 		g.EachRow(func(y int) {
 			for i := y * g.W; i < (y+1)*g.W; i++ {
-				if group != nil && group[i] != kind {
+				if (group != nil && group[i] != kind) || g.abyssal(i) {
 					continue
 				}
 				c := &g.strata[i]
