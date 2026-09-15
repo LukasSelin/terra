@@ -65,8 +65,8 @@ func TestAnOpenOceanHasNoGyre(t *testing.T) {
 	for i := range g.Tiles {
 		// The drift across the parallels carries the fall of warmth with it,
 		// and the energy balance's fall at fifty degrees is some eight
-		// tenths of a degree a degree: a couple of degrees and no more.
-		if w := g.SeaWarmth(i); math.Abs(w) > 2 {
+		// tenths of a degree a degree - twice the old cosine's: two or so and no more.
+		if w := g.SeaWarmth(i); math.Abs(w) > 2.5 {
 			t.Fatalf("the open ocean at tile %d stands %+.2f degrees over its latitude", i, w)
 		}
 	}
