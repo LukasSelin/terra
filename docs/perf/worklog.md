@@ -119,6 +119,28 @@ the grid. Budget -2.9% / -4.9% / -2.1% bytes against item 3; allocations
 
 The fifth item, `fillFrom` as a bucketed flood, was not started.
 
+### After the rebase onto main (639d7d5)
+
+Main took the deep sea floor, the rock chemistry, the weather gate, the
+clock by pass and the softened winters while this ran, and those move the
+world, so `budget.json` was rewritten at the tip - not because these items
+moved anything. The proof is the same as before, taken again on the new
+base: main's own `digest.json` (current: written again from main's tree
+and identical to the committed file) is what the tip makes, at Workers 1,
+2, 3, 4, 8 and 16 (`TERRA_DIGEST=check` and the goroutine test both pass
+at the tip). Budget at the tip against main, Workers 4: valley 14.86 ->
+10.33 MB (**-30%**), 1519 -> 1299 allocs; ancient 84.44 -> 58.20 MB
+(**-31%**), 12066 -> 10217 allocs; globe128 525.3 -> 437.5 MB (**-17%**),
+36198 -> 33584 allocs. The percentages are larger than before the rebase
+because the weather gate took much of the other allocation away. An
+earlier rebase, onto 41bd904, read globe256 plan commit against tip,
+interleaved n=6, under load: 6.105 s ± 20% against 6.427 s ± 22%, ~
+(p=1.000); B/op -18.2%.
+
+The full suite on the pre-rebase branch failed only
+`TestRealNumbers/Hack_exponent,_globe` (0.6005 against 0.54-0.6), which is
+main's known failure; see the base run below.
+
 ### What needs attention next
 
 - A quiet count-6 run of globe256 and a count-3 globe, to read what items
