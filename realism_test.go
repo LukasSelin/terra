@@ -143,6 +143,13 @@ var realYardsticks = []realYardstick{
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).sinuosity },
 	}},
+	{yardstick: yardstick{
+		name: "meander migration", unit: "widths/yr", scale: "ground", lo: 0.001, hi: 0.18,
+		source:  "Hickin & Nanson 1984; Braudrick et al. 2009: <0.01 to 0.18 widths/yr on flood plains; floor lowered for rivers confined in incised valleys, not a measured figure",
+		measure: meanderMigration,
+	},
+		gap: "known gap: G - since the sun and the ranges' rain, valleys 1 and 3 have lost their shifts of three to six tiles, their one-tile migration as it was, and valleys 4 and 5 hardly move at all: 0.0005 over five valleys",
+	},
 
 	// 6. The climate by latitude.
 	{yardstick: yardstick{

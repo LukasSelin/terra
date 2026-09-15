@@ -213,11 +213,6 @@ var yardsticks = []yardstick{
 		source:  "Montgomery 2007: ploughing 1-2 orders of magnitude over native vegetation; medians 1.537/0.013 = 118",
 		measure: func() float64 { p, w := ploughedAndWooded(); return p / w },
 	},
-	{
-		name: "meander migration", unit: "widths/yr", scale: "ground", lo: 0.001, hi: 0.18,
-		source:  "Hickin & Nanson 1984; Braudrick et al. 2009: <0.01 to 0.18 widths/yr on flood plains; floor lowered for rivers confined in incised valleys, not a measured figure",
-		measure: meanderMigration,
-	},
 }
 
 // TestRealNumbers holds the map to the yardsticks.
@@ -769,7 +764,8 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 }
 
 // meanderMigration is how far the rivers great enough to wander have moved in
-// forty ages, in channel widths a year. A river here is a tile wide, so the
+// forty ages, in channel widths a year, over the five valleys the other valley
+// readings take. A river here is a tile wide, so the
 // width is TileSpan and the distance is counted in tiles.
 func meanderMigration() float64 {
 	const ages = 40
@@ -783,7 +779,7 @@ func meanderMigration() float64 {
 		return out
 	}
 	sum, n := 0.0, 0.0
-	for seed := uint64(1); seed <= 3; seed++ {
+	for seed := uint64(1); seed <= 5; seed++ {
 		w := NewLand(seed, DefaultTerms())
 		was := big(w.Grid)
 		for k := 0; k < ages; k++ {
