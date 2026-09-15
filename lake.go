@@ -206,7 +206,9 @@ func (t *basins) full(x int32) bool {
 // many tiles drain through each one, which is what the guards against the
 // grid's own patterns are read in. See spreadUntil.
 func (g *Grid) drain() {
-	g.weather()
+	if g.weatherStale() {
+		g.weather()
+	}
 	g.pool()
 	g.flow()
 }

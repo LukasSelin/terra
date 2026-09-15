@@ -92,7 +92,7 @@ check)
 	' && echo "perf: ok" || { echo "perf: FAILED - world creation has drifted slower" >&2; exit 1; }
 	;;
 baseline)
-	out="$basedir/$(date +%Y-%m-%d)-small.txt"
+	out="$basedir/$(date +%Y-%m-%d-%H%M)-small.txt"
 	run "$out"
 	echo "perf: wrote $out; commit it with a work log entry saying why" >&2
 	;;

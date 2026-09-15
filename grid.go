@@ -238,6 +238,9 @@ type Grid struct {
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See wind.go.
 	winds *Winds
+	// aired is the ground the weather was last read over: see weatherStale.
+	// A copy of the map starts without it, and reads its weather afresh.
+	aired []float32
 	// area is how many tiles drain through each tile, and water is how much
 	// the whole map runs off, in cubic metres a second. Both are drain's.
 	area  []float64

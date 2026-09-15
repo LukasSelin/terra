@@ -3,19 +3,19 @@
 	"workers": 4,
 	"worlds": {
 		"ancient": {
-			"bytes": 94713648,
-			"allocs": 14039,
-			"nanos": 425419000
+			"bytes": 84105960,
+			"allocs": 12348,
+			"nanos": 385523600
 		},
 		"globe128": {
-			"bytes": 643516128,
-			"allocs": 46029,
-			"nanos": 3198972500
+			"bytes": 502750352,
+			"allocs": 34904,
+			"nanos": 2544333900
 		},
 		"valley": {
-			"bytes": 25422056,
-			"allocs": 3237,
-			"nanos": 128728300
+			"bytes": 14824912,
+			"allocs": 1563,
+			"nanos": 86519100
 		}
 	}
 }
