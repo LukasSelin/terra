@@ -138,6 +138,7 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land.
 func (e *airEnv) currents(u, v [phases][]float32) []float64 {
+	defer phase("airEnv.currents")()
 	n := e.w * e.h
 	wet := func(i int) bool { return e.sea[i] > 0.5 }
 

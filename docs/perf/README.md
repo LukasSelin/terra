@@ -158,9 +158,31 @@ Things that are easy to misread here:
 
 ## Wall clock per pass
 
-The profiles do not say how long each pass took on the clock. The
-2026-09-15 entry in the work log did it with throwaway instrumentation: a
-`defer phase("name")()` at the top of each pass in `Generate` and `history`,
-summing `time.Since` into a map under a mutex, and printing the map after one
-`NewLand(1, GlobeTerms())`. It was not committed; redo it the same way when
-the table in the log needs refreshing.
+The profiles do not say how long each pass took on the clock. The timer
+in [phases.go](../../phases.go) does: every pass worth a line in the work
+log starts with `defer phase("name")()`, and with `TERRA_PHASES=1` in the
+environment the wall time and the calls are summed under that name. Off, a
+pass pays one bool read; on, nothing is allocated while a world is made, so
+the heap budget holds either way.
+
+The table for the globe, in the columns the work log uses:
+
+```bash
+TERRA_PHASES=1 go run ./cmd/overview -preset globe
+```
+
+The benchmark reports each pass as a metric, `s/<name>`, so benchstat can
+compare passes between runs, and logs the table with the calls:
+
+```bash
+TERRA_PHASES=1 go test -run '^$' -bench 'NewLand/globe$' -benchtime 1x -count 3 -timeout 60m .
+```
+
+The times are inclusive: `drain` includes the `weather`, `pool` and `flow`
+it calls, so the shares do not add up to 100%. A pass that runs on several
+goroutines at once (`airEnv.vapour` under `rainOn`) sums its time on each of
+them, so it can read as more than the wall clock of the pass that spread it.
+The environment is read once, when the package is initialised, which is
+before `go test` starts watching the environment for its cache: a test run
+that switches `TERRA_PHASES` needs `-count=1`, or the cache answers for the
+other setting.

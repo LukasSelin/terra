@@ -119,6 +119,7 @@ const runoutMost = 4096
 // neighbours of the one that failed, whose fall to it has just grown; the
 // tiles are taken in the order they were queued, so a world repeats.
 func (g *Grid) landslide(keep bool) {
+	defer phase("landslide")()
 	if !keep {
 		g.cutBack()
 		return

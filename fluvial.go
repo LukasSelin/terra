@@ -412,6 +412,7 @@ func (c *fluvial) supplied(i int32, gr int) float64 {
 // nothing settling it is exactly Braun and Willett: h' = (h + F·h'_r)/(1 + F),
 // taken from the sea upward.
 func (c *fluvial) solve(iters int) []float64 {
+	defer phase("fluvial.solve")()
 	n := len(c.h)
 	next := append([]float64(nil), c.h...)
 	cut := make([]float64, n)

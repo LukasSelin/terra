@@ -56,6 +56,7 @@ const (
 // cutValleys runs valleyYears of weather over a freshly drawn map, working the
 // channels, the slides, the rock and the drainage out again each round.
 func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
+	defer phase("cutValleys")()
 	for range valleyRounds {
 		g.carve(rng)
 		g.wear(valleyYears / float64(valleyRounds))
@@ -67,6 +68,7 @@ func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
 
 // Generate is GenerateTerrain on the given terms.
 func (w *Land) Generate(cfg Terms) {
+	defer phase("Generate")()
 	width, height := cfg.Width, cfg.Height
 	g := NewGrid(width, height)
 	g.Wrap = cfg.Wrap

@@ -6,6 +6,132 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The clock by pass, committed; the night's timings were taken under load
+
+**Branch:** `claude/perf-instrument` from main 1ad4985, plus
+`claude/work-trees-performance-plan-4b623c` ([scaling-plan.md](scaling-plan.md),
+[briefs/](briefs/), `TestWorldDigest` and [digest.json](digest.json)), then
+main again at 41bd904 when the weather gate (the entry below) landed while
+this session ran. The gate moved every world, so the digest was rewritten
+to the merged worlds; main's own digest, taken with the same test in a
+worktree at 41bd904, is identical to the branch's, which is the proof that
+the timer leaves the worlds as they were. A, B and C's start-of-session
+digests match the committed file only if they branch from main after this
+merge. Main moved once more, to b8d3856 (the sea read against its row, more
+heat traded on a globe), before this branch could land; it was merged in
+turn, the digest rewritten again (globe128 moved, valley and ancient did
+not), and main's own digest at b8d3856 is again identical to the branch's.
+The suite was not run a third time: the code the branch adds is the same,
+and the two runs below are its proof. One thing b8d3856 brought is
+`TestWorldCreationBudget` failing on globe128, +3.27% bytes and +4.51%
+allocations against [budget.json](budget.json), on main itself as much as
+here, with the instrument off or on. That budget is the climate change's
+to rewrite, so it is left as it is.
+
+**The timer.** [phases.go](../../phases.go) makes the throwaway
+`defer phase("name")()` of the first entry permanent: 27 passes, from
+`Generate` and `history` down to `airEnv.vapour` and `fluvial.solve`, summed
+by name under a mutex when `TERRA_PHASES=1`. `BenchmarkNewLand` reports each
+pass as `s/<pass>` and `cmd/overview` prints the table. Three things learned
+while making it hold the acceptance checks:
+
+- The first version returned a fresh closure per call, and with the
+  instrument on the budget test failed on allocations (valley +4.4%,
+  ancient +3.8%). The entries are now made at init with one stop function
+  and a stack of start times each, so a call allocates nothing: the budget
+  passes with the instrument off and on (valley 1520 / 1513 allocations
+  against 1524, within the goroutines' noise), and the digest is identical
+  both ways.
+- The environment is read at package init, before `go test` starts
+  recording what a test reads, so the test cache does not know the setting
+  changed: switching `TERRA_PHASES` needs `-count=1`. The first "on" runs
+  came back `(cached)` from the "off" ones.
+- The testing package keeps only the first lines of a benchmark's log, so
+  the table logged by the benchmark is cut after eight rows. The
+  `s/<pass>` metrics on the result line are complete; `cmd/overview` prints
+  the whole table with the calls.
+
+**Off, the instrument costs nothing measurable.** Main's test binary (at
+1ad4985) and the branch's, interleaved on the same loaded machine:
+
+| world | main | branch | | n |
+|---|---|---|---|---|
+| valley | 143.0 ms ± 13% | 167.4 ms ± 10% | +17% (p=0.015) | 6 |
+| ancient | 526 ms ± 15% | 505 ms ± 14% | ~ (p=0.94) | 6 |
+| globe256 | 7.27 s ± 8% | 7.10 s ± 5% | ~ (p=0.39) | 6 |
+| valley | 162.1 ms ± 6% | 162.5 ms ± 7% | ~ (p=0.81) | 15 |
+| ancient | 528 ms ± 10% | 534 ms ± 6% | ~ (p=0.78) | 15 |
+
+The n=6 valley reading did not survive n=15; the off path is one bool read
+and a deferred no-op per pass call, a few hundred per valley.
+
+**The suite** (`go test -timeout 60m .`): the branch fails the same tests as main, both times it was run. At 1ad4985 (before the gate) branch and main each failed one test, `TestRealNumbers/Hack_exponent,_globe` at 0.6005 against 0.54-0.60 (1639 s and 1622 s under load). At 41bd904 (the merged branch, and main in a worktree at the same commit) both fail `TestTheTideLaysFlatsOnlyWhereItReaches` (small globe 4 has no flats), `TestRealNumbers/drainage_area_exceedance_exponent,_small_globe` (0.4894 against 0.39-0.46) and `TestRealNumbers/discharge_exceedance_exponent,_small_globe` (0.4912 against 0.40-0.46), and the globe Hack exponent passes (1092 s and 1090 s). Those three are main's, from the deep floor and the rock chemistry that came in with the gate's merge; see the memory notes on the coasts workstream.
+
+**The machine was not quiet.** Four to ten test processes from other
+sessions ran the whole night (their suites, one at a 120 min timeout), so
+every timing here is under load. Before the merge, `scripts/perf.sh check`
+against the quiet [baseline/2026-09-15-2230-small.txt](baseline/2026-09-15-2230-small.txt)
+read valley +9.9%, ancient +12.4% (fails the 10% limit), globe256 -7.5%
+(the precomputes, as measured when they went in); the A/B table above says
+the ancient reading is load, not the timer. That count-6 run is kept as
+[baseline/2026-09-16-small-under-load.txt](baseline/2026-09-16-small-under-load.txt),
+named so that the script's newest-baseline glob (`*-small.txt`) skips it:
+against the quiet baseline it reads valley +24%, ancient +26%, globe256 ~.
+
+**The baseline for the morning is [baseline/2026-09-16-0039-small.txt](baseline/2026-09-16-0039-small.txt)**,
+count 6, at the merged branch (timer and gate), taken in the quietest hour
+of the night (four foreign test processes, mostly idle). Against the gate's
+own [2026-09-15-2333](baseline/2026-09-15-2333-small.txt) it reads valley ~
+(p=0.31), ancient +7.6% (p=0.009), globe256 -4.0% (p=0.026), with intervals
+of ±9-11% on both sides, which is load on both sides. **Retake it with
+`scripts/perf.sh baseline` on a quiet machine before checking A, B and C**;
+a quiet run on this machine has intervals of ±4-6%, and a baseline taken
+under load hides regressions of the load's size.
+
+**The globe by pass**, from `TERRA_PHASES=1 go run ./cmd/overview -preset globe`
+at the merged branch (83.2 s, with two suites running; the same run before
+the gate, on a lighter load, made the globe in 77.0 s and is the second
+column). Inclusive; a pass's time includes the passes it calls. The two
+columns were taken under different loads, so read the calls and the shares,
+not the seconds, across them.
+
+| pass | wall s | calls | share | before the gate | notes |
+|---|---:|---:|---:|---:|---|
+| `Generate` | 83.2 | 1 | 100% | 77.0 (1) | |
+| `history` | 62.7 | 1 | 75% | 51.6 (1) | 16 epochs |
+| `drain` | 33.0 | 30 | 40% | 34.1 (30) | = weather + pool + flow |
+| `wear` | 20.9 | 20 | 25% | 16.9 (20) | |
+| `weather` | 17.9 | 21 | 22% | 22.4 (31) | the gate: 21 readings, 18 of them the epochs' |
+| `rainOn` | 14.1 | 21 | 17% | 17.8 (31) | |
+| `waterStep` | 9.2 | 26 | 11% | 7.1 (26) | |
+| `flow` | 8.2 | 30 | 10% | 6.5 (30) | serial |
+| `airEnv.vapour` | 8.2 | 66 | 10% | 9.2 (96) | on the workers under rainOn; summed over goroutines |
+| `silt` | 7.4 | 1 | 9% | 9.6 (1) | includes drains and tides |
+| `pool` | 7.4 | 30 | 9% | 5.9 (30) | full sort per call |
+| `cutValleys` | 7.3 | 1 | 9% | 9.6 (1) | |
+| `orographic` | 7.1 | 63 | 8% | 8.9 (93) | 3 wind phases per rain |
+| `move` | 6.1 | 16 | 7% | 5.2 (16) | |
+| `fluvial.solve` | 6.0 | 26 | 7% | 4.5 (26) | serial |
+| `creep` | 5.0 | 20 | 6% | 4.6 (20) | serial stencil |
+| `tectonics` | 4.6 | 16 | 6% | 4.0 (16) | |
+| `windsFor` | 3.7 | 21 | 4% | 4.6 (31) | |
+| `landslide` | 3.0 | 6 | 4% | 4.1 (6) | |
+| `tides` | 2.4 | 7 | 3% | 2.1 (7) | |
+| `airEnv.currents` | 2.3 | 21 | 3% | 2.7 (31) | serial |
+| `shape` | 2.2 | 1 | 3% | 2.1 (1) | |
+| `reshape` | 1.9 | 16 | 2% | 1.4 (16) | |
+| `joinUp` | 1.9 | 30 | 2% | 1.5 (30) | |
+| `keepBook` | 1.0 | 16 | 1% | 0.6 (16) | |
+| `basins` | 0.3 | 1 | 0% | 0.3 (1) | |
+| `settleRock` | 0.03 | 1 | 0% | 0.02 (1) | |
+
+The shape of the first entry holds after the gate: `drain` is 40% of the
+clock, and what is left of it is the 18 per-epoch weather readings the gate
+keeps (brief A's remaining question, a model decision) and the serial
+hydrology, `pool` + `flow` + `waterStep`, now 30% (brief B).
+
+---
+
 ## 2026-09-15 - drain reads the weather only when the ground has moved
 
 **Change:** `drain` used to call `weather()` (winds for every phase, then the

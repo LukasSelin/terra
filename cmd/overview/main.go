@@ -92,6 +92,11 @@ func main() {
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
 
+	// With TERRA_PHASES=1, the clock by pass, longest first.
+	if phases := terra.Phases(); len(phases) > 0 {
+		fmt.Print(terra.PhaseTable(phases), "\n")
+	}
+
 	// The day's weather, run from the founding up to the day asked for.
 	for tick := 0; tick <= max(*day, 0); tick++ {
 		land.Tick = tick

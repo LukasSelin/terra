@@ -123,6 +123,7 @@ func (g *Grid) medianGrain(i int) float64 {
 // It draws no chance and writes nothing but the tiles it turns, so it may run
 // anywhere in the making of a world without moving a seed.
 func (g *Grid) tides() {
+	defer phase("tides")()
 	if g.sea < 0 {
 		g.tidal, g.ebb = nil, nil
 		return
@@ -676,6 +677,7 @@ const (
 // coast the mud has made. The mud takes up room under the sea, so level is
 // called after each round to find the sea's level again, for the same water.
 func (g *Grid) silt(level func()) {
+	defer phase("silt")()
 	if g.sea < 0 {
 		return
 	}
