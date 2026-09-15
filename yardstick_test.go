@@ -82,6 +82,13 @@ func smallGlobes(n int) []*Grid {
 // gave 0.431 and 0.419.
 const networkGlobes = 8
 
+// exceedanceGlobes is how many small globes the exceedance exponents are read
+// over: one basin each, scattering by 0.095, so eight leave the reading 0.034
+// about its mean, more than half the width of the real range, and one basin
+// whose trunk runs from wet ranges into dry lowland could carry discharge
+// 0.05 over area on its own. Sixteen halve the variance.
+const exceedanceGlobes = 16
+
 func globes() []*Grid { return []*Grid{yardWorld("globe", 1, GlobeTerms())} }
 
 var yardsticks = []yardstick{
@@ -122,14 +129,14 @@ var yardsticks = []yardstick{
 		name: "drainage area exceedance exponent, small globe", unit: "", scale: "water", lo: 0.39, hi: 0.46,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: P(A>=a) ~ a^-0.43, 0.40-0.46 in real networks; floor lowered a hundredth for streams held to the strike of layered rock, not a measured figure",
 		measure: func() float64 {
-			return basinExceedance(smallGlobes(networkGlobes), func(g *Grid, i int) float64 { return g.area[i] })
+			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.area[i] })
 		},
 	},
 	{
 		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: discharge goes as area, so the same 0.40-0.46",
 		measure: func() float64 {
-			return basinExceedance(smallGlobes(networkGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
+			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
 		},
 	},
 	{
