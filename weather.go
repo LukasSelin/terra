@@ -158,7 +158,7 @@ func (g *Grid) rainOn() {
 			season := seasonTemp(e.hemi[cy], phaseSin[k], 0)
 			for cx := 0; cx < e.w; cx++ {
 				i := cy*e.w + cx
-				sst[k][i] = e.mean[cy] + season
+				sst[k][i] = e.mean[cy] + season + seaOverAir
 				if e.warm != nil {
 					// The current warms or chills the sea and the shallow air
 					// over it, under the inversion, and not the column above:

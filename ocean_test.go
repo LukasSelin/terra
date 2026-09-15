@@ -162,9 +162,9 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 // they come north toward California, where the western Pacific's go on to
 // Japan. The same storm over the same water with the currents left out lives.
 func TestAStormDiesOverTheColdCurrent(t *testing.T) {
-	// A day of the trades aloft carries a storm at eighteen degrees some four
-	// degrees west, so one set down three degrees east of a shore comes down
-	// on the water just off it.
+	// A storm is set down on the water a degree off the eastern shore, and
+	// six off the western, so that a day of the trades that steer it leaves
+	// it over the water off each.
 	day := func(lon float64, currents bool) (age, sea, warm float64) {
 		wx := weatherOver(twoOceans())
 		if !currents {
@@ -177,8 +177,8 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 		return s.Age, wx.env.sample(wx.env.sea, fx, fy), wx.env.seaTemp(fx, fy, yearSin(Year/4))
 	}
 	// The first ocean runs from -123.75 degrees to 0.
-	cold, coldSea, coldWarm := day(3, true)
-	still, _, stillWarm := day(3, false)
+	cold, coldSea, coldWarm := day(-1, true)
+	still, _, stillWarm := day(-1, false)
 	warm, warmSea, warmWarm := day(-117.5, true)
 	t.Logf("off the eastern shore the sea is %.1f degrees and a storm ages %.0f days in a day; with no currents %.1f and %.0f; off the western shore %.1f and %.0f (a storm needs %.1f)",
 		coldWarm, cold, stillWarm, still, warmWarm, warm, stormSea)

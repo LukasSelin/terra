@@ -121,13 +121,38 @@ const (
 	// under its equator's mean; the energy balance gives the tropics their
 	// real warmth, and the threshold its real figure.
 	stormSea = 26.5
-	// westerlyAloft is how fast, in metres a second, the westerlies aloft
-	// carry a system east in the middle latitudes, and tradesAloft how fast
-	// the trades carry one west. A third again in winter and a third less in
-	// summer, when the difference in warmth between pole and equator that
-	// drives them is greater and less.
-	westerlyAloft = 10.0
-	tradesAloft   = 5.0
+	// steerHeight is the height, in metres, of the wind that carries a system:
+	// the 500 hPa level's, some five and a half kilometres up (the steering
+	// level of both lows and tropical cyclones; Holton, 2004; Chan and Gray,
+	// 1982). It is the wind near the ground and the thermal wind's shear over
+	// that height, g/(f T) times the fall of the air's warmth across it.
+	steerHeight = 5500.0
+	// frontShare is how much of the steering wind a low or a high goes at.
+	frontShare = 0.65
+	// steerLeast is the latitude, in degrees, the turning of the planet is read
+	// at no less than for the thermal wind: nearer the equator the balance does
+	// not hold, and the steering is the trades'.
+	steerLeast = 15.0
+	// eadyN is N, the buoyancy frequency of the troposphere the Eady growth
+	// rate is read at, per second, and eadyRef the growth rate, per second,
+	// of the planet's own fall of warmth of seven tenths of a degree in a
+	// hundred kilometres at 280 K: 0.31 g |∇T| / (N T) (Eady, 1949; Lindzen
+	// and Farrell, 1980). A low is born where the rate is high.
+	eadyN = 0.01
+	// stormOutflow is T_o, the temperature in kelvin at which a tropical
+	// cyclone's air flows out at the top, and stormExchange C_k/C_D, the
+	// ratio of the sea's exchange of enthalpy to its drag (Emanuel, 1986;
+	// Bister and Emanuel, 1998: 200 K and 0.9).
+	stormOutflow  = 200.0
+	stormExchange = 0.9
+	// hollandB is the shape of a cyclone's pressure profile, and the
+	// pressure it takes off for its wind is ρ e V² / B (Holland, 1980).
+	hollandB = 1.5
+	// decayRate, per hour, and decayFloor, m/s, are how a tropical cyclone's
+	// wind falls over land: V = Vb + (V0 - Vb) exp(-α t) (Kaplan and DeMaria,
+	// 1995: α = 0.095 h⁻¹, Vb = 26.7 kt).
+	decayRate  = 0.095
+	decayFloor = 13.7
 	// drift is how fast, in metres a second, a low or a storm wanders toward
 	// its pole, and a high toward the equator.
 	drift = 1.5
@@ -215,16 +240,22 @@ func (wx *Weather) step(day int) {
 	e := wx.env
 	sinT := yearSin(day)
 	live := wx.Systems[:0]
+	temp := e.blur(e.blur(e.airTemp(sinT), synopticReach), synopticReach)
 	for _, s := range wx.Systems {
 		hemi := math.Copysign(1, s.Lat)
-		winter := -sinT * hemi
-		a := math.Abs(s.Lat)
-		east := -tradesAloft + (tradesAloft+westerlyAloft*(1+winter/3))*smoothstep(18, 35, a) - 0.6*westerlyAloft*smoothstep(62, 80, a)
+		east, north := wx.aloft(temp, s.Lat, s.Lon, day)
+		if s.Kind != Storm {
+			// The weather of the middle latitudes goes at some two thirds of
+			// the wind at its steering level (Palmén and Newton, 1969;
+			// Carlson, 1991); a tropical cyclone goes with it.
+			east, north = east*frontShare, north*frontShare
+		}
 		pole := drift
 		if s.Kind == High {
 			pole = -drift / 3
 		}
-		s.Lat += hemi * pole * kmADay / 111.2
+		s.Lat += (hemi*pole + north) * kmADay / 111.2
+		s.Lat = math.Max(-89, math.Min(89, s.Lat))
 		s.Lon = wrapLon(s.Lon + east*kmADay/(111.32*math.Max(0.1, math.Cos(s.Lat*math.Pi/180))))
 		fx, fy, _ := e.cellOf(s.Lat, s.Lon)
 		sea := e.sample(e.sea, fx, fy)
@@ -233,7 +264,16 @@ func (wx *Weather) step(day int) {
 		case Low:
 			s.Age += 0.3 * (1 - sea)
 		case Storm:
-			s.Age += 2 * (1 - sea)
+			// Over land the wind runs down as Kaplan and DeMaria found it
+			// does, and a storm whose wind is down to its floor is gone.
+			if land := 1 - sea; land > 0 {
+				v := stormWindOf(s.Depth)
+				v = decayFloor + (v-decayFloor)*math.Exp(-decayRate*24*land)
+				s.Depth = stormDepthOf(v)
+				if v < 1.3*decayFloor {
+					s.Age = s.Life
+				}
+			}
 			if e.seaTemp(fx, fy, sinT) < stormSea {
 				s.Age++
 			}
@@ -263,9 +303,12 @@ func (wx *Weather) step(day int) {
 				for range 12 {
 					lat, lon := hemi*(7+13*r.Float64()), 360*r.Float64()-180
 					fx, fy, on := e.cellOf(lat, lon)
-					if on && e.sample(e.sea, fx, fy) > 0.8 && e.seaTemp(fx, fy, sinT) >= stormSea {
+					if sst := e.seaTemp(fx, fy, sinT); on && e.sample(e.sea, fx, fy) > 0.8 && sst >= stormSea {
+						// Few storms reach the most the sea could make of them:
+						// the share they do is spread from a fifth to four fifths
+						// (Emanuel, 2000).
 						wx.Systems = append(wx.Systems, System{Kind: Storm, Lat: lat, Lon: lon,
-							Depth: 25 + 45*r.Float64(), Radius: 120 + 180*r.Float64(), Life: 6 + 6*r.Float64()})
+							Depth: potentialDepth(sst) * (0.2 + 0.6*r.Float64()), Radius: 120 + 180*r.Float64(), Life: 6 + 6*r.Float64()})
 						break
 					}
 				}
@@ -283,16 +326,83 @@ func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT float64) (lat, lon float6
 	for range 8 {
 		lat, lon = hemi*(32+30*r.Float64()), 360*r.Float64()-180
 		fx, fy, _ := e.cellOf(lat, lon)
-		// How fast the warmth changes over a cell, against the planet's own
-		// pole-to-equator fall of some seven tenths of a degree in a hundred
-		// kilometres.
-		dt := math.Abs(e.seaTempAt(fx+1, fy, sinT)-e.seaTempAt(fx-1, fy, sinT))/(2*e.dx[e.row(fy)]) +
-			math.Abs(e.seaTempAt(fx, fy-1, sinT)-e.seaTempAt(fx, fy+1, sinT))/(2*e.dy)
-		if r.Float64() < math.Max(0.2, math.Min(1, dt*1e5/0.7)) {
+		// How fast a wave on the front would grow here, by Eady's rate,
+		// against how fast it grows under the planet's own fall of warmth.
+		gx := (e.seaTempAt(fx+1, fy, sinT) - e.seaTempAt(fx-1, fy, sinT)) / (2 * e.dx[e.row(fy)])
+		gy := (e.seaTempAt(fx, fy-1, sinT) - e.seaTempAt(fx, fy+1, sinT)) / (2 * e.dy)
+		t := e.seaTempAt(fx, fy, sinT)
+		if r.Float64() < math.Max(0.2, math.Min(1, eady(math.Hypot(gx, gy), t)/eady(0.7e-5, 7))) {
 			return lat, lon
 		}
 	}
 	return lat, lon
+}
+
+// eady is the Eady growth rate, per second, of a wave on air at temp degrees
+// whose warmth falls grad degrees a metre: 0.31 f |∂u/∂z| / N, with the shear
+// the thermal wind's, g |∇T| / (f T), so that f goes out.
+func eady(grad, temp float64) float64 {
+	return 0.31 * gravity * grad / (eadyN * (temp + 273.15))
+}
+
+// aloft is the wind, m/s toward the east and the north, that carries a
+// system at lat, lon on day: the climate's wind near the ground there and the
+// thermal wind over steerHeight, read off the warmth of the air near the
+// ground, temp, blurred to the scale of the weather. A valley's air has the
+// planet's fall of warmth across its latitude and not its own.
+func (wx *Weather) aloft(temp []float64, lat, lon float64, day int) (east, north float64) {
+	e := wx.env
+	fx, fy, _ := e.cellOf(lat, lon)
+	for k, m := range seasonWeights(day) {
+		east += m * e.sample32(wx.winds.u[k], fx, fy)
+		north += m * e.sample32(wx.winds.v[k], fx, fy)
+	}
+	// The fall of warmth toward the pole, along the row: the planet's, which
+	// is what the westerlies aloft stand on. A coast's contrast between land
+	// and sea is a sea breeze's, and not the jet's.
+	var gy float64
+	if e.wrap {
+		cy := e.row(fy)
+		north, south := max(cy-1, 0), min(cy+1, e.h-1)
+		gy = (rowMean(temp, e.w, north) - rowMean(temp, e.w, south)) / (float64(south-north) * e.dy)
+	} else {
+		gy = (zonalMean(lat+0.5) - zonalMean(lat-0.5)) / 111195
+	}
+	// The balance holds poleward of the tropics, and comes in over steerLeast
+	// to twice that.
+	a := math.Max(math.Abs(lat), steerLeast)
+	f := 2 * omega * math.Sin(a*math.Pi/180)
+	shear := gravity / (f * (e.sample(temp, fx, fy) + 273.15)) * steerHeight * smoothstep(steerLeast, 2*steerLeast, math.Abs(lat))
+	return east - math.Copysign(shear, lat)*gy, north
+}
+
+// rowMean is the mean of v over row cy of a lattice w cells across.
+func rowMean(v []float64, w, cy int) float64 {
+	var s float64
+	for _, x := range v[cy*w : (cy+1)*w] {
+		s += x
+	}
+	return s / float64(w)
+}
+
+// potentialDepth is how many hPa the deepest tropical cyclone warm sea at sst
+// degrees could make takes off the pressure: the wind of Emanuel's potential
+// intensity, V² = C_k/C_D (T_s - T_o)/T_o L (q*_s - q), with the air over the
+// sea a degree cooler and four fifths saturated, turned to a fall of pressure
+// by Holland's profile.
+func potentialDepth(sst float64) float64 {
+	ts := sst + 273.15
+	dq := saturation(sst) - 0.8*saturation(sst-1)
+	v2 := stormExchange * (ts - stormOutflow) / stormOutflow * latentHeat * math.Max(0, dq)
+	return stormDepthOf(math.Sqrt(v2))
+}
+
+// stormDepthOf is the fall of pressure, hPa, of a tropical cyclone whose
+// wind is v m/s, and stormWindOf its inverse: Holland's ρ e V² / B.
+func stormDepthOf(v float64) float64 { return airDensity * math.E * v * v / hollandB / 100 }
+
+func stormWindOf(depth float64) float64 {
+	return math.Sqrt(math.Max(0, depth) * 100 * hollandB / (airDensity * math.E))
 }
 
 // row is the row of cells nearest fy, held on the map.
@@ -314,12 +424,17 @@ func (e *airEnv) seaTempAt(fx, fy, sinT float64) float64 {
 // it, with the sea's own small swing and what the currents have brought.
 func (e *airEnv) seaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, 0)
+	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, 0) + seaOverAir
 	if e.warm != nil {
 		t += e.sample(e.warm, fx, fy)
 	}
 	return t
 }
+
+// seaOverAir is how many degrees the sea's surface stands over the air just
+// above it: the air is warmed from the sea, and over the open ocean the sea
+// is some one degree the warmer (Kara, Wallcraft and Hurlburt, 2007).
+const seaOverAir = 1.0
 
 // smoothstep is 0 below lo, 1 above hi, and a smooth step between.
 func smoothstep(lo, hi, x float64) float64 {
