@@ -112,6 +112,7 @@ func defaultAir(g *Grid) *Air {
 // together: a monsoon coast is wet for the summer's onshore wind whatever the
 // winter's offshore one does.
 func (g *Grid) weather() {
+	defer phase("weather")()
 	if g.air == nil {
 		g.air = defaultAir(g)
 	}
@@ -133,6 +134,7 @@ func (g *Grid) weather() {
 
 // rainOn is the rain and the runoff of g under the winds it has.
 func (g *Grid) rainOn() {
+	defer phase("rainOn")()
 	a := g.air
 	w := g.winds
 	e := w.airEnv

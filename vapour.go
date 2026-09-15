@@ -192,6 +192,7 @@ type vapourCell struct {
 
 // vapour settles one phase's budget.
 func (e *airEnv) vapour(in vapourIn) vapourOut {
+	defer phase("airEnv.vapour")()
 	n := e.w * e.h
 	dy := e.dy
 	f := e.vapourFluxes(in.u, in.v)

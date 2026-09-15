@@ -244,6 +244,7 @@ func (w *Land) Erode() {
 // It leaves the drainage stale on purpose: the caller says when the water is
 // worked out again, because doing it here would do it twice in Erode.
 func (g *Grid) wear(years float64) {
+	defer phase("wear")()
 	n := len(g.Tiles)
 	c := g.waterStep(years)
 	// The waves on the coast as it stands at the start of the step, and the
@@ -494,6 +495,7 @@ const creepSweeps = 12
 // does, because roots are what hold a hillside together. Whatever somebody has
 // built on stays where it is, and nothing slumps onto it.
 func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, lost []float64) {
+	defer phase("creep")()
 	// A river great enough to wander has banks that are its own business: see
 	// meander, which takes the outside of a bend and builds the inside, and
 	// whose bends creep would otherwise ease back out as fast as they are cut.
@@ -692,6 +694,7 @@ func blend(t *Tile, held float64, laid [Grains]float64) {
 // each tile, what settles where, and what the tide, the map's edges and the
 // still water do with what reaches them. See wear.
 func (g *Grid) waterStep(years float64) fluvial {
+	defer phase("waterStep")()
 	n := len(g.Tiles)
 	recv, run := g.receivers()
 	c := fluvial{

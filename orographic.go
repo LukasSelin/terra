@@ -89,6 +89,7 @@ func (g *Grid) orographicPatch() int {
 // of temp degrees, both on the air cells. ground is the height of each tile
 // over the water the air takes its fill from.
 func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
+	defer phase("orographic")()
 	a := g.air
 	if !g.Wrap {
 		return g.orographicWhole(e, u, v, temp, ground)

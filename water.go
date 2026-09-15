@@ -163,6 +163,7 @@ func (g *Grid) room() float64 {
 // the floor, having been raised by the continent's ramp, and the continent's
 // edge the lowest of the continent, so each side meets the foot from its own.
 func (w *Land) basins(g *Grid, ocean []bool) {
+	defer phase("basins")()
 	n := len(g.Tiles)
 	floor := 0
 	for i := range g.Tiles {

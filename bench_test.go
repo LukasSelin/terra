@@ -11,6 +11,10 @@ import "testing"
 // them: a quarter-scale globe, which runs every pass the globe does over a
 // sixteenth of its tiles, so that a change can be measured in seconds and
 // only confirmed on the full globe.
+//
+// With TERRA_PHASES=1 in the environment each pass is reported as a metric
+// too, s/<pass>, so that benchstat can compare passes between runs, and the
+// table is logged with the calls. See phases.go.
 var benchWorlds = []struct {
 	name  string
 	terms func() Terms
@@ -30,6 +34,7 @@ func BenchmarkNewLand(b *testing.B) {
 		b.Run(w.name, func(b *testing.B) {
 			terms := w.terms()
 			b.ReportAllocs()
+			ResetPhases()
 			for b.Loop() {
 				NewLand(1, terms)
 			}
@@ -37,6 +42,15 @@ func BenchmarkNewLand(b *testing.B) {
 			// against one another.
 			tiles := float64(terms.Width * terms.Height)
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/tiles, "ns/tile")
+			if phases := Phases(); len(phases) > 0 {
+				runs := float64(b.N)
+				for i := range phases {
+					phases[i].Seconds /= runs
+					phases[i].Calls = int(float64(phases[i].Calls)/runs + 0.5)
+					b.ReportMetric(phases[i].Seconds, "s/"+phases[i].Name)
+				}
+				b.Logf("phases, per world:\n%s", PhaseTable(phases))
+			}
 		})
 	}
 }

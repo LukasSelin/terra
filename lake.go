@@ -206,6 +206,7 @@ func (t *basins) full(x int32) bool {
 // many tiles drain through each one, which is what the guards against the
 // grid's own patterns are read in. See spreadUntil.
 func (g *Grid) drain() {
+	defer phase("drain")()
 	g.weather()
 	g.pool()
 	g.flow()
@@ -214,6 +215,7 @@ func (g *Grid) drain() {
 // pool finds every hollow on the map and how full the weather keeps it, and
 // writes down the lakes and the salt flats that leaves.
 func (g *Grid) pool() {
+	defer phase("pool")()
 	n := len(g.Tiles)
 	order := make([]heightNode, n)
 	for i := range order {
@@ -641,6 +643,7 @@ type floodNode struct {
 // reached in, backwards, is an order in which everything above a tile is
 // finished before the tile is.
 func (g *Grid) flow() {
+	defer phase("flow")()
 	n := len(g.Tiles)
 	stand := make([]float64, n) // the height the water stands at, flooded
 	reached := make([]bool, n)

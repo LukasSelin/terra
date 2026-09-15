@@ -75,6 +75,7 @@ const (
 // shape lays the ground again as the water would have left it, and returns how
 // many tiles each tile drains, by the drainage it was laid down.
 func (g *Grid) shape() (area []float64) {
+	defer phase("shape")()
 	n := len(g.Tiles)
 	root := make([]bool, n)
 	for i := range g.Tiles {
