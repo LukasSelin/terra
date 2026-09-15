@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/metrics"
 	"testing"
 	"time"
 )
@@ -61,10 +62,36 @@ const (
 	allocsSlack = 0.03
 )
 
+// The peak is written and logged but not held to a slack, because no
+// reading of it taken from outside the world is steady enough to hold: on
+// 2026-09-15, with two other test runs on the machine, three runs put the
+// ancient valley's peak at 6.2, 14.1 and 8.3 MiB. That is not the sampler
+// missing the top - reading the live heap at the collector's marks, and
+// forcing a mark every MiB allocated, both spread as wide - it is that
+// whatever the world allocates during a concurrent mark is counted live,
+// and a mark takes longer on a loaded machine. A peak that does not move
+// with load needs the world to hold still while it is read: a hook at each
+// pass boundary that collects and reads the heap. That is session 0's
+// phases.go; when it lands, set peakSlack and check it here like the bytes.
+// See docs/perf/README.md.
+const peakSlack = 0 // not checked; see above
+
+// peakEvery is how often the sampler reads the heap while a world is made.
+// A valley is made in a hundred and some milliseconds, so it is not every
+// hundred; the read is not a stop-the-world one, so it can be every one.
+const peakEvery = time.Millisecond
+
 // budget is one world's line in docs/perf/budget.json.
 type budget struct {
 	Bytes  uint64 `json:"bytes"`
 	Allocs uint64 `json:"allocs"`
+	// Peak is the most the heap held at once while the world was made, over
+	// what it held before: the highest HeapAlloc the sampler saw, less the
+	// HeapAlloc after the collection that precedes the world. Bytes is what
+	// the world churns through; Peak is what a machine has to have, and so
+	// what bounds the size of world a machine can make. It is logged, not
+	// checked, until it can be read with the world held still; see peakSlack.
+	Peak uint64 `json:"peak"`
 	// Nanos is what the world took on the machine the budget was written on.
 	// It is not checked; see the top of the file.
 	Nanos int64 `json:"nanos"`
@@ -84,17 +111,51 @@ func spend(terms Terms) budget {
 	was := Workers
 	Workers = budgetWorkers
 	defer func() { Workers = was }()
+	// The sampler and its channels are made before the heap is read, so that
+	// what they allocate is not put down to the world.
+	stop := make(chan struct{})
+	peaked := make(chan uint64)
+	go samplePeak(stop, peaked)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	start := time.Now()
 	NewLand(1, terms)
 	took := time.Since(start)
+	close(stop)
+	peak := <-peaked
 	runtime.ReadMemStats(&after)
+	if peak < before.HeapAlloc {
+		peak = before.HeapAlloc
+	}
 	return budget{
 		Bytes:  after.TotalAlloc - before.TotalAlloc,
 		Allocs: after.Mallocs - before.Mallocs,
+		Peak:   peak - before.HeapAlloc,
 		Nanos:  took.Nanoseconds(),
+	}
+}
+
+// samplePeak reads the heap every peakEvery until stop is closed, reads it
+// once more, and sends the most it saw. It reads through runtime/metrics
+// rather than ReadMemStats so that a sample does not stop the world; the
+// objects metric is MemStats.HeapAlloc by another name. The loop allocates
+// nothing after its first sleep, so it does not show in the world's count.
+func samplePeak(stop <-chan struct{}, peaked chan<- uint64) {
+	samples := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	var peak uint64
+	for {
+		metrics.Read(samples)
+		if v := samples[0].Value.Uint64(); v > peak {
+			peak = v
+		}
+		select {
+		case <-stop:
+			peaked <- peak
+			return
+		default:
+		}
+		time.Sleep(peakEvery)
 	}
 }
 
@@ -111,7 +172,7 @@ func TestWorldCreationBudget(t *testing.T) {
 		}
 	}
 	got := budgets{
-		Note:    "Written by TERRA_PERF_UPDATE=1 go test -run TestWorldCreationBudget. Bytes and allocs are checked; nanos are for reference only. See docs/perf/README.md.",
+		Note:    "Written by TERRA_PERF_UPDATE=1 go test -run TestWorldCreationBudget. Bytes and allocs are checked; peak and nanos are for reference only. See docs/perf/README.md.",
 		Workers: budgetWorkers,
 		Worlds:  map[string]budget{},
 	}
@@ -130,10 +191,14 @@ func TestWorldCreationBudget(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s has no budget; write one with TERRA_PERF_UPDATE=1", w.name)
 			}
-			t.Logf("spent %s against a budget of %s (time %+.0f%%, not checked)",
-				describe(spent), describe(have), 100*(float64(spent.Nanos)/float64(have.Nanos)-1))
+			t.Logf("spent %s against a budget of %s (time %+.0f%%, peak %+.0f%%, not checked)",
+				describe(spent), describe(have), 100*(float64(spent.Nanos)/float64(have.Nanos)-1),
+				100*(float64(spent.Peak)/float64(have.Peak)-1))
 			over(t, "bytes", spent.Bytes, have.Bytes, bytesSlack)
 			over(t, "allocations", spent.Allocs, have.Allocs, allocsSlack)
+			if peakSlack > 0 {
+				over(t, "peak", spent.Peak, have.Peak, peakSlack)
+			}
 		})
 	}
 	if update {
@@ -168,6 +233,6 @@ func over(t *testing.T, what string, spent, have uint64, slack float64) {
 }
 
 func describe(b budget) string {
-	return fmt.Sprintf("%.1f MiB in %d allocations, %v", float64(b.Bytes)/(1<<20), b.Allocs,
-		time.Duration(b.Nanos).Round(time.Millisecond))
+	return fmt.Sprintf("%.1f MiB in %d allocations, %.1f MiB at the peak, %v", float64(b.Bytes)/(1<<20), b.Allocs,
+		float64(b.Peak)/(1<<20), time.Duration(b.Nanos).Round(time.Millisecond))
 }

@@ -42,6 +42,43 @@ between runs, so a pass that starts making a new tile-sized slice shows up
 right away. The time is written to the file and logged (`time +7%, not
 checked`), but it is never enforced there.
 
+The file also carries a `peak`: the most the heap held at once while the
+world was made, over what it held before. `bytes` is churn, what the world
+asks of the allocator over its whole run; `peak` is what a machine has to
+have, and so what bounds the size of world it can make. A sampler goroutine
+reads the heap's live-objects metric every millisecond while the world is
+made and keeps the highest reading, less the reading after the collection
+that precedes the world.
+
+**The peak is logged (`peak -3%, not checked`) and not enforced**, because
+no reading taken from outside the world holds still under load. Three runs
+on 2026-09-15 with two other test runs on the machine:
+
+| world | sampled `HeapAlloc`, MiB | live at the collector's marks, MiB | live at a forced mark every MiB allocated, MiB |
+|---|---|---|---|
+| valley | 3.8, 3.8, 6.1 | 1.8, 2.1, 2.7 | 2.1, 3.8, 2.1 |
+| ancient | 6.2, 14.1, 8.3 | 3.3, 6.3, 8.2 | 7.2, 6.7, 4.1 |
+| globe128 | 21.0, 21.6, 22.1 | 11.3, 11.3, 15.8 | 20.7, 16.4, 15.0 |
+
+Three ways of reading it spread by 40-130%, so it is not the sampler
+missing the top and not the pacer's choice of when to collect. It is that
+the collector is concurrent: whatever the world allocates during a mark is
+counted live, and a mark takes longer when the machine is busy. Turning the
+collector's percent down (25, 10) did not narrow the spread, and cost the
+globe two seconds and a few hundred allocations. On a quiet machine the
+sampled `HeapAlloc` came out within 1-5% run to run, which is why it is
+the reading kept in the file: it is the honest one on the machine the
+budget is written on, and the one to compare when a change means to move
+the peak.
+
+A steady peak needs the world to hold still while the heap is read: a hook
+at each pass boundary (the phase timer in `phases.go`, session 0's file)
+that runs a collection and reads `HeapAlloc` when the budget test asks it
+to. Every pass then contributes one reading taken with nothing allocating,
+and the largest of them is the peak, the same on any machine. When that
+lands, set `peakSlack` in `budget_test.go` and the test holds it like the
+bytes.
+
 When a change is meant to move the heap, rewrite the budget and commit the
 diff with the change:
 
