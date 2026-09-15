@@ -63,6 +63,10 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 			if !g.seaCell(j) {
 				continue
 			}
+			// Within about seventy degrees of the drift, and a shore that carries
+			// sand on is taken over open water that lies up to forty degrees
+			// nearer the drift's way: how a line of sand keeps to a shore drawn
+			// in steps of eight ways, which is the grid's and not the sea's.
 			l := math.Hypot(float64(off.X), float64(off.Y))
 			dot := (float64(off.X)*d[0] + float64(off.Y)*d[1]) / (l * mag)
 			if dot < 0.3 {
