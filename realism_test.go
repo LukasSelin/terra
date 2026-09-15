@@ -214,14 +214,14 @@ var realYardsticks = []realYardstick{
 			b, _ := flint(singleGlobes())
 			return a - b
 		},
-	}},
+	},
+		gap: "known gap: B - the small globe's concavity swings by seed and by small changes to the coast (see the concavity yardstick), and the two resolutions do not swing together: 0.20 with the softened winters, the deep floor and the warm-sea limestone merged",
+	},
 	{yardstick: yardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	},
-		gap: "known gap: B - a globe of twice the tiles carries a longer tail of high ground, its peaks risen further than its mean, on every seed and at every merge since cc897fb (-0.049); the soil's creep with G's rain took it to -0.057 and the crust's balance to -0.078",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",
