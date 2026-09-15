@@ -122,6 +122,18 @@ globe over 16 globes (standard error about 0.034), moved toward their range
 under the gate and are not the branch's to judge either way. The meander
 marker is no longer a difference because main took it off.
 
+**Rebased once more, onto main at b9fbba3.** Main merged the profiling
+branch itself meanwhile (41bd904: the gate, and both markers taken off) and
+read the tide's flats off the third small globe (b9fbba3). The rebase
+dropped this branch's copy of the gate as already upstream, so what the
+branch adds to main is the plan branch (briefs, scaling plan, the digest
+test), the two-line laidHeight read in the gate, and the budget, digest and
+this log. The digest is as committed with and without that read. Full suite
+on main b9fbba3 (1054 s) and on the branch (1055 s), both under load: each
+fails exactly `drainage_area_exceedance_exponent,_small_globe` (0.4894)
+and `discharge_exceedance_exponent,_small_globe` (0.4912), main's own. The
+branch's list is main's list.
+
 ---
 
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
