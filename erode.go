@@ -326,6 +326,12 @@ func (g *Grid) wear(years float64) {
 		}
 	})
 	g.tideWork(&c, recv)
+	// The waves on the coast as it stands at the start of the step, and the
+	// sand the rivers bring them. See coast.go.
+	s := g.surfOf(nil)
+	if len(s.cells) > 0 {
+		c.surf, c.sands = s.slot, make([]float64, n)
+	}
 	g.edgeWork(&c, recv, years)
 	g.stillWork(&c, recv)
 	next := c.solve(settleIters)
@@ -379,6 +385,7 @@ func (g *Grid) wear(years float64) {
 			t.Soil = float32(h)
 		}
 	})
+	g.coast(s, years, c.sands)
 }
 
 // overbank books what a river lays down at channel tile i: on its own bed, and

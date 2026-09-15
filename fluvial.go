@@ -267,6 +267,12 @@ func stackOf(recv []int32) []int32 {
 // edge is, in a history, the height a root on the map's edge cuts toward - the
 // lower ground its water leaves for - and +Inf where a root cuts toward
 // nothing. It is nil outside a history. See edgeWork.
+//
+// surf is, on a coast with waves, each tile's place among the cells of the
+// surf, -1 for a tile that is not one, and sands the sand the water brings to
+// each of those cells: what a river brings to the surf is the waves' to carry
+// along the shore, and not yet the sea's. Both are nil where there are none.
+// See coast.go.
 type fluvial struct {
 	h      []float64
 	recv   []int32
@@ -285,6 +291,8 @@ type fluvial struct {
 	drop   []float64
 	lasts  []float64
 	supply [][Grains]float64
+	surf   []int32
+	sands  []float64
 }
 
 // edgeCut is how much the water takes off root i, whose height at the end of
@@ -491,6 +499,11 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 			change[i] -= cut
 			for gr := range load[i] {
 				exported[gr] += load[i][gr] - kept[gr] + cut*c.parts[i][gr]
+			}
+			if c.surf != nil && c.surf[i] >= 0 {
+				sand := load[i][Sand] - kept[Sand]
+				c.sands[i] += sand
+				exported[Sand] -= sand
 			}
 			continue
 		}
