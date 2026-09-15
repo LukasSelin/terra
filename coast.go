@@ -70,7 +70,8 @@ func strength(b int) float64 {
 // height: Ferreira and others (2000), over steep and gentle foreshores, 0.27.
 const mixingDepth = 0.27
 
-// coast does what the waves do to g's coast in years, with sands the sand the
+// coast does what the waves do to g's coast in years - the cliffs, the drift of
+// the sand and the winnowing, in that order - with sands the sand the
 // rivers brought to each tile of the sea this step, in metres over a tile. What
 // goes out of reach of the shore is added to what the step sent to the sea.
 func (g *Grid) coast(s *surf, years float64, sands []float64) {
@@ -83,9 +84,8 @@ func (g *Grid) coast(s *surf, years float64, sands []float64) {
 			supply[c] = sands[i]
 		}
 	}
-	for c := range supply {
-		g.exported[Sand] += supply[c]
-	}
+	g.cliffs(s, years, supply)
+	g.littoral(s, years, supply)
 	g.winnow(s, years)
 }
 
