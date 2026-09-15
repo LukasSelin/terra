@@ -179,6 +179,17 @@ type vapourOut struct {
 	sat []float64
 }
 
+// vapourCell is one cell's equation for its column's water, as the sweeps
+// read it: what it is given and loses whatever its water, where its water
+// comes from and how hard, and its rain curve. See vapour.
+type vapourCell struct {
+	give, lose        float64
+	toStep, rainScale float64
+	slope             float64
+	from              [4]int32
+	share             [4]float64
+}
+
 // vapour settles one phase's budget.
 func (e *airEnv) vapour(in vapourIn) vapourOut {
 	n := e.w * e.h
@@ -190,8 +201,9 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 	// Each cell's equation, whatever W is: what it is given, and at what
 	// rate it loses its own water to the faces, to the sea and to the air
 	// gathering; its neighbours upwind are read as the sweeps go.
-	give := make([]float64, n)  // kg/m²/s the cell is given whatever its W
-	lose := make([]float64, n)  // the part a second it loses, the column's rain aside
+	// Each is laid out in a vapourCell, so that a visit reads one run of
+	// memory.
+	cells := make([]vapourCell, n)
 	seaA := make([]float64, n)  // the sea's evaporation at W of nothing, kg/m²/s
 	seaB := make([]float64, n)  // and what each kg/m² of W takes off it, a second
 	satW := make([]float64, n)  // the saturated column
@@ -211,23 +223,23 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 			bulk := airDensity * exchangeCoeff * speed * e.sea[i]
 			seaA[i] = bulk * saturation(in.sst[i])
 			seaB[i] = bulk / (airDensity * vapourHeight)
-			give[i] = seaA[i] + (1-e.sea[i])*in.landEvap[i]
+			cells[i].give = seaA[i] + (1-e.sea[i])*in.landEvap[i]
 			out := math.Max(0, east[i]) + math.Max(0, -westOf(cx, cy)) + math.Max(0, north[i]) + math.Max(0, -southOf(cx, cy))
-			lose[i] = out/area + seaB[i] + gather[i]
+			cells[i].lose = out/area + seaB[i] + gather[i]
 			if !e.wrap {
 				// Air coming in over the edge brings the sea's water with it.
 				bnd := boundaryHumidity * ws
 				if cx == e.w-1 {
-					give[i] += math.Max(0, -east[i]) / area * bnd
+					cells[i].give += math.Max(0, -east[i]) / area * bnd
 				}
 				if cx == 0 {
-					give[i] += math.Max(0, westOf(cx, cy)) / area * bnd
+					cells[i].give += math.Max(0, westOf(cx, cy)) / area * bnd
 				}
 				if cy == 0 {
-					give[i] += math.Max(0, -north[i]) / area * bnd
+					cells[i].give += math.Max(0, -north[i]) / area * bnd
 				}
 				if cy == e.h-1 {
-					give[i] += math.Max(0, southOf(cx, cy)) / area * bnd
+					cells[i].give += math.Max(0, southOf(cx, cy)) / area * bnd
 				}
 			}
 			rainK[i] = 1
@@ -248,51 +260,53 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 	// Where each cell's water comes from: up to four cells upwind, and the
 	// part a second of each one's water that crosses into it.
 	const none = -1
-	from := make([]int32, 4*n)
-	share := make([]float64, 4*n)
 	for cy := 0; cy < e.h; cy++ {
 		area := e.dx[cy] * dy
 		for cx := 0; cx < e.w; cx++ {
 			i := cy*e.w + cx
-			k := 4 * i
-			from[k], from[k+1], from[k+2], from[k+3] = none, none, none, none
+			c := &cells[i]
+			c.from = [4]int32{none, none, none, none}
 			if f := westOf(cx, cy); f > 0 && (cx > 0 || e.wrap) {
-				from[k], share[k] = int32(e.at(cx-1, cy)), f/area
+				c.from[0], c.share[0] = int32(e.at(cx-1, cy)), f/area
 			}
 			if f := east[i]; f < 0 && (cx+1 < e.w || e.wrap) {
-				from[k+1], share[k+1] = int32(e.at(cx+1, cy)), -f/area
+				c.from[1], c.share[1] = int32(e.at(cx+1, cy)), -f/area
 			}
 			if f := southOf(cx, cy); f > 0 && cy+1 < e.h {
-				from[k+2], share[k+2] = int32(i+e.w), f/area
+				c.from[2], c.share[2] = int32(i+e.w), f/area
 			}
 			if f := north[i]; f < 0 && cy > 0 {
-				from[k+3], share[k+3] = int32(i-e.w), -f/area
+				c.from[3], c.share[3] = int32(i-e.w), -f/area
 			}
 			if e.wrap {
 				// The eddies' share, both ways across every face.
 				across := eddyVapour / (e.dx[cy] * e.dx[cy])
-				from[k], share[k] = int32(e.at(cx-1, cy)), share[k]+across
-				from[k+1], share[k+1] = int32(e.at(cx+1, cy)), share[k+1]+across
-				lose[i] += 2 * across
+				c.from[0], c.share[0] = int32(e.at(cx-1, cy)), c.share[0]+across
+				c.from[1], c.share[1] = int32(e.at(cx+1, cy)), c.share[1]+across
+				c.lose += 2 * across
 				if cy+1 < e.h {
 					d := eddyVapour * 0.5 * (e.dx[cy] + e.dx[cy+1]) / dy / area
-					from[k+2], share[k+2] = int32(i+e.w), share[k+2]+d
-					lose[i] += d
+					c.from[2], c.share[2] = int32(i+e.w), c.share[2]+d
+					c.lose += d
 				}
 				if cy > 0 {
 					d := eddyVapour * 0.5 * (e.dx[cy] + e.dx[cy-1]) / dy / area
-					from[k+3], share[k+3] = int32(i-e.w), share[k+3]+d
-					lose[i] += d
+					c.from[3], c.share[3] = int32(i-e.w), c.share[3]+d
+					c.lose += d
 				}
 			}
 		}
 	}
 	// The rain curve of each column, kept ready: how far along its table a
-	// kg/m² of water moves it, and what the column's rain is scaled by.
-	toStep, rainScale := make([]float64, n), make([]float64, n)
-	for i := range toStep {
-		toStep[i] = rainSteps / rainMost / satW[i]
-		rainScale[i] = rainK[i] * satW[i] / rainColumn / 86400
+	// kg/m² of water moves it, what the column's rain is scaled by, and the
+	// part of its slope that does not depend on the water. Every product is
+	// the one the sweep used to take, in the order it took it, so the sweeps
+	// settle on the same bits.
+	for i := range cells {
+		c := &cells[i]
+		c.toStep = rainSteps / rainMost / satW[i]
+		c.rainScale = rainK[i] * satW[i] / rainColumn / 86400
+		c.slope = c.rainScale * rainSteep * c.toStep * rainMost / rainSteps
 	}
 	taken := make([]float64, n)
 	type order struct{ x0, x1, dx, y0, y1, dy int }
@@ -310,34 +324,36 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 			for cy := o.y0; cy != o.y1; cy += o.dy {
 				for cx := o.x0; cx != o.x1; cx += o.dx {
 					i := cy*e.w + cx
-					k := 4 * i
-					sum := give[i]
-					for j := k; j < k+4; j++ {
-						if c := from[j]; c != none {
-							sum += share[j] * w[c]
+					c := &cells[i]
+					sum := c.give
+					for j, from := range c.from {
+						if from != none {
+							sum += c.share[j] * w[from]
 						}
 					}
 					if in.oro != nil {
 						// The ground's lift wrings out what it would, or all
-						// the column is given if that is less.
-						taken[i] = math.Max(0, math.Min(in.oro[i], sum))
+						// the column is given if that is less. The builtin
+						// min and max are math.Min and math.Max to the bit,
+						// and are not a call.
+						taken[i] = max(0, min(in.oro[i], sum))
 						sum -= taken[i]
 					}
 					// columnRainSlope, written out for the few million times
 					// a map asks it.
 					wi := w[i]
-					f := wi * toStep[i]
+					f := wi * c.toStep
 					if f > rainSteps {
 						f = rainSteps
 					}
 					kk := int(f)
 					ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
-					p := rainScale[i] * (ex - rainEmpty)
-					dp := rainScale[i] * rainSteep * toStep[i] * rainMost / rainSteps * ex
+					p := c.rainScale * (ex - rainEmpty)
+					dp := c.slope * ex
 					if over := wi - rainMost*satW[i]; over > 0 {
 						p += dp * over
 					}
-					next := wi - (lose[i]*wi+p-sum)/(lose[i]+dp)
+					next := wi - (c.lose*wi+p-sum)/(c.lose+dp)
 					if next < 0 {
 						next = 0
 					}
@@ -347,7 +363,7 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 			}
 		}
 		if e.wrap && e.h > 2 {
-			e.zonalCorrection(w, give, lose, share, from, in.oro, toStep, rainScale, satW)
+			e.zonalCorrection(w, cells, in.oro, satW)
 		}
 		if most < vapourSettled*float64(n) {
 			break
@@ -367,46 +383,46 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 // mixing of the water between the latitudes, which a sweep moves a cell at a
 // time, and one tridiagonal solve down the rows moves it all at once. It is a
 // coarse grid of one cell a row under the sweeps.
-func (e *airEnv) zonalCorrection(w, give, lose, share []float64, from []int32, oro, toStep, rainScale, satW []float64) {
+func (e *airEnv) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float64) {
 	const none = -1
 	h := e.h
 	diag, up, down, res := make([]float64, h), make([]float64, h), make([]float64, h), make([]float64, h)
 	for cy := 0; cy < h; cy++ {
 		for cx := 0; cx < e.w; cx++ {
 			i := cy*e.w + cx
-			k := 4 * i
-			sum := give[i]
-			for j := k; j < k+4; j++ {
-				if c := from[j]; c != none {
-					sum += share[j] * w[c]
+			c := &cells[i]
+			sum := c.give
+			for j, from := range c.from {
+				if from != none {
+					sum += c.share[j] * w[from]
 				}
 			}
 			if oro != nil {
-				sum -= math.Max(0, math.Min(oro[i], sum))
+				sum -= max(0, min(oro[i], sum))
 			}
 			wi := w[i]
-			f := math.Min(wi*toStep[i], rainSteps)
+			f := min(wi*c.toStep, rainSteps)
 			kk := int(f)
 			ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
-			p := rainScale[i] * (ex - rainEmpty)
-			dp := rainScale[i] * rainSteep * toStep[i] * rainMost / rainSteps * ex
+			p := c.rainScale * (ex - rainEmpty)
+			dp := c.slope * ex
 			if over := wi - rainMost*satW[i]; over > 0 {
 				p += dp * over
 			}
-			res[cy] += sum - lose[i]*wi - p
-			diag[cy] += lose[i] + dp
+			res[cy] += sum - c.lose*wi - p
+			diag[cy] += c.lose + dp
 			// A row moved as one gives itself back what crosses along it.
-			if from[k] != none {
-				diag[cy] -= share[k]
+			if c.from[0] != none {
+				diag[cy] -= c.share[0]
 			}
-			if from[k+1] != none {
-				diag[cy] -= share[k+1]
+			if c.from[1] != none {
+				diag[cy] -= c.share[1]
 			}
-			if from[k+2] != none {
-				down[cy] += share[k+2]
+			if c.from[2] != none {
+				down[cy] += c.share[2]
 			}
-			if from[k+3] != none {
-				up[cy] += share[k+3]
+			if c.from[3] != none {
+				up[cy] += c.share[3]
 			}
 		}
 	}
