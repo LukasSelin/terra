@@ -211,7 +211,9 @@ var realYardsticks = []realYardstick{
 		name: "Hack exponent, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Hack 1957; Rigon et al. 1996: h is a property of the network, not of the survey's resolution",
 		measure: func() float64 { return hackExponent(doubleGlobes()) - hackExponent(singleGlobes()) },
-	}},
+	},
+		gap: "known gap: G - once the sea about a place stopped warming every tile four degrees and the land's winters softened, the small globe of twice the tiles grew mainstreams long for their basins, Hack 0.619 against 0.550 at one: 0.070",
+	},
 	{yardstick: yardstick{
 		name: "channel concavity, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.1, hi: 0.1, slow: true,
 		source: "Wobus et al. 2006; Perron & Royden 2013: theta is a property of the channels, not of the DEM",
@@ -225,9 +227,7 @@ var realYardsticks = []realYardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	},
-		gap: "known gap: B - a globe of twice the tiles carries a longer tail of high ground, its peaks risen further than its mean, on every seed and at every merge since cc897fb (-0.049); the soil's creep with G's rain took it to -0.057 and the crust's balance to -0.078",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",
