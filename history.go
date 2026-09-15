@@ -1020,6 +1020,7 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 		}
 	}
 	g.partition(plates, mids, fl)
+	w.balanceCrust(g, plates, ocean)
 	// A world has both kinds in it. Left to the draw, a valley - which asks
 	// for no sea and so for few ocean plates - came out on two seeds of five
 	// with nothing but continent, and a world with no floor anywhere has no
@@ -1049,6 +1050,75 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 		plates[i].Spin = w.spin(g, math.Sqrt(share[i]*float64(len(g.Tiles))/math.Pi))
 	}
 	return plates
+}
+
+// crustSlack is how far the share of a world's first crust that is ocean floor
+// may come out from the share its terms ask for before the draw is put right.
+//
+// The kinds are drawn plate by plate, and the plates are not the same size: a
+// great plate is a fifth of a world, so the draw that says a half of the plates
+// are floor can say a half or four fifths of the ground is. How much of a
+// planet is continent is a fact about how much light rock it has melted out of
+// its mantle, which is a matter of its chemistry and its age and not of which
+// way one plate's coin fell (Taylor and McLennan 1995; the earth's continental
+// crust is about four tenths of it, shelves and all). The crust is set once
+// at the first plates and carried from there, so a world given its water and
+// not its sea - see water.go - came out with what that one coin said: the
+// first globe was eight tenths floor, and eight tenths sea.
+//
+// So the draw stands inside a band either side of the asked share, and is only
+// put right when it falls outside: inside it, how much continent a world has is
+// still its own luck, and the plates still decide where it goes.
+const crustSlack = 0.15
+
+// balanceCrust turns plates of the kind there is too much of into the other,
+// one at a time and each the one that brings the ground nearest the share
+// wanted, until the ocean floor is within crustSlack of it. It never turns the
+// last plate of a kind, which is the rule below it in firstPlates to keep.
+func (w *Land) balanceCrust(g *Grid, plates []Plate, want float64) {
+	n := len(g.Tiles)
+	if n == 0 {
+		return
+	}
+	held := make([]float64, len(plates))
+	for i := range g.Tiles {
+		if k := int(g.Tiles[i].Plate); k < len(plates) {
+			held[k]++
+		}
+	}
+	for {
+		floor, kinds := 0.0, 0
+		for k := range plates {
+			if plates[k].Ocean {
+				floor += held[k] / float64(n)
+				kinds++
+			}
+		}
+		over := floor > want+crustSlack
+		if !over && floor >= want-crustSlack {
+			return
+		}
+		if (over && kinds <= 1) || (!over && kinds >= len(plates)-1) {
+			return
+		}
+		best, near := -1, math.Abs(floor-want)
+		for k := range plates {
+			if plates[k].Ocean != over || held[k] == 0 {
+				continue
+			}
+			to := floor + held[k]/float64(n)
+			if over {
+				to = floor - held[k]/float64(n)
+			}
+			if d := math.Abs(to - want); d < near {
+				best, near = k, d
+			}
+		}
+		if best < 0 {
+			return
+		}
+		plates[best].Ocean = !over
+	}
 }
 
 // spacing is how far apart two neighbouring middles stand on this world, in

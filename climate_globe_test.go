@@ -73,7 +73,8 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	}
 	// How much of it is sea is the plates' to say, since the globe is given
 	// water and not a share: see water.go. Over its first three seeds it is
-	// between a half and three fifths, which is where the ocean crust puts it.
+	// between a half and two thirds, which is where the ocean crust puts it,
+	// and the crust is held near the share asked for: see crustSlack.
 	if share := float64(sea) / float64(len(g.Tiles)); share < 0.4 || share > 0.7 {
 		t.Fatalf("the globe's water covers %.2f of it", share)
 	}
@@ -118,11 +119,13 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of
 	// plates, weather and drainage over half a million tiles - see Globe. It
-	// is about fourteen seconds on the machine this was written on against
-	// about one for a drawn map, and the budget is set well above that
+	// was about fourteen seconds on the machine this was written on against
+	// about one for a drawn map; what has been added to the making since has
+	// brought it to about sixty-seven seconds run alone and seventy-five in
+	// the whole suite. The budget is set at about twice that
 	// because what it is for is catching something that has gone quadratic,
 	// not policing a second either way.
-	if made > 40*time.Second {
+	if made > 150*time.Second {
 		t.Fatalf("the globe took %v to make", made)
 	}
 	t.Logf("a globe of %d tiles, %d sea, %d forest, made in %v", len(g.Tiles), sea, g.Forest(), made)
