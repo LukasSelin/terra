@@ -203,6 +203,13 @@ func (g *Grid) landslide(keep bool) {
 			came[Silt] += rock / d * clamp01(1-sand-clay)
 			came[Clay] += rock / d * clay
 		}
+		// The scar takes what time had made of the soil it took, and where it
+		// went through into the rock it has left a fresh face: see strip.
+		if soil[i] > 0 {
+			strip(&g.Tiles[i], d/soil[i])
+		} else {
+			clearSoil(&g.Tiles[i])
+		}
 		h[i] -= d
 		soil[i] -= fromSoil
 		push(i)
