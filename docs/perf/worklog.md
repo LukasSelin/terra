@@ -6,6 +6,94 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The weather gate through the yardsticks (session A)
+
+**What this is.** The gate from `claude/world-creation-profiling-e734ef`
+(97e8e42, "Read the weather again only when the ground has moved from under
+it") brought onto `claude/weather-gate` as handed - the three code files
+only: `grid.go` (`aired`), `lake.go` (`drain` asks `weatherStale`) and
+`weather.go` (`weatherFlips` 0.005, `weatherDrift` 0.01, `airedGround`,
+`weatherStale`) - and taken through the counts, the yardsticks, the budget
+and the digest, as [briefs/A-weather-gate.md](briefs/A-weather-gate.md)
+asks. That commit's README, baseline and `perf.sh` changes belong to other
+sessions' files and were left behind. Base commit ec23816 (main 1ad4985
+plus the plan branch); gate b464eaa. The thresholds are the values the patch
+came with: nothing was tuned.
+
+**Skip counts** (a temporary counter in `drain`, removed; seed 1,
+`Workers` 4):
+
+| world | drains | weather rebuilt | skipped |
+|---|---|---|---|
+| valley | 6 | 1 | 5 |
+| ancient | 24 | 19 | 5 |
+| globe256 | 30 | 20 | 10 |
+| globe | 30 | 19 | 11 |
+
+The plan expected about 14 of 31 on the globe to skip; it is 11 of 30. The
+rebuilds are the history's per-epoch drains, which really do move the
+ground, plus the first after the pour.
+
+**`Clone`.** `aired` is written by `weather` and read only by `weatherStale`,
+behind a length check; `Clone` does not copy it, so a copy's first drain
+reads the weather afresh (checked: a cloned valley reports stale, the
+made map does not). Draining a clone then panics in `rainOn` at
+`g.dayRange[i]`, because `Clone` does not copy `dayRange` either - on the
+base commit too, so it is not the gate's and `dayRange` is not this
+session's field. Nothing in the package drains a clone.
+
+**Yardsticks.** Full suite on base (1701 s) and on the branch (1507 s),
+both under load with two other sessions running:
+
+| test | base | branch |
+|---|---|---|
+| `TestRealNumbers/Hack_exponent,_globe` | fails, 0.6005 against 0.54-0.6 | fails, 0.6005 - the known failure on main |
+| `TestTheRealWorld/meander_wavelength,_small_globe` | passes on its known-gap marker (B, 14.6 widths) | 13.6 widths, **inside** 10-14: "the gap has closed, take the marker off" |
+| `TestTheRealWorld/valley_floor_over_hillslope_soil_depth,_small_globe` | passes on its known-gap marker (I, 2.96x) | 3.015x, **inside** 3-50: "the gap has closed, take the marker off" |
+
+Both differences are readings that moved inside their real range, not out
+of it, and both were already sitting at the edge. The meander reading rests
+on about 21 reaches of 16 steps over 8 small globes (see the yardstick
+sample-size notes), so a one-width move is within its noise. The soil ratio
+is a mean over the floor and hillslope tiles of the same 8 globes and stood
+at 2.96 against a floor of 3; the gate's world lays the flats' mud under
+rain read a few drains earlier, and the ratio crept over. Halving
+`weatherDrift` or `weatherFlips` to push either back outside its range
+would be tuning a threshold against one reading to keep a known gap open,
+so the thresholds stay and the markers are left for the owner's decision
+(`realism_test.go` and `realism_soil_test.go` are not this session's).
+Everything else passes, `TestMakingAWorldDoesNotDependOnTheGoroutines`
+among it.
+
+**Budget and digest**, rewritten and committed (0911d8f):
+
+| world | bytes before | bytes after | allocs before | allocs after |
+|---|---|---|---|---|
+| valley | 25.5 MB | 14.9 MB | 3124 | 1518 |
+| ancient | 95.0 MB | 84.4 MB | 13643 | 12048 |
+| globe128 | 652 MB | 509 MB | 45640 | 34611 |
+
+Digest: valley fcd0ba48 -> 83bd9375, ancient aa5e4657 -> de10fa92,
+globe128 71ad0b0e -> 6a85c8de. The world moves on purpose: a drain that
+skips the weather keeps the rain of the last reading.
+
+**Benchstat, taken under load** - two other sessions' suites and this one's
+were running throughout, `GOMAXPROCS=8`, so none of these gates a merge.
+Base in a second checkout of ec23816, count 6:
+
+| world | base | gate | | B/op | allocs/op |
+|---|---|---|---|---|---|
+| valley | 200.9 ms ± 38% | 138.8 ms ± 14% | -30.9% (p=0.002) | -41.8% | -51.8% |
+| ancient | 725.0 ms ± 13% | 589.4 ms ± 15% | -18.7% (p=0.009) | -11.2% | -11.8% |
+| globe256 | 10.13 s ± 5% | 8.10 s ± 5% | -20.1% (p=0.002) | -24.2% | -28.7% |
+
+Globe, `-benchtime 1x -count 3`: 124.0 / 108.4 / 109.3 s base against
+105.7 / 94.9 / 102.6 s gate (benchstat ~, p=0.100 at n=3); 18.67 GiB to
+15.40 GiB and 933 k to 685 k allocs. The bytes and allocs are exact; the
+seconds are the quiet-machine job of `scripts/perf.sh check` in the morning.
+
+---
+
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
 
 Session C of the overnight briefs (`briefs/C-guards.md`), on
@@ -274,6 +362,7 @@ main's known failure; see the base run below.
   with the ground; both are easy scratch.
 - `pool`'s sort on a history's drains: a radix sort by the height's bits
   (with -0 folded to +0, so the order is exactly `heightBefore`'s).
+
 
 ---
 
