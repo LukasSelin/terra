@@ -60,6 +60,11 @@ New baselines: [baseline/2026-09-15-2333-small.txt](baseline/2026-09-15-2333-sma
   gap has closed". This yardstick rests on about 21 reaches (see the
   yardstick sample-size notes), so a one-width move is within its noise. At the
   user's call the marker was taken off, and the yardstick now passes.
+- After merging main's soil work (a60e3a5): `valley floor over hillslope
+  soil depth, small globe` read 3.015x against 3-50. That is past its
+  known-gap marker (I, 2.96x on main without this change). At the user's call
+  it was taken off like the meander one. The margin is 0.5%, so the next
+  change to soils or rain may put it back.
 - Everything else passes. `TestMakingAWorldDoesNotDependOnTheGoroutines`
   passes: the gate is serial arithmetic and draws nothing.
 
