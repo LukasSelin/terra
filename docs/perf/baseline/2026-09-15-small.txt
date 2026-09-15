@@ -1,0 +1,23 @@
+goos: windows
+goarch: amd64
+pkg: github.com/LukasSelin/terra
+cpu: AMD Ryzen 9 3900X 12-Core Processor            
+BenchmarkNewLand/valley-24         	       6	 171700567 ns/op	     59618 ns/tile	25412154 B/op	    3230 allocs/op
+BenchmarkNewLand/valley-24         	       7	 192346314 ns/op	     66787 ns/tile	25410482 B/op	    3225 allocs/op
+BenchmarkNewLand/valley-24         	       7	 213142200 ns/op	     74008 ns/tile	25409960 B/op	    3226 allocs/op
+BenchmarkNewLand/valley-24         	       6	 185036750 ns/op	     64249 ns/tile	25410085 B/op	    3227 allocs/op
+BenchmarkNewLand/valley-24         	       6	 215917783 ns/op	     74971 ns/tile	25409797 B/op	    3224 allocs/op
+BenchmarkNewLand/valley-24         	       6	 206289300 ns/op	     71628 ns/tile	25410304 B/op	    3229 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 626190950 ns/op	    217427 ns/tile	94709944 B/op	   14041 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 703130150 ns/op	    244142 ns/tile	94711464 B/op	   14055 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 612577450 ns/op	    212701 ns/tile	94710848 B/op	   14049 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 634879800 ns/op	    220444 ns/tile	94710720 B/op	   14048 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 640123700 ns/op	    222265 ns/tile	94709112 B/op	   14034 allocs/op
+BenchmarkNewLand/ancient-24        	       2	 532755150 ns/op	    184984 ns/tile	94709368 B/op	   14036 allocs/op
+BenchmarkNewLand/globe256-24       	       1	10228635700 ns/op	    312153 ns/tile	2569163648 B/op	  278303 allocs/op
+BenchmarkNewLand/globe256-24       	       1	10199884700 ns/op	    311276 ns/tile	2568616568 B/op	  277147 allocs/op
+BenchmarkNewLand/globe256-24       	       1	9890227900 ns/op	    301826 ns/tile	2569800648 B/op	  277282 allocs/op
+BenchmarkNewLand/globe256-24       	       1	9336120800 ns/op	    284916 ns/tile	2571570568 B/op	  277482 allocs/op
+BenchmarkNewLand/globe256-24       	       1	9903449100 ns/op	    302229 ns/tile	2570622888 B/op	  277357 allocs/op
+BenchmarkNewLand/globe256-24       	       1	9391336900 ns/op	    286601 ns/tile	2570318296 B/op	  277315 allocs/op
+PASS
