@@ -530,6 +530,16 @@ const creepSweeps = 12
 // H the soil on the higher tile up to soilActive, H0 SoilScale and Sc Critical.
 // A tile with no soil on it has nothing to creep.
 //
+// Not in a history. A tile there is a piece of a planet read over millions of
+// years - see deep - and how deep its soil is is not a fact about any hillside
+// on it: under an epoch every soil-mantled slope in it has long been at its
+// steady depth. So a history creeps at SoilScale everywhere, as it crept
+// before the soil was kept; charged to the tile's own soil, a history's
+// ground crept less wherever its first epochs had made little, and the small
+// globes' coasts and dry basins came out differently enough that the first
+// seed lost its tidal flats or the second its salt lake, whichever way the
+// slides at the end of the history were taken.
+//
 // The step is taken implicitly, as Perron (2011) takes it: the heights at the
 // end of the age are what the fluxes are read off, with the coefficients read
 // off the heights at the start. The system is solved by sweeping; what it
@@ -548,6 +558,14 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	wander := meanderFlow
 	share := g.creepShare(years)
 	span := g.span()
+	// How deep the soil the creep carries is counted, against SoilScale: see
+	// above for why a history does not count it.
+	depth := func(t *Tile) float64 {
+		if g.deep > 0 {
+			return 1
+		}
+		return math.Min(float64(t.Soil), soilActive) / SoilScale
+	}
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
 		off       geom.Pos
@@ -592,8 +610,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
-			kk := share / 8 * pr.near * hold(top) *
-				math.Min(float64(top.Soil), soilActive) / SoilScale / (1 - fall*fall)
+			kk := share / 8 * pr.near * hold(top) * depth(top) / (1 - fall*fall)
 			if kk <= 0 {
 				continue
 			}

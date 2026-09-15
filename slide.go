@@ -107,7 +107,7 @@ const runoutMost = 4096
 // until it settles. With keep, the ground on the map adds up to the same before
 // and after, to the rounding of the sums, which is how the ages of weather run
 // it; without, what came down is let go, which is how the making of a map runs
-// it. See above for why.
+// it - see above for why, and cutBack for how.
 //
 // What stands steep depends on what it is made of. The slope a tile fails at
 // and the slope it is left at go with the rock at its surface against the
@@ -119,6 +119,10 @@ const runoutMost = 4096
 // neighbours of the one that failed, whose fall to it has just grown; the
 // tiles are taken in the order they were queued, so a world repeats.
 func (g *Grid) landslide(keep bool) {
+	if !keep {
+		g.cutBack()
+		return
+	}
 	n := len(g.Tiles)
 	h := make([]float64, n)
 	soil := make([]float64, n)
@@ -210,9 +214,6 @@ func (g *Grid) landslide(keep bool) {
 		// lowest of the rim it has not yet crossed.
 		runs++
 		at, left := to, d
-		if !keep {
-			left = 0
-		}
 		seen[i] = runs
 		for step := 0; left > 0; step++ {
 			seen[at] = runs
@@ -299,5 +300,68 @@ func (q *slideQueue) pop() int32 {
 		}
 		q.at[k], q.at[least] = q.at[least], q.at[k]
 		k = least
+	}
+}
+
+// cutBack is landslide for the making of a map: every tile standing more than
+// Critical above a neighbour is cut back to Repose above it, and what is cut
+// is let go. Taken from the lowest ground up, each tile is final by the time it
+// is reached - a tile is only ever lowered by one below it - so one pass over
+// the tiles in order of their heights settles the whole map, however far up a
+// slope the failing runs.
+//
+// It is kept as it was, rather than landslide with the debris dropped, because
+// the order the failing is taken in shapes what is left. Taken off a queue in
+// the order the tiles were reached and cut toward the steepest neighbour
+// first, the same scars lay the coast of a small globe's first seed a few
+// metres differently, and its tidal flats, which are the ground within a
+// spring tide of the sea, were gone.
+func (g *Grid) cutBack() {
+	n := len(g.Tiles)
+	h := make([]float64, n)
+	done := make([]bool, n)
+	var q slideQueue
+	for i := range g.Tiles {
+		h[i] = g.Tiles[i].Height
+		q.push(h[i], int32(i))
+	}
+	soft := 1 / g.meanHard()
+	for len(q.at) > 0 {
+		i := q.pop()
+		if done[i] {
+			continue
+		}
+		done[i] = true
+		p := g.PosOf(int(i))
+		for _, off := range Dirs {
+			nb := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if !g.In(nb) {
+				continue
+			}
+			j := int32(g.Index(nb))
+			if done[j] {
+				continue
+			}
+			run := TileSpan
+			if off.X != 0 && off.Y != 0 {
+				run *= math.Sqrt2
+			}
+			critical, repose := Critical, Repose
+			if g.strata != nil {
+				// Whether the edge fails is the rock the edge is made of;
+				// what it is left at is the rock the failure bares.
+				s := stand(g.hardAt(int(j), h[j]) * soft)
+				critical, repose = critical*s, repose*s
+				left := h[i] + repose*run
+				repose = Repose * stand(g.hardAt(int(j), left)*soft)
+			}
+			if h[j] > h[i]+critical*run {
+				h[j] = h[i] + repose*run
+				q.push(h[j], j)
+			}
+		}
+	}
+	for i := range g.Tiles {
+		g.Tiles[i].Height = h[i]
 	}
 }
