@@ -74,7 +74,7 @@ const (
 	beltCap     = 5.0  // how far over it the polar highs stand
 	// beltShift is how many degrees the belts follow the sun north and south
 	// over the year. The real trough wanders further over the continents, and
-	// the continents are what move it there: see thermalGain.
+	// the continents are what move it there: see hypsometric.
 	beltShift = 5.0
 	// beltWinter is how much deeper a subpolar low is in its own winter, as a
 	// share: the Icelandic and Aleutian lows are a third again as deep in
@@ -108,22 +108,23 @@ const (
 	// averaged before the pressure is read off it: a thermal low is the size
 	// of a country and not of a valley. It is taken twice.
 	synopticReach = 500.0
-	// thermalGain is how many hPa the pressure falls for each degree the air
-	// stands warmer than its latitude's mean. A column of air warmer by a
-	// degree through the lowest few kilometres weighs some half an hPa less by
-	// the hypsometric equation; the Siberian high, a winter's twenty degrees
-	// colder than its latitude, is some twenty hPa over it. The warmth here is
-	// smoothed over a thousand kilometres before it is read, which takes the
-	// edge off a continent's, and at one a continent a quarter of the way
-	// round the planet at twenty-five degrees still had the trades blowing off
-	// its southern coast at midsummer: at one and a half the wind there turns
-	// onshore in summer and blows out at eight or nine metres a second in
-	// winter, which is the south Asian monsoon's wind both ways.
-	thermalGain = 1.5
-	// warmGain is what a degree the day's weather has carried in is worth,
-	// which is less: a warm sector lasts days, not a season, and the air
-	// above it has not all warmed.
-	warmGain = 0.5
+	// The pressure a column's warmth takes off the ground under it is the
+	// hypsometric equation's: a layer H deep warmer by ΔT at T kelvin weighs
+	// p g H ΔT / (R_d T²) less. H is the depth of the air the ground warms or
+	// chills, which is the depth of its boundary layer: the marine layer's
+	// kilometre over the sea (Stull, 1988), the dry convective layer's three
+	// and more over a continent in its summer - the Saharan and Indian heat
+	// lows reach four or five (Lavaysse and others, 2009) - and the cold
+	// dome's one and a half under a continent's winter high (Ding, 1990). It
+	// used to be one figure, 1.5 hPa a degree, raised until a continent at
+	// twenty-five degrees drew the sea wind in in its summer.
+	boundarySea  = 1000.0
+	boundaryWarm = 3500.0
+	boundaryCold = 1500.0
+	// warmDepth is how deep, in metres, the warmth the day's weather has
+	// carried in reaches: a warm sector lasts days, not a season, and the air
+	// above its lowest kilometre has not all warmed.
+	warmDepth = 1000.0
 )
 
 // How the ground drags on the air. A drag is written as a rate, per second:
@@ -593,6 +594,13 @@ func (e *airEnv) airTempOn(day int) []float64 {
 	return temp
 }
 
+// hypsometric is how many hPa a layer depth metres deep over ground at p hPa
+// weighs less for each degree it stands warmer, at temp degrees.
+func hypsometric(p, temp, depth float64) float64 {
+	t := temp + 273.15
+	return p * gravity * depth / (dryGas * t * t)
+}
+
 // solve works out the wind over the cells with the year sinT of the way into
 // the north's summer, over air at sea level of temp degrees. extra is pressure added to what the climate lays down,
 // in hPa, and warm the degrees the day's weather has carried in; either may be
@@ -602,13 +610,10 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 
 	// The warmth of the air at sea level, and the pressure it and the belts
 	// make between them.
-	temp = append([]float64(nil), temp...)
-	if warm != nil {
-		for i := range temp {
-			temp[i] += warm[i] * warmGain / thermalGain
-		}
-	}
 	temp = e.blur(e.blur(temp, synopticReach), synopticReach)
+	if warm != nil {
+		warm = e.blur(e.blur(warm, synopticReach), synopticReach)
+	}
 	pres := make([]float64, n)
 	for cy := 0; cy < e.h; cy++ {
 		row := cy * e.w
@@ -620,7 +625,16 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 		belt := beltPressure(e.lat[cy], sinT)
 		for cx := 0; cx < e.w; cx++ {
 			i := row + cx
-			pres[i] = belt - thermalGain*(temp[i]-zonal)
+			dt := temp[i] - zonal
+			depth := boundaryCold
+			if dt > 0 {
+				depth = boundaryWarm
+			}
+			depth = boundarySea + (depth-boundarySea)*e.cont[i]
+			pres[i] = belt - hypsometric(belt, temp[i], depth)*dt
+			if warm != nil {
+				pres[i] -= hypsometric(belt, temp[i], warmDepth) * warm[i]
+			}
 			if extra != nil {
 				pres[i] += extra[i]
 			}
