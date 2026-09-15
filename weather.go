@@ -163,7 +163,7 @@ func (g *Grid) airedGround(into []float32) []float32 {
 	for i := range g.Tiles {
 		into[i] = -1
 		if !g.sunk(i) {
-			into[i] = float32(math.Max(0, g.Tiles[i].Height-base))
+			into[i] = float32(math.Max(0, g.laidHeight(i)-base)) // see laidHeight
 		}
 	}
 	return into
@@ -188,7 +188,7 @@ func (g *Grid) weatherStale() bool {
 		if was < 0 {
 			continue
 		}
-		h := math.Max(0, g.Tiles[i].Height-base)
+		h := math.Max(0, g.laidHeight(i)-base)
 		moved += math.Abs(h - float64(was))
 		stood += h
 	}
