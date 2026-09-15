@@ -2,6 +2,7 @@ package terra
 
 import (
 	"math"
+	"slices"
 
 	"github.com/LukasSelin/terra/geom"
 )
@@ -472,4 +473,117 @@ func (g *Grid) tideWork(c *fluvial, recv []int32) {
 			}
 		}
 	})
+	g.bays(c, recv)
+}
+
+// siltYears is how long the rivers have been bringing mud down to the coast
+// when a world is made, and siltRounds how many times over the tide's reach is
+// read again in the course of it. The seas of the earth stopped rising six to
+// seven thousand years ago, and the flats and the deltas that stand on its
+// coasts today are what has built up since (Stanley and Warne 1994).
+const (
+	siltYears  = 6000 * yr
+	siltRounds = 6
+)
+
+// silt lays siltYears of the rivers' mud on the shoals, and nothing else: the
+// land is left as its shaping graded it and its valleys were cut, because
+// cutting them longer spoils them - see valleyYears - and only what settles in
+// the tidal water is kept of each round. The flats are then read again on the
+// coast the mud has made. The mud takes up room under the sea, so level is
+// called after each round to find the sea's level again, for the same water.
+func (g *Grid) silt(level func()) {
+	if g.sea < 0 {
+		return
+	}
+	n := len(g.Tiles)
+	for range siltRounds {
+		if len(g.tidal) != n {
+			return
+		}
+		c := g.waterStep(siltYears / siltRounds)
+		if c.bay == nil {
+			return
+		}
+		next := c.solve(settleIters)
+		change := make([]float64, n)
+		gained := make([][Grains]float64, n)
+		c.account(next, change, gained, func(int32, [Grains]float64) {})
+		for b := range c.shoal {
+			for _, i := range c.shoal[b] {
+				t := &g.Tiles[i]
+				t.Height += change[i]
+				mix(t, float64(t.Soil), gained[i])
+				t.Soil += float32(carrying(gained[i]))
+			}
+		}
+		level()
+		g.expose()
+		g.drain()
+		g.height()
+		g.tides()
+	}
+}
+
+// Mud from the rivers. A flat is not a shape the coast happens to have: it is
+// the mud a river brings down, carried back and forth by the tide until it
+// finds slack water shallow enough to let it fall, and built up there, a few
+// millimetres a year, until the ground stands at the high water that covers it
+// and no higher (Krone 1962; Friedrichs 2011 has flats' surfaces tracking high
+// water as they build). A flat under mean sea keeping only what reached it
+// down its own river laid a tongue of mud one tile wide out into deep water, and
+// a tongue is not a flat: so what reaches the sea is carried by the tide over
+// all the shoals of the body of water it reaches - the tide's excursion is
+// kilometres and the map's bays are not - and settles over them by their
+// area. Mixed through the deep water as well, the shoals of a small globe got
+// a millimetre in a thousand years; most of what the earth's rivers carry is
+// kept on its shelves and coasts (Milliman and Syvitski 1992), and what the
+// shoals do not trap goes on to the deep water.
+//
+// A shoal is sea shallower than a spring tide's range below mean sea: the
+// water that runs slack over it at the turn of the tide, which the deep water
+// never does. What falls into the deep water goes on to the sea.
+func (g *Grid) bays(c *fluvial, recv []int32) {
+	n := len(g.Tiles)
+	in := func(i int) bool {
+		return int(recv[i]) == i && g.underSea(i) && g.tidal[i] > 0
+	}
+	c.bay = make([]int32, n)
+	c.trap = make([]float64, n)
+	for i := range c.bay {
+		c.bay[i] = -1
+	}
+	c.shoal = nil
+	var stack []int
+	for start := range n {
+		if c.bay[start] >= 0 || !in(start) {
+			continue
+		}
+		b := int32(len(c.shoal))
+		var shoal []int32
+		c.bay[start] = b
+		stack = append(stack[:0], start)
+		for len(stack) > 0 {
+			i := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			t := &g.Tiles[i]
+			f := float64(g.tidal[i])
+			spring := 2 * f * (TideM2 + TideS2)
+			if t.Mark == None && g.sea-t.Height <= spring && !g.Frozen(g.PosOf(i)) {
+				c.trap[i] = clamp01(spring / trapRange)
+				c.room[i] = math.Max(0, g.sea+f*MeanHigh-t.Height)
+				if c.trap[i] > 0 && c.room[i] > 0 {
+					shoal = append(shoal, int32(i))
+				}
+			}
+			g.eachNear(i, func(j int) {
+				if c.bay[j] < 0 && in(j) {
+					c.bay[j] = b
+					stack = append(stack, j)
+				}
+			})
+		}
+		slices.Sort(shoal) // the order a world repeats in
+		c.shoal = append(c.shoal, shoal)
+	}
 }
