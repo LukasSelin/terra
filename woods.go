@@ -85,8 +85,7 @@ func (g *Grid) waterRatio(i int) float64 {
 	if g.air == nil || i >= len(g.rain) || g.twiMean <= 0 {
 		return 0
 	}
-	y := i / g.W
-	pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.Tiles[i].Height)
+	pet := g.pet(i)
 	if pet <= 0 {
 		return math.Inf(1)
 	}

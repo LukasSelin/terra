@@ -344,10 +344,13 @@ func TestSaltLakesStandInDryCountry(t *testing.T) {
 }
 
 // dryBowl, dryStep and dryValley are how much of a temperate valley's rain the
-// dry cases below are given.
+// dry cases below are given. The steps' trough is walled thirty metres high,
+// and under the column budget its floors get some seven tenths of a metre a
+// year at the valley's own rain; at 0.92 to 0.96 of that the upper hollow runs
+// over and the lower does not.
 const (
 	dryBowl   = 0.4
-	dryStep   = 0.7
+	dryStep   = 0.94
 	dryValley = 0.3
 )
 

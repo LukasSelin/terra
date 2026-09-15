@@ -229,6 +229,9 @@ type Grid struct {
 	// weather.go.
 	air          *Air
 	rain, runoff []float64
+	// dayRange is how many times its row's evaporation table each tile's is,
+	// for the range of its day's temperature: see diurnal.
+	dayRange []float32
 	// rainWarm is how much of each tile's year of rain falls in its warmer
 	// half, which is what tells a monsoon from a Mediterranean winter rain.
 	rainWarm []float32

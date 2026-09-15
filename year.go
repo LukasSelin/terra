@@ -14,34 +14,40 @@ import "math"
 // where the ground stays frozen and where no tree will stand - reads it here,
 // so that they agree about what summer is.
 
-// solarSwing is how much of the temperate latitudes' swing the year at lat
-// has, signed by hemisphere. The sun's reach at the top of the air swings over
-// the year by very nearly the sine of the latitude (it is the declination's
-// cosine term in the daily insolation; see Hartmann, Global Physical
-// Climatology, 2016, ch. 2), so the swing is quoted against its value at
-// Temperate: exactly one there, which is where a valley's year was tuned, and
-// some two fifths again at a pole.
-//
-// It was the latitude over Temperate, capped at one, which gave the whole of
-// the ground beyond forty-five degrees the temperate year: the Arctic's swing
-// was Bordeaux's.
+// solarSwing is how much of the temperate latitudes' swing the sun alone
+// gives the year at lat, signed by hemisphere. The sun's reach at the top of
+// the air swings over the year by very nearly the sine of the latitude (it is
+// the declination's cosine term in the daily insolation; see Hartmann, Global
+// Physical Climatology, 2016, ch. 2), so the swing is quoted against its value
+// at Temperate. The wind still reads the year this way - see seasonTemp - and
+// the ground reads the energy balance's: see swingAt.
 func solarSwing(lat float64) float64 {
 	return math.Sin(math.Abs(lat)*math.Pi/180) / math.Sin(Temperate*math.Pi/180) * math.Copysign(1, lat)
 }
 
 // swingAt is half the distance from the coldest day of the year to the warmest
-// at latitude lat, on ground cont of whose country round about is land: the
-// sun's swing, times how much of it the ground under the air keeps. The air
-// over the open sea keeps swingSea of it and the air deep in a continent
-// swingLand. It is signed by hemisphere, as solarSwing is.
+// at latitude lat, on ground cont of whose country round about is land. It is
+// the energy balance's year (see ebm.go): the swing of the balance's sea at
+// that latitude where the country is all water, its land's where it is all
+// land, and between in proportion. It is signed by hemisphere, as solarSwing
+// is.
+//
+// It used to be the sun's swing times a share written down for each - a third
+// of it over the open sea and one and three fifths deep in a continent. The
+// balance's land, holding the heat of its air and half a metre of ground, and
+// its sea, holding fifty metres of water, give nineteen degrees and under three
+// at forty-five against the old nineteen and four, and are what they are for a
+// reason.
 func swingAt(lat, cont float64) float64 {
-	return seasonTemp(solarSwing(lat), 1, cont)
+	e := ebm()
+	sea, land := e.at(&e.swingS, lat), e.at(&e.swingL, lat)
+	return math.Copysign(sea+(land-sea)*clamp01(cont), lat)
 }
 
 // seasonTemp is what the year adds to the mean at a place whose sun has solar
 // of the temperate swing, phase of the way from its mean to its crest, on
-// ground cont continental. It is the one reading of the swing the wind, the
-// storms and the ground all take.
+// ground cont continental: the swing the wind and the storms read. See
+// swingSea.
 func seasonTemp(solar, phase, cont float64) float64 {
 	return solar * Swing * phase * (swingSea + (swingLand-swingSea)*cont)
 }
@@ -50,18 +56,22 @@ func seasonTemp(solar, phase, cont float64) float64 {
 // temperate swing: the ground a latitude's weather is the weather of when
 // nothing is known about the ground. A valley's year, and Climate.TempAt's,
 // are read at it.
-const contMiddling = (1 - swingSea) / (swingLand - swingSea)
+var contMiddling = func() float64 {
+	e := ebm()
+	sea, land := e.at(&e.swingS, Temperate), e.at(&e.swingL, Temperate)
+	return clamp01((Swing - sea) / (land - sea))
+}()
 
 // The lag of the seasons. Ground heated by a sun that swings sinusoidally warms
 // with the same period and lags it: for a surface of heat capacity C losing
 // heat at B per degree, C dT/dt = F sin ωt - B T gives a lag of atan(ωC/B)/ω
-// (North and Coakley, 1979). The real lag is about a month over the continents
-// and two over the ocean mixed layer, and those are the two figures the
-// relaxation times below are chosen to give; a place partly both has a heat
-// capacity partly each.
-const (
-	lagLand = 30.0 // days, in a year of 365.25
-	lagSea  = 60.0
+// (North and Coakley, 1979). The lags are the energy balance's at Temperate,
+// where its land's year peaks a month after the solstice and its sea's nearly
+// three - the real lag is a month over the continents and two to three over
+// the open ocean - and a place partly both has a heat capacity partly each.
+var (
+	lagLand = ebm().at(&ebm().lagL, Temperate) // days, in a year of 365.25
+	lagSea  = ebm().at(&ebm().lagS, Temperate)
 )
 
 var (

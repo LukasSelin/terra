@@ -105,12 +105,13 @@ func shelfValley() *Land {
 }
 
 // The rivers cut down toward the low sea of a glacial and the sea comes back
-// over what they cut: the valley's floor at the coast ends up drowned further
-// inland than the same valley cut for as long at today's sea. The shelf's sea
-// is shallow, so the ice is taken to hold half of it at its greatest, which
-// puts its low sea tens of metres down, as a real ocean's is.
+// over what they cut: the sea standing over the valley's mouth, where it
+// crosses the old shelf edge and the coast, is deeper than over the same valley
+// cut for as long at today's sea. The shelf's sea is shallow, so the ice is
+// taken to hold half of it at its greatest, which puts its low sea tens of
+// metres down, as a real ocean's is.
 func TestTheLowSeaLeavesDrownedValleys(t *testing.T) {
-	drowned := func(fallen func(float64) float64) (int, float64) {
+	drowned := func(fallen func(float64) float64) (float64, float64) {
 		w := shelfValley()
 		g := w.Grid
 		low := math.Inf(1)
@@ -121,18 +122,18 @@ func TestTheLowSeaLeavesDrownedValleys(t *testing.T) {
 			}
 			return f
 		})
-		n := 0
-		for x := 24; x < g.W; x++ {
-			if g.underSea(g.Index(geom.Pos{X: x, Y: 32})) {
-				n++
+		water := 0.0
+		for y := 29; y <= 35; y++ {
+			for x := 20; x <= 32; x++ {
+				water += math.Max(0, g.sea-g.At(geom.Pos{X: x, Y: y}).Height)
 			}
 		}
-		return n, low
+		return water, low
 	}
 	still, _ := drowned(func(float64) float64 { return 0 })
 	glacial, low := drowned(func(before float64) float64 { return glacialFall(before) / glacialLow * oceanDepth / 2 })
-	if !(glacial > still) {
-		t.Errorf("after a glacial cycle the valley is drowned %d tiles inland, and cut at today's sea %d", glacial, still)
+	if !(glacial > 1.2*still) {
+		t.Errorf("after a glacial cycle %.1f m of sea stands over the valley's mouth, and cut at today's sea %.1f", glacial, still)
 	}
 	if !(low < 100-10) {
 		t.Errorf("the low sea stood at %.1f against today's 100", low)

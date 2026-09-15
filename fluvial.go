@@ -291,8 +291,16 @@ type fluvial struct {
 	drop   []float64
 	lasts  []float64
 	supply [][Grains]float64
-	surf   []int32
-	sands  []float64
+	// bay is which body of tidal water each root of it is in, or -1, and
+	// shoal the tiles of each body shallow enough for its mud to settle on.
+	// What reaches any root of a bay is carried over all its shoals by the
+	// tide before it settles. Both are nil where there is no tide. See
+	// tideWork.
+	bay   []int32
+	shoal [][]int32
+	trap  [][Grains]float64
+	surf  []int32
+	sands []float64
 }
 
 // edgeCut is how much the water takes off root i, whose height at the end of
@@ -471,12 +479,26 @@ func (c *fluvial) solve(iters int) []float64 {
 func (c *fluvial) account(next []float64, change []float64, gained [][Grains]float64, lay func(i int32, laid [Grains]float64)) (exported [Grains]float64) {
 	n := len(c.h)
 	load := make([][Grains]float64, n)
+	pooled := make([][Grains]float64, len(c.shoal))
 	for k := len(c.stack) - 1; k >= 0; k-- {
 		i := c.stack[k]
 		r := c.recv[i]
 		if r == i {
 			for gr := range load[i] {
 				load[i][gr] += c.supplied(i, gr)
+			}
+			if c.bay != nil && c.bay[i] >= 0 {
+				// Into a bay: the tide takes it through the whole of the bay
+				// before any of it settles. See below. Its sand, where it comes
+				// to the surf, is the waves' to drive along the shore.
+				if c.surf != nil && c.surf[i] >= 0 {
+					c.sands[i] += load[i][Sand]
+					load[i][Sand] = 0
+				}
+				for gr := range load[i] {
+					pooled[c.bay[i]][gr] += load[i][gr]
+				}
+				continue
 			}
 			var kept [Grains]float64
 			if c.keep != nil && c.keep[i] > 0 {
@@ -522,6 +544,45 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 				change[i] += laid[gr]
 				gained[i][gr] += laid[gr]
 			}
+		}
+	}
+	// What the rivers brought each bay, carried over all of its shoals: the
+	// mud over each is the bay's load over the shoals' tiles, and a
+	// shoal lets fall what its tide traps of that - Krone's deposition, with
+	// the slack water over a shoal the only place the bed's stress is under
+	// what the mud needs to stay down - up to high water. What the shoals do
+	// not trap, and whatever a filled shoal has no room for, goes on
+	// to the sea.
+	for b, shoal := range c.shoal {
+		pool := pooled[b]
+		if pool[Sand]+pool[Silt]+pool[Clay] <= 0 {
+			continue
+		}
+		var settled [Grains]float64
+		across := float64(len(shoal))
+		for _, i := range shoal {
+			var laid [Grains]float64
+			total := 0.0
+			for gr := range laid {
+				laid[gr] = pool[gr] / across * c.trap[i][gr]
+				total += laid[gr]
+			}
+			if total <= 0 {
+				continue
+			}
+			if room := c.room[i]; total > room {
+				for gr := range laid {
+					laid[gr] *= room / total
+				}
+			}
+			for gr := range laid {
+				change[i] += laid[gr]
+				gained[i][gr] += laid[gr]
+				settled[gr] += laid[gr]
+			}
+		}
+		for gr := range pool {
+			exported[gr] += pool[gr] - settled[gr]
 		}
 	}
 	return exported

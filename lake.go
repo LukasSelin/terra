@@ -150,8 +150,7 @@ func (g *Grid) loss(i int) float64 {
 	if len(g.rain) != len(g.Tiles) || g.sunk(i) || g.air == nil {
 		return 0
 	}
-	y := i / g.W
-	pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.Tiles[i].Height)
+	pet := g.pet(i)
 	return math.Max(0, pet-(g.rain[i]-g.runoff[i]))
 }
 

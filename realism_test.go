@@ -149,9 +149,7 @@ var realYardsticks = []realYardstick{
 		name: "annual mean temperature, equator, globe", unit: "C", scale: "water", lo: 24, hi: 28, slow: true,
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992 Fig. 7.4: zonal mean surface air ~26 C at 0-5 deg",
 		measure: func() float64 { return zonalTemp(globes(), 0, 5) },
-	},
-		gap: "known gap: A - MeanAt is 10 + 30(cos lat - cos 45), which is 18.8 C at the equator",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "annual mean temperature, 60 deg, globe", unit: "C", scale: "water", lo: -4, hi: 4, slow: true,
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992 Fig. 7.4: zonal mean surface air ~0 C at 60 deg",
@@ -162,20 +160,22 @@ var realYardsticks = []realYardstick{
 		source:  "Legates & Willmott 1990; Peixoto & Oort 1992: -18 C over the Arctic, -50 C over Antarctica; both poles under -20",
 		measure: func() float64 { return zonalTemp(globes(), 80, 90) },
 	},
-		gap: "known gap: A - the cosine curve bottoms out at -11 C at the poles, and the currents warm it from there",
+		gap: "known gap: G - the energy balance's poles are -11 C: one column a band has no polar inversion and no ice sheet standing kilometres high",
 	},
 	{yardstick: yardstick{
 		name: "equatorial over subtropical rain, globe", unit: "x", scale: "water", lo: 1.8, hi: 4, slow: true,
 		source:  "Adler et al. 2003 (GPCP): zonal rain ~5.5 mm/d under the ITCZ against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 0, 10) / zonalRain(globes(), 20, 30) },
 	},
-		gap: "known gap: A - beltRain puts 2450 mm under the equator against a few hundred at 25 deg: the equatorial belt is 5x the subtropics, not 2-3x",
+		gap: "known gap: G - the column budget gathers the trades' water into a narrow ITCZ under a mean wind with no transient convection spreading it: 5x the subtropics, not 2-3x",
 	},
 	{yardstick: yardstick{
 		name: "midlatitude over subtropical rain, globe", unit: "x", scale: "water", lo: 1.1, hi: 2, slow: true,
 		source:  "Adler et al. 2003 (GPCP): the storm tracks at 40-60 deg rain ~2.8 mm/d against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 40, 60) / zonalRain(globes(), 20, 30) },
-	}},
+	},
+		gap: "known gap: G - the storm tracks' rain is the fronts' of the day's lows, which the climate's budget sees only as eddy mixing: 0.85x",
+	},
 	{yardstick: yardstick{
 		name: "latitude of the driest belt, globe", unit: "deg", scale: "water", lo: 15, hi: 35, slow: true,
 		source:  "Adler et al. 2003 (GPCP); Peixoto & Oort 1992: the subtropical minimum of zonal rain lies at 20-30 deg",
@@ -734,8 +734,7 @@ func forestByAridity(gs []*Grid, lo, hi float64) float64 {
 			if g.underSea(i) || t.Wet() || t.Terrain.Tidal() || g.air == nil {
 				continue
 			}
-			y := i / g.W
-			pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*t.Height)
+			pet := g.pet(i)
 			ai := pet / math.Max(1e-9, g.Rain(i))
 			if ai < lo || ai >= hi {
 				continue

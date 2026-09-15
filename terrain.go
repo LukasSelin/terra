@@ -152,6 +152,15 @@ func (w *Land) Generate(cfg Terms) {
 	// The tide's reach, and the flats it covers and uncovers, before the woods
 	// are shared out: a wood's share is a share of ground trees could have.
 	g.tides()
+	// And the mud the rivers have brought the tide since the sea stood where
+	// it stands, which is what a flat is made of. See silt.
+	g.silt(func() {
+		if poured {
+			g.repour(cfg.Water)
+		} else {
+			g.relevel(cfg.SeaShare)
+		}
+	})
 
 	// Woods stand where the ground is damp enough to grow them and gentle
 	// enough to hold soil: the valley sides above the flood, not the crown of

@@ -242,98 +242,13 @@ func (w *Land) Erode() {
 // worked out again, because doing it here would do it twice in Erode.
 func (g *Grid) wear(years float64) {
 	n := len(g.Tiles)
-	recv, run := g.receivers()
-	c := fluvial{
-		h:      make([]float64, n),
-		recv:   recv,
-		stack:  stackOf(recv),
-		f:      make([]float64, n),
-		drop:   make([]float64, n),
-		settle: make([][Grains]float64, n),
-		parts:  make([][Grains]float64, n),
-		supply: g.bankLoad,
-		soil:   make([]float64, n),
-		rock:   make([]float64, n),
-		eff:    make([]float64, n),
-		abrade: make([]float64, n),
-		lasts:  make([]float64, n),
-	}
-	for i := range c.lasts {
-		c.lasts[i] = 1
-	}
-	// What the rivers took off their banks is carried from here: see meander.
-	g.bankLoad = nil
-	g.EachRow(func(y int) {
-		for i := y * g.W; i < (y+1)*g.W; i++ {
-			t := &g.Tiles[i]
-			c.h[i] = t.Height
-			c.soil[i] = float64(t.Soil)
-			// What the water takes off a tile is its soil, or its rock where it
-			// has none, which is the soil the rock would make.
-			c.parts[i] = parts(t)
-			if t.Soil <= 0 {
-				sand, clay := g.TextureAt(g.PosOf(i))
-				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
-			}
-			// Ground somebody has built on is out of the water's reach: it is
-			// neither cut nor settled on.
-			if int(recv[i]) == i || t.Mark != None {
-				continue
-			}
-			// How hard the water cuts: stream power, charged to what the soil
-			// is made of for the soil and to the rock for the rock. See
-			// fluvial.go and rockErodibility.
-			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
-			c.f[i] = power * t.Wash()
-			c.rock[i] = power * rockErodibility(t)
-			c.abrade[i] = abrasion(run[i])
-			// What grows on it holds its soil until the water's stress in a
-			// flood clears what it stands, and what settles is what a flood
-			// lets fall: see floodFlow, criticalFall and settleShare.
-			q := t.Flow * floodFlow
-			fall := (t.Height - g.Tiles[recv[i]].Height) / run[i]
-			w := flowWidth(t, q, fall, run[i])
-			if g.deep > 0 {
-				// A tile of a history is a piece of a planet, a hundred
-				// kilometres across, and its water runs in a network of
-				// channels too fine for it to draw. Read as a sheet that wide
-				// it put no stress on anything, and read as settling over the
-				// whole run it laid every grain of sand back where it was cut:
-				// either way the ranges rose for ever, to two hundred
-				// kilometres by the sixteenth epoch of a small globe. What a
-				// planet's rivers carry off a tile settles where they stop, in
-				// its basins and its seas - see stillWork - and the beds of its
-				// channels grow nothing.
-				continue
-			}
-			c.drop[i] = math.Min(criticalFall(q, w, t.Terrain.Shear())*run[i], math.MaxFloat64)
-			// A river in flood is not the width of its channel. Its sand goes
-			// along the bed and settles there, over the channel; its silt and
-			// clay are held up in the water, which spreads over the ground
-			// beside it the flood reaches, and settle over all of that. See
-			// floodWidth and overbank.
-			plain := w
-			if t.Wet() && !g.standing(i) {
-				plain += g.floodWidth(i)
-			}
-			for gr := range fallSpeed {
-				over := plain
-				if Grain(gr) == Sand {
-					over = w
-				}
-				c.settle[i][gr] = settleShare(fallSpeed[gr], run[i], over, q)
-			}
-		}
-	})
-	g.tideWork(&c, recv)
+	c := g.waterStep(years)
 	// The waves on the coast as it stands at the start of the step, and the
 	// sand the rivers bring them. See coast.go.
 	s := g.surfOf(nil)
 	if len(s.cells) > 0 {
 		c.surf, c.sands = s.slot, make([]float64, n)
 	}
-	g.edgeWork(&c, recv, years)
-	g.stillWork(&c, recv)
 	next := c.solve(settleIters)
 	change := make([]float64, n)
 	gained := make([][Grains]float64, n)
@@ -725,4 +640,98 @@ func mix(t *Tile, held float64, laid [Grains]float64) {
 	held = math.Max(0, held)
 	t.Sand = (t.Sand*held + laid[Sand]) / (held + d)
 	t.Clay = (t.Clay*held + laid[Clay]) / (held + d)
+}
+
+// waterStep is the water's step over years, set up to be solved: how hard it cuts
+// each tile, what settles where, and what the tide, the map's edges and the
+// still water do with what reaches them. See wear.
+func (g *Grid) waterStep(years float64) fluvial {
+	n := len(g.Tiles)
+	recv, run := g.receivers()
+	c := fluvial{
+		h:      make([]float64, n),
+		recv:   recv,
+		stack:  stackOf(recv),
+		f:      make([]float64, n),
+		drop:   make([]float64, n),
+		settle: make([][Grains]float64, n),
+		parts:  make([][Grains]float64, n),
+		supply: g.bankLoad,
+		soil:   make([]float64, n),
+		rock:   make([]float64, n),
+		eff:    make([]float64, n),
+		abrade: make([]float64, n),
+		lasts:  make([]float64, n),
+	}
+	for i := range c.lasts {
+		c.lasts[i] = 1
+	}
+	// What the rivers took off their banks is carried from here: see meander.
+	g.bankLoad = nil
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			t := &g.Tiles[i]
+			c.h[i] = t.Height
+			c.soil[i] = float64(t.Soil)
+			// What the water takes off a tile is its soil, or its rock where it
+			// has none, which is the soil the rock would make.
+			c.parts[i] = parts(t)
+			if t.Soil <= 0 {
+				sand, clay := g.TextureAt(g.PosOf(i))
+				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
+			}
+			// Ground somebody has built on is out of the water's reach: it is
+			// neither cut nor settled on.
+			if int(recv[i]) == i || t.Mark != None {
+				continue
+			}
+			// How hard the water cuts: stream power, charged to what the soil
+			// is made of for the soil and to the rock for the rock. See
+			// fluvial.go and rockErodibility.
+			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
+			c.f[i] = power * t.Wash()
+			c.rock[i] = power * rockErodibility(t)
+			c.abrade[i] = abrasion(run[i])
+			// What grows on it holds its soil until the water's stress in a
+			// flood clears what it stands, and what settles is what a flood
+			// lets fall: see floodFlow, criticalFall and settleShare.
+			q := t.Flow * floodFlow
+			fall := (t.Height - g.Tiles[recv[i]].Height) / run[i]
+			w := flowWidth(t, q, fall, run[i])
+			if g.deep > 0 {
+				// A tile of a history is a piece of a planet, a hundred
+				// kilometres across, and its water runs in a network of
+				// channels too fine for it to draw. Read as a sheet that wide
+				// it put no stress on anything, and read as settling over the
+				// whole run it laid every grain of sand back where it was cut:
+				// either way the ranges rose for ever, to two hundred
+				// kilometres by the sixteenth epoch of a small globe. What a
+				// planet's rivers carry off a tile settles where they stop, in
+				// its basins and its seas - see stillWork - and the beds of its
+				// channels grow nothing.
+				continue
+			}
+			c.drop[i] = math.Min(criticalFall(q, w, t.Terrain.Shear())*run[i], math.MaxFloat64)
+			// A river in flood is not the width of its channel. Its sand goes
+			// along the bed and settles there, over the channel; its silt and
+			// clay are held up in the water, which spreads over the ground
+			// beside it the flood reaches, and settle over all of that. See
+			// floodWidth and overbank.
+			plain := w
+			if t.Wet() && !g.standing(i) {
+				plain += g.floodWidth(i)
+			}
+			for gr := range fallSpeed {
+				over := plain
+				if Grain(gr) == Sand {
+					over = w
+				}
+				c.settle[i][gr] = settleShare(fallSpeed[gr], run[i], over, q)
+			}
+		}
+	})
+	g.tideWork(&c, recv)
+	g.edgeWork(&c, recv, years)
+	g.stillWork(&c, recv)
+	return c
 }
