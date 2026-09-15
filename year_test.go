@@ -166,8 +166,7 @@ func TestForestFollowsTheWater(t *testing.T) {
 		if t.Wet() || t.Terrain.Tidal() || g.Treeless(g.PosOf(i)) {
 			continue
 		}
-		y := i / g.W
-		pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*t.Height)
+		pet := g.pet(i)
 		if pet <= 0 || g.Rain(i) <= 0 {
 			continue
 		}

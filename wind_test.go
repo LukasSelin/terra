@@ -243,3 +243,26 @@ func TestAWarmColumnWeighsWhatTheHypsometricEquationSays(t *testing.T) {
 		t.Errorf("a summer continent's layer at 30 C gains %.2f hPa a degree", most)
 	}
 }
+
+// A crest stands in more wind than the country round it by Jackson and Hunt's
+// 2h/L, and the wind off an ice cap drains at Ball's gravity-flow speed: some
+// ten to twenty metres a second down a slope of a few in a hundred.
+func TestTheGroundQuickensAndDrainsTheWind(t *testing.T) {
+	g := oceanGlobe(64, 32)
+	e := newAirEnv(g)
+	cy := e.h / 4
+	i := cy*e.w + 3
+	e.expose[i] = 100
+	half := float64(exposeReach) * math.Min(e.dx[cy], e.dy)
+	u, _ := e.ground(3, cy, 10, 0)
+	if want := 10 * (1 + 2*100/half); math.Abs(u-want) > 1e-9 {
+		t.Errorf("a wind of 10 m/s over a crest 100 m over its country is %.4f, want %.4f", u, want)
+	}
+	e.expose[i], e.gx[i], e.gy[i] = 0, 0.02, 0
+	e.height[i] = 3000
+	e.mean[cy] = -10
+	u, v := e.ground(3, cy, 0, 0)
+	if s := math.Hypot(u, v); s < 10 || s > 25 {
+		t.Errorf("an ice cap's slope of 2 in 100 drains its air at %.1f m/s", s)
+	}
+}

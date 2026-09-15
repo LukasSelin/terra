@@ -732,8 +732,7 @@ func forestByAridity(gs []*Grid, lo, hi float64) float64 {
 			if g.underSea(i) || t.Wet() || t.Terrain.Tidal() || g.air == nil {
 				continue
 			}
-			y := i / g.W
-			pet := petAt(g.air.pet[y], g.air.mean[y]-Lapse*t.Height)
+			pet := g.pet(i)
 			ai := pet / math.Max(1e-9, g.Rain(i))
 			if ai < lo || ai >= hi {
 				continue

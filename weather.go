@@ -121,6 +121,7 @@ func (g *Grid) weather() {
 	}
 	if len(g.rainWarm) != len(g.Tiles) {
 		g.rainWarm = make([]float32, len(g.Tiles))
+		g.dayRange = make([]float32, len(g.Tiles))
 	}
 	was := g.winds
 	g.winds = windsFor(g)
@@ -209,6 +210,11 @@ func (g *Grid) rainOn() {
 		for cx := 0; cx < e.w; cx++ {
 			i := cy*e.w + cx
 			pet[i] = petAt(a.pet[row], e.mean[cy]-Lapse*e.height[i])
+			if r := annualRain(w.budget, i); r > 0 {
+				pet[i] *= diurnal(cellCont(e, i), pet[i]/r)
+			} else {
+				pet[i] *= diurnal(cellCont(e, i), 1)
+			}
 			var total float64
 			var each [phases]float64
 			for k := range phases {
@@ -332,10 +338,12 @@ func (g *Grid) rainOn() {
 			if total := each[0] + each[1] + each[2] + each[3]; total > 0 {
 				g.rainWarm[i] = float32((summer + (each[1]+each[3])/2) / total)
 			}
-			g.rain[i], g.runoff[i] = p, 0
+			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
 				t := a.mean[y] - Lapse*g.Tiles[i].Height
-				g.runoff[i] = p - fu(p, petAt(a.pet[y], t))
+				pe := petAt(a.pet[y], t)
+				g.dayRange[i] = float32(diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
+				g.runoff[i] = p - fu(p, pe*float64(g.dayRange[i]))
 			}
 		}
 	})
@@ -409,7 +417,7 @@ func fu(p, pet float64) float64 {
 func petTable(lat float64) []float64 {
 	const (
 		solar = 0.0820 // MJ a square metre a minute
-		span  = 10.0   // degrees between the day's warmest and coldest
+		span  = tableRange
 	)
 	phi := lat * math.Pi / 180
 	// The evaporation keeps the year it was calibrated on - the temperate
@@ -449,6 +457,40 @@ func petTable(lat float64) []float64 {
 	return out
 }
 
+// The day's range of temperature Hargreaves's reading takes the sun's
+// strength from. The table is read at tableRange, and each place at its own:
+// some six degrees on a humid coast, where the sea and the clouds hold the
+// night's warmth in, and sixteen in a dry continent's interior, under clear
+// skies over dry ground (Dai, Trenberth and Karl, 1999: 5-8 over the oceans'
+// coasts and humid tropics, 12-18 in the deserts and the continents' dry
+// interiors). Evaporation goes as its root.
+const (
+	tableRange = 10.0
+	rangeMoist = 6.0 // a maritime, humid place
+	rangeInner = 6.0 // what a continent's interior adds
+	rangeDry   = 4.0 // and what an arid place adds, reached at PET five times the rain
+)
+
+// diurnal is how many times the evaporation table's a place's evaporation
+// is, for the day's range of its temperature: cont of the country round it
+// land, and pet over rain its dryness at the table's range.
+func diurnal(cont, dryness float64) float64 {
+	span := rangeMoist + rangeInner*clamp01(cont) + rangeDry*clamp01((dryness-1)/4)
+	return math.Sqrt(span / tableRange)
+}
+
+// pet is how much water the air could take up in a year on tile i, in mm: the
+// row's table at the tile's year and height, for the day's range the tile
+// has. It is the table's where the rain has not been read.
+func (g *Grid) pet(i int) float64 {
+	y := i / g.W
+	p := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.Tiles[i].Height)
+	if i < len(g.dayRange) {
+		p *= float64(g.dayRange[i])
+	}
+	return p
+}
+
 // petAt reads a row's evaporation table at a year's mean of t degrees.
 func petAt(table []float64, t float64) float64 {
 	f := math.Max(0, math.Min(float64(len(table)-1), t-petLo))
@@ -466,3 +508,34 @@ const (
 	springDay = 80.0
 	firstRain = 700.0
 )
+
+// annualRain is the rain, mm a year, a budget last gave cell i, or nothing
+// where it has not been worked out.
+func annualRain(b [phases]vapourOut, i int) float64 {
+	if len(b[1].rain) <= i {
+		return 0
+	}
+	var r float64
+	for k := range phases {
+		r += (b[k].rain[i] + b[k].oro[i]) * secondsPerYear / phases
+	}
+	return r
+}
+
+// rangeCont is the continentality the day's range at tile i is read at: the
+// land round it on a globe, and a middling amount on a map with no ocean to be
+// near or far from, whose year is a temperate latitude's.
+func (g *Grid) rangeCont(i int) float64 {
+	if !g.Wrap {
+		return contMiddling
+	}
+	return g.contAt(i)
+}
+
+// cellCont is rangeCont for air cell i.
+func cellCont(e *airEnv, i int) float64 {
+	if !e.wrap {
+		return contMiddling
+	}
+	return e.cont[i]
+}

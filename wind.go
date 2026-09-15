@@ -160,18 +160,25 @@ const (
 	blockReach = 300.0
 	blockSteps = 8
 	blockCells = 4.0
-	// exposeHeight is how many metres a crest must stand over the country round
-	// it to have half as much wind again, and a hollow under it to have half
-	// as much less; exposeReach is how many cells round count as that country.
-	exposeHeight = 1000.0
-	exposeReach  = 2
-	// katabatic is how hard, in metres a second, the air drains off an ice cap:
-	// the winds off Antarctica's coast blow at ten or twenty day in and day out.
-	// It is full on a slope of katabaticSlope and in air katabaticCold degrees
-	// under freezing or colder over the year, and it turns katabaticTurn radians to the right
-	// of downhill in the north and to the left in the south.
-	katabatic      = 12.0
-	katabaticSlope = 0.004
+	// exposeReach is how many cells round count as the country a cell stands
+	// over or sinks under. A hill h over it and some exposeReach cells to its
+	// half-height quickens the wind on its crest by 2h/L (Jackson and Hunt,
+	// 1975; Taylor and Lee, 1984: ΔS ≈ 1.6-2 h/L), and a hollow slows it as
+	// much; the wind is never less than exposeLeast of itself nor more than
+	// exposeMost.
+	exposeReach = 2
+	exposeLeast = 0.5
+	exposeMost  = 2.0
+	// The wind that drains off an ice cap under its own weight: a layer
+	// katabaticDepth metres deep, as cold under the air above as the ground
+	// under freezing, to katabaticCold degrees at most, running down a slope of
+	// sine s at sqrt(g (Δθ/θ) H s / C_D) against the drag and the air it drags
+	// along with it, katabaticDrag (Ball, 1956; Parish and Bromwich, 1987:
+	// 10-20 m/s off Antarctica's coastal slopes of a few in a hundred). It
+	// turns katabaticTurn radians to the right of downhill in the north and to
+	// the left in the south.
+	katabaticDepth = 100.0
+	katabaticDrag  = 5e-3
 	katabaticCold  = 20.0
 	katabaticTurn  = 0.5
 	// layerDepth is how deep the air near the ground is, in metres, over the
@@ -708,15 +715,19 @@ func (e *airEnv) ground(cx, cy int, uu, vv float64) (float64, float64) {
 		}
 	}
 
-	// Exposure.
-	k := math.Max(0.5, math.Min(1.5, 1+0.5*e.expose[i]/exposeHeight))
+	// Exposure: Jackson and Hunt's speed-up over a hill of the country's
+	// breadth.
+	half := float64(exposeReach) * math.Min(e.dx[cy], e.dy)
+	k := math.Max(exposeLeast, math.Min(exposeMost, 1+2*e.expose[i]/half))
 	uu, vv = uu*k, vv*k
 
 	// The ice's own wind.
 	if slope > 1e-6 {
-		cold := math.Max(0, math.Min(1, (Lapse*e.height[i]-e.mean[cy])/katabaticCold))
+		air := e.mean[cy] - Lapse*e.height[i]
+		cold := math.Min(katabaticCold, -air)
 		if cold > 0 {
-			s := katabatic * cold * math.Min(1, slope/katabaticSlope)
+			sine := slope / math.Sqrt(1+slope*slope)
+			s := math.Sqrt(gravity * cold / (math.Max(air, coldest) + 273.15) * katabaticDepth * sine / katabaticDrag)
 			dx, dz := -gx/slope, -gy/slope
 			turn := -math.Copysign(katabaticTurn, e.f[cy])
 			c, sn := math.Cos(turn), math.Sin(turn)
