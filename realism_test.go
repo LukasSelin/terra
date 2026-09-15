@@ -131,12 +131,21 @@ var realYardsticks = []realYardstick{
 		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14,
 		source:  "Leopold & Wolman 1960: meander wavelength 10-14 channel widths",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).wavelength },
-	}},
+	},
+		gap: "known gap: B - a small globe's rivers of meander size run 13-33 tiles from the sea, so a reach is 16 steps and most cross their line twice, which reads the reach's own chord: 14.6 widths",
+	},
 	{yardstick: yardstick{
 		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3,
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).sinuosity },
 	}},
+	{yardstick: yardstick{
+		name: "meander migration", unit: "widths/yr", scale: "ground", lo: 0.001, hi: 0.18,
+		source:  "Hickin & Nanson 1984; Braudrick et al. 2009: <0.01 to 0.18 widths/yr on flood plains; floor lowered for rivers confined in incised valleys, not a measured figure",
+		measure: meanderMigration,
+	},
+		gap: "known gap: G - since the sun and the ranges' rain, valleys 1 and 3 have lost their shifts of three to six tiles, their one-tile migration as it was, and valleys 4 and 5 hardly move at all: 0.0005 over five valleys",
+	},
 
 	// 6. The climate by latitude.
 	{yardstick: yardstick{
@@ -167,9 +176,7 @@ var realYardsticks = []realYardstick{
 		name: "midlatitude over subtropical rain, globe", unit: "x", scale: "water", lo: 1.1, hi: 2, slow: true,
 		source:  "Adler et al. 2003 (GPCP): the storm tracks at 40-60 deg rain ~2.8 mm/d against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 40, 60) / zonalRain(globes(), 20, 30) },
-	},
-		gap: "known gap: G - the storm tracks' rain is the fronts' of the day's lows, which the climate's budget sees only as eddy mixing: 0.85x",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "latitude of the driest belt, globe", unit: "deg", scale: "water", lo: 15, hi: 35, slow: true,
 		source:  "Adler et al. 2003 (GPCP); Peixoto & Oort 1992: the subtropical minimum of zonal rain lies at 20-30 deg",
@@ -212,7 +219,9 @@ var realYardsticks = []realYardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	}},
+	},
+		gap: "known gap: B - a globe of twice the tiles carries a longer tail of high ground, its peaks risen further than its mean, on every seed and at every merge since cc897fb (-0.049); the soil's creep with G's rain took it to -0.057 and the crust's balance to -0.078",
+	},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",
@@ -317,12 +326,19 @@ func hypsometricModes(gs []*Grid) (continent, ocean float64) {
 	return mode(split, len(count)), mode(0, split)
 }
 
-// epochMyr is how long an epoch of a history is, in millions of years, for
-// reading its sea floor against the earth's. It was once taken as the earth's
-// oldest floor still in place, some 180 Myr (Müller et al. 2008), over the
-// epochs, from before the history said; it says now - see epochYears - and a
-// globe's sixteen epochs are 64 Myr and not 180.
-const epochMyr = epochYears / myr
+// epochMyr is how long an epoch of a globe's history is, in millions of years,
+// for reading its sea floor against the earth's.
+//
+// It was taken to be 180 Myr over the globe's sixteen epochs, eleven and a
+// quarter each, on the grounds that nothing in the history said how long an
+// epoch was and that the earth's oldest floor still in place is some 180 Myr
+// old (Müller et al. 2008). The history says now - an epoch is epochYears,
+// four million years, and every rate in it is quoted on that clock - so the
+// reading was dating every floor two and four fifths times as old as the
+// history made it, and a sixteen-epoch globe's oldest floor is 64 Myr and not
+// 180. Past seventy there is then no floor at all to read, which is a truth
+// about how long a globe's history runs and not about how its floor sinks.
+var epochMyr = epochYears / myr
 
 type subsidence struct {
 	ridge float64 // metres under the sea at the youngest floor
@@ -566,10 +582,18 @@ func chiLinearity(gs []*Grid) float64 {
 	})
 }
 
-type meanderReading struct{ wavelength, sinuosity float64 }
+type meanderReading struct {
+	wavelength, sinuosity float64
+	// reaches is how many reaches the reading rests on.
+	reaches int
+}
 
 // meanderReach is how many steps of a river a meander is read over.
-const meanderReach = 32
+const meanderReach = 16
+
+// minMeanderReaches is the fewest reaches a meander reading may rest on:
+// fewer, and it reads as NaN rather than as one river's chance bends.
+const minMeanderReaches = 8
 
 // meanderingSlope is the steepest a river carrying q cubic metres a second
 // can fall and still meander rather than braid: Leopold & Wolman 1957's line,
@@ -588,21 +612,20 @@ func meanders(gs []*Grid) meanderReading {
 	return remember(fmt.Sprintf("meanders/%p/%d", gs[0], len(gs)), func() meanderReading {
 		var wl, sn []float64
 		for _, g := range gs {
+			// A lake is no reach of a river, but an open one is no end of it
+			// either: the river goes on from where the lake lets it out.
 			river := func(i int) bool {
-				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow
+				return !g.underSea(i) && g.lakeOf[i] < 0 && g.Tiles[i].Flow >= meanderFlow
 			}
 			next := func(i int) int {
-				d := g.flowStep(i)
-				if d.X == 0 && d.Y == 0 {
+				j := int(g.down[i])
+				for n := 0; j >= 0 && g.lakeOf[j] >= 0 && n < len(g.Lakes); n++ {
+					j = int(g.Lakes[g.lakeOf[j]].Outlet)
+				}
+				if j >= 0 && g.lakeOf[j] >= 0 {
 					return -1
 				}
-				p := g.PosOf(i)
-				p.X, p.Y = p.X+d.X, p.Y+d.Y
-				p = g.Norm(p)
-				if !g.In(p) {
-					return -1
-				}
-				return g.Index(p)
+				return j
 			}
 			// The rivers as streams: each walked up from its mouth along the
 			// inflow carrying the most, its other inflows mouths of their own.
@@ -645,8 +668,10 @@ func meanders(gs []*Grid) meanderReading {
 				x, y := float64(stem[0]%g.W), float64(stem[0]/g.W)
 				for k, i := range stem {
 					xs[k], ys[k], hs[k], qs[k] = x, y, g.Tiles[i].Height, g.Tiles[i].Flow
-					d := g.flowStep(i)
-					x, y = x+float64(d.X), y+float64(d.Y)
+					if k+1 < len(stem) {
+						d := g.Delta(g.PosOf(i), g.PosOf(stem[k+1]))
+						x, y = x+float64(d.X), y+float64(d.Y)
+					}
 				}
 				for s := 0; s+meanderReach < len(xs); s += meanderReach / 2 {
 					e := s + meanderReach
@@ -682,13 +707,13 @@ func meanders(gs []*Grid) meanderReading {
 				}
 			}
 		}
-		if len(sn) == 0 {
-			return meanderReading{math.NaN(), math.NaN()}
+		if len(sn) < minMeanderReaches {
+			return meanderReading{math.NaN(), math.NaN(), len(sn)}
 		}
 		if len(wl) == 0 { // reaches gentle enough, and not one of them bending
-			return meanderReading{math.NaN(), meanOf(sn)}
+			return meanderReading{math.NaN(), meanOf(sn), len(sn)}
 		}
-		return meanderReading{quantile(wl, 0.5), meanOf(sn)}
+		return meanderReading{quantile(wl, 0.5), meanOf(sn), len(sn)}
 	})
 }
 

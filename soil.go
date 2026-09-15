@@ -157,16 +157,20 @@ func weathered(sand, clay, w float64) (float64, float64) {
 // it brings soil in instead. Production falls with depth and the creep's
 // taking rises with it, so there is one depth where they meet, and it is
 // found by halving.
-func (g *Grid) soilDepthOf(i int) float64 {
+//
+// It gives too the pace the rock is making soil at under that depth, which is
+// what the ground is lowering at while the soil holds steady: how long the
+// surface has been forming soil is read off it (see exposure).
+func (g *Grid) soilDepthOf(i int) (depth, pace float64) {
 	t := &g.Tiles[i]
 	if t.Wet() || t.Terrain == Rock {
-		return 0 // water, and the outcrops: ground the soil has already gone from
+		return 0, 0 // water, and the outcrops: ground the soil has already gone from
 	}
 	p := g.PosOf(i)
 	making := SoilMaking * g.weathering(i)
 	deepest := SoilScale * math.Log(math.Max(1, making/soilDeepest))
 	if making <= soilDeepest {
-		return 0
+		return 0, making
 	}
 	// The curvature over the tile, as the creep reads it: the height of the
 	// neighbours over this tile, a diagonal counting half.
@@ -189,7 +193,7 @@ func (g *Grid) soilDepthOf(i int) float64 {
 		return water - creepy*math.Min(h, soilActive)*round
 	}
 	if taken(deepest) <= soilDeepest {
-		return deepest
+		return deepest, soilDeepest
 	}
 	lo, hi := 0.0, deepest
 	for k := 0; k < 40; k++ {
@@ -200,15 +204,30 @@ func (g *Grid) soilDepthOf(i int) float64 {
 			hi = mid
 		}
 	}
-	return (lo + hi) / 2
+	h := (lo + hi) / 2
+	return h, making * math.Exp(-h/SoilScale)
 }
 
-// laySoil sets every tile's soil to its steady depth. It runs when a map is
-// made, once the ground, the water and what grows on it are settled.
-func (g *Grid) laySoil() {
+// laySoil sets every tile's soil to its steady depth, and its age and
+// chemistry to what that age has made of it (see pedogenesis.go). It runs
+// when a map is made, once the ground, the water and what grows on it are
+// settled; made says the map is its own history's, whose surface ages each
+// tile's Exposed holds on the way in.
+func (g *Grid) laySoil(made bool) {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			g.Tiles[i].Soil = float32(g.soilDepthOf(i))
+			h, pace := g.soilDepthOf(i)
+			g.Tiles[i].Soil = float32(h)
+			// The history's age bounds the ground's own reading of it, except
+			// where the history last saw the tile under its sea: the map's sea
+			// is poured again, and when that ground came out of it the history
+			// cannot say. See deepExposure.
+			bound := math.Inf(1)
+			if made && g.Tiles[i].Exposed > 0 {
+				bound = float64(g.Tiles[i].Exposed)
+			}
+			g.laySoilState(i, h, pace, bound)
 		}
 	})
+	g.pedons = true
 }

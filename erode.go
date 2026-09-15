@@ -212,6 +212,9 @@ func (w *Land) Erode() {
 	g.height()
 	// The coast has moved, so the tide's reach has, and the flats with it.
 	g.tides()
+	// And what is water or salt now, which the weathering read as ground,
+	// holds no soil to age.
+	g.drownSoils()
 	g.resoil(was)
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
@@ -285,6 +288,17 @@ func (g *Grid) wear(years float64) {
 			h := math.Max(0, c.soil[i]-lost[i])
 			laid := carrying(gained[i])
 			surface := !t.Wet() && !t.Terrain.Tidal()
+			// What time has made of the soil goes with the soil: what was
+			// taken took its share of it, and what cut through into the rock
+			// has left a fresh surface. See pedogenesis.go.
+			if g.pedons && g.deep == 0 {
+				switch {
+				case c.soil[i] <= 0 || h <= 0:
+					clearSoil(t)
+				default:
+					strip(t, lost[i]/c.soil[i])
+				}
+			}
 			if surface {
 				mix(t, h, gained[i])
 			}
@@ -293,11 +307,17 @@ func (g *Grid) wear(years float64) {
 				made := soilMade(h, years, SoilMaking*g.weathering(i)) - h
 				if made > 0 {
 					sand, clay := g.TextureAt(g.PosOf(i))
-					mix(t, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
+					blend(t, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
 					h += made
 				}
 			}
 			t.Soil = float32(h)
+			switch {
+			case g.deep > 0:
+				g.deepExposure(i, -change[i], years)
+			case g.pedons:
+				g.ripenSoil(i, years)
+			}
 		}
 	})
 	g.coast(s, years, c.sands)
@@ -649,7 +669,16 @@ func carrying(load [Grains]float64) float64 {
 // against what there was: a river that lays down a centimetre on a metre of
 // soil barely moves what the field is made of, and one that lays it on bare
 // rock has made the field.
+//
+// And what arrives is younger than what was there: see buryIn.
 func mix(t *Tile, held float64, laid [Grains]float64) {
+	blend(t, held, laid)
+	buryIn(t, held, carrying(laid))
+}
+
+// blend is mix for the mixture alone: what the rock makes under a soil is part
+// of that soil's forming and not new ground laid on it.
+func blend(t *Tile, held float64, laid [Grains]float64) {
 	d := carrying(laid)
 	if d <= 0 {
 		return
