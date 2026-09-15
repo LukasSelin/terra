@@ -131,9 +131,7 @@ var realYardsticks = []realYardstick{
 		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14,
 		source:  "Leopold & Wolman 1960: meander wavelength 10-14 channel widths",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).wavelength },
-	},
-		gap: "known gap: B - a small globe's rivers of meander size run 13-33 tiles from the sea, so a reach is 16 steps and most cross their line twice, which reads the reach's own chord: 14.6 widths",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3,
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
