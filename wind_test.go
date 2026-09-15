@@ -239,7 +239,7 @@ func TestAWarmColumnWeighsWhatTheHypsometricEquationSays(t *testing.T) {
 	if got := hypsometric(1013.25, 15, 1000); math.Abs(got-0.4165) > 0.005 {
 		t.Errorf("a kilometre a degree warmer at 15 C weighs %.4f hPa less", got)
 	}
-	if most := hypsometric(beltMean, 0, boundaryWarm); most >= 1.5 {
-		t.Errorf("the deepest summer layer gains %.2f hPa a degree", most)
+	if most := hypsometric(beltMean, 30, boundaryWarm); most >= 1.5 {
+		t.Errorf("a summer continent's layer at 30 C gains %.2f hPa a degree", most)
 	}
 }
