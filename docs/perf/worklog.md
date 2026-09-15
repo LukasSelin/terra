@@ -6,6 +6,47 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-15 - SIMD for the transform's butterflies
+
+**Change:** `fft_simd_amd64.go` does the FFT butterflies two complex numbers
+per AVX2 vector under `GOEXPERIMENT=simd` (following `pass_simd_amd64.go`).
+The complex product is written as `x*p + swap(x)*q`, which gives the same
+bits as Go's complex multiply. `TestTheButterfliesAreTheScalarOnes` checks
+every length from 1 to 4096 in both directions, including negative zeros and
+values of very different sizes. The whole-world digests (ancient, globe128)
+match between the two builds.
+
+**Kernel** (`BenchmarkFFT`, forward and inverse together):
+
+| length | scalar | simd | |
+|---|---|---|---|
+| 64 | 1212 ns | 1050 ns | -13% |
+| 256 | 7837 ns | 4320 ns | -45% |
+| 1024 | 34701 ns | 17698 ns | -49% |
+
+**World** (scalar and simd binaries interleaved, n=6 each):
+
+| world | scalar | simd | |
+|---|---|---|---|
+| ancient | 0.491 s ± 17% | 0.459 s ± 12% | ~ (p=0.093) |
+| globe256 | 7.33 s ± 3% | 7.24 s ± 4% | ~ (p=0.065) |
+
+The kernel is twice as fast, but world creation gains 1-4%, which is not
+significant. This is Finding 1 of the first entry again: the FFT runs on
+the `InParallel` workers, and wall-clock time is set by the serial passes.
+On globe256 the main goroutine does 19 of the 27 profiled seconds, and the
+largest serial pieces are `airEnv.currents` (17% of wall), the rest of
+`rainOn`, `windsFor`, `slideQueue`, `pool`/`flow` and the priority floods.
+
+**Why the serial passes are not vectorized:** `currents`, `airEnv.vapour`,
+`fluvial.solve` and the floods are Gauss-Seidel sweeps or priority-queue
+walks. Each tile reads the value its neighbour was just given in the same
+sweep, so doing four at once changes the result. Making them vectorizable
+(Jacobi or red-black ordering) would also make them parallel, but it changes
+the world and moves the realism tests. That decision needs an owner.
+
+---
+
 ## 2026-09-15 - Drift guards
 
 **Heap budget in the suite.** `TestWorldCreationBudget` holds `valley`,
