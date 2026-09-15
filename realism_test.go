@@ -180,9 +180,7 @@ var realYardsticks = []realYardstick{
 		name: "midlatitude over subtropical rain, globe", unit: "x", scale: "water", lo: 1.1, hi: 2, slow: true,
 		source:  "Adler et al. 2003 (GPCP): the storm tracks at 40-60 deg rain ~2.8 mm/d against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 40, 60) / zonalRain(globes(), 20, 30) },
-	},
-		gap: "known gap: G - the storm tracks' rain is the fronts' of the day's lows, which the climate's budget sees only as eddy mixing: 0.85x",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "latitude of the driest belt, globe", unit: "deg", scale: "water", lo: 15, hi: 35, slow: true,
 		source:  "Adler et al. 2003 (GPCP); Peixoto & Oort 1992: the subtropical minimum of zonal rain lies at 20-30 deg",
