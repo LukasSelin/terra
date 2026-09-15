@@ -6,6 +6,118 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The clock by pass, committed; the night's timings were taken under load
+
+**Branch:** `claude/perf-instrument` from main 1ad4985 (which already had the
+SIMD FFT and the `currents`/`vapour`/`fluvial.solve` precomputes), plus
+`claude/work-trees-performance-plan-4b623c`: [scaling-plan.md](scaling-plan.md),
+[briefs/](briefs/), `TestWorldDigest` and [digest.json](digest.json). The
+digest written on that base is the one the plan branch committed, byte for
+byte; A, B and C's start-of-session digests match it.
+
+**The timer.** [phases.go](../../phases.go) makes the throwaway
+`defer phase("name")()` of the first entry permanent: 27 passes, from
+`Generate` and `history` down to `airEnv.vapour` and `fluvial.solve`, summed
+by name under a mutex when `TERRA_PHASES=1`. `BenchmarkNewLand` reports each
+pass as `s/<pass>` and `cmd/overview` prints the table. Two things learned
+while making it hold the acceptance checks:
+
+- The first version returned a fresh closure per call, and with the
+  instrument on the budget test failed on allocations (valley +4.4%,
+  ancient +3.8%). The entries are now made at init with one stop function
+  and a stack of start times each, so a call allocates nothing: the budget
+  passes with the instrument off and on (valley 3126 / 3129 allocations
+  against 3124, within the goroutines' noise), and the digest is identical
+  both ways.
+- The environment is read at package init, before `go test` starts
+  recording what a test reads, so the test cache does not know the setting
+  changed: switching `TERRA_PHASES` needs `-count=1`. The first "on" runs
+  came back `(cached)` from the "off" ones.
+- The testing package keeps only the first lines of a benchmark's log, so
+  the table logged by the benchmark is cut after eight rows. The
+  `s/<pass>` metrics on the result line are complete; `cmd/overview` prints
+  the whole table with the calls.
+
+**Off, the instrument costs nothing measurable.** Main's test binary and the
+branch's, interleaved on the same loaded machine:
+
+| world | main | branch | | n |
+|---|---|---|---|---|
+| valley | 143.0 ms ± 13% | 167.4 ms ± 10% | +17% (p=0.015) | 6 |
+| ancient | 526 ms ± 15% | 505 ms ± 14% | ~ (p=0.94) | 6 |
+| globe256 | 7.27 s ± 8% | 7.10 s ± 5% | ~ (p=0.39) | 6 |
+| valley | 162.1 ms ± 6% | 162.5 ms ± 7% | ~ (p=0.81) | 15 |
+| ancient | 528 ms ± 10% | 534 ms ± 6% | ~ (p=0.78) | 15 |
+
+The n=6 valley reading did not survive n=15; the off path is one bool read
+and a deferred no-op per pass call, a few hundred per valley.
+
+**The suite** (`go test -timeout 60m .`) fails the same one test on the
+branch and on main: `TestRealNumbers/Hack_exponent,_globe` at 0.6005 against
+0.54-0.60, the known edge since 337a047. 1639 s on the branch, 1622 s on
+main, both under load.
+
+**The machine was not quiet.** Four to ten test processes from other
+sessions ran the whole time (their suites, one at 120 min timeout), so
+every timing here is under load. `scripts/perf.sh check` against
+[baseline/2026-09-15-small.txt](baseline/2026-09-15-small.txt) (quiet)
+read valley +9.9%, ancient +12.4% (fails the 10% limit), globe256 -7.5%
+(the precomputes, as measured when they went in). The A/B table above says
+the ancient reading is load, not the timer.
+
+**Tonight's baseline is [baseline/2026-09-16-small-under-load.txt](baseline/2026-09-16-small-under-load.txt)**,
+count 6, and it is named so that `scripts/perf.sh`'s newest-baseline glob
+(`*-small.txt`) skips it: against the quiet baseline it reads valley +24%,
+ancient +26%, globe256 ~, and a loaded baseline hides regressions of the
+load's size. **The morning should run `scripts/perf.sh baseline` on the
+quiet machine at the instrument commit before checking A, B and C.** Until
+then `check` compares against 2026-09-15, which predates the precomputes, so
+globe256 will read about 7% "faster - take a new baseline".
+
+**The globe by pass**, from `TERRA_PHASES=1 go run ./cmd/overview -preset globe`
+(77.0 s; the three benchmark runs read 91.1, 83.8 and 79.9 s as the load
+came and went). Inclusive; a pass's time includes the passes it calls. The
+2026-09-15 column is the hand-instrumented table in the first entry
+(100.9 s, before the precomputes, on a different load).
+
+| pass | wall s | calls | share | 2026-09-15 | notes |
+|---|---:|---:|---:|---:|---|
+| `Generate` | 77.0 | 1 | 100% | 100.9 | |
+| `history` | 51.6 | 1 | 67% | 68.0 | 16 epochs |
+| `drain` | 34.1 | 30 | 44% | 44.6 | = weather + pool + flow |
+| `weather` | 22.4 | 31 | 29% | 29.3 | winds and rain from scratch every drain |
+| `rainOn` | 17.8 | 31 | 23% | 21.0 | |
+| `wear` | 16.9 | 20 | 22% | 23.3 | |
+| `silt` | 9.6 | 1 | 13% | 13.2 | includes drains and tides |
+| `cutValleys` | 9.6 | 1 | 12% | 11.9 | |
+| `airEnv.vapour` | 9.2 | 96 | 12% | | on the workers under rainOn; summed over goroutines |
+| `orographic` | 8.9 | 93 | 12% | 9.9 | 3 wind phases per rain |
+| `waterStep` | 7.1 | 26 | 9% | 8.6 | |
+| `flow` | 6.5 | 30 | 8% | 8.8 | serial |
+| `pool` | 5.9 | 30 | 8% | 7.4 | full sort per call |
+| `move` | 5.2 | 16 | 7% | 6.7 | |
+| `windsFor` | 4.6 | 31 | 6% | 8.3 | |
+| `creep` | 4.6 | 20 | 6% | 5.5 | serial stencil |
+| `fluvial.solve` | 4.5 | 26 | 6% | 8.7 | serial; the precompute |
+| `landslide` | 4.1 | 6 | 5% | 4.8 | |
+| `tectonics` | 4.0 | 16 | 5% | 5.0 | |
+| `airEnv.currents` | 2.7 | 31 | 4% | | serial; the precompute |
+| `tides` | 2.1 | 7 | 3% | 2.8 | |
+| `shape` | 2.1 | 1 | 3% | 2.6 | |
+| `joinUp` | 1.5 | 30 | 2% | | |
+| `reshape` | 1.4 | 16 | 2% | | |
+| `keepBook` | 0.6 | 16 | 1% | | |
+| `basins` | 0.3 | 1 | 0% | | |
+| `settleRock` | 0.02 | 1 | 0% | | |
+
+The shape of the first entry holds: `drain` is 44% of the clock and
+`weather` inside it 29%, which is brief A; `pool` + `flow` + `waterStep` are
+20%, brief B. `windsFor` is the one pass that has clearly moved since the
+first table (8.3 to 4.6 s), from the `currents` precompute.
+
+---
+
+
 ## 2026-09-15 - Precompute in `airEnv.vapour` and `fluvial.solve`
 
 The same idea as the sea-warmth links: take the work that is constant during
