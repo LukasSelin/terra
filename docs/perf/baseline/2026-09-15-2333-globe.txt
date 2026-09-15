@@ -1,0 +1,8 @@
+goos: windows
+goarch: amd64
+pkg: github.com/LukasSelin/terra
+cpu: AMD Ryzen 9 3900X 12-Core Processor            
+BenchmarkNewLand/globe-24         	       1	67271137600 ns/op	    128310 ns/tile	16450851608 B/op	  686845 allocs/op
+BenchmarkNewLand/globe-24         	       1	68545669500 ns/op	    130740 ns/tile	16450235512 B/op	  685688 allocs/op
+PASS
+ok  	github.com/LukasSelin/terra	137.060s
