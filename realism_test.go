@@ -103,7 +103,9 @@ var realYardsticks = []realYardstick{
 		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(smallGlobes(networkGlobes)); return th },
-	}},
+	},
+		gap: "known gap: B - profiles are less concave than stream power carves them, and the reading swings by seed and by small changes to the coast: 0.367 with the deep floor laid, 0.29 with the warm-sea limestone as well",
+	},
 	{yardstick: yardstick{
 		name: "Flint's law fit R2, valley", unit: "", scale: "water", lo: 0.85, hi: 1,
 		source:  "Flint 1974; Wobus et al. 2006: binned log S against log A is a straight line in steady channels",
