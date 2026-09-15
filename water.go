@@ -57,6 +57,17 @@ import (
 // seed. The share it comes to is about the share of the crust that is ocean,
 // a half to three fifths - the real world is seven tenths - and it is the
 // plates and not this figure that move it from one world to the next.
+//
+// The table was taken when a basin was ocean by its plate's kind at the end of
+// the history. The crust has carried its own kind tile by tile since, and it is
+// set by the first plates' draw, so the same 7.5 m in 20 m basins now comes to
+//
+//	sea, small globes 1-8                    sea, globes 1-3
+//	.641 .576 .623 .675 .693 .610 .538 .652  .608 .499 .658
+//
+// with that draw held within crustSlack of the asked share. Without that it
+// came to .771 on the first globe and .774 on the fourth small one, whose
+// first plates had drawn eight tenths of their ground as floor: see crustSlack.
 const (
 	DefaultWater = 7.5
 	BasinDepth   = 20.0

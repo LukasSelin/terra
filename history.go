@@ -26,11 +26,14 @@ import (
 // where the ground still shakes - can then be asked of what happened rather
 // than painted on afterwards.
 //
-// It runs behind Config.Epochs and no preset uses it yet. The constants the
-// whole settlement model is tuned against - the sixty metres of lowland, the
-// share of a map that can be ploughed - were measured on the picture, so a
-// history has to be shown to hand them the same kind of map before it can be
-// allowed to make the only one. See normalise, which is where that join is.
+// It runs behind Terms.Epochs. The globe is made by sixteen epochs of it,
+// because a world that size has no picture that passes for it, and so is
+// AncientTerms, which is the valley arrived at rather than composed; the
+// default valley is still drawn. The constants the whole settlement model is
+// tuned against - the sixty metres of lowland, the share of a map that can be
+// ploughed - were measured on the picture, so a history has to be shown to
+// hand a valley the same kind of map before it can be allowed to make the
+// default one too. See normalise, which is where that join is.
 
 // The three eras. Molten is a world with no rigid crust at all, where the
 // surface is convection and nothing that forms outlasts the forming of it;
@@ -861,7 +864,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	g.drain()
 	g.soilTexture()
 	fl := w.flood(g, spacing(g, plateTotal(g)))
-	plates := w.firstPlates(g, sea, fl)
+	plates := w.firstPlates(g, sea, water > 0, fl)
 	cr := newCrust(g)
 	for i := range g.Tiles {
 		cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
@@ -970,7 +973,7 @@ func (w *Land) molten(g *Grid) {
 // and each plate's rate put right until the plates hold the ground they were
 // drawn at, since where two floods meet depends on every other flood as well
 // as on those two.
-func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
+func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Plate {
 	n := plateTotal(g)
 	ocean := clamp01(oceanFloor + oceanPerSea*sea)
 	plates := make([]Plate, n, plateCap)
@@ -1020,6 +1023,9 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 		}
 	}
 	g.partition(plates, mids, fl)
+	if poured {
+		w.balanceCrust(g, plates, ocean)
+	}
 	// A world has both kinds in it. Left to the draw, a valley - which asks
 	// for no sea and so for few ocean plates - came out on two seeds of five
 	// with nothing but continent, and a world with no floor anywhere has no
@@ -1049,6 +1055,81 @@ func (w *Land) firstPlates(g *Grid, sea float64, fl *flooding) []Plate {
 		plates[i].Spin = w.spin(g, math.Sqrt(share[i]*float64(len(g.Tiles))/math.Pi))
 	}
 	return plates
+}
+
+// crustSlack is how far the share of a world's first crust that is ocean floor
+// may come out from the share its terms ask for before the draw is put right.
+//
+// The kinds are drawn plate by plate, and the plates are not the same size: a
+// great plate is a fifth of a world, so the draw that says a half of the plates
+// are floor can say a half or four fifths of the ground is. How much of a
+// planet is continent is a fact about how much light rock it has melted out of
+// its mantle, which is a matter of its chemistry and its age and not of which
+// way one plate's coin fell (Taylor and McLennan 1995; the earth's continental
+// crust is about four tenths of it, shelves and all). The crust is set once
+// at the first plates and carried from there, so a world given its water and
+// not its sea - see water.go - came out with what that one coin said: the
+// first globe was eight tenths floor, and eight tenths sea.
+//
+// So the draw stands inside a band either side of the asked share, and is only
+// put right when it falls outside: inside it, how much continent a world has is
+// still its own luck, and the plates still decide where it goes.
+//
+// It is only done for a world given water. A world given a share of sea is
+// flooded to that share whatever its crust, so the draw does not decide how
+// much of it is drowned, and a made valley's ground is matched to the drawn
+// one's: put right there as well, the twelfth valley came out with nearly four
+// times the drawn map's water.
+const crustSlack = 0.15
+
+// balanceCrust turns plates of the kind there is too much of into the other,
+// one at a time and each the one that brings the ground nearest the share
+// wanted, until the ocean floor is within crustSlack of it. It never turns the
+// last plate of a kind, which is the rule below it in firstPlates to keep.
+func (w *Land) balanceCrust(g *Grid, plates []Plate, want float64) {
+	n := len(g.Tiles)
+	if n == 0 {
+		return
+	}
+	held := make([]float64, len(plates))
+	for i := range g.Tiles {
+		if k := int(g.Tiles[i].Plate); k < len(plates) {
+			held[k]++
+		}
+	}
+	for {
+		floor, kinds := 0.0, 0
+		for k := range plates {
+			if plates[k].Ocean {
+				floor += held[k] / float64(n)
+				kinds++
+			}
+		}
+		over := floor > want+crustSlack
+		if !over && floor >= want-crustSlack {
+			return
+		}
+		if (over && kinds <= 1) || (!over && kinds >= len(plates)-1) {
+			return
+		}
+		best, near := -1, math.Abs(floor-want)
+		for k := range plates {
+			if plates[k].Ocean != over || held[k] == 0 {
+				continue
+			}
+			to := floor + held[k]/float64(n)
+			if over {
+				to = floor - held[k]/float64(n)
+			}
+			if d := math.Abs(to - want); d < near {
+				best, near = k, d
+			}
+		}
+		if best < 0 {
+			return
+		}
+		plates[best].Ocean = !over
+	}
 }
 
 // spacing is how far apart two neighbouring middles stand on this world, in
@@ -1943,72 +2024,100 @@ func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int
 // front can be eaten through where the front is narrow - and a piece left on
 // the far side is a scrap of one plate adrift in another. Every piece of a
 // plate but its largest goes to the plate it borders most.
+//
+// Borders most among the pieces that stay where they are, and not among
+// everything round it, because the scraps are all handed out at once and a
+// scrap can border another scrap that is going somewhere else. The second
+// globe of TestEveryPlateIsOnePiece did exactly that on its last epoch: a
+// single tile of plate 22 was cut off against a piece of plate 3 nine hundred
+// tiles big, five of its neighbours on that piece and three on plate 23, so it
+// was given to 3 - in the same pass as the piece of 3 was given to 23. What
+// was left was one tile of plate 3 on the far side of plate 23, and since the
+// last epoch has no move after it and so no joinUp, the world ended with it.
+// Counting only the largest pieces, a scrap always joins ground that is going
+// to stay its plate's; one whose every neighbour is another scrap waits until
+// those have been handed out, and is handed out the time after.
 func (g *Grid) joinUp(fl *flooding) {
 	piece := fl.dist // the distances are spent; the space is reused for labels
-	for i := range piece {
-		piece[i] = -1
-	}
+	largest := make([]int, plateCap)
 	var sizes []int
 	var stack []int32
-	for s := range g.Tiles {
-		if piece[s] >= 0 {
-			continue
+	for {
+		for i := range piece {
+			piece[i] = -1
 		}
-		label, of := float32(len(sizes)), g.Tiles[s].Plate
-		piece[s], stack = label, append(stack[:0], int32(s))
-		n := 0
-		for len(stack) > 0 {
-			i := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			n++
-			g.eachNear(int(i), func(j int) {
-				if piece[j] < 0 && g.Tiles[j].Plate == of {
-					piece[j] = label
-					stack = append(stack, int32(j))
+		sizes = sizes[:0]
+		for s := range g.Tiles {
+			if piece[s] >= 0 {
+				continue
+			}
+			label, of := float32(len(sizes)), g.Tiles[s].Plate
+			piece[s], stack = label, append(stack[:0], int32(s))
+			n := 0
+			for len(stack) > 0 {
+				i := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				n++
+				g.eachNear(int(i), func(j int) {
+					if piece[j] < 0 && g.Tiles[j].Plate == of {
+						piece[j] = label
+						stack = append(stack, int32(j))
+					}
+				})
+			}
+			sizes = append(sizes, n)
+		}
+		for i := range largest {
+			largest[i] = -1
+		}
+		for s := range g.Tiles {
+			l, of := int(piece[s]), g.Tiles[s].Plate
+			if largest[of] < 0 || sizes[l] > sizes[largest[of]] {
+				largest[of] = l
+			}
+		}
+		// The pieces cut off, and which of the pieces that stay each of them
+		// borders; and whether any of them borders another that does not.
+		border := map[int]map[uint8]int{}
+		waiting := false
+		for i := range g.Tiles {
+			l, of := int(piece[i]), g.Tiles[i].Plate
+			if largest[of] == l {
+				continue
+			}
+			g.eachNear(i, func(j int) {
+				o := g.Tiles[j].Plate
+				switch {
+				case o == of:
+				case largest[o] != int(piece[j]):
+					waiting = true
+				default:
+					if border[l] == nil {
+						border[l] = map[uint8]int{}
+					}
+					border[l][o]++
 				}
 			})
 		}
-		sizes = append(sizes, n)
-	}
-	largest := make([]int, plateCap)
-	for i := range largest {
-		largest[i] = -1
-	}
-	for s := range g.Tiles {
-		l, of := int(piece[s]), g.Tiles[s].Plate
-		if largest[of] < 0 || sizes[l] > sizes[largest[of]] {
-			largest[of] = l
-		}
-	}
-	// The pieces cut off, and which plates each of them borders.
-	border := map[int]map[uint8]int{}
-	for i := range g.Tiles {
-		l, of := int(piece[i]), g.Tiles[i].Plate
-		if largest[of] == l {
-			continue
-		}
-		g.eachNear(i, func(j int) {
-			if o := g.Tiles[j].Plate; o != of {
-				if border[l] == nil {
-					border[l] = map[uint8]int{}
+		to := map[int]uint8{}
+		for l, near := range border {
+			best, most := uint8(0), -1
+			for o, n := range near {
+				if n > most || (n == most && o < best) {
+					best, most = o, n
 				}
-				border[l][o]++
 			}
-		})
-	}
-	to := map[int]uint8{}
-	for l, near := range border {
-		best, most := uint8(0), -1
-		for o, n := range near {
-			if n > most || (n == most && o < best) {
-				best, most = o, n
+			to[l] = best
+		}
+		for i := range g.Tiles {
+			if o, ok := to[int(piece[i])]; ok {
+				g.Tiles[i].Plate = o
 			}
 		}
-		to[l] = best
-	}
-	for i := range g.Tiles {
-		if o, ok := to[int(piece[i])]; ok {
-			g.Tiles[i].Plate = o
+		// A map always has a piece that stays, and so a scrap beside one, so
+		// every pass hands out at least one and this ends.
+		if !waiting {
+			return
 		}
 	}
 }
