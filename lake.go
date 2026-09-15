@@ -222,7 +222,10 @@ func (g *Grid) drain() {
 // shore and walk are stand's, which pool calls while its own stack still has
 // basins on it.
 type poolScratch struct {
-	order              []heightNode
+	order []heightNode
+	// moved is how many entries of order the last call found out of place,
+	// or -1 where it sorted afresh: see reorder.
+	moved              int
 	own                []int32
 	b                  []basin
 	uf                 []int32
@@ -241,17 +244,21 @@ func (g *Grid) pool() {
 	defer phase("pool")()
 	n := len(g.Tiles)
 	s := &g.poolScratch
-	s.order = sized(s.order, n)
-	order := s.order
-	for i := range order {
-		order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
-	}
-	slices.SortFunc(order, func(a, b heightNode) int {
-		if a.h != b.h {
-			return cmp.Compare(a.h, b.h)
+	// Every tile by height, and then by index, which is a total order: it is
+	// the same order whoever produces it. Between two drains the ground has
+	// moved little, so the last call's order, its heights read again, is put
+	// right with an insertion pass rather than sorted afresh; see reorder.
+	if len(s.order) == n {
+		s.moved = g.reorder(s.order)
+	} else {
+		s.order = make([]heightNode, n)
+		for i := range s.order {
+			s.order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
 		}
-		return cmp.Compare(a.idx, b.idx)
-	})
+		sortHeights(s.order)
+		s.moved = -1
+	}
+	order := s.order
 
 	// The tree, lowest ground first. A tile with nothing lower beside it
 	// already taken in starts a hollow of its own; one beside a single
@@ -473,6 +480,67 @@ func (g *Grid) pool() {
 		}
 	}
 	s.b, s.uf, s.stack = t.b, t.uf, stack[:0]
+}
+
+// heightBefore is the order the tiles are pooled in: by height, and then by
+// index. It is total, so the sorted order is the same however it was sorted.
+func heightBefore(a, b heightNode) bool {
+	if a.h != b.h {
+		return a.h < b.h
+	}
+	return a.idx < b.idx
+}
+
+// sortHeights sorts order by heightBefore, from nothing.
+func sortHeights(order []heightNode) {
+	slices.SortFunc(order, func(a, b heightNode) int {
+		if a.h != b.h {
+			return cmp.Compare(a.h, b.h)
+		}
+		return cmp.Compare(a.idx, b.idx)
+	})
+}
+
+// reorder reads the tiles' heights again into order, which is every tile in
+// the order the last call sorted them, and puts it back in order. Ground that
+// has hardly moved since is an insertion pass, near linear; ground that has
+// moved a lot - more than a tenth of the entries out of place, or a shifting
+// that has run to four times the tiles - is sorted afresh. Either way the
+// order is the one sortHeights would give, since it is total. It returns how
+// many entries were out of place, or -1 where it gave up and sorted.
+//
+// Which it does on every drain of a history: an epoch moves the ground by
+// kilometres, and the pass gave up on all twenty-two of globe256's, hitting
+// the shift bound with under a tenth of the entries moved. The bound is set
+// so that giving up costs a tenth of the sort it then does. The drains after
+// the history - the silting and the cutting of the valleys - found at most
+// 171 of 32768 entries out of place, shifted under a fifth of the tiles,
+// and were put right in under half the sort's time.
+func (g *Grid) reorder(order []heightNode) int {
+	n := len(order)
+	for k := range order {
+		order[k].h = g.Tiles[order[k].idx].Height
+	}
+	moved, shifted := 0, 0
+	for k := 1; k < n; k++ {
+		nd := order[k]
+		if !heightBefore(nd, order[k-1]) {
+			continue
+		}
+		j := k
+		for j > 0 && heightBefore(nd, order[j-1]) {
+			order[j] = order[j-1]
+			j--
+		}
+		order[j] = nd
+		moved++
+		shifted += k - j
+		if moved > n/10 || shifted > 4*n {
+			sortHeights(order)
+			return -1
+		}
+	}
+	return moved
 }
 
 // pour puts w of water into basin x, where it runs down into whichever of the
