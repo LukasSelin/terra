@@ -6,6 +6,72 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-15 - Precompute in `airEnv.vapour` and `fluvial.solve`
+
+The same idea as the sea-warmth links: take the work that is constant during
+a solve out of the sweep, keep the sweep order, and keep the bits. The world
+digests for valley, glacial valley, ancient and globe128 are identical
+before and after.
+
+**`airEnv.vapour`** already built its upwind links once. What was left per
+visit:
+
+- The rain slope's constant factor `rainScale·rainSteep·toStep·rainMost/rainSteps`:
+  three multiplies and a divide on every visit. It is now computed once per
+  cell as `slope`, in the same order.
+- `math.Max`/`math.Min`: out-of-line assembly calls on amd64 (`archMax`/`archMin`
+  were 3.9 s + 2.1 s flat on the globe). The builtin `max`/`min` have the
+  same NaN and signed-zero rules and compile inline.
+- Locality: each cell's `give`, `lose`, `toStep`, `rainScale`, `slope`, four
+  sources and four shares now sit in one `vapourCell`, so a visit reads one
+  run of memory instead of eight scattered arrays. `zonalCorrection` reads
+  the same cells.
+
+**`fluvial.solve`:**
+
+- Every step of a history has no settling anywhere (deep tiles skip it; see
+  `waterStep`). The per-tile settle sums (`Σ settle·parts`,
+  `Σ settle·(load+supply)`) and the `·(1−settle)` on what is passed on are
+  now skipped when `settles()` finds nothing to settle. Leaving them out
+  gives the same bits for any finite load: +0 times something finite added
+  to +0 is +0, and multiplying by 1 changes nothing.
+- The builtin `max` replaces `math.Max` in `rate`, `below` and `cutAt`.
+- A precomputed `share` array for valleys was tried and dropped. It cost
+  n x 8 bytes per solve and pushed the budget over, while history, the
+  target, doesn't use it.
+
+**CPU, full globe profile** (one run each; wall clock too noisy to read, see
+below):
+
+| function | before (cum) | after (cum) | |
+|---|---|---|---|
+| `airEnv.vapour` | 15.09 s | 9.82 s | -35% |
+| `fluvial.solve` | 10.59 s | 5.06 s | -52% |
+| `airEnv.zonalCorrection` | 1.96 s | 1.05 s | -46% |
+| `math.archMax` + `archMin` | 5.98 s | 3.31 s | the rest is outside these passes |
+
+**World** (old and new binaries interleaved, n=6; quiet run, CIs ±2-6%):
+
+| world | before | after | |
+|---|---|---|---|
+| ancient | 0.467 s ± 6% | 0.468 s ± 4% | ~ |
+| globe256 | 6.61 s ± 2% | 6.24 s ± 2% | **-5.63% (p=0.002)** |
+| globe (2 runs each) | 76.9, 76.4 s | 82.8, 69.9 s | inconclusive |
+
+The globe's two new runs are 13 s apart, so load noise swamps the effect at
+n=2. `fluvial.solve`'s saving is serial and should show up on the clock. It
+needs a quiet count-6 globe run to confirm.
+
+**Memory: the budget was rewritten on purpose.** globe128 came out +1.30%
+bytes against the budget, over the 1% slack. `vapourCell` holds one more
+float per air cell than the arrays it replaced (`slope`), across every
+vapour call of every drain. I judged a divide per visit worth 8 bytes per
+air cell and rewrote `budget.json` with `TERRA_PERF_UPDATE=1`: valley
++0.41%, ancient +0.33%, globe128 +1.30% (this includes the +0.3% from the
+sea links). Allocation counts went down 3-3.5% (fewer separate arrays).
+
+---
+
 ## 2026-09-15 - Jacobi for the sea's warmth: tried, rejected; the equations precomputed instead
 
 The sea-warmth solve in `airEnv.currents` was the largest serial pass left
