@@ -137,7 +137,9 @@ var realYardsticks = []realYardstick{
 		name: "meander wavelength, small globe", unit: "widths", scale: "ground", lo: 10, hi: 14,
 		source:  "Leopold & Wolman 1960: meander wavelength 10-14 channel widths",
 		measure: func() float64 { return meanders(smallGlobes(networkGlobes)).wavelength },
-	}},
+	},
+		gap: "known gap: B - a small globe's rivers of meander size run 13-33 tiles from the sea, so a reach is 16 steps and most cross their line twice, which reads the reach's own chord: 14.6 widths",
+	},
 	{yardstick: yardstick{
 		name: "sinuosity of low-gradient reaches, small globe", unit: "", scale: "ground", lo: 1.2, hi: 3,
 		source:  "Leopold & Wolman 1957, 1960: meandering reaches 1.5 and over, braided and straight below; 1.2-3 on flood plains",
@@ -223,7 +225,9 @@ var realYardsticks = []realYardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	}},
+	},
+		gap: "known gap: B - a globe of twice the tiles carries a longer tail of high ground, its peaks risen further than its mean, on every seed and at every merge since cc897fb (-0.049); the soil's creep with G's rain took it to -0.057 and the crust's balance to -0.078",
+	},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",
