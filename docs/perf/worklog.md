@@ -6,6 +6,132 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Session B: the hydrology, exactly as it was, cheaper
+
+The four items of [briefs/B-hydrology.md](briefs/B-hydrology.md), on branch
+`claude/hydrology-exact`, one commit each. Every one leaves every world
+bit-for-bit as it was: the digest of valley, ancient and globe128
+(`TERRA_DIGEST=check`) matched the base after each item, and
+`TestMakingAWorldDoesNotDependOnTheGoroutines` passed after each. Base:
+main at 1ad4985 with the plan branch merged (51db354).
+
+**Timing was taken under load and gates nothing.** Sessions A and C ran on
+the same desktop all night, at `GOMAXPROCS=8` each. The first globe256
+reading, base then item 1 in two separate count-6 runs, came out +18%
+(p=0.002) for item 1 - and vanished when the binaries were interleaved,
+one run each in turn for six rounds, which is how every table below was
+taken. A sequential A/B under load measures the load's drift, not the
+change. The interleaved table, globe256, n=6 each, all five binaries in
+one session:
+
+| binary | sec/op | vs base | B/op | vs base | allocs/op |
+|---|---|---|---|---|---|
+| base | 8.806 ± 10% | | 2.416 GiB | | 276.3 k |
+| item 1, 4-ary heaps | 8.850 ± 5% | ~ (p=0.699) | 2.354 GiB | -2.58% | 275.2 k |
+| item 2, scratch on the grid | 8.749 ± 7% | ~ (p=0.818) | 2.130 GiB | -11.87% | 272.2 k |
+| item 3, pool repairs its order | 8.724 ± 8% | ~ (p=0.937) | 2.129 GiB | -11.89% | 272.2 k |
+| item 4, solve by outlet tree | 8.607 ± 6% | ~ (p=0.937) | 2.083 GiB | -13.80% | 272.6 k |
+
+Nothing in the clock is significant at these confidence intervals; the
+bytes are exact. A quiet count-6 run in the morning is what will say what
+the items bought on the clock; the budget says what they bought in memory.
+
+**Budget** (`TestWorldCreationBudget`, Workers 4), bytes and allocations,
+rewritten after items 1, 2 and 4 (item 3 left it unchanged):
+
+| world | base | item 1 | item 2 | item 4 (final) | bytes | allocs |
+|---|---|---|---|---|---|---|
+| valley | 25.53 MB, 3124 | 24.61 MB, 2993 | 21.56 MB, 2905 | 21.00 MB, 2910 | **-17.7%** | -6.9% |
+| ancient | 95.03 MB, 13643 | 91.29 MB, 13065 | 72.35 MB, 11814 | 68.79 MB, 11798 | **-27.6%** | -13.5% |
+| globe128 | 651.85 MB, 45640 | 637.00 MB, 44799 | 576.52 MB, 43108 | 564.29 MB, 43255 | **-13.4%** | -5.2% |
+
+### Item 1: a 4-ary heap for the floods and the slides (b40c3e2)
+
+`floodQueue` (lake.go) and `slideQueue` (slide.go) are 4-ary heaps: a pop
+walks half the ladder, and the four children it asks at each rung sit in
+one cache line. Both comparisons are total orders - height, then the push
+sequence or the tile's index - so which entries come out, and in what
+order, does not depend on the heap's shape; `slideAt.less` was checked
+before starting (two entries that compare equal are the same tile at the
+same height, and the second is passed over as stale). Each queue's backing
+slice is kept on the `Grid` (`floodScratch`, `slideScratch`); `fillFrom` in
+shape.go, which floods with a `slideQueue` too, uses the same one. Budget
+-3.6% / -3.9% / -2.3% bytes on valley / ancient / globe128. globe256:
+8.850 s ± 5% against 8.806 ± 10%, ~ (under load); B/op -2.58%.
+
+### Item 2: scratch on the grid (c53ffbc)
+
+Every tile-sized `make` in `pool`, `flow`, `waterStep` (with `receivers`,
+`deepReceivers`, `stackOf`, `fillFrom`, `edgeWork` and `stillWork`) and
+`creep` is a slice kept on the `Grid` - `poolScratch`, `flowScratch`,
+`stepScratch`, `creepScratch`, `fillScratch` - fitted by `sized`, which
+remakes a slice only when its length is not the tile count. Where a pass
+relied on `make` zeroing, it clears first: `gathered`, the flood's
+`stand`/`reached`/`from`, the lakes' pools, the step's `f`, `drop`,
+`settle`, `rock`, `eff`, `abrade`, `stackOf`'s tally, creep's `k` and
+`gives`. `stand`, which `pool` calls while its own stack still has basins
+on it, walks the tree on a slice of its own; the first draft shared it,
+and the digest would have caught that. `Clone` leaves all of it nil.
+Budget -12.4% / -20.8% / -9.5% bytes against item 1. globe256: 8.749 s
+± 7%, ~ (under load); B/op -11.87% against the base.
+
+### Item 3: pool repairs the last drain's order (39c2a0b)
+
+The order is total, so the last call's `order`, its heights read again, is
+put right with an insertion pass, and sorted afresh where more than a tenth
+of the entries are out of place or the shifting has run to four times the
+tiles. **Measured on globe256, 30 pools:** every one of the history's 22
+drains gave up - an epoch moves the ground by kilometres - hitting the
+shift bound with under a tenth of the entries moved, so the bound was set
+where giving up costs about a tenth of the sort it then does (with the
+bound at sixteen times the tiles the aborted pass cost as much as the
+sort). The seven drains after the history found 0, 124, 171, 0, 0, 0 and
+0 of 32768 entries out of place, shifted under a fifth of the tiles, and
+were put right in under half the sort's time. So the item buys a little
+on the drains outside a history and nothing inside one; the brief's
+premise that the ground moves little between drains holds for a
+settlement's decade and the making of a map, not for an epoch. The sort
+itself (3 s of the globe's 100) is what is left; a radix sort on the
+height's bits with the index as tie-break would give the same total order
+and is the next thing to try there. Budget unchanged. globe256: 8.724 s
+± 8%, ~ (under load).
+
+### Item 4: `fluvial.solve` by outlet tree (cfdbc51)
+
+Read `solve` and `account`. A tile's implicit step reads its receiver's new
+height and what its donors passed it, and writes its own height, cut, load
+and rate: nothing in `solve` reads a tile outside its own tree. `forest`
+lays the stack out tree by tree, each tree's tiles in the order the whole
+stack had them - the stack is breadth-first from all roots at once, and
+its restriction to one tree is that tree's own breadth-first order, so
+what arrives at a tile is summed in the order it always was - cuts the
+trees into runs of about 4096 tiles, and deals the runs to `InParallel`;
+each run does all its sweeps on its own. Digest unchanged at Workers 1, 4
+and 24 (a throwaway test, not committed). `account` stays one pass on one
+goroutine, and the comment says why: `lay` puts what a river lays over its
+banks onto ground beside it (`overbank`), which may be in another tree, and
+`exported`, the bays' pools and the surf's sands are sums over the whole
+map in stack order. The solve's `next`, `cut`, `load`, the forest and
+`account`'s load live in a `solveScratch` the step hands the fluvial from
+the grid. Budget -2.9% / -4.9% / -2.1% bytes against item 3; allocations
++0.4% on globe128 for the goroutines dealt. globe256: 8.607 s ± 6% against
+8.806 ± 10%, ~ (under load); B/op -13.80% against the base.
+
+The fifth item, `fillFrom` as a bucketed flood, was not started.
+
+### What needs attention next
+
+- A quiet count-6 run of globe256 and a count-3 globe, to read what items
+  1-4 bought on the clock; the tables above only show they cost nothing
+  measurable under load.
+- `wear` still makes `change`, `gained` and `lost` afresh each age, and
+  `solve`'s forest is rebuilt every step though the receivers change only
+  with the ground; both are easy scratch.
+- `pool`'s sort on a history's drains: a radix sort by the height's bits
+  (with -0 folded to +0, so the order is exactly `heightBefore`'s).
+
+---
+
 ## 2026-09-16 - The clock by pass, committed; the night's timings were taken under load
 
 **Branch:** `claude/perf-instrument` from main 1ad4985, plus
