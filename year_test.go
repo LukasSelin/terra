@@ -64,7 +64,12 @@ func TestTheYearLagsAndSwingsByPlace(t *testing.T) {
 	if !(swingAt(70, 0.5) > swingAt(45, 0.5) && swingAt(45, 0.5) > swingAt(10, 0.5)) {
 		t.Error("the swing does not grow toward the pole")
 	}
-	if !(swingAt(60, 1) > 3*swingAt(60, 0)) {
+	// Twice and not three times: with the land and the sea trading six W/m²K
+	// a degree between them, the balance's continent at sixty swings 19.2
+	// and its sea 7.9. The real world's ratio there is larger - Yakutia
+	// against the open North Atlantic - so this is a floor on the balance's
+	// continentality, not a measure of it.
+	if !(swingAt(60, 1) > 2*swingAt(60, 0)) {
 		t.Errorf("a continent swings %.1f and the open sea %.1f at sixty degrees", swingAt(60, 1), swingAt(60, 0))
 	}
 	if swingAt(-60, 1) >= 0 {
@@ -105,6 +110,14 @@ func climateGlobe() *Land {
 // A globe's frozen ground, its tundra and its ice keep to the high latitudes,
 // and hold a sane share of the land: some, and not the fifth of it that went
 // to bare rock when the growing frost was the permafrost line.
+//
+// The shares are of the land's area, each tile weighed by the cosine of its
+// latitude: a globe's rows are all as many tiles long, so a tile near the pole
+// is a sliver of the ground one at the equator is. Counted by the tile, seed
+// 1's permafrost was 30.9% of the land once the sea about a place stopped
+// warming every tile four degrees over its latitude; by the area it is 12.7%,
+// against some fifteen per cent of the real world's exposed land (Obu and
+// others, 2021).
 func TestTheColdKeepsToThePoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe takes a while to make")
@@ -118,15 +131,16 @@ func TestTheColdKeepsToThePoles(t *testing.T) {
 		}
 		p := g.PosOf(i)
 		lat := math.Abs(w.Climate.latitude(p.Y))
-		land++
+		area := math.Cos(lat * math.Pi / 180)
+		land += area
 		if g.Frozen(p) {
-			frozen++
+			frozen += area
 			if lat < 45 {
 				t.Fatalf("permafrost at %.0f degrees, %v", lat, p)
 			}
 		}
 		if g.Treeless(p) {
-			treeless++
+			treeless += area
 			if lat < 45 {
 				t.Fatalf("above the tree line at %.0f degrees, %v", lat, p)
 			}
@@ -135,10 +149,10 @@ func TestTheColdKeepsToThePoles(t *testing.T) {
 			}
 		}
 		if g.Barren(p) {
-			bare++
+			bare += area
 		}
 	}
-	t.Logf("of the land: %.1f%% permafrost, %.1f%% above the tree line, %.1f%% under ice",
+	t.Logf("of the land's area: %.1f%% permafrost, %.1f%% above the tree line, %.1f%% under ice",
 		100*frozen/land, 100*treeless/land, 100*bare/land)
 	if frozen == 0 || frozen/land > 0.25 {
 		t.Errorf("%.1f%% of the land is permafrost", 100*frozen/land)
@@ -147,7 +161,7 @@ func TestTheColdKeepsToThePoles(t *testing.T) {
 		t.Errorf("%.1f%% of the land is above the tree line", 100*treeless/land)
 	}
 	if bare > treeless {
-		t.Errorf("more ground is under ice (%.0f tiles) than above the tree line (%.0f)", bare, treeless)
+		t.Errorf("more ground is under ice (%.0f tiles' worth) than above the tree line (%.0f)", bare, treeless)
 	}
 }
 

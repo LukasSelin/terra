@@ -135,17 +135,28 @@ func (w *Land) Generate(cfg Terms) {
 	sea := g.seaNear(g.Span() / maritimeSpan)
 	g.warm, g.swing = make([]float32, len(g.Tiles)), make([]float32, len(g.Tiles))
 	g.EachRow(func(y int) {
+		// The sea about a place is read against the sea about its row: the
+		// latitude's mean is the energy balance's, which is the land's and the
+		// sea's together already, so more sea than the row has is a warmer
+		// year and less a colder one, and the row as a whole keeps its mean.
+		// Read as a warming of every tile by all the sea about it, every
+		// globe's ground stood some four degrees over its latitude, which
+		// pushed the subtropics' winters over eighteen and their dry line
+		// eighty millimetres up. A current is warm or cold the year round.
+		var row float64
 		for i := y * width; i < (y+1)*width; i++ {
-			// The sea's moderation is a milder winter and not a warmer summer:
-			// what it adds to the mean it takes off the swing, so the warmest
-			// month is where the latitude and the land put it and only the
-			// coldest is raised. A current is warm or cold the year round.
-			m := maritime(sea[i])
+			row += sea[i]
+		}
+		row /= float64(width)
+		for i := y * width; i < (y+1)*width; i++ {
+			m := maritime(sea[i] - row)
 			g.warm[i] = float32(w.Climate.seaMeanAt(y, m+g.CoastWarmth(i)))
 			g.swing[i] = Swing
 			if w.Climate.globe {
-				s := swingAt(w.Climate.latitude(y), g.contAt(i))
-				g.swing[i] = float32(math.Copysign(math.Max(0, math.Abs(s)-m), s))
+				// The sea's moderation of the swing is swingAt's, off the land
+				// round about; taking the maritime share off it as well counted
+				// the same sea twice.
+				g.swing[i] = float32(swingAt(w.Climate.latitude(y), g.contAt(i)))
 			}
 		}
 	})

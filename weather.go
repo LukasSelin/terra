@@ -592,7 +592,7 @@ func annualRain(b [phases]vapourOut, i int) float64 {
 // near or far from, whose year is a temperate latitude's.
 func (g *Grid) rangeCont(i int) float64 {
 	if !g.Wrap {
-		return contMiddling
+		return contValley
 	}
 	return g.contAt(i)
 }
@@ -600,7 +600,7 @@ func (g *Grid) rangeCont(i int) float64 {
 // cellCont is rangeCont for air cell i.
 func cellCont(e *airEnv, i int) float64 {
 	if !e.wrap {
-		return contMiddling
+		return contValley
 	}
 	return e.cont[i]
 }
