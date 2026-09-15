@@ -92,6 +92,36 @@ Globe, `-benchtime 1x -count 3`: 124.0 / 108.4 / 109.3 s base against
 15.40 GiB and 933 k to 685 k allocs. The bytes and allocs are exact; the
 seconds are the quiet-machine job of `scripts/perf.sh check` in the morning.
 
+**After the rebase onto main at 59cdb90.** Main moved under the branch
+overnight: the deep sea floor laid from the crust's age and the land shaped
+to the history's uplift (124d5a1), each rock's chemistry (c4b7b3a), the
+meander marker taken off (6d3a069) and the concavity marker put back
+(59cdb90). Since 124d5a1 the rain reads its height off `laidHeight`, so
+`airedGround` and `weatherStale` now read the same (14cc3f6): the deep
+floor is always under the sea and kept as -1 either way, so no world moves
+by it. Digest and budget were rewritten again (d9cb769): ancient and
+globe128 move with the deep floor, the drawn valley does not. Skip counts
+on the rebased branch: valley 1 of 6 rebuilt, ancient 19 of 24, globe256
+20 of 30, globe 20 of 30 (10 skipped, one fewer than on ec23816).
+
+Full suite on main itself (59cdb90, in a second checkout, 1357 s) and on
+the rebased branch (1181 s), both under load:
+
+| test | main 59cdb90 | branch |
+|---|---|---|
+| `TestTheTideLaysFlatsOnlyWhereItReaches` | fails: small globe 4 has no flats | fails the same |
+| `TestRealNumbers/drainage_area_exceedance_exponent,_small_globe` | fails, 0.4927 against 0.39-0.46 | fails, 0.4894 |
+| `TestRealNumbers/discharge_exceedance_exponent,_small_globe` | fails, 0.5164 against 0.40-0.46 | fails, 0.4912 |
+| `TestRealNumbers/Hack_exponent,_globe` | passes now | passes |
+| `TestTheRealWorld/valley_floor_over_hillslope_soil_depth,_small_globe` | passes on its marker (I, 2.96x) | 3.08x, inside 3-50: "the gap has closed" |
+
+The one difference is the soil-floor marker, as before the rebase, one
+notch further inside its range. The tide flats and the two exceedance
+exponents are main's own failures; the exceedance readings, one basin per
+globe over 16 globes (standard error about 0.034), moved toward their range
+under the gate and are not the branch's to judge either way. The meander
+marker is no longer a difference because main took it off.
+
 ---
 
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
