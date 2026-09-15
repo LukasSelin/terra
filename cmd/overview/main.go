@@ -284,8 +284,9 @@ func measure(land *terra.Land) summary {
 const waterfallDrop = 2.0
 
 // riverFlow is how much water, in cubic metres a second, a channel has to
-// carry to be drawn as running water rather than standing.
-const riverFlow = 1.0
+// carry to be drawn as running water rather than standing: a fifth of a litre
+// a second, a runnel and not a seep.
+const riverFlow = 2e-4
 
 func shareOf(name string, c, of int, col string) share {
 	return share{Name: name, Count: c, Pct: 100 * float64(c) / float64(max(of, 1)), Color: col}

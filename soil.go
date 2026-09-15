@@ -182,9 +182,9 @@ func (g *Grid) soilDepthOf(i int) float64 {
 		}
 		round += near * (g.At(q).Height - t.Height)
 	}
-	water := Erodibility * math.Sqrt(t.Flow) * hold(t) * g.Slope(p) / ageYears
+	water := Erodibility * math.Sqrt(t.Flow) * hold(t) * g.Slope(p)
 	// Creep at a metre of soil per metre of soil, and in from the hollow.
-	creepy := Creep / 8 * hold(t) / SoilScale / ageYears
+	creepy := g.creepShare(1) / 8 * hold(t) / SoilScale
 	taken := func(h float64) float64 {
 		return water - creepy*math.Min(h, soilActive)*round
 	}
@@ -212,6 +212,3 @@ func (g *Grid) laySoil() {
 		}
 	})
 }
-
-// ageYears is how many years an age of weather is: a decade. See Erode.
-const ageYears = 10.0

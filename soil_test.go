@@ -103,7 +103,7 @@ func ridge(soil float32) *Grid {
 // Hilley 2015).
 func TestACrestIsAsRoundAsItsLoweringOverItsDiffusivity(t *testing.T) {
 	const lift = 2e-6 // m/yr: a crest gentle enough that its flanks creep near linearly
-	const by = 1000.0 // ages a step: the creep is taken implicitly
+	const years = 1000 * ageYears // a step: the creep is taken implicitly
 	crest := func(soil float32) float64 {
 		g := ridge(soil)
 		n := len(g.Tiles)
@@ -111,20 +111,20 @@ func TestACrestIsAsRoundAsItsLoweringOverItsDiffusivity(t *testing.T) {
 			change := make([]float64, n)
 			gained := make([][Grains]float64, n)
 			lost := make([]float64, n)
-			g.creep(by, change, gained, lost)
+			g.creep(years, change, gained, lost)
 			for i := range g.Tiles {
 				if y := i / g.W; y == 0 || y == g.H-1 {
 					continue // the feet, which the rivers at them hold where they are
 				}
-				g.Tiles[i].Height += change[i] + lift*by*ageYears
+				g.Tiles[i].Height += change[i] + lift*years
 			}
 		}
 		top := g.H / 2 * g.W
 		above, below := g.Tiles[top-g.W].Height, g.Tiles[top+g.W].Height
 		return (above - 2*g.Tiles[top].Height + below) / (TileSpan * TileSpan)
 	}
-	// D over a year at SoilScale of soil: see Creep.
-	d := Creep / 4 * TileSpan * TileSpan * Grass.Hold() / ageYears
+	// D at SoilScale of soil: see Diffusivity.
+	d := Diffusivity * Grass.Hold()
 	want := -lift / d
 	if got := crest(SoilScale); math.Abs(got-want) > 0.03*math.Abs(want) {
 		t.Errorf("under %.1f m of soil the crest is curved %.3g a metre; lowering over diffusivity says %.3g", SoilScale, got, want)

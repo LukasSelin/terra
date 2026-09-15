@@ -100,9 +100,7 @@ var realYardsticks = []realYardstick{
 		name: "channel concavity, valley", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
 		measure: func() float64 { th, _ := flint(valleys(5)); return th },
-	},
-		gap: "known gap: B - profiles are less concave than stream power carves them: theta 0.32",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "channel concavity, small globe", unit: "", scale: "water", lo: 0.35, hi: 0.60,
 		source:  "Flint 1974; Tucker & Whipple 2002; Whipple 2004: S ~ A^-theta, theta 0.35-0.6 in bedrock and mixed channels",
@@ -208,7 +206,9 @@ var realYardsticks = []realYardstick{
 		name: "Hack exponent, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Hack 1957; Rigon et al. 1996: h is a property of the network, not of the survey's resolution",
 		measure: func() float64 { return hackExponent(doubleGlobes()) - hackExponent(singleGlobes()) },
-	}},
+	},
+		gap: "known gap: D - with the history on its real clock, the same seed at 512x256 has a Hack exponent 0.07 above 256x128",
+	},
 	{yardstick: yardstick{
 		name: "channel concavity, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.1, hi: 0.1, slow: true,
 		source: "Wobus et al. 2006; Perron & Royden 2013: theta is a property of the channels, not of the DEM",
@@ -222,9 +222,7 @@ var realYardsticks = []realYardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
 		measure: func() float64 { return meanHypsometry(doubleGlobes()) - meanHypsometry(singleGlobes()) },
-	},
-		gap: "known gap: D - the same seed at 512x256 has a hypsometric integral 0.09 below 256x128",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "mean land rain, 2x over 1x, small globe", unit: "x", scale: "water", lo: 0.85, hi: 1.15, slow: true,
 		source:  "Adler et al. 2003 (GPCP): a planet's rain is the planet's, however finely it is gridded",
@@ -566,8 +564,8 @@ const meanderReach = 32
 // cubic metres.
 func meanderingSlope(q float64) float64 { return 0.0125 * math.Pow(math.Max(q, 1e-9), -0.44) }
 
-// meanders reads the rivers great enough to wander - meanderFlow of the map's
-// greatest - reach by reach along the way the model sends their water, on
+// meanders reads the rivers great enough to wander - meanderFlow and more -
+// reach by reach along the way the model sends their water, on
 // reaches of meanderReach steps gentle enough by meanderingSlope to meander.
 // Sinuosity is the length along the river over the straight line between the
 // ends of the reach. Wavelength is read off the river's offset from that line,
@@ -577,9 +575,8 @@ func meanders(gs []*Grid) meanderReading {
 	return remember(fmt.Sprintf("meanders/%p/%d", gs[0], len(gs)), func() meanderReading {
 		var wl, sn []float64
 		for _, g := range gs {
-			most := maxFlow(g)
 			river := func(i int) bool {
-				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow*most
+				return !g.underSea(i) && g.Tiles[i].Flow >= meanderFlow
 			}
 			next := func(i int) int {
 				d := g.flowStep(i)

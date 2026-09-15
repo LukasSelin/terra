@@ -211,6 +211,10 @@ type Grid struct {
 	// while it runs, and below zero on a map with neither. See weather.go.
 	base float64
 
+	// deep is how wide, in metres, a tile is read as while a history runs,
+	// and nothing otherwise: see span and deepSpan.
+	deep float64
+
 	// tide is the day's sea the map is read against: see tide.go. tidal is,
 	// for each tile, how many times the open ocean's tide it has, and ebb, on
 	// a flat, how far under mean sea it lies in those tides. Both are laid

@@ -23,11 +23,6 @@ import (
 // and call the tiles that carry enough of it a river. Fertility, woods and
 // outcrops then read off the finished land instead of being scattered over it.
 
-// TileSpan is how wide a tile is on the ground, in metres. It is what turns a
-// difference in height into a slope, and so the only reason heights and
-// distances can be spoken of in the same breath.
-const TileSpan = 25.0
-
 // Relief is the fall of the lowland in metres, from the lowest ground a map
 // can have to the shoulders of the valley: sixty metres over eighty tiles is
 // a river valley with sides to it, enough that walking uphill is felt and
@@ -394,7 +389,7 @@ func (g *Grid) Slope(p geom.Pos) float64 {
 		if !g.In(q) {
 			continue
 		}
-		run := TileSpan
+		run := g.span()
 		if off.X != 0 && off.Y != 0 {
 			run *= math.Sqrt2
 		}
@@ -668,7 +663,7 @@ func (w *Land) lattice(g *Grid, span float64) []float64 {
 func smooth(t float64) float64 { return t * t * (3 - 2*t) }
 
 // Incise is how far the water has cut into the ground it has been running
-// over, in metres, along the largest river a map has. It is what makes a
+// over, in metres, along a great river: see greatFlow. It is what makes a
 // valley a valley rather than a dip: raised and left alone, a river lies on
 // the surface of the country like a line drawn on it, and the ground falls
 // away from the water at a slope nobody can see. Cut down, the river sits at
@@ -719,13 +714,6 @@ const Incise = 12.0
 // standing straight up out of the flood plain, and the map got steeper
 // everywhere without looking like anything.
 func (g *Grid) incise() {
-	most := 0.0
-	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
-	}
-	if most <= 0 {
-		return
-	}
 	cut := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		if g.standing(i) {
@@ -733,9 +721,9 @@ func (g *Grid) incise() {
 		}
 		// Charged by the water, and paid by the rock: the same river cuts a
 		// gorge through shale and is turned aside by granite.
-		cut[i] = Incise * math.Sqrt(g.Tiles[i].Flow/most) / g.Tiles[i].Hard()
+		cut[i] = Incise * math.Sqrt(greatShare(g.Tiles[i].Flow)) / g.Tiles[i].Hard()
 	}
-	for pass := 0; pass < valleyWidth; pass++ {
+	for pass := 0; pass < int(math.Round(tilesAcross(valleyWidth, TileSpan))); pass++ {
 		cut = g.spread(cut)
 	}
 	for i := range g.Tiles {
@@ -743,10 +731,11 @@ func (g *Grid) incise() {
 	}
 }
 
-// valleyWidth is how far the cut is carried out from the channel, in passes
-// of the blur below and so roughly in tiles. Three is a valley a few hundred
-// metres across, with sides that can be walked up.
-const valleyWidth = 3
+// valleyWidth is how far the cut is carried out from the channel, in metres:
+// a pass of the blur below for every tile of it. Seventy-five metres either
+// side is a valley a few hundred metres across, with sides that can be walked
+// up.
+const valleyWidth = 75 * metre
 
 // spread is one pass of a blur: every tile becomes the mean of itself and the
 // eight around it, with the edge of the map reflecting rather than pulling
@@ -820,7 +809,7 @@ func (g *Grid) outlet(x, y int) bool {
 // diagonal steps filled in as well - see carve.
 const spreadUntil = 64.0
 
-// crowdSpace is how near, in tiles, a small stream may start to another
+// crowdSpace is how near, in metres, a small stream may start to another
 // channel it does not join, and crowdUntil is how much ground's rain, in
 // tiles, makes a stream no longer small.
 //
@@ -838,7 +827,7 @@ const spreadUntil = 64.0
 // tiles with an unjoined channel within three tiles went from 41 and 34 per
 // cent of the river to 17 and 16.
 const (
-	crowdSpace = 3
+	crowdSpace = 75 * metre
 	crowdUntil = 256.0
 )
 
@@ -861,10 +850,14 @@ const (
 // valley, with the threshold set to give eight tiles in a hundred of it river,
 // half the rain gave none at all.
 //
-// The figure is not a flume's. The fall is read over a tile and the water off
-// HydroSpan of catchment - see weather.go - so what it is tuned to is the map
-// and not a stream bed. Over the first five seeds of the valley, and three
-// small globes, at a head of eight:
+// The figures in the tables below were read with the water off twelve hundred
+// metres of catchment a tile, 2304 times the tile's own ground - see
+// weather.go - and the power goes as the water, so each is 2304 times the
+// power the same rivers spend at their real discharge. That real figure,
+// under a watt on a metre of bed, is a litre a second falling one in ten: the
+// order of the mean flow off the few thousand square metres a channel head in
+// soil-mantled country drains (Montgomery and Dietrich 1988, 1992). Over the
+// first five seeds of the valley, and three small globes, at a head of eight:
 //
 //	power    valley river   upland share   half the rain   twice   small globe
 //	  700       13.1%          17.2%           4.1%        22.6%      3.1%
@@ -899,7 +892,7 @@ const (
 // spread over a hillside rarely gathers from that many before it reaches the
 // foot.
 const (
-	channelPower = 2100.0
+	channelPower = 2100.0 / 2304 // watts a metre
 	channelHead  = 8.0
 )
 
@@ -1023,7 +1016,8 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	// crowded says whether a small stream starting at i would run beside a
 	// channel it does not join: see crowdSpace.
 	crowdFlow := crowdUntil
-	reach := crowdSpace * 3
+	space := int(math.Round(tilesAcross(crowdSpace, TileSpan)))
+	reach := space * 3
 	path := make([]int32, 0, reach+1)
 	on := func(j int32) bool { return slices.Contains(path, j) }
 	crowded := func(i int32) bool {
@@ -1035,8 +1029,8 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			path = append(path, j)
 		}
 		p := g.PosOf(int(i))
-		for dy := -crowdSpace; dy <= crowdSpace; dy++ {
-			for dx := -crowdSpace; dx <= crowdSpace; dx++ {
+		for dy := -space; dy <= space; dy++ {
+			for dx := -space; dx <= space; dx++ {
 				q := geom.Pos{X: p.X + dx, Y: p.Y + dy}
 				if !g.In(q) {
 					continue

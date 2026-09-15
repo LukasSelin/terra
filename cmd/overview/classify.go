@@ -511,8 +511,8 @@ func biome(k string, byRiver bool) uint8 {
 }
 
 // floodReach is how many tiles out a river floods for each root of a cubic
-// metre a second it carries: four spreads one tile, a hundred and fifty six.
-const floodReach = 2.0
+// metre a second it carries: under two litres a second spreads one tile.
+const floodReach = 2.0 / 48
 
 // floodOut marks the ground within r tiles of p as in reach of its river.
 func floodOut(g *terra.Grid, flood []bool, p geom.Pos, r int) {

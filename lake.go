@@ -202,7 +202,7 @@ func (t *basins) full(x int32) bool {
 // as it now is: the lakes, the salt flats, which way each tile's water leaves,
 // and how much of the map's water passes through each tile, as Flow.
 //
-// What each tile starts with is its own runoff, off HydroSpan of catchment -
+// What each tile starts with is its own runoff, off the ground the tile is -
 // see weather.go - and alongside the water it counts the ground: area is how
 // many tiles drain through each one, which is what the guards against the
 // grid's own patterns are read in. See spreadUntil.
@@ -738,7 +738,7 @@ func (g *Grid) flow() {
 	if len(g.area) != n {
 		g.area = make([]float64, n)
 	}
-	perMM := HydroSpan * HydroSpan / 1000 / secondsPerYear
+	perMM := discharge(1, g.span())
 	water := 0.0
 	for i := range g.Tiles {
 		g.Tiles[i].Flow, g.area[i] = 0, 0

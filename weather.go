@@ -15,22 +15,31 @@ import "math"
 // rivers carry, in real quantities, so a wet country and a dry one have
 // different rivers and not just different colours.
 //
-// The scale of it is a fiction and worth being plain about. A tile is
+// The scale of the air is a fiction and worth being plain about. A tile is
 // TileSpan across for everything that is walked or ploughed, and a globe of a
 // thousand of them is twenty-five kilometres round - a size at which there are
-// no trade winds and no rain belts, and at which the greatest river the rain
-// could make would be a brook. So the air reads the map as a planet: a globe's
-// rows are latitudes, from pole to pole, and a row is as long as that parallel
-// is. And a tile's rain is the rain of HydroSpan of catchment rather than of
-// the tile, which is what lets a globe's trunk rivers carry what trunk rivers
-// carry. The ground keeps its own scale; the air and the water keep theirs.
+// no trade winds and no rain belts. So the air reads the map as a planet: a
+// globe's rows are latitudes, from pole to pole, and a row is as long as that
+// parallel is; and a valley's rows are airSpan apart, so that its ranges lift
+// the wind over kilometres and not over the few hundred metres they really
+// stand across. What falls is a depth of water a year, which does not care how
+// wide the tile is, so the fiction stays in the air.
+//
+// It used to reach the water too. A tile's runoff was counted off HydroSpan,
+// twelve hundred metres, of catchment - 2304 times its own ground - so that a
+// globe's trunk rivers would carry what trunk rivers carry. That made every
+// figure read off a river a figure about the fiction: the erodibility, the
+// power a bed is cut at and the flow a load settles out of were all fitted to
+// discharges no ground this size can shed. The water now runs off the ground
+// the tile is, and those figures are what the same rivers need at their real
+// size: see Erodibility, channelPower and settleFlow. A valley's greatest
+// river is a brook of ten or twenty litres a second, which is what two
+// kilometres of country makes of a metre of rain.
 
-// HydroSpan is how far across, in metres, the ground is whose rain one tile
-// gathers. See the remark on scale above.
-const HydroSpan = 1200.0
-
-// secondsPerYear turns a year's water into a flow.
-const secondsPerYear = 365.25 * 24 * 3600
+// airSpan is how far apart, in metres, a valley's air reads its tiles as
+// standing: see the remark on scale above. A globe's air reads them off the
+// planet instead.
+const airSpan = 1200.0
 
 // Air is what the weather of a map is, row by row: the parts of the climate
 // that do not change from one day to the next and that the water is read off.
@@ -69,13 +78,13 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 		dx: make([]float64, g.H), pet: make([][]float64, g.H),
 		wetness: wetness,
 	}
-	a.dy = HydroSpan / 1000
+	a.dy = airSpan / km
 	if c.globe {
 		a.dy = 20015 / float64(g.H)
 	}
 	for y := 0; y < g.H; y++ {
 		lat, mean := Temperate, MeanTemp
-		dx := HydroSpan / 1000
+		dx := airSpan / km
 		if c.globe {
 			lat, mean = c.latitude(y), c.MeanAt(y)
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
