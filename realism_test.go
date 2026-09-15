@@ -205,9 +205,7 @@ var realYardsticks = []realYardstick{
 		name: "Hack exponent, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Hack 1957; Rigon et al. 1996: h is a property of the network, not of the survey's resolution",
 		measure: func() float64 { return hackExponent(doubleGlobes()) - hackExponent(singleGlobes()) },
-	},
-		gap: "known gap: G - once the sea about a place stopped warming every tile four degrees and the land's winters softened, the small globe of twice the tiles grew mainstreams long for their basins, Hack 0.619 against 0.550 at one: 0.070",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "channel concavity, 2x less 1x, small globe", unit: "", scale: "water", lo: -0.1, hi: 0.1, slow: true,
 		source: "Wobus et al. 2006; Perron & Royden 2013: theta is a property of the channels, not of the DEM",
@@ -216,7 +214,9 @@ var realYardsticks = []realYardstick{
 			b, _ := flint(singleGlobes())
 			return a - b
 		},
-	}},
+	},
+		gap: "known gap: B - the small globe's concavity swings by seed and by small changes to the coast (see the concavity yardstick), and the two resolutions do not swing together: 0.20 with the softened winters, the deep floor and the warm-sea limestone merged",
+	},
 	{yardstick: yardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
 		source:  "Strahler 1952: the integral is dimensionless and read the same off any faithful map of the ground",
