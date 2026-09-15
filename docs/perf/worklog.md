@@ -570,3 +570,19 @@ Smaller observations:
 - Pick item 1 or 2, change it, and record `globe256` count 6 benchstat
   against [baseline/2026-09-15-2230-small.txt](baseline/2026-09-15-2230-small.txt), plus
   the globe count 3, plus whether the realism/climate tests still pass.
+
+## 2026-09-16: the softened winters move the heap, not the code
+
+Merging `claude/amazing-tesla-0fc728` (the sea about a place read against its
+row, and a stronger land-sea exchange on globes) failed
+`TestWorldCreationBudget`: `globe128` at +3.26% bytes and +4.52% allocations.
+
+It is the world and not a new pass. Taking the valley's second energy-balance
+solve out changed the count by 25 allocations of the 1567, and the time came
+out 14% *faster* in the same run. Softer winters leave more water on the
+ground, so a globe carries more lakes and channels to allocate for.
+
+The budget was rewritten at the user's call: `globe128` 525.3 MB in 36198
+allocations, against 508.7 MB in 34646. `valley` moved 0.03%, which is the
+run-to-run noise the README quotes; it reads its day's range at `contValley`
+and is otherwise untouched.
