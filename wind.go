@@ -198,6 +198,9 @@ type Winds struct {
 	// u is the wind toward the east and v toward the north, in metres a
 	// second; p is the pressure at sea level in hPa.
 	u, v, p [phases][]float32
+	// budget is the water in the air in each phase, as the rain was last
+	// worked out over the wind: see vapour.go.
+	budget [phases]vapourOut
 }
 
 // airEnv is the ground as the air reads it: the lattice of air cells and

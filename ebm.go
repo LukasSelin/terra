@@ -227,6 +227,7 @@ func moistEnergy(temp float64) float64 {
 // the mean pressure at sea level, kg/kg: Bolton's (1980) form of the
 // Clausius-Clapeyron relation for the vapour pressure.
 func saturation(temp float64) float64 {
+	temp = math.Max(temp, coldest)
 	e := 6.112 * math.Exp(17.67*temp/(temp+243.5))
 	return 0.622 * e / (beltMean - 0.378*e)
 }

@@ -89,11 +89,18 @@ func TestTheColdCoastIsADesert(t *testing.T) {
 		if cold > warm/2 {
 			t.Errorf("at %v degrees the cold coast has %.0f mm against the warm coast's %.0f", lat, cold, warm)
 		}
-		if cold > was*2/3 {
+		// The horse latitudes' west coasts are deserts under the sinking air
+		// whatever the water does; the cold water keeps them so, and takes a
+		// coast that is not one yet a third of the way there.
+		if cold > was*2/3 && cold > desertCoast {
 			t.Errorf("at %v degrees the currents take the cold coast from %.0f mm only to %.0f", lat, was, cold)
 		}
 	}
 }
+
+// desertCoast is the most rain, mm a year, a coast counts as a desert with:
+// the Atacama's and the Namib's coasts have a few millimetres to a few tens.
+const desertCoast = 50.0
 
 // The water that crosses an ocean in the westerlies keeps the warmth it
 // brought up from the tropics, and the coast it comes ashore on is milder

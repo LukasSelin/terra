@@ -9,7 +9,7 @@ import "math"
 // on the highest ground as on the lowest, shared out so that it added to one
 // - which gave every map the same climate and made every river a share of a
 // whole rather than an amount of water. Here it is carried: the wind brings
-// moisture off the sea, the ground it crosses wrings some of it out on the way
+// water off the sea, the ground it crosses wrings some of it out on the way
 // up, what is left over the top is dry, and the warmth of a place decides how
 // much of what fell goes straight back into the air. What runs off is what the
 // rivers carry, in real quantities, so a wet country and a dry one have
@@ -49,9 +49,8 @@ type Air struct {
 	mean []float64 // the year's mean temperature at the foot of the map
 	dx   []float64 // kilometres of the planet one tile is, along the row
 	dy   float64   // and across the rows
-	// wetness is what the rain of every belt is multiplied by; the belts
-	// themselves move with the year, so they are read where they stand on the
-	// day rather than kept here. See beltRain and weather.
+	// wetness is what the rain the air's budget gives is multiplied by. See
+	// weather.
 	wetness float64
 	// pet is how much water the air could take up in a year, in mm, on each
 	// row at each whole degree of the year's mean from petLo up: see petOf.
@@ -100,79 +99,18 @@ func defaultAir(g *Grid) *Air {
 	return Climate{rows: g.H}.airFor(g, 1)
 }
 
-// beltRain is how much rain falls on low ground by the sea at a latitude, in
-// mm a year. Air rises at the equator and at the polar front and rains as it
-// goes; it sinks at thirty degrees, which is where the world's deserts are, and
-// over the poles, which are deserts too. The figures are the zonal means of
-// the real world near its coasts: some two and a half metres under the
-// equator, a few hundred millimetres in the horse latitudes, a metre in the
-// westerlies, and little at the poles.
-func beltRain(lat float64) float64 {
-	l := math.Abs(lat)
-	c := math.Cos(lat * math.Pi / 180)
-	return 150 + 2300*math.Exp(-(l/10)*(l/10)) + 900*math.Exp(-((l-50)/14)*((l-50)/14)) + 250*c*c
-}
-
-// How the air carries its water over the land. Each of these is a length on
-// the planet in kilometres, or a height in metres.
-const (
-	// seaReach is how far over open water the air goes to take up its fill.
-	seaReach = 800.0
-	// landReach is how far inland the air goes before what it carries is
-	// what the continent itself sends back up, rather than what came off the
-	// sea: the air deep inside a continent is not dry, but it is not maritime.
-	landReach = 2000.0
-	// inlandShare is how much of the sea's moisture that is: the rain deep in a
-	// continent against the rain on its coast. At this, a globe's equatorial
-	// land comes out at some 1450 mm a year and its westerlies at 760, against
-	// the real world's two metres and some seven hundred millimetres.
-	inlandShare = 0.65
-	// smoothReach is how far, in every direction, the ground is averaged before
-	// the air is asked how much it has risen. Air rises over a range and not
-	// over every bump in it; read tile by tile, a valley's upland would be
-	// wrung out by its own roughness.
-	smoothReach = 25.0
-	// wringHeight is how far the air rises to give up all but a part in e of
-	// what it carries. The real figure is about two kilometres - the scale
-	// height of water vapour - and it is shortened here because the mountains
-	// on these maps stand well under a kilometre.
-	wringHeight = 1500.0
-	// wringReach is how much of what the rising air gives up falls on the
-	// slope that lifted it, written as the length of country whose rain that
-	// is: the moisture the wind carries over a ridge, as rain spread over so
-	// many kilometres of coast. Most of what a real column condenses is carried
-	// on and falls or evaporates beyond, which is why it is not the whole flux.
-	//
-	// Measured on a ridge standing across a flat valley under the westerlies,
-	// against the plain upwind of it, with wringHeight at 1500:
-	//
-	//	ridge    plain   windward face   lee face
-	//	100 m    1063       1180          1023
-	//	300 m    1128       1472          1015
-	//	800 m    1292       2080          1004
-	//
-	// A third less and the three hundred metre ridge's windward face gets 1.2
-	// times its lee's rain, which is no shadow anybody would notice; a third
-	// more and the valley's own upland takes a metre and a half a year. The
-	// westerlies of this valley blow toward the north-east and not due east,
-	// so its lee is drier than these figures for a ridge standing square
-	// across them: the shadow follows the wind. See TestARangeAtAnAngle.
-	wringReach = 400.0
-)
-
 // weather reads the air over the map as it now lies: how much rain each tile
 // has in a year, and how much of it runs off. It is read afresh whenever the
 // drainage is, because the ground the air crosses is part of what it does.
 //
 // The wind is worked out first, for each phase of the year - see wind.go -
-// and the water is carried along it. The air over the sea takes up its fill,
-// the air over land trades the sea's moisture for the continent's own, and
-// air made to rise over the ground wrings itself out: all of that on the air
-// cells, where what the air carries over a cell is what it carried over the
-// cells upwind of it. Then each tile's rain is read off the air over it, with
-// what its own slope wrings out of the wind added, and the year's rain is the
-// four phases' taken together: a monsoon coast is wet for the summer's
-// onshore wind whatever the winter's offshore one does.
+// and the water is carried along it as a budget on the air cells: taken up
+// off the sea and the land, rained out as the column nears saturation and
+// where the air gathers, and wrung out by the ground (vapour.go and
+// orographic.go). Then each tile's rain is the column's over it and what its
+// own ground wrings out, and the year's rain is the four phases' taken
+// together: a monsoon coast is wet for the summer's onshore wind whatever the
+// winter's offshore one does.
 func (g *Grid) weather() {
 	if g.air == nil {
 		g.air = defaultAir(g)
@@ -184,7 +122,11 @@ func (g *Grid) weather() {
 	if len(g.rainWarm) != len(g.Tiles) {
 		g.rainWarm = make([]float32, len(g.Tiles))
 	}
+	was := g.winds
 	g.winds = windsFor(g)
+	if was != nil {
+		g.winds.budget = was.budget
+	}
 	g.rainOn()
 }
 
@@ -193,85 +135,189 @@ func (g *Grid) rainOn() {
 	a := g.air
 	w := g.winds
 	e := w.airEnv
-
-	// The ground the air rises over, tile by tile and cell by cell, in metres a
-	// kilometre.
-	lifted := g.lifted()
-	cellLift := e.gather(g, lifted)
 	n := e.w * e.h
-	cgx, cgy := make([]float64, n), make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			gx, gy := e.grad(cellLift, cx, cy)
-			cgx[i], cgy[i] = gx*1000, gy*1000
+
+	// The ground the air rises over, tile by tile, in metres above the water
+	// the air takes its fill from.
+	base := math.Max(0, g.base)
+	ground := make([]float64, len(g.Tiles))
+	for i := range ground {
+		if !g.sunk(i) {
+			ground[i] = math.Max(0, g.Tiles[i].Height-base)
 		}
 	}
 
-	// What the air carries over each cell in each phase, against what it
-	// carries straight off the sea, as the rain that makes on low ground: with
-	// the belts where the sun has them, and the air's gathering taken in.
-	var carried [phases][]float32
-	for k := range carried {
-		carried[k] = make([]float32, n)
+	// What each phase's budget is worked out over: the warmth of the air and
+	// the sea, how fast the air near the ground gathers, and how much of its
+	// rain air held down by the cold water under it keeps.
+	var temp, sst [phases][]float64
+	for k := range phases - 1 {
+		temp[k] = e.airTemp(phaseSin[k])
+		sst[k] = make([]float64, n)
+		for cy := 0; cy < e.h; cy++ {
+			season := seasonTemp(e.hemi[cy], phaseSin[k], 0)
+			for cx := 0; cx < e.w; cx++ {
+				i := cy*e.w + cx
+				sst[k][i] = e.mean[cy] + season
+				if e.warm != nil {
+					// The current warms or chills the sea and the shallow air
+					// over it, under the inversion, and not the column above:
+					// see inversion.
+					sst[k][i] += e.warm[i]
+				}
+			}
+		}
+	}
+	temp[3], sst[3] = temp[1], sst[1]
+	// What the ground's lift would rain out of saturated air in each phase,
+	// tile by tile; see orographic.go.
+	var lift [phases][]float32
+	for k := range phases - 1 {
+		lift[k] = g.orographic(e, w.u[k], w.v[k], temp[k], ground)
+	}
+	lift[3] = lift[1]
+	liftCell := func(k int) []float64 {
+		c := make([]float64, n)
+		for i, r := range lift[k] {
+			c[e.cellOfTile(g, i)] += float64(r) / float64(e.cell*e.cell)
+		}
+		return c
+	}
+	var liftCells [phases][]float64
+	for k := range phases - 1 {
+		liftCells[k] = liftCell(k)
+	}
+	liftCells[3] = liftCells[1]
+	var stable []float64
+	if e.coast != nil {
+		stable = make([]float64, n)
+		for i := range stable {
+			stable[i] = inversion(e.coast[i])
+		}
+	}
+
+	// What the land could send back to the air in a year, and how that is
+	// shared out over the phases: as Hargreaves shares it, by the sun at the
+	// top of the air and the warmth over freezing.
+	pet := make([]float64, n)
+	var share [phases][]float64
+	for k := range share {
+		share[k] = make([]float64, n)
+	}
+	for cy := 0; cy < e.h; cy++ {
+		row := min(cy*e.cell+e.cell/2, g.H-1)
+		for cx := 0; cx < e.w; cx++ {
+			i := cy*e.w + cx
+			pet[i] = petAt(a.pet[row], e.mean[cy]-Lapse*e.height[i])
+			var total float64
+			var each [phases]float64
+			for k := range phases {
+				if t := temp[k][i] - Lapse*e.height[i]; t > 0 {
+					// The autumn's sun is the spring's.
+					day := springDay + float64(dayOf[min(k, 2)])*365.25/Year
+					each[k] = math.Max(0, insolation(e.lat[cy]*math.Pi/180, day)) * (t + 17.8)
+				}
+				total += each[k]
+			}
+			for k := range phases {
+				if total > 0 {
+					share[k][i] = phases * each[k] / total
+				}
+			}
+		}
+	}
+
+	// The budget, and the land's rain and what it sends back worked out
+	// against each other a few times over.
+	// Where the air was last worked out over much the same ground - a history
+	// rains on its world every age - its columns and its land's rain are
+	// where this one starts, and once round is enough.
+	annual := make([]float64, n)
+	budget := w.budget
+	rounds := recycleRounds
+	if last := budget[1].rain; len(last) == n {
+		for i := range annual {
+			for k := range phases {
+				annual[i] += (budget[k].rain[i] + budget[k].oro[i]) * secondsPerYear / phases
+			}
+		}
+		rounds = 1
+	} else {
+		budget = [phases]vapourOut{}
+		for i := range annual {
+			annual[i] = firstRain
+		}
 	}
 	workers := 1
 	if n >= spreadTiles {
 		workers = WorkersFor(phases)
 	}
-	InParallel(phases-1, workers, func(k, _ int) {
-		q := e.moisture(w.u[k], w.v[k], cgx, cgy)
-		conv := e.convergence(w.u[k], w.v[k])
-		for cy := 0; cy < e.h; cy++ {
-			belt := a.wetness * beltRain(e.rainLat(a, cy)-beltShift*phaseSin[k])
-			for cx := 0; cx < e.w; cx++ {
-				i := cy*e.w + cx
-				stable := 1.0
-				if e.coast != nil {
-					// Cold water offshore holds the air down, and it does not
-					// rise to rain whatever it carries.
-					stable = inversion(e.coast[i])
-				}
-				carried[k][i] = float32(q[i] * conv[i] * belt * stable)
+	var landEvap [phases][]float64
+	for range rounds {
+		for k := range phases {
+			landEvap[k] = make([]float64, n)
+			for i := range annual {
+				landEvap[k][i] = fu(annual[i], pet[i]) * share[k][i] / secondsPerYear
 			}
 		}
-	})
-	copy(carried[3], carried[1])
+		InParallel(phases-1, workers, func(k, _ int) {
+			// The ground wrings out of air as near saturation as the column
+			// last stood.
+			oro := make([]float64, n)
+			for i := range oro {
+				oro[i] = liftCells[k][i] * humidity(budget[k], i)
+			}
+			budget[k] = e.vapour(vapourIn{
+				u: w.u[k], v: w.v[k], temp: temp[k], sst: sst[k],
+				landEvap: landEvap[k], stable: stable, oro: oro, w: budget[k].w,
+			})
+		})
+		budget[3] = budget[1]
+		for i := range annual {
+			annual[i] = 0
+			for k := range phases {
+				annual[i] += (budget[k].rain[i] + budget[k].oro[i]) * secondsPerYear / phases
+			}
+		}
+	}
+	w.budget = budget
 
-	// Each tile's rain: the air over it, and what its own slope wrings out.
-	dy := a.dy
+	// How much of what the ground would wring out of each cell's air its
+	// column gave: all of it, unless the air ran dry.
+	var given [phases][]float64
+	for k := range phases - 1 {
+		given[k] = make([]float64, n)
+		for i := range given[k] {
+			if want := liftCells[k][i]; want > 0 {
+				given[k][i] = budget[k].oro[i] / want
+			}
+		}
+	}
+	given[3] = given[1]
+
+	// What each phase's air rains on low ground, in mm a year.
+	var carried [phases][]float32
+	for k := range carried {
+		carried[k] = make([]float32, n)
+		for i, r := range budget[k].rain {
+			carried[k][i] = float32(r * secondsPerYear * a.wetness)
+		}
+	}
+
+	// Each tile's rain: the column's over it, and what its own ground wrings
+	// out of the air there.
 	g.EachRow(func(y int) {
-		dx := a.dx[y]
 		fy := (float64(y)+0.5)/float64(e.cell) - 0.5
-		up, down := max(y-1, 0), min(y+1, g.H-1)
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
 			fx := (float64(x)+0.5)/float64(e.cell) - 0.5
-			var gx, gy float64
-			if !g.sunk(i) {
-				west, east := x-1, x+1
-				if g.Wrap {
-					west, east = (west+g.W)%g.W, east%g.W
-				} else {
-					west, east = max(west, 0), min(east, g.W-1)
-				}
-				gx = (lifted[y*g.W+east] - lifted[y*g.W+west]) / (2 * dx)
-				gy = (lifted[up*g.W+x] - lifted[down*g.W+x]) / (2 * dy)
-			}
-			cell := e.at(int(math.Round(fx)), int(math.Round(fy)))
+			cell := e.cellOfTile(g, i)
 			var p float64
 			var each [phases]float64
 			for k := range phases {
 				air := e.sample32(carried[k], fx, fy)
-				if gx != 0 || gy != 0 {
-					if ex, ny, ok := unitWind(w.u[k][cell], w.v[k][cell]); ok {
-						if rise := ex*gx + ny*gy; rise > 0 {
-							// The rise over a tile's length along the wind,
-							// and the rain what that wrings out makes on it.
-							ds := 1 / (math.Abs(ex)/dx + math.Abs(ny)/dy)
-							air *= 1 + (1-math.Exp(-rise*ds/wringHeight))*wringReach/ds
-						}
-					}
+				if r := lift[k][i]; r > 0 {
+					air += float64(r) * given[k][cell] * secondsPerYear * a.wetness
 				}
 				p += air / phases
 				each[k] = air
@@ -295,256 +341,23 @@ func (g *Grid) rainOn() {
 	})
 }
 
-// unitWind is the way a wind blows, as a unit step east and north, or not ok
-// where there is too little of it to have a way.
-func unitWind(u, v float32) (east, north float64, ok bool) {
-	s := math.Hypot(float64(u), float64(v))
-	if s < calm {
-		return 0, 0, false
-	}
-	return float64(u) / s, float64(v) / s, true
-}
-
 // calm is how little wind, in metres a second, has no way it blows: the air
 // over a calm place is the air of that place and not of anywhere upwind.
 const calm = 0.3
 
-// rainLat is the latitude row cy of the cells has its rain belt at: the
-// air's, averaged over the rows of tiles in it.
-func (e *airEnv) rainLat(a *Air, cy int) float64 {
-	var lat float64
-	for y := cy * e.cell; y < (cy+1)*e.cell; y++ {
-		lat += a.lat[y]
+// humidity is how near saturation the column over cell i stood in a phase's
+// budget, as the ground's lift reads it: no more than saturated, and the air
+// off the sea where the budget has not been worked out.
+func humidity(b vapourOut, i int) float64 {
+	if b.sat == nil {
+		return boundaryHumidity
 	}
-	return lat / float64(e.cell)
+	return math.Min(1, b.w[i]/b.sat[i])
 }
 
-// moisture is what the air carries over each cell, as a share of what it
-// carries straight off the sea, when it blows u, v over ground rising gx, gy
-// metres a kilometre toward the east and the north.
-//
-// Along the wind, a kilometre of sea brings the air a part in seaReach of the
-// way to its fill, a kilometre of land a part in landReach of the way to
-// inlandShare, and a metre of rise takes away a part in wringHeight of what it
-// has. Written for a cell from what the cells upwind of it carry, that is one
-// equation a cell, and the cells are swept in each of the four orders a wind
-// can blow in until what they carry settles: a sweep in the order the wind
-// blows settles all of that wind in one pass. Air coming in over the edge of a
-// valley comes straight off the sea.
-//
-// Where the currents have made the sea warmer or colder than its latitude,
-// the sea's fill is that much more or less: see damp.
-func (e *airEnv) moisture(u, v []float32, gx, gy []float64) []float64 {
-	n := e.w * e.h
-	// Each cell's equation, written once: what it is given whatever its
-	// neighbours carry, how much of each upwind neighbour it takes, and what
-	// all of that is divided by. An upwind neighbour off the edge of a valley
-	// is the sea's air, which is folded into what the cell is given.
-	const none = -1
-	from := make([]float64, n)
-	share := make([]float64, 2*n)
-	upwind := make([]int32, 2*n)
-	dykm := e.dy / 1000
-	e.rows(func(cy int) {
-		dxkm := e.dx[cy] / 1000
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			sea := e.sea[i]
-			fill := 1.0
-			if e.warm != nil {
-				fill = damp(e.warm[i])
-			}
-			gain := sea/seaReach + (1-sea)/landReach
-			f := sea*fill/seaReach + (1-sea)*inlandShare/landReach
-			upwind[2*i], upwind[2*i+1] = none, none
-			if ex, ny, ok := unitWind(u[i], v[i]); ok {
-				if rise := ex*gx[i] + ny*gy[i]; rise > 0 {
-					gain += rise / wringHeight
-				}
-				// Upwind along the row, and up or down the column: toward
-				// the north is up the map, so the air comes from the row
-				// below.
-				if a := math.Abs(ex) / dxkm; a > 0 {
-					ux := cx - int(math.Copysign(1, ex))
-					switch {
-					case e.wrap:
-						upwind[2*i], share[2*i] = int32(cy*e.w+(ux+e.w)%e.w), a
-					case ux >= 0 && ux < e.w:
-						upwind[2*i], share[2*i] = int32(cy*e.w+ux), a
-					default:
-						f += a
-					}
-					gain += a
-				}
-				if b := math.Abs(ny) / dykm; b > 0 {
-					uy := cy + int(math.Copysign(1, ny))
-					switch {
-					case uy >= 0 && uy < e.h:
-						upwind[2*i+1], share[2*i+1] = int32(uy*e.w+cx), b
-						gain += b
-					case !e.wrap:
-						f += b
-						gain += b
-					}
-				}
-			}
-			from[i] = f / gain
-			share[2*i] /= gain
-			share[2*i+1] /= gain
-		}
-	})
-
-	q := make([]float64, n)
-	for i := range q {
-		q[i] = inlandShare + (1-inlandShare)*e.sea[i]
-	}
-	type order struct{ x0, x1, dx, y0, y1, dy int }
-	orders := [4]order{
-		{0, e.w, 1, 0, e.h, 1}, {e.w - 1, -1, -1, 0, e.h, 1},
-		{0, e.w, 1, e.h - 1, -1, -1}, {e.w - 1, -1, -1, e.h - 1, -1, -1},
-	}
-	for round := 0; round < moistureRounds; round++ {
-		most := 0.0
-		for _, o := range orders {
-			for cy := o.y0; cy != o.y1; cy += o.dy {
-				row := cy * e.w
-				for cx := o.x0; cx != o.x1; cx += o.dx {
-					i := row + cx
-					next := from[i]
-					if j := upwind[2*i]; j != none {
-						next += share[2*i] * q[j]
-					}
-					if j := upwind[2*i+1]; j != none {
-						next += share[2*i+1] * q[j]
-					}
-					if d := math.Abs(next - q[i]); d > most {
-						most = d
-					}
-					q[i] = next
-				}
-			}
-		}
-		if most < moistureSettled {
-			break
-		}
-	}
-	return q
-}
-
-// moistureRounds is the most rounds of the four sweeps the air is given to
-// settle what it carries, and moistureSettled the change in a round that is
-// settled. Two or three settle an ordinary map; a globe's air going round a
-// parallel with no sea on it takes more.
-const (
-	moistureRounds  = 12
-	moistureSettled = 1e-3
-)
-
-// convergence is how many times its belt's rain each cell has for the air
-// gathering over it in the wind u, v: air that gathers has to go up, and air
-// that goes up rains. It is read against the mean of its row, because the
-// belts already are the rain of the planet's own gathering, and what is
-// wanted here is where the land and the ranges bend it.
-func (e *airEnv) convergence(u, v []float32) []float64 {
-	n := e.w * e.h
-	fu, fv := make([]float64, n), make([]float64, n)
-	for i := range fu {
-		fu[i], fv[i] = e.depth[i]*float64(u[i]), e.depth[i]*float64(v[i])
-	}
-	out := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			// It is the air near the ground that has to go up, and over high
-			// ground there is less of it: a wind quickening up a slope into a
-			// shallower layer is not air leaving.
-			i := cy*e.w + cx
-			out[i] = e.div(fu, fv, cx, cy) / e.depth[i]
-		}
-	}
-	// Read at the scale of the weather and not of the ground: the air a
-	// single slope lifts is wrung out by the slope, and counted there.
-	out = e.blur(out, synopticReach)
-	for cy := 0; cy < e.h; cy++ {
-		row := cy * e.w
-		var mean float64
-		for cx := 0; cx < e.w; cx++ {
-			mean += out[row+cx]
-		}
-		mean /= float64(e.w)
-		for cx := 0; cx < e.w; cx++ {
-			out[row+cx] = math.Max(convLeast, math.Min(convMost, 1-convGain*(out[row+cx]-mean)))
-		}
-	}
-	return out
-}
-
-// The rain of gathering air. convGain is how many times its belt's rain a cell
-// gains for each part a second the air over it gathers faster than its row's
-// does: a continent's summer low gathers air at some five parts in a million a
-// second, and has half as much rain again for it. The rain is never less than
-// convLeast of the belt's for this, nor more than convMost of it.
-const (
-	convGain  = 1e5
-	convLeast = 0.5
-	convMost  = 2.0
-)
-
-// lifted is the height of each tile above the sea, averaged over the country
-// round it with a weight falling off by a part in smoothReach a kilometre
-// either way along the row and down the column: the shape the air rises over,
-// which is the shape of the range and not of every bump in it. It is taken
-// forward and back along each, so that the average is centred on each tile;
-// taken one way only it lags behind the ground, and the air goes on rising
-// past the crest and rains on the side it should leave dry. A globe's row is
-// taken twice round each way, so that where it starts does not show.
-func (g *Grid) lifted() []float64 {
-	a := g.air
-	base := math.Max(0, g.base)
-	h := make([]float64, len(g.Tiles))
-	g.EachRow(func(y int) {
-		row := h[y*g.W : (y+1)*g.W]
-		for x := range row {
-			row[x] = math.Max(0, g.Tiles[y*g.W+x].Height-base)
-		}
-		keep := 1 - math.Exp(-a.dx[y]/smoothReach)
-		laps := 1
-		if g.Wrap {
-			laps = 2
-		}
-		for _, step := range []int{1, -1} {
-			first := 0
-			if step < 0 {
-				first = g.W - 1
-			}
-			v := row[first]
-			for lap := 0; lap < laps; lap++ {
-				for k := 0; k < g.W; k++ {
-					x := first + step*k
-					v += (row[x] - v) * keep
-					row[x] = v
-				}
-			}
-		}
-	})
-	keep := 1 - math.Exp(-a.dy/smoothReach)
-	if g.H < 2 {
-		return h
-	}
-	for x := 0; x < g.W; x++ {
-		v := h[x]
-		for y := 0; y < g.H; y++ {
-			i := y*g.W + x
-			v += (h[i] - v) * keep
-			h[i] = v
-		}
-		v = h[(g.H-1)*g.W+x]
-		for y := g.H - 1; y >= 0; y-- {
-			i := y*g.W + x
-			v += (h[i] - v) * keep
-			h[i] = v
-		}
-	}
-	return h
+// cellOfTile is the air cell tile i of g lies in.
+func (e *airEnv) cellOfTile(g *Grid, i int) int {
+	return min(i/g.W/e.cell, e.h-1)*e.w + min(i%g.W/e.cell, e.w-1)
 }
 
 // sunk reports whether tile i is under the water the air takes its fill from:
@@ -645,3 +458,11 @@ func petAt(table []float64, t float64) float64 {
 	}
 	return table[k] + (table[k+1]-table[k])*(f-float64(k))
 }
+
+// springDay is the day of the calendar year, from the first of January, that
+// tick zero - the spring equinox - falls on; and firstRain the rain, mm a year,
+// the land is taken to have before any has been worked out.
+const (
+	springDay = 80.0
+	firstRain = 700.0
+)
