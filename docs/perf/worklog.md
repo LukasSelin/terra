@@ -17,7 +17,16 @@ to the merged worlds; main's own digest, taken with the same test in a
 worktree at 41bd904, is identical to the branch's, which is the proof that
 the timer leaves the worlds as they were. A, B and C's start-of-session
 digests match the committed file only if they branch from main after this
-merge.
+merge. Main moved once more, to b8d3856 (the sea read against its row, more
+heat traded on a globe), before this branch could land; it was merged in
+turn, the digest rewritten again (globe128 moved, valley and ancient did
+not), and main's own digest at b8d3856 is again identical to the branch's.
+The suite was not run a third time: the code the branch adds is the same,
+and the two runs below are its proof. One thing b8d3856 brought is
+`TestWorldCreationBudget` failing on globe128, +3.27% bytes and +4.51%
+allocations against [budget.json](budget.json), on main itself as much as
+here, with the instrument off or on. That budget is the climate change's
+to rewrite, so it is left as it is.
 
 **The timer.** [phases.go](../../phases.go) makes the throwaway
 `defer phase("name")()` of the first entry permanent: 27 passes, from
