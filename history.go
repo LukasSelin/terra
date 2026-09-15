@@ -905,6 +905,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		g.drain()
 		g.wear(epochYears)
 		g.keepBook(book, e)
+		// What the epoch floored with lava, filled or silted over is a new
+		// surface, and its soil starts from nothing. See pedogenesis.go.
+		g.restartBuried(e)
 		// And the weather next epoch meets the rock this one has bared.
 		g.expose()
 		plates = w.reshape(g, plates, fl, touch, weld)

@@ -48,6 +48,11 @@ import (
 // over the making of a 1024 by 512 globe, before the beds, rose from 754 bytes
 // a tile to 835, eleven per cent; 576 grown by that is 638. A drawn map, which
 // wears nothing while it is made, read 257 before and after.
+//
+// What time has made of the soil - its age, its leaching, its carbonate, salt
+// and carbon - is five more numbers a tile, and costs nothing either: they lie
+// in the padding between the tile's fields, and a tile is 72 bytes with them
+// as it was without (see TestTheSoilStateCostsATileNothing).
 const (
 	bytesDrawn = 384
 	bytesRun   = 640
