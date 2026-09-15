@@ -58,7 +58,7 @@ func TestTheYearLagsAndSwingsByPlace(t *testing.T) {
 	if got, want := lagAt(0), lagSea*Year/365.25; math.Abs(got-want) > 1e-9 {
 		t.Errorf("sea lags %.2f days, want %.2f", got, want)
 	}
-	if solarSwing(Temperate) != 1 || swingAt(Temperate, contMiddling) != Swing {
+	if solarSwing(Temperate) != 1 || math.Abs(swingAt(Temperate, contMiddling)-Swing) > 1e-9 {
 		t.Fatalf("the temperate latitude swings %.4f of the sun's and %.4f degrees", solarSwing(Temperate), swingAt(Temperate, contMiddling))
 	}
 	if !(swingAt(70, 0.5) > swingAt(45, 0.5) && swingAt(45, 0.5) > swingAt(10, 0.5)) {

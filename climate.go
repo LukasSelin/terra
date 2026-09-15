@@ -90,14 +90,9 @@ func NewClimateOn(cfg Terms) Climate {
 }
 
 // The globe's weather. Temperate is the latitude the default map's weather
-// is the weather of; a globe reads that weather there, warmer toward the
-// middle and colder toward the poles by LatSwing across the whole of the
-// curve, with the year's swing turning over in the south, fading out at the
-// equator and growing toward the poles. See solarSwing.
-const (
-	Temperate = 45.0
-	LatSwing  = 30.0
-)
+// is the weather of. A globe's year is the energy balance's, by latitude: see
+// ebm.go.
+const Temperate = 45.0
 
 // latitude is the latitude of row y in degrees, from ninety at the top
 // row to minus ninety at the bottom.
@@ -105,9 +100,13 @@ func (c Climate) latitude(y int) float64 {
 	return 90 - 180*(float64(y)+0.5)/float64(c.rows)
 }
 
-// warmth is what a latitude adds to the temperate mean the year round.
-func warmth(lat float64) float64 {
-	return LatSwing * (math.Cos(lat*math.Pi/180) - math.Cos(Temperate*math.Pi/180))
+// zonalMean is the year's mean at sea level at a latitude on a globe: the energy
+// balance's zonal mean there. It was MeanTemp and thirty degrees times how
+// far the cosine of the latitude stood from its value at Temperate, which put
+// the equator at nineteen degrees and the poles at minus eleven.
+func zonalMean(lat float64) float64 {
+	e := ebm()
+	return e.at(&e.mean, lat)
 }
 
 // TempAt is this tick's temperature on row y. On a valley it is Temp
@@ -131,7 +130,7 @@ func (c Climate) MeanAt(y int) float64 {
 	if !c.globe {
 		return MeanTemp
 	}
-	return MeanTemp + warmth(c.latitude(y))
+	return zonalMean(c.latitude(y))
 }
 
 // GrowthAt is Growth on row y, and ChillAt is Chill there.

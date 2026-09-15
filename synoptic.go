@@ -115,13 +115,12 @@ const (
 	highsADay  = 0.8
 	stormsADay = 0.45
 	// stormSea is the warmth, in degrees, the sea under a storm has to have
-	// for it to be born or live. The real threshold is twenty-six and a half,
-	// a couple of degrees under the warmest open ocean; a world here has
-	// cooler tropics than that - see LatSwing - so the threshold is read the
-	// same way against its own: a degree and a half under the year's mean at
-	// the equator. In their summer the storms live out to some thirty
-	// degrees, which is where the real ones die too.
-	stormSea = MeanTemp + LatSwing*(1-math.Sqrt2/2) - 1.5
+	// for it to be born or live: twenty-six and a half, the real threshold
+	// (Gray, 1968; Dare and McBride, 2011). It used to be read against a
+	// world whose tropics were seven degrees too cool, as a degree and a half
+	// under its equator's mean; the energy balance gives the tropics their
+	// real warmth, and the threshold its real figure.
+	stormSea = 26.5
 	// westerlyAloft is how fast, in metres a second, the westerlies aloft
 	// carry a system east in the middle latitudes, and tradesAloft how fast
 	// the trades carry one west. A third again in winter and a third less in
