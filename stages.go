@@ -42,11 +42,35 @@ const (
 )
 
 // generateFrom runs the stages numbered from up to but not including to on
-// g, which has to be the grid the stage before from left.
-func (w *Land) generateFrom(g *Grid, cfg Terms, from, to int) {
+// g, which has to be the grid the stage before from left, and tells watch,
+// where there is one, of each as it ends.
+func (w *Land) generateFrom(g *Grid, cfg Terms, from, to int, watch StageWatch) {
 	for _, s := range stages[from:to] {
 		stop := phase(s.name)
 		s.run(w, g, cfg)
 		stop()
+		if watch != nil {
+			watch(s.name[len("stage."):], w, g)
+		}
 	}
 }
+
+// Stages are the names a StageWatch is told, in the order the stages end.
+func Stages() []string {
+	names := make([]string, len(stages))
+	for i, s := range stages {
+		names[i] = s.name[len("stage."):]
+	}
+	return names
+}
+
+// A StageWatch is told of each stage of a making as it ends, by name (see
+// Stages), with the land and the grid the stage has left: a way to look at a
+// world part-way through, and to find the stage a change first shows in.
+//
+// The grid is the hand-off to the next stage, and a watch only reads it.
+// Until the cover stage is over, l.Grid is nil and the grid lacks what the
+// later stages add: the climate before the coast, the features before the
+// end of the cover, and on a drawn map the strata and the book throughout.
+// What it reads it reads before the call returns; the next stage changes it.
+type StageWatch func(stage string, l *Land, g *Grid)
