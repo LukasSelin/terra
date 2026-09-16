@@ -67,6 +67,9 @@ type exporter struct {
 	o     options
 	jobs  []func() error
 	nodes []string // the path of every group and array, in the order queued
+	// bytes is what the job of each index holds while it runs, where it
+	// is known; see run.
+	bytes map[int]int64
 }
 
 // export writes land into store, and says how many arrays it wrote. The
@@ -167,18 +170,39 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// run runs the jobs over as many goroutines as there are processors, and
-// returns the first error in the order the jobs were given.
+// run runs the jobs side by side and returns the first error in the order
+// the jobs were given. Jobs start in that order, as many at once as there
+// are processors and as the bytes they hold fit in exportBytes and
+// exportBytesPerTile a tile; a job bigger than that runs when nothing else
+// does. A job is let go once it starts, so that what it alone holds goes
+// with it.
 func (e *exporter) run() error {
 	errs := make([]error, len(e.jobs))
-	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
-	var wg sync.WaitGroup
+	procs, budget := runtime.GOMAXPROCS(0), exportBytes+exportBytesPerTile*int64(len(e.g.Tiles))
+	var (
+		mu      sync.Mutex
+		done    = sync.NewCond(&mu)
+		held    int64
+		running int
+		wg      sync.WaitGroup
+	)
 	for i, job := range e.jobs {
+		e.jobs[i] = nil
+		need := e.bytes[i]
+		mu.Lock()
+		for running > 0 && (running >= procs || held+need > budget) {
+			done.Wait()
+		}
+		held, running = held+need, running+1
+		mu.Unlock()
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
-			defer func() { <-sem; wg.Done() }()
+			defer wg.Done()
 			errs[i] = job()
+			mu.Lock()
+			held, running = held-need, running-1
+			mu.Unlock()
+			done.Signal()
 		}()
 	}
 	wg.Wait()
@@ -188,6 +212,32 @@ func (e *exporter) run() error {
 		}
 	}
 	return nil
+}
+
+// What the jobs running at once may hold between them: enough on a
+// 1024 by 512 globe that no job waits for another, and on a bigger map
+// room for two float64 copies of the map beside the shards being encoded.
+// Without it every processor holds a copy of the map, and a world made as
+// big as memory allows cannot be written. See the work log, 2026-09-16.
+const (
+	exportBytes        = 256 << 20
+	exportBytesPerTile = 16
+)
+
+// holding says that the next job queued holds about bytes while it runs.
+func (e *exporter) holding(bytes int64) {
+	if e.bytes == nil {
+		e.bytes = map[int]int64{}
+	}
+	e.bytes[len(e.jobs)] = bytes
+}
+
+// stored is how many elements an object in the store holds, a shard or an
+// unsharded chunk, for per elements a tile: what zarr.Write fills and
+// encodes at once.
+func (e *exporter) stored(per int) int64 {
+	side := int64(e.o.Chunk * max(e.o.Shard, 1))
+	return side * side * int64(per)
 }
 
 // consolidate writes the root's metadata again with every node's metadata
@@ -327,16 +377,55 @@ func (e *exporter) queue(grp *zarr.Group, name string, job func() error) {
 }
 
 // put queues an array of the map, H by W, whose elements data makes.
+// It holds the map's elements and a shard's twice, filled and encoded.
 func put[T zarr.Element](e *exporter, grp *zarr.Group, f field, data func() []T) {
+	e.holding(int64(zarr.DataTypeOf[T]().Size()) * (int64(len(e.g.Tiles)) + 2*e.stored(1)))
 	e.queue(grp, f.name, func() error {
 		return write(e, grp, f, []int{e.g.H, e.g.W}, []string{"y", "x"}, data())
 	})
 }
 
-// putBeds queues an array of the map by bed, H by W by BedsMax.
-func putBeds[T zarr.Element](e *exporter, grp *zarr.Group, f field, data []T) {
+// putBeds queues an array of the map by bed, H by W by BedsMax, whose
+// element for a bed pick makes and for a bed past the tile's pile is empty.
+// An array of the beds is BedsMax times the map, so none is built whole: it
+// is written a shard at a time from the piles, and holds a shard three
+// times over, built, filled and encoded.
+func putBeds[T zarr.Element](e *exporter, grp *zarr.Group, f field, empty T, pick func(terra.Bed) T) {
+	g, per := e.g, terra.BedsMax
+	e.holding(3 * int64(zarr.DataTypeOf[T]().Size()) * e.stored(per))
 	e.queue(grp, f.name, func() error {
-		return write(e, grp, f, []int{e.g.H, e.g.W, terra.BedsMax}, []string{"y", "x", "bed"}, data)
+		a, err := grp.CreateArray(e.ctx, f.name, e.arrayOptions([]int{g.H, g.W, per}, []string{"y", "x", "bed"}, f, zarr.DataTypeOf[T]()))
+		if err != nil {
+			return fmt.Errorf("%s/%s: %w", grp.Path(), f.name, err)
+		}
+		side := e.o.Chunk * max(e.o.Shard, 1)
+		var (
+			buf  []T
+			pile []terra.Bed
+		)
+		for y0 := 0; y0 < g.H; y0 += side {
+			for x0 := 0; x0 < g.W; x0 += side {
+				h, w := min(side, g.H-y0), min(side, g.W-x0)
+				buf = slices.Grow(buf[:0], h*w*per)[:h*w*per]
+				at := 0
+				for y := y0; y < y0+h; y++ {
+					for x := x0; x < x0+w; x++ {
+						pile = g.AppendBeds(pile[:0], y*g.W+x)
+						for k := range per {
+							buf[at] = empty
+							if k < len(pile) {
+								buf[at] = pick(pile[k])
+							}
+							at++
+						}
+					}
+				}
+				if err := zarr.Write(e.ctx, a, []int{y0, x0, 0}, []int{h, w, per}, buf); err != nil {
+					return fmt.Errorf("%s/%s: %w", grp.Path(), f.name, err)
+				}
+			}
+		}
+		return nil
 	})
 }
 
@@ -508,31 +597,34 @@ func (e *exporter) climate(grp *zarr.Group) {
 const noBed = math.MaxUint8
 
 func (e *exporter) strata(grp *zarr.Group) {
-	g, n, beds := e.g, len(e.g.Tiles), terra.BedsMax
-	count := make([]uint8, n)
-	top := tiles(n*beds, func(int) float32 { return float32(math.NaN()) })
-	rock, formed := slices.Repeat([]uint8{noBed}, n*beds), slices.Repeat([]uint8{noBed}, n*beds)
-	sand := make([]uint8, n*beds)
+	g, n := e.g, len(e.g.Tiles)
 	var pile []terra.Bed
 	var err error
-	for i := range count {
+	for i := 0; i < n && err == nil; i++ {
 		pile = g.AppendBeds(pile[:0], i)
-		count[i] = uint8(len(pile))
 		for k, b := range pile {
-			if b.Formed == noBed && err == nil {
+			if b.Formed == noBed {
 				err = fmt.Errorf("strata/formed: tile %d bed %d was laid in epoch %d, which the store keeps for no bed", i, k, b.Formed)
+				break
 			}
-			top[i*beds+k], rock[i*beds+k], formed[i*beds+k], sand[i*beds+k] = float32(b.Top), uint8(b.Rock), b.Formed, b.Sand
 		}
 	}
-	put(e, grp, field{name: "count", about: "how many beds the pile holds; beds past it are fill"}, same(count))
+	put(e, grp, field{name: "count", about: "how many beds the pile holds; beds past it are fill"},
+		func() []uint8 {
+			var pile []terra.Bed
+			return tiles(n, func(i int) uint8 { pile = g.AppendBeds(pile[:0], i); return uint8(len(pile)) })
+		})
 	nan32 := float32(math.NaN())
 	missing := uint8(noBed)
-	putBeds(e, grp, field{name: "top", units: "m", about: "height of the bed's upper surface, in the ground's metres", fill: nan32}, top)
-	putBeds(e, grp, field{name: "rock", about: "the rock of the bed", codes: &bedrockCodes, fill: missing, missing: missing}, rock)
-	putBeds(e, grp, field{name: "formed", about: "the epoch the bed was laid in", fill: missing, missing: missing}, formed)
+	putBeds(e, grp, field{name: "top", units: "m", about: "height of the bed's upper surface, in the ground's metres", fill: nan32}, nan32,
+		func(b terra.Bed) float32 { return float32(b.Top) })
+	putBeds(e, grp, field{name: "rock", about: "the rock of the bed", codes: &bedrockCodes, fill: missing, missing: missing}, missing,
+		func(b terra.Bed) uint8 { return uint8(b.Rock) })
+	putBeds(e, grp, field{name: "formed", about: "the epoch the bed was laid in", fill: missing, missing: missing}, missing,
+		func(b terra.Bed) uint8 { return b.Formed })
 	putBeds(e, grp, field{name: "sand", units: "1", scale: 1.0 / 255, about: "share of sand in a bed the water laid",
-		comment: "0 past the bottom of the pile, where 0 is also a bed without sand: take the beds from count or top"}, sand)
+		comment: "0 past the bottom of the pile, where 0 is also a bed without sand: take the beds from count or top"}, 0,
+		func(b terra.Bed) uint8 { return b.Sand })
 	if err != nil {
 		e.jobs = append(e.jobs, func() error { return err })
 	}

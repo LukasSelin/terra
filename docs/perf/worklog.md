@@ -6,6 +6,139 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - What cmd/zarr's export holds beside the world
+
+**What this is.** `cmd/zarr` (merged 6ede026) had only been timed, on the
+1024x512 globe. A `-max` world is sized to fill free memory, so what the
+export holds on top of the land is what decides whether such a world can be
+written at all. On `claude/zarr-export-memory`; `cmd/zarr/export.go` only
+(`run`, `put`, `strata`), nothing in the root package or in `zarr/`.
+
+**How it is measured.** `TestExportPeak` in `cmd/zarr/memory_test.go`
+(`TERRA_ZARR_PEAK=WxH`, or `max`; `TERRA_ZARR_HISTORY=<file>` keeps the
+world's history so a second run skips the making) makes a globe, collects,
+and then exports it into a store that keeps nothing, at 1, 4 and 24
+goroutines. A sampler reads `/memory/classes/heap/objects` every
+millisecond, as the root's budget test does; "peak" is the highest reading
+over the one after the collection before the export. It is read twice:
+at the default GOGC, where it is mostly the garbage the pacer lets pile up
+(6.8 GiB allocated for a 41 MiB store on the globe, almost all of it in
+`zarr/`), and at `GOGC=5`, where it is close to what the export truly
+holds. The "mapped" reading (runtime memory not released to the OS, the
+nearest to RSS Go gives) is logged too, but it mostly reflects what the
+runtime already held from the making, and swings from 0 to 4 GiB between
+runs, so it is not tabled. `BenchmarkExport` reports `peak-B/op` for a
+512x256 globe: 567 MiB at 24 goroutines, default GOGC, 0.25 s/op.
+
+Machine: AMD Ryzen 9 3900X (12 cores, 24 threads), 64 GiB, Windows 11.
+Every reading below was taken with the CPU at 1-12 % before and after.
+A first set was spoilt by another session's `zarrexport` and 25 `zarr.test`
+processes holding the CPU at 100 % (making took 31 s, not 12), and was
+thrown away.
+
+**What it found.** On the 1024x512 globe the land holds 424 MiB. Before the
+change, the export held 355-362 MiB of its own at 24 goroutines (85 % of
+the land) and reached 1.29-1.62 GiB at the default GOGC. Three things made
+up what it held:
+
+- every running job builds a whole copy of the map, up to 8 B a tile, and
+  `zarr.Write` fills a whole shard, 1024x1024 elements whatever the map, and
+  encodes it; at 24 jobs at once that is 24 copies;
+- `strata` built its four arrays up front, 57 B a tile (BedsMax 8), and held
+  them until the last job finished;
+- every closure stayed reachable from `e.jobs` until `run` returned, so
+  terrain, the Köppen types (16 B a tile) and the book's records (24 B a
+  tile) outlived their jobs.
+
+On a -max world the copies grow with the map and the shards do not, so the
+first two dominate.
+
+**What changed.** The store is byte-for-byte as before: sha256 of every key
+matched main's code for valley, ancient and a 256x128 globe, each at chunk
+16/shard 2/gzip 1, the defaults, 64/unsharded/uncompressed and 32/3/0 (so
+shards cut by the map's edge are covered), and
+`TestTheSameWorldWritesTheSameStore` passes unchanged.
+
+- `run` starts jobs in order when there is a free processor *and* the bytes
+  they declare fit in 256 MiB + 16 B a tile (a job bigger than that runs
+  alone). `put` declares the map's elements plus a shard twice; the first
+  bound keeps every job side by side on the globe.
+- The strata arrays are no longer built: each job reads the piles again and
+  writes a shard at a time through `zarr.Write` with a start and a shape,
+  holding a shard three times (built, filled, encoded). The rock legend's
+  top value comes from one pass over the piles when the job is queued.
+- A job is dropped from `e.jobs` when it starts.
+
+Peak MiB over the land, two runs each where two are given:
+
+| world | goroutines | before, GOGC 100 | after, GOGC 100 | before, GOGC 5 | after, GOGC 5 |
+|---|---:|---:|---:|---:|---:|
+| 1024x512 (424 MiB) | 1 | 675, 718 | 603, 591 | 125, 117 | 99, 99 |
+| | 4 | 780, 749 | 642, 664 | 155, 154 | 138, 146 |
+| | 24 | 1289, 1394 | 877, 941 | 362, 355 | 215, 208 |
+| 4096x2048 (6286 MiB) | 1 | 9811 | 7998, 8785 | 1601 | 870 |
+| | 4 | 9654 | 8931, 8836 | 1629 | 1146 |
+| | 24 | 10611 | 7647, 7444 | 2190 | 1049 |
+
+Export time, same runs, default GOGC: globe 1.71-1.72 / 0.64-0.66 / 0.67-0.72 s
+(1 / 4 / 24) before, and 1.78-1.79 / 0.66-0.67 / 0.67-0.80 s after, which is
+within noise. 4096x2048: 24.1 / 9.0 / 9.2 s before, and 21.6-24.0 / 8.5-9.1 /
+8.7-9.1 s after. At GOGC 5 the globe at 24 goroutines went from 0.90 to
+1.07-1.08 s, because the jobs wait on bytes when the collector is also busy.
+
+At 4096x2048 and 24 goroutines, what the export truly holds fell from 35 %
+to 17 % of the land, about 131 B a tile. That is the 256 MiB + 16 B a tile
+the jobs may hold, plus the Köppen types and book records built up front
+(~44 B a tile, in `climate` and `book`, left alone because another session
+is editing those definitions), plus gzip state.
+
+**Not measured: a real -max world.** `Largest` would size one at about
+63 M tiles here (7.5x the 4096x2048 world, hours to make), and the reading
+above says it would not have fit even before the export: a kept
+4096x2048 land holds 6286 MiB, 786 B a tile, while `Largest` budgets
+`bytesRun` = 640 B a tile for the making's peak. That is for the root
+package to look into; nothing here touches it. The per-tile figures above
+scale linearly, since the shard-sized parts are fixed.
+
+**Left for others.**
+
+- *Default GOGC.* At GOGC 100 the peak is about the land's size again,
+  whatever the export holds, because the heap goal is twice what is live.
+  `main` sets no memory limit, so a -max export needs `GOMEMLIMIT` (or `main`
+  setting `debug.SetMemoryLimit` from the budget `Largest` used) before any
+  of this matters.
+- *`zarr/` (not changed, another session owns it).* The 90 GiB allocated
+  for a 582 MiB store is churn inside `zarr.Write` and its codecs: a fresh
+  `filled` buffer of the whole shard grid per shard (the full 1024x1024
+  even when the map is 512 tall), a fresh gzip writer per chunk, an
+  `extract` copy per chunk in `ShardingCodec.EncodeArray`, and `body`
+  grown by append. Pooling the gzip writers and the shard buffer (or a
+  `Write` that takes a caller's buffer) would cut both the churn and the
+  pacer peak. A write that encodes chunk by chunk from a source function
+  would let `put` stop building whole-map copies too.
+- *`climate` and `book`.* Building the Köppen types and records inside
+  their jobs instead of up front saves ~40 B a tile.
+
+**After merging main (abaf1ee).** Main had since kept gzip writers in
+`zarr/` (6fe433e), made the Köppen codes a fixed table built inside their
+job, given the strata a `noBed` fill, and consolidated the metadata
+(so the discarding store in `memory_test.go` now keeps `zarr.json` keys).
+The change was redone over that; the store is byte-identical to main's
+code again (sha256 of all 4424 keys, same worlds and options as above).
+Globe, quiet machine (CPU 0 % before and after), two runs each, peak MiB
+over the land (428 MiB) at 1 / 4 / 24 goroutines, and time at 24:
+
+| | GOGC 100 | GOGC 5 | time at 24, GOGC 100 |
+|---|---|---|---:|
+| main | 532, 532 / 568, 552 / 984, 974 | 107, 104 / 163, 139 / 428, 446 | 0.33, 0.32 s |
+| this branch | 490, 487 / 518, 511 / 748, 771 | 95, 97 / 129, 130 / 222, 245 | 0.33, 0.32 s |
+
+Allocation fell from 6.8 to 1.2 GiB with the pooled gzip writers, so the
+first `zarr/` item above is partly done. The whole-shard `filled` buffer
+and the per-chunk `extract` copy are still there.
+
+---
+
 ## 2026-09-16 - the deep floor at GDH1's depths
 
 **What this is.** On `claude/missing-yardsticks-simulation-b40e20`.
