@@ -1,6 +1,9 @@
 package terra
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // A history runs on a grid of its own. Today that grid is the map itself:
 // historyShrink is one, historyGround hands the map back, and nothing is
@@ -55,20 +58,21 @@ func (w *Land) historyGround(g *Grid, cfg Terms) *Grid {
 	return h
 }
 
+// reading is where a map tile's centre falls on a history's grid: the
+// nearest history tile, and the four it lies between with its weights.
+type reading struct {
+	near   int32
+	x0, x1 int32
+	y0, y1 int32
+	tx, ty float64
+}
+
 // handDown lays the history run on from onto the map to, and returns what
 // the history hands on beside the grid, read onto the map's tiles. to has to
 // be a new grid: nothing on it is kept.
 func handDown(from, to *Grid, d *deepStage) *deepStage {
 	n := len(to.Tiles)
 	sx, sy := float64(from.W)/float64(to.W), float64(from.H)/float64(to.H)
-	// Where each map tile's centre falls on the history's grid: the nearest
-	// history tile, and the four it lies between with its weights.
-	type reading struct {
-		near   int32
-		x0, x1 int32
-		y0, y1 int32
-		tx, ty float64
-	}
 	at := make([]reading, n)
 	to.EachRow(func(y int) {
 		fy := (float64(y)+0.5)*sy - 0.5
@@ -134,6 +138,9 @@ func handDown(from, to *Grid, d *deepStage) *deepStage {
 		}
 	})
 	to.plateRoot, to.epochs = from.plateRoot, from.epochs
+	if d.book != nil {
+		layFeet(from, to, d, at, field)
+	}
 	to.repatch()
 
 	out := &deepStage{depths: field(d.depths), shares: field(d.shares), uplift: field(d.uplift)}
@@ -185,12 +192,18 @@ func (g *Grid) passes(n int) int {
 
 // bandShare is how much of a tile of g lies in a band beside a seam that is
 // drawn in the map's tiles. On the map it is the map's own rule, onMap, whole
-// or not at all. On a grid c times coarser it is the share of the tile's
-// reach from the seam in the map's tiles, [away·c, (away+1)·c], that lies in
-// [mapLo, mapHi+1]: onMap takes a map tile at distance a, which reaches to
-// a+1, where mapLo <= a <= mapHi. Counted whole instead, a band narrower than
-// a tile is a tile wide, and the rock it makes is as common as the tile is
-// wide: schist doubled with every halving of the history grid.
+// or not at all: a tile at distance a from the seam is in the band where
+// mapLo <= a <= mapHi. On a grid c times coarser a tile at distance A stands
+// for c of the map's tiles across, at distances A·c, A·c+1, ... A·c+c-1, and
+// its share is how many of those the map's rule takes, over c: at a
+// coarseness of one, the map's rule itself.
+//
+// Counted whole instead, a band narrower than a tile was a tile wide and
+// schist doubled with every halving of the history grid; counted as the
+// share of the tile's reach [A·c, (A+1)·c] that lies in [mapLo, mapHi+1], a
+// band with edges between two tiles took a tile more than the map's rule
+// gives it, and an arc's crushing and fire came out a quarter wider than on
+// the map.
 func (g *Grid) bandShare(onMap bool, away, mapLo, mapHi float64) float64 {
 	if g.planet <= 0 {
 		if onMap {
@@ -199,8 +212,73 @@ func (g *Grid) bandShare(onMap bool, away, mapLo, mapHi float64) float64 {
 		return 0
 	}
 	c := g.coarseness()
-	lo, hi := math.Max(away*c, mapLo), math.Min((away+1)*c, mapHi+1)
-	return math.Max(0, hi-lo) / c
+	base := away * c
+	first := math.Ceil(math.Max(0, mapLo-base))
+	last := math.Floor(math.Min(c-1, mapHi-base))
+	return math.Max(0, last-first+1) / c
+}
+
+// layFeet lays the foot of every pile on the map, where the history ran on a
+// coarser grid and left the feet to be laid: each map tile by the book of the
+// history tile nearest it, less whatever banded making does not reach it.
+// Of the map tiles under one history tile, a band that covered a share of
+// that tile reaches the same share of them, the ones nearest the band's
+// middle by the distance read between the history's tiles, the lower index
+// first where two are as near. So a band keeps its width on the map whatever
+// the size of the grid the history ran on.
+func layFeet(from, to *Grid, d *deepStage, at []reading, field func([]float64) []float64) {
+	n := len(to.Tiles)
+	// The map tiles under each history tile, in index order.
+	under := make([][]int32, len(from.Tiles))
+	for i := range at {
+		j := at[i].near
+		under[j] = append(under[j], int32(i))
+	}
+	reach := make([][makings]bool, n)
+	for k := 0; k < makings; k++ {
+		near := make([]float64, len(from.Tiles))
+		for j := range near {
+			near[j] = math.MaxFloat32 // nothing of this making: as far as can be
+			if b := &d.book[j]; b.share[k] > 0 {
+				near[j] = float64(b.near[k])
+			}
+		}
+		onMap := field(near)
+		var kids []int32
+		for j := range from.Tiles {
+			b := &d.book[j]
+			if b.whole[k] {
+				for _, i := range under[j] {
+					reach[i][k] = true
+				}
+				continue
+			}
+			if b.share[k] <= 0 || len(under[j]) == 0 {
+				continue
+			}
+			kids = append(kids[:0], under[j]...)
+			sort.SliceStable(kids, func(a, c int) bool { return onMap[kids[a]] < onMap[kids[c]] })
+			take := int(math.Round(float64(b.share[k]) * float64(len(kids))))
+			for _, i := range kids[:min(take, len(kids))] {
+				reach[i][k] = true
+			}
+		}
+	}
+	for i := range to.Tiles {
+		j := at[i].near
+		b := d.book[j]
+		if !reach[i][makingMelt] {
+			b.melt = 0
+		}
+		if !reach[i][makingPluton] {
+			b.pluton = 0
+		}
+		if !reach[i][makingCrush] {
+			b.crush = 0
+		}
+		to.cookFoot(i, b, d.ocean[j])
+	}
+	to.expose()
 }
 
 func clampInt(v, lo, hi int) int { return min(hi, max(lo, v)) }

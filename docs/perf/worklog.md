@@ -6,6 +6,70 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: the rock decided on the map, and the band share made exact
+
+**What this is.** Two changes toward a coarser history making the same
+rock, on `claude/history-km`. No world moves: `TERRA_DIGEST=check` and the
+short tier pass.
+
+**The rock on the map.** A history on a coarser grid no longer lays the foot
+of its piles. Its book notes, for the melt, the arc's fire and the crushing,
+whether a tile was covered whole or the most of it a band covered and how
+far the tile's centre stood from the band's middle (`record.banded`), and
+the amounts are the amounts a tile in the band takes. `settleRock`'s switch
+is `cookFoot`; on the map it runs as it did, and on a coarser history
+`layFeet` runs it on the map after the hand-down: of the map tiles under a
+history tile, a band covering a share of it reaches that share, the nearest
+the band's middle by the distance read between the history's tiles, and
+each tile's foot is laid from the book less what does not reach it.
+`TestABandLaidOnTheMapKeepsItsShare` holds a quarter-covered history tile to
+four schist tiles of sixteen and a covered one to sixteen.
+
+**The share made exact.** Counting it, the step before's `bandShare` was
+wrong at the scale of one: set against the map's rule over the same four
+small globes' histories, it gave an arc's crushing 54 501 tile-epochs to the
+rule's 43 101, the arc's fire 103 100 to 81 197, a collision 19 138 to
+17 907 and the melt 371 429 to 344 748, because a band with edges between
+two tiles took a tile more than the rule. It now counts the map tiles a
+coarse tile at distance A stands for, A c to A c+c-1, that the rule takes:
+at a coarseness of one it is the rule, and the four sums came out equal.
+
+**What it measured** (`TERRA_PLANET=1`, small globes 1-8, globes 1-4):
+
+| world, history grid | granite | schist | basalt | limestone | shale |
+|---|---:|---:|---:|---:|---:|
+| small, 256x128 | 0.42 | 0.11 | 0.08 | 0.19 | 0.16 |
+| small, 128x64 | 0.37 | 0.16 | 0.11 | 0.16 | 0.16 |
+| small, 64x32 | 0.25 | 0.23 | 0.13 | 0.14 | 0.21 |
+| globe, 1024x512 | 0.345 | 0.062 | 0.017 | 0.29 | 0.23 |
+| globe, 512x256 | 0.338 | 0.085 | 0.025 | 0.25 | 0.24 |
+| globe, 256x128 | 0.349 | 0.100 | 0.027 | 0.25 | 0.22 |
+
+Against the step before (small schist 0.17 and 0.29, globe 0.085 and 0.110)
+the rock on the map took the quarter-size small globe's schist from 0.29 to
+0.23, and the exact share moved nothing further. The leak is upstream of
+the rock. Read off the books (small globes 1-8, the share each making
+covers, summed over tiles):
+
+| history grid | any crushing | any fire | any melt | crushed past 6 km | fire over crushing |
+|---|---:|---:|---:|---:|---:|
+| 256x128 (on the coarse path at one) | 0.085 | 0.104 | 0.514 | 0.061 | 0.054 |
+| 128x64 | 0.096 | 0.092 | 0.545 | 0.078 | 0.050 |
+| 64x32 | 0.127 | 0.059 | 0.525 | 0.108 | 0.034 |
+
+The bands themselves drift: an arc's crushing grows and its fire shrinks
+with the coarseness, though each epoch's share is now the map's rule at
+one, the boundaries per area of each kind of meeting hold (an earlier
+count: collisions 0.0019, 0.0018, 0.0025 a map tile), and the arc's gap in
+map tiles is the same at full and half size (3 on the small globe, 5.33 on
+the globe). What is left to find: where on a coarser grid an arc's front and
+its axis fall against the tiles (the seam is a tile of the grid either side
+of the line between the plates, and a coarse tile of the axis band reads the
+front's distance), and that a tile's book sums every epoch, so one coarse
+tile that was front in one epoch and axis in another carries both.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: the seam's bands read by the share of a tile
 
 **What this is.** The schist found by the step before, on
