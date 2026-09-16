@@ -1,4 +1,4 @@
-package terra
+package kernel
 
 import (
 	"math"
@@ -88,32 +88,52 @@ func FuzzFade(f *testing.F) {
 			by := draw(rng)
 			want := run(rng, n)
 			got := slices.Clone(want)
-			fade(got, by)
+			Fade(got, by)
 			fadeScalar(want, by)
 			sameBits(t, "fade", n, got, want)
 		}
 	})
 }
 
+// kindSpan is how many kinds the grow tests draw from: more than a map has.
+const kindSpan = 256
+
+// growing is a table of the kinds that age, as a growth table would give one:
+// some kinds of kindSpan, drawn at random, and the same kinds listed. It is
+// sometimes none and sometimes more than the vectors are written for, which
+// are the two cases the vectors hand to the statement.
+func growing(rng *rand.Rand) (ages []bool, aging []int64) {
+	ages = make([]bool, kindSpan)
+	for range rng.IntN(11) {
+		k := rng.IntN(kindSpan)
+		if !ages[k] {
+			ages[k] = true
+			aging = append(aging, int64(k))
+		}
+	}
+	return ages, aging
+}
+
 func FuzzGrow(f *testing.F) {
 	seeds(f)
 	f.Fuzz(func(t *testing.T, seed uint64) {
 		rng := rand.New(rand.NewPCG(seed, 2))
-		// Kinds that age and kinds that do not, as the growth table has them.
-		var kinds []int64
-		for k := range int64(kindSpan) {
-			kinds = append(kinds, k)
-		}
 		for _, n := range lengths(rng) {
+			ages, aging := growing(rng)
 			k := draw(rng)
 			want := run(rng, n)
 			ks := make([]int64, n)
 			for i := range ks {
-				ks[i] = kinds[rng.IntN(len(kinds))]
+				// Mostly kinds that age, so that the mask is seen to choose.
+				if len(aging) > 0 && rng.IntN(2) == 0 {
+					ks[i] = aging[rng.IntN(len(aging))]
+				} else {
+					ks[i] = int64(rng.IntN(kindSpan))
+				}
 			}
 			got := slices.Clone(want)
-			grow(got, ks, k)
-			growScalar(want, ks, k)
+			Grow(got, ks, k, ages, aging)
+			growScalar(want, ks, k, ages)
 			sameBits(t, "grow", n, got, want)
 		}
 	})
@@ -130,53 +150,59 @@ func BenchmarkKernel(b *testing.B) {
 	for i := range ks {
 		ks[i] = int64(rng.IntN(kindSpan))
 	}
+	// The three kinds a settlement's map grows on, or near enough.
+	ages := make([]bool, kindSpan)
+	aging := []int64{1, 2, 3}
+	for _, k := range aging {
+		ages[k] = true
+	}
 	b.Run("fade", func(b *testing.B) {
 		y := slices.Clone(x)
 		for b.Loop() {
-			fade(y, Fade)
+			Fade(y, 0.999)
 		}
 	})
 	b.Run("grow", func(b *testing.B) {
 		y := slices.Clone(x)
 		for b.Loop() {
-			grow(y, ks, 0.37)
+			Grow(y, ks, 0.37, ages, aging)
 		}
 	})
 	b.Run("axpy", func(b *testing.B) {
 		y := slices.Clone(x)
 		for b.Loop() {
-			axpy(y, x, 0.5)
+			Axpy(y, x, 0.5)
 		}
 	})
 	b.Run("lerp", func(b *testing.B) {
 		y := slices.Clone(x)
 		for b.Loop() {
-			lerp(y, y, x, 0.25)
+			Lerp(y, y, x, 0.25)
 		}
 	})
 	b.Run("clamp", func(b *testing.B) {
 		y := slices.Clone(x)
 		for b.Loop() {
-			clamp(y, -0.5, 0.5)
+			Clamp(y, -0.5, 0.5)
 		}
 	})
 	b.Run("sumTree", func(b *testing.B) {
 		var total float64
 		for b.Loop() {
-			total += sumTree(x)
+			total += SumTree(x)
 		}
 		_ = total
 	})
 	b.Run("stencil5", func(b *testing.B) {
 		y := make([]float64, n-2)
 		for b.Loop() {
-			stencil5(y, x[:n-2], x, x[2:], 0.5, 0.125)
+			Stencil5(y, x[:n-2], x, x[2:], 0.5, 0.125)
 		}
 	})
 	b.Run("minmaxSelect", func(b *testing.B) {
 		var lo, hi float64
 		for b.Loop() {
-			lo, hi = minmaxSelect(x)
+			lo, hi = MinmaxSelect(x)
 		}
 		_, _ = lo, hi
 	})
@@ -226,7 +252,7 @@ func FuzzAxpy(f *testing.F) {
 			x := run(rng, n+rng.IntN(3)) // x may be longer than y
 			want := run(rng, n)
 			got := slices.Clone(want)
-			axpy(got, x, a)
+			Axpy(got, x, a)
 			axpyScalar(want, x, a)
 			sameBits(t, "axpy", n, got, want)
 		}
@@ -241,12 +267,12 @@ func FuzzLerp(f *testing.F) {
 			tt := draw(rng)
 			a, b := run(rng, n+rng.IntN(3)), run(rng, n+rng.IntN(3))
 			got, want := make([]float64, n), make([]float64, n)
-			lerp(got, a, b, tt)
+			Lerp(got, a, b, tt)
 			lerpScalar(want, a, b, tt)
 			sameBits(t, "lerp", n, got, want)
 			// And in place, over a itself.
 			got, want = slices.Clone(a[:n]), slices.Clone(a[:n])
-			lerp(got, got, b, tt)
+			Lerp(got, got, b, tt)
 			lerpScalar(want, want, b, tt)
 			sameBits(t, "lerp in place", n, got, want)
 		}
@@ -264,7 +290,7 @@ func FuzzClamp(f *testing.F) {
 			}
 			want := run(rng, n)
 			got := slices.Clone(want)
-			clamp(got, lo, hi)
+			Clamp(got, lo, hi)
 			clampScalar(want, lo, hi)
 			sameBits(t, "clamp", n, got, want)
 		}
@@ -277,7 +303,7 @@ func FuzzSumTree(f *testing.F) {
 		rng := rand.New(rand.NewPCG(seed, 7))
 		for _, n := range lengths(rng) {
 			v := run(rng, n)
-			got, want := sumTree(v), sumTreeScalar(v)
+			got, want := SumTree(v), sumTreeScalar(v)
 			sameBits(t, "sumTree", n, []float64{got}, []float64{want})
 		}
 	})
@@ -291,7 +317,7 @@ func FuzzStencil5(f *testing.F) {
 			c, s := draw(rng), draw(rng)
 			up, row, down := run(rng, n+rng.IntN(3)), run(rng, n+2+rng.IntN(3)), run(rng, n+rng.IntN(3))
 			got, want := make([]float64, n), make([]float64, n)
-			stencil5(got, up, row, down, c, s)
+			Stencil5(got, up, row, down, c, s)
 			stencil5Scalar(want, up, row, down, c, s)
 			sameBits(t, "stencil5", n, got, want)
 		}
@@ -312,7 +338,7 @@ func FuzzMinmaxSelect(f *testing.F) {
 					}
 				}
 			}
-			lo, hi := minmaxSelect(v)
+			lo, hi := MinmaxSelect(v)
 			wlo, whi := minmaxSelectScalar(v)
 			sameBits(t, "minmaxSelect", n, []float64{lo, hi}, []float64{wlo, whi})
 		}

@@ -6,6 +6,47 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The kernels leave the root package for internal/kernel
+
+**What this is.** The third move of splitting the root package, on
+`claude/internal-kernel`. `kernel.go`, `kernel_noasm.go`,
+`kernel_simd_amd64.go`, `fft.go` and their tests are now
+`internal/kernel`. What the root calls is exported: `Fade`, `Grow`, `Axpy`,
+`FFT`, `FFT2`, `PowerOfTwo`, and `Lerp`, `Clamp`, `SumTree`, `Stencil5` and
+`MinmaxSelect` beside them for the passes to come.
+
+The one tie to the land was `grow`, which read the day's pass's tables of
+which kinds age. `Grow` is now handed them, `ages` by kind and `aging` the
+same kinds listed, and `FuzzGrow` draws its own: from none to ten kinds of
+256, so both of the cases the vectors hand back to the statement are tried.
+`scripts/perf.sh simd` builds the package `PERF_PKG` names, `.` by default;
+the kernels alone are
+`PERF_PKG=./internal/kernel PERF_BENCH='Kernel|FFT' scripts/perf.sh simd`.
+
+**Checked.** `TERRA_DIGEST=check` passes on the scalar build and under
+`GOEXPERIMENT=simd`, with `TestMakingAWorldDoesNotDependOnTheGoroutines` and
+the heap budget, which needs no update. The kernel tests pass on both
+builds, and `FuzzGrow` ran 30 s under `GOEXPERIMENT=simd` clean.
+`go test -short ./...` fails only `TestAHistoryLeavesItsBedsInLayers`, as
+main does.
+
+**Timing.** `BenchmarkGrowRow`, the day's fade and grow over a chunk's row,
+eight runs of main against eight of this, turn about, Ryzen 9 3900X:
+
+| build | main | this | |
+|---|---|---|---|
+| scalar | 661.1 ns ± 4 % | 653.8 ns ± 2 % | ~ (p=0.398) |
+| simd | 641.9 ns ± 2 % | 626.6 ns ± 3 % | -2.4 % (p=0.005) |
+
+Handing `Grow` a slice where it indexed an array costs nothing measurable.
+`BenchmarkKernel/grow` is not comparable across the move: before it, the
+kinds that aged were whatever the root's tests had registered.
+`scripts/perf.sh check` against `2026-09-16-0718-small.txt` passes: valley
+-4.7 %, ancient -1.8 %, globe256 -3.7 % a tile, the same as the move
+before it read against that older baseline.
+
+---
+
 ## 2026-09-16 - geom.Map and package tile leave the root package
 
 **What this is.** The first two moves of splitting the root package into

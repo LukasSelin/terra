@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/internal/kernel"
+)
 
 // The water in the column of air over each cell, kept as a budget.
 //
@@ -605,13 +609,13 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 		}
 	}
 	chi := make([]float64, n)
-	if e.wrap && powerOfTwo(e.w) && e.h > 1 {
+	if e.wrap && kernel.PowerOfTwo(e.w) && e.h > 1 {
 		rows := make([]complex128, n)
 		for i, d := range div {
 			rows[i] = complex(d-mean, 0)
 		}
 		for cy := 0; cy < e.h; cy++ {
-			fft(rows[cy*e.w:(cy+1)*e.w], false)
+			kernel.FFT(rows[cy*e.w:(cy+1)*e.w], false)
 		}
 		lo, mid, hi, rhs := make([]complex128, e.h), make([]complex128, e.h), make([]complex128, e.h), make([]complex128, e.h)
 		for m := 0; m < e.w; m++ {
@@ -640,7 +644,7 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 			}
 		}
 		for cy := 0; cy < e.h; cy++ {
-			fft(rows[cy*e.w:(cy+1)*e.w], true)
+			kernel.FFT(rows[cy*e.w:(cy+1)*e.w], true)
 		}
 		for i := range chi {
 			chi[i] = real(rows[i])

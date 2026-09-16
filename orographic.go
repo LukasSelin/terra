@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/internal/kernel"
+)
 
 // The rain the ground wrings out of the wind.
 //
@@ -232,7 +236,7 @@ func liftField(buf, col []complex128, bw, bh int, uu, vv, temp, dxm, dym float64
 	tk := temp + 273.15
 	cw := saturatedColumn(temp) / vapourHeight * moistLapse(temp) / Lapse
 	hw := vapourGas * tk * tk / (latentHeat * Lapse)
-	fft2(buf, bw, bh, false, col)
+	kernel.FFT2(buf, bw, bh, false, col)
 	n2 := moistStability * moistStability
 	for r := 0; r < bh; r++ {
 		rr := r
@@ -264,7 +268,7 @@ func liftField(buf, col []complex128, bw, bh int, uu, vv, temp, dxm, dym float64
 			buf[i] *= complex(0, cw*sigma/storm) / den
 		}
 	}
-	fft2(buf, bw, bh, true, col)
+	kernel.FFT2(buf, bw, bh, true, col)
 	return true
 }
 

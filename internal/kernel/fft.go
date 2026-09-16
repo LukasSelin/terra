@@ -1,4 +1,4 @@
-package terra
+package kernel
 
 import (
 	"math"
@@ -10,7 +10,7 @@ import (
 // iterative radix-2 algorithm (Cormen and others, Introduction to Algorithms,
 // ch. 30). The length of x is a power of two. The inverse divides by the
 // length, so that fft then its inverse gives x back.
-func fft(x []complex128, inverse bool) {
+func FFT(x []complex128, inverse bool) {
 	n := len(x)
 	if n <= 1 {
 		return
@@ -64,15 +64,15 @@ func planFor(n int) *fftPlan {
 // fft2 is the two-dimensional transform of a field w by h, each a power of
 // two, laid out row by row: each row, then each column. col is room for a
 // column, h long.
-func fft2(x []complex128, w, h int, inverse bool, col []complex128) {
+func FFT2(x []complex128, w, h int, inverse bool, col []complex128) {
 	for y := 0; y < h; y++ {
-		fft(x[y*w:(y+1)*w], inverse)
+		FFT(x[y*w:(y+1)*w], inverse)
 	}
 	for c := 0; c < w; c++ {
 		for y := 0; y < h; y++ {
 			col[y] = x[y*w+c]
 		}
-		fft(col, inverse)
+		FFT(col, inverse)
 		for y := 0; y < h; y++ {
 			x[y*w+c] = col[y]
 		}
@@ -80,4 +80,4 @@ func fft2(x []complex128, w, h int, inverse bool, col []complex128) {
 }
 
 // powerOfTwo reports whether n is one.
-func powerOfTwo(n int) bool { return n > 0 && n&(n-1) == 0 }
+func PowerOfTwo(n int) bool { return n > 0 && n&(n-1) == 0 }
