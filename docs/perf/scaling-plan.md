@@ -228,6 +228,110 @@ branch with the yardsticks run at every step.
   batch of worlds, run them as processes in parallel today; memory is the
   only limit (about 1 GB each at the globe).
 
+### Track S: SIMD throughout (cross-cutting, from the first morning after the overnight run)
+
+Added 2026-09-16. The owner wants the vectors used everywhere they can be.
+What the toolchain offers, what the profile allows, and what the contract
+demands together decide how.
+
+**What there is.** Go 1.27's `simd/archsimd`, behind `GOEXPERIMENT=simd`:
+`Float64x4` and `Float32x8` on AVX2, `Float64x8` and `Float32x16` on
+AVX-512, `Float64x2` and `Float32x4` on arm64. Add, sub, mul, div, sqrt,
+min, max, fused multiply-add, compares, masked select, permutes. No
+gather, no scatter, no exp, log or pow. The package is experimental and
+its API may move between Go versions. Two kernels exist already: the day's
+pass (`pass_simd_amd64.go`) and the FFT butterflies, each with a scalar
+twin and a test that holds the two bit-equal, and each clearing the upper
+register halves on the way out (golang/go#80835).
+
+**What it means.**
+
+1. *Lanes load slices, not structs.* Without a gather, a vector kernel
+   reads four consecutive float64s. `Tile` is 72 bytes with `Height`,
+   `Flow`, `Drain`, `Soil`, `Sand` and `Clay` interleaved among bytes, so
+   nothing on it can be vectorised as it stands. `Height` is read in 346
+   places across 55 files; the six hot fields together in about 530. The
+   day's fields already live in `Layers` as slices for this reason. The
+   hot ground fields have to move the same way, and every pass and the
+   `pool` sort get a cache win from it whether or not they use lanes: a
+   sort over heights reads 8-byte strides instead of 72.
+2. *Lanes need independent work, and the serial passes have none.* A
+   priority flood pops one tile at a time; a Gauss-Seidel sweep reads what
+   the last tile wrote; a heap and a sort are comparisons. Those are the
+   85 s. SIMD in the arithmetic passes is worth about 10% of today's wall
+   clock (the parallel share is 15 s of CPU-bound work on the workers)
+   until the solvers are written in a shape that has lanes, which is a
+   change of algorithm and of world, and the owner's decision.
+3. *The contract holds if kernels come in pairs.* Add, sub, mul, div and
+   sqrt round the same in a lane as in a register; fused multiply-add does
+   not, and a vector `MulAdd` has to be matched by `math.FMA` in the twin
+   or not used; reductions have to sum in the same tree order on both
+   paths; `min`/`max` on a signed zero are written as compare-and-select.
+   The existing kernels follow all of that. The rule becomes: no vector
+   code outside a kernel, no kernel without a scalar twin, no twin without
+   a test that fuzzes the pair bit-equal, including NaN, signed zero and
+   values of wildly different size.
+
+**The four shapes.** Every pass over the ground is declared as one of
+these, in its comment, so that where lanes can go is decided once and
+read by anyone:
+
+| shape | what it is | threads | lanes | today |
+|---|---|---|---|---|
+| map | each tile from its own fields | rows | yes | the `EachRow` passes (33 of them), the day's pass, the wear update, `airedGround` |
+| stencil | each tile from its neighbours' old values | rows with a halo | yes | slopes, `soften`, taper and sum-back in `orographic`, `creep` if made explicit |
+| tree | each tile from its receiver, in dependency order | independent trees | across a level | `fluvial.solve` and `account`, `stackOf` |
+| flood | one tile at a time from a priority queue | tiled with merged edges | none | `pool`, `flow`, `fillFrom`, `deepReceivers`, `landslide` |
+
+The tree shape is the one that turns a serial solver into a vector one
+without changing the world: a tile's implicit step reads only its
+receiver, so every tile at the same depth from its outlet can be done at
+once, level by level, and the levels are exact as long as donors are
+summed into a receiver in index order. That is phase 1's per-basin item
+taken one step further, and it is where the lanes in `wear` come from.
+
+**The work, in order.** Each step is digest-exact unless marked, and each
+lands behind the guards.
+
+- **S1, the kernel layer** (one week, after the overnight merges).
+  A `kernel_*.go` set: `axpy`, `lerp`, `clamp`, `fade`, `sumTree`,
+  `stencil5`, `minmaxSelect`, later `expPoly`. Each with `_simd_amd64.go`
+  and `_noasm.go` twins and one fuzzing test. Move the day's pass and the
+  FFT into it. Add a `perf.sh simd` mode that benchmarks both builds, so
+  the scalar path does not rot and the vector build's gain is a number.
+- **S2, struct of arrays** (one to two weeks, sequential, its own branch).
+  `Height`, then `Flow`, `Drain`, `Soil`, `Sand`, `Clay`, one field per
+  commit, out of `Tile` into slices on the `Grid` beside `Layers`. The
+  compiler finds the sites. `Tile` keeps the cold fields. Digest-exact.
+  Breaks `lreat`, which reads `Tiles[i].Height` through the replace
+  directive: decide whether to keep a `Tile` view for readers or to move
+  it too.
+- **S3, the map and stencil passes as kernels** (one to two weeks). The
+  33 `EachRow` passes and the per-tile update in `wear`, one at a time,
+  each measured with the phase timer. This is the 15% and the batch
+  throughput; expect the parallel share to fall by two thirds.
+- **S4, the tree shape for the water** (two weeks, after phase 1's
+  per-basin item). Level-order `fluvial.solve`, with the lanes across a
+  level. Exact. Then `creep` explicit with a stencil kernel, which is a
+  world change and the owner's decision, or kept implicit and serial.
+- **S5, transcendental kernels** (owner's decision). `math.Exp` and
+  `math.Pow` are 5.5 s of the globe's CPU and have no vector form. A
+  polynomial `expPoly` in both twins is bit-equal between them but not to
+  `math.Exp`, so it changes every world once, on purpose, and is accepted
+  by the yardsticks. Do it after S3, when the map passes are the ones
+  waiting on it.
+
+**Precision.** State stays float64; derived read-only fields are float32
+where they already are (`warm`, `swing`, `tidal`, `rain` buffers) and
+where a measurement argues for it, which doubles the lanes. Heights in
+float32 lose the tenth of a millimetre at 8 km, so `Height` stays double.
+
+**What it does not do.** It does not touch the wall-clock share of the
+floods. Their scaling is threads over tiles (phase 1) and, beyond that,
+the deep grid (phase 3), which shrinks the tile count the floods run
+over. SIMD throughout and the deep grid are complements, not
+alternatives.
+
 ## 5. Guards, so it does not drift back
 
 The heap budget and `scripts/perf.sh check` exist. They catch bytes and
@@ -269,6 +373,10 @@ with phase 0.
    existing `slow` flag, share made worlds through the `yardWorld` registry
    everywhere a test makes its own, and hold the short tier under two
    minutes so it is run.
+9. **Kernel pairs.** No vector code outside `kernel_*.go`; every kernel
+   has a scalar twin and a fuzz test holding them bit-equal; `perf.sh
+   simd` benchmarks both builds; the digest is written and checked under
+   both `GOEXPERIMENT=simd` and the plain build.
 
 ## 6. Decisions for the owner
 
@@ -284,6 +392,12 @@ with phase 0.
   to `cmd/overview` and the tests at first.
 - **Prune the worktrees.** Thirty-five are at or behind main with nothing
   ahead.
+- **The `Tile` API.** Moving the hot fields to slices (S2) breaks
+  `Tiles[i].Height` for `lreat`. Keep a read-only `Tile` view, or move the
+  game with it.
+- **Bits that change once.** A polynomial exp in place of `math.Exp` (S5),
+  an explicit `creep` (S4): each changes every world once and is then
+  held by the pair test. Yes or no to each, judged by the yardsticks.
 
 ## 7. What it buys
 
