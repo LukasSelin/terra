@@ -33,8 +33,9 @@ type FeatureKind uint8
 const (
 	NoFeature FeatureKind = iota
 	// UpliftBelt is connected ground whose strongest meeting was the same
-	// pair of plates in the same epoch: a range, an arc, a rift valley, a
-	// volcanic province. What "the Arken Mountains" is. Made worlds only.
+	// pair of plates, of the same kind, in the same epoch: a range, an arc,
+	// a rift valley, a volcanic province. What "the Arken Mountains" is.
+	// Made worlds only.
 	UpliftBelt
 	// DrainageBasin is every tile whose water leaves by one outlet - a river
 	// mouth on the sea, a closed lake, the edge of a valley - with its trunk
@@ -224,7 +225,10 @@ func (g *Grid) readFeatures() {
 			if l.raised() == NoMeeting {
 				return 0, false
 			}
-			return uint32(l.plates[0])<<16 | uint32(l.plates[1])<<8 | uint32(l.epoch), true
+			// The pair, the kind and the epoch: one pair of plates can be
+			// closing at one end of its seam and parting at the other, and
+			// an arc and a rift are not one meeting.
+			return uint32(l.plates[0])<<24 | uint32(l.plates[1])<<16 | uint32(l.raised())<<8 | uint32(l.epoch), true
 		}, func(fe *Feature, i int) {
 			l := &g.ledger[i]
 			fe.Kind = UpliftBelt
