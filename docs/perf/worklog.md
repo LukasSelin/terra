@@ -6,6 +6,55 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - soil orders and soil carbon: six soil yardsticks close
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. Two
+changes to the soil (workstream I), and the world moves: the digest is
+rewritten.
+
+- `carbonLevel` (`pedogenesis.go`): what grows into the soil is the Miami
+  model's warmth term times its rain term, where it was West's runoff term
+  and nothing below -5 C. The decay goes by a Q10 of 1.4 (Mahecha and
+  others 2010) where it was 2, slows with drought as the rain term to 0.7,
+  and runs at a fifth on permafrost. Half the carbon (0.8 on permafrost)
+  lies in the litter and needs no mineral soil under it. The constants were
+  fitted offline against the globe's forest, grass, desert and tundra.
+- `SoilOrderOf` (`soilorder.go`, new): Soil Taxonomy's key asked of what a
+  tile carries, for Gelisols, Histosols, Oxisols, Aridisols, Ultisols,
+  Mollisols, Alfisols, Inceptisols and Entisols, and no soil.
+- `carbonByBiome` reads the biome ratios over tiles with soil, as Jobbágy
+  and Jackson's pits were dug; the land mean still counts bare ground at
+  nothing. Half the desert tiles have no soil, so without this forest over
+  desert reads 3.7.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | main | this | real |
+|---|---|---|---|
+| carbon, forest over desert | 143x | 1.93x | 1.5-3.2 |
+| carbon, tundra over desert | 0.19x | 1.81x | 1.5-3.2 |
+| mean land carbon, kg C/m2 | 1.96 | 9.54 | 9-13 |
+| Aridisols | - | 0.111 | 0.09-0.15 |
+| Gelisols | - | 0.098 | 0.06-0.11 |
+| Mollisols | - | 0.064 | 0.05-0.09 |
+| Oxisols | - | 0.024 (gap) | 0.05-0.10 |
+
+The rest of the land: no soil 0.125, Alfisols 0.397, Inceptisols 0.145,
+Histosols 0.020, Ultisols 0.013, Entisols 0.004. Alfisols stand at half
+again Earth's share and Ultisols and Oxisols at a fraction, for one reason:
+the warm humid land's surfaces are a median of fourteen thousand years old,
+too young to be leached.
+
+**Held.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout 60m .`
+on this branch and on its base (312900f), side by side: no failures on
+either, and every other gap reads the same. `go test -short` passes, the
+budget test with it, so the heap budget is not rewritten. The digest was
+checked on the base (it holds) and rewritten here: all three budget worlds
+move, as fertility reads the carbon through `humus`. `scripts/perf.sh check`
+was not run: the machine was loaded by other sessions.
+
+---
+
 ## 2026-09-16 - zarrdiff: where and by how much two worlds differ
 
 **What this is.** On `claude/zarrdiff`: `cmd/zarr/zarrdiff`, a command in
