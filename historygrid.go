@@ -128,6 +128,13 @@ func handDown(from, to *Grid, d *deepStage) *deepStage {
 	to.repatch()
 
 	out := &deepStage{depths: field(d.depths), shares: field(d.shares), uplift: field(d.uplift)}
+	// An age is the crust's under the map tile, not a blend of two crusts'.
+	if d.ages != nil {
+		out.ages = make([]float64, n)
+		for i := range out.ages {
+			out.ages[i] = d.ages[at[i].near]
+		}
+	}
 	if d.ocean != nil {
 		out.ocean = make([]bool, n)
 		for i := range out.ocean {

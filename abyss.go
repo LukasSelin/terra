@@ -1,7 +1,9 @@
 package terra
 
 import (
+	"cmp"
 	"math"
+	"slices"
 
 	"github.com/LukasSelin/terra/geom"
 )
@@ -86,29 +88,86 @@ func floorDepth(t float64) float64 {
 // read while the tiles are still a history's, at their deep span.
 //
 // A tile's age is the middle of the epoch its crust was made in, to the end of
-// the history. The crust the first plates broke is dated from the start of
-// the history, which is also when the floor the first epoch opens is dated
-// from; that floor is one epoch's in sixteen, and the difference is two
-// million years.
-func (g *Grid) floorDepths(cr *crust, epochs int) (depth, share []float64) {
+// the history. The crust the first plates broke is the whole history old, and
+// as old again as it already was when the history began: see firstFloorAges.
+// ages is each tile's, in millions of years, and NaN on continental crust.
+func (g *Grid) floorDepths(cr *crust, epochs int) (depth, share, ages []float64) {
 	n := len(g.Tiles)
-	depth, share = make([]float64, n), make([]float64, n)
+	depth, share, ages = make([]float64, n), make([]float64, n), make([]float64, n)
 	away := g.awayFrom(func(i int) bool { return !cr.ocean[i] })
 	span := g.span()
 	shelf := math.Max(1, tilesAcross(shelfWidth, span))
 	slope := math.Max(1, tilesAcross(slopeWidth, span))
 	for i := range g.Tiles {
+		ages[i] = math.NaN()
 		if !cr.ocean[i] {
 			continue
 		}
-		age := float64(epochs) - float64(cr.born[i]) - 0.5
+		age := (float64(epochs) - float64(cr.born[i]) - 0.5) * epochYears
 		if cr.born[i] == 0 {
-			age = float64(epochs)
+			age = float64(epochs)*epochYears + float64(cr.aged[i])
 		}
-		depth[i] = floorDepth(age * epochYears / myr)
+		ages[i] = age / myr
+		depth[i] = floorDepth(ages[i])
 		share[i] = smooth(clamp01((away[i] - shelf) / slope))
 	}
-	return depth, share
+	return depth, share, ages
+}
+
+// oldestFloor is the age of the oldest ocean floor a planet keeps: older floor
+// has gone down a trench. Müller and others (2008) date the earth's oldest in
+// place at some 180 million years, in the western Pacific.
+const oldestFloor = 180 * myr
+
+// firstFloorAges dates the first plates' ocean floor. The history takes up a
+// planet that has had oceans for as long as it has had plates, and the floor
+// the first plates carry was made by ridges before the history began; dated
+// all from its start, half of a globe's sea floor came out one age, and all of
+// it lay in one band of depth. So it is given ages as the earth's floor has
+// them: the area of floor falls with its age as a straight line to nothing at
+// the oldest (Sclater and others 1980; Parsons 1982), which puts a tile's age
+// at T(1 - sqrt(1 - u)) for u the share of the floor younger than it. And they
+// lie as the earth's do, youngest along the ridges and oldest furthest from
+// them: the first plates' ocean floor is ranked by how far each tile is from
+// the nearest seam between two ocean plates. T is the oldest the floor can be
+// less the history still to come, so that none of it is older than
+// oldestFloor at the end.
+func (cr *crust) firstFloorAges(g *Grid, epochs int) {
+	oldest := float64(oldestFloor) - float64(epochs)*epochYears
+	if oldest <= 0 {
+		return
+	}
+	seam := func(i int) bool {
+		if !cr.ocean[i] {
+			return false
+		}
+		p, k := g.PosOf(i), g.Tiles[i].Plate
+		for _, off := range Dirs {
+			q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if g.Wrap {
+				q = g.Norm(q)
+			}
+			if !g.In(q) {
+				continue
+			}
+			if j := g.Index(q); cr.ocean[j] && g.Tiles[j].Plate != k {
+				return true
+			}
+		}
+		return false
+	}
+	away := g.awayFrom(seam)
+	var floor []int32
+	for i := range g.Tiles {
+		if cr.ocean[i] {
+			floor = append(floor, int32(i))
+		}
+	}
+	slices.SortStableFunc(floor, func(a, b int32) int { return cmp.Compare(away[a], away[b]) })
+	for r, i := range floor {
+		u := (float64(r) + 0.5) / float64(len(floor))
+		cr.aged[i] = float32(oldest * (1 - math.Sqrt(1-u)))
+	}
 }
 
 // awayFrom is how many tiles each tile is from the nearest tile from says

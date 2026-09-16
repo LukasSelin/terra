@@ -6,6 +6,56 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - the first plates' ocean floor has ages: flattening closes
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. The
+first plates' ocean crust was all dated from the start of the history, so
+half a globe's deep floor was 64 Myr old and 5.3 km down, and no floor was
+old enough to flatten. `firstFloorAges` (`abyss.go`) now gives it the ages
+it had before the history began: the earth's age-area law (Sclater and
+others 1980; Parsons 1982), area falling linearly to nothing at 180 Myr
+(Müller and others 2008) less the history still to come, ranked by distance
+from the seams between ocean plates. The crust carries them (`crust.aged`),
+`floorDepths` lays the floor by them, and the grid keeps each tile's age as
+`floorAge`, which the history file keeps by reflection and `handDown` reads
+by the nearest tile.
+
+The ages do not feed the subduction. Letting the older of two first-plate
+crusts sink first changed which crust went down, and with it every globe's
+continents: the sea on the globe covered 6 % less, and the mean land carbon
+(8.99), the small globe's Hack exponent at 2x less 1x (0.083), its discharge
+exceedance exponent (0.481) and the tide flats of small globe 3 all failed.
+Without it the land is the soil commit's to the bit, and only the deep floor
+moves: the digest's `globe128` changes, and `valley` and `ancient`, which
+have no ocean, do not.
+
+`seafloorSubsidence` reads each tile's age off `floorAge`, in bins of an
+epoch, and only on floor a shelf and a slope's width (230 km, six globe
+tiles) from continental crust, which is the floor `floorDepths` lays at its
+age's depth. Read over the margins too, the floor of 50 to 75 Myr, much of
+it on the first rifts' margins, came out a kilometre shallow and the old
+floor sank 0.83 as fast as the young.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | before | now | real |
+|---|---|---|---|
+| ridge crest depth, km | in range | 2.51 | 2.0-3.0 |
+| subsidence to 70 Myr, m/sqrt(Myr) | in range | 347 | 250-450 |
+| flattening past 70 Myr | NaN (gap) | 0.48 | -0.2-0.6 |
+| oceanic hypsometric mode, km | -5.375 (gap) | -5.875 (gap) | -5.0 to -3.8 |
+
+The mode goes the wrong way, and stays a gap: with the earth's ages the
+Parsons and Sclater depths heap up at 5.5-6 km. The earth's floor stands
+shallower under its sediment and its plateaus and swells; a globe's carries
+some twenty metres.
+
+**Held.** `go test -short` passes. `TestRealNumbers|TestTheRealWorld`: no
+failures, and every other reading is the soil commit's. `scripts/perf.sh
+check` not run: the machine was loaded.
+
+---
+
 ## 2026-09-16 - soil orders and soil carbon: six soil yardsticks close
 
 **What this is.** On `claude/missing-yardsticks-simulation-b40e20`. Two

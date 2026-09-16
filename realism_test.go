@@ -49,7 +49,7 @@ var realYardsticks = []realYardstick{
 		source:  "Wegener 1915; Amante & Eakins 2009 (ETOPO1): the second peak of the earth's elevations near -4.4 km",
 		measure: func() float64 { _, lo := hypsometricModes(globes()); return lo },
 	},
-		gap: "known gap: T5 - the floor sinks with its age now (abyss.go), but half of it is the first plates' crust, dated from the start of a 64 Myr history and all 5.3 km down; the earth's is spread over 0-180 Myr",
+		gap: "known gap: T5 - the floor's ages are the earth's now (firstFloorAges) and it lies at Parsons and Sclater's depths, which with those ages heap up at 5.5-6 km; the earth's floor stands shallower under its sediment, hundreds of metres of it, and its plateaus and swells, and a globe's floor carries some twenty metres: -5.875 km",
 	},
 
 	// 2. The sea floor sinks as it cools. New floor at a ridge stands two and a
@@ -77,9 +77,7 @@ var realYardsticks = []realYardstick{
 			}
 			return s.old / s.young
 		},
-	},
-		gap: "known gap: T5 - a globe's history is 64 Myr, so no floor on it is old enough to have flattened",
-	},
+	}},
 
 	// 3. Plate sizes. Past the handful of great plates the earth's plates
 	// follow a power law in area.
@@ -347,11 +345,11 @@ type subsidence struct {
 }
 
 // seafloorSubsidence reads how deep the sea floor lies against how old its
-// rock is: the tiles under the sea still basalt, dated by the epoch their rock
-// was made in, the mean depth of each epoch's floor fitted against the root of
-// its age in two halves either side of seventy million years. A rock's age is
-// the middle of its epoch, to the end of the last: the youngest floor is two
-// million years old and not new.
+// rock is: the tiles under the sea whose basement is basalt, dated by their
+// crust, the mean depth of each four million years' floor fitted against the
+// root of its age in two halves either side of seventy million years. Floor
+// the history made is the middle of its epoch old, to the end of the last: the
+// youngest floor is two million years old and not new.
 //
 // The ridge is where the young half's line meets no age, which is what
 // Parsons and Sclater's 2500 m is. Read as the youngest epoch's mean, it was
@@ -359,50 +357,60 @@ type subsidence struct {
 // crest, and it was the depth of every tile of that epoch's floor however
 // near a continent's shelf it lay.
 //
-// The age is the crust's: the date of the basalt at the foot of the pile under
-// the tile, which is what a drill that went down through the ooze to the
-// basement would read (the Deep Sea Drilling Project dated the floor so). It
-// was read off the rock at the surface, floor that was still basalt, but the
-// sea lays its limestone and its mud on the floor every epoch - see keepBook -
-// and on a small globe four tiles of eighteen thousand of the deep floor came
-// out bare.
+// The age is the crust's, which is what a drill that went down through the
+// ooze to the basement would read (the Deep Sea Drilling Project dated the
+// floor so). It was read off the rock at the surface, floor that was still
+// basalt, but the sea lays its limestone and its mud on the floor every epoch
+// - see keepBook - and on a small globe four tiles of eighteen thousand of the
+// deep floor came out bare. It was then the epoch of the basalt at the foot of
+// the pile, which dates nothing from before the history: the first plates'
+// floor was all one epoch. It is now the grid's floorAge, which the history
+// dates that floor by as well (see firstFloorAges).
 //
 // And it is the ocean's floor that is read, not the shelves': ground under less
 // water than a shelf's edge stands at, some two hundred metres (Shepard 1963
 // has 130 on the mean), is a continent's margin whatever crust it rides, as it
 // was for Parsons and Sclater, who fitted the deep floor. Read with them, a
 // globe's floor sank 173 m per root Myr, the mean of each epoch dragged toward
-// the shelf by the tiles a rift had floored in the middle of a continent.
+// the shelf by the tiles a rift had floored in the middle of a continent. Nor
+// the slopes': the floor is laid down its age's depth only past a shelf and a
+// slope's width from continental crust (see floorDepths), and read within it,
+// once the first plates' floor had its ages, the floor of 50 to 75 Myr - much
+// of it on the margins of the first rifts - came out a kilometre shallow, and
+// the old floor sank 0.83 as fast as the young. So a tile is read only where
+// it lies that far out.
 const shelfBreak = 200.0
 
 func seafloorSubsidence(gs []*Grid) subsidence {
 	return remember(fmt.Sprintf("subsidence/%p", gs[0]), func() subsidence {
-		const epochs = 256
-		var sum, n [epochs]float64
-		last := 0
+		const bins = 256
+		var sum, n [bins]float64
 		for _, g := range gs {
+			if g.floorAge == nil || g.strata == nil {
+				continue
+			}
+			away := g.awayFrom(func(i int) bool { return math.IsNaN(g.floorAge[i]) })
+			margin := tilesAcross(shelfWidth+slopeWidth, deepSpan(g))
 			for i := range g.Tiles {
-				if g.sea-g.Height[i] < shelfBreak || g.strata == nil {
+				if g.sea-g.Height[i] < shelfBreak || math.IsNaN(g.floorAge[i]) || away[i] < margin {
 					continue
 				}
 				c := &g.strata[i]
-				foot := int(c.n) - 1
-				if c.rock[foot] != Basalt {
+				if c.rock[int(c.n)-1] != Basalt {
 					continue
 				}
-				e := int(c.formed[foot])
-				sum[e] += g.sea - g.Height[i]
-				n[e]++
-				last = max(last, e)
+				k := min(bins-1, int(g.floorAge[i]/epochMyr))
+				sum[k] += g.sea - g.Height[i]
+				n[k]++
 			}
 		}
 		var xy, xo, yy, yo []float64
-		for e := last; e >= 0; e-- {
-			if n[e] < 20 {
+		for k := range bins {
+			if n[k] < 20 {
 				continue
 			}
-			age := (float64(last-e) + 0.5) * epochMyr
-			d := sum[e] / n[e]
+			age := (float64(k) + 0.5) * epochMyr
+			d := sum[k] / n[k]
 			if age <= 70 {
 				xy, yy = append(xy, math.Sqrt(age)), append(yy, d)
 			}
