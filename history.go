@@ -880,6 +880,35 @@ type record struct {
 	// floods itself to. Ground that lay there quietly, with no river mud
 	// reaching it, is where limestone comes from.
 	submerged int
+	// On a history grid coarser than the map, where the melt, the fire and
+	// the crushing lay across the tile: whole, where any of that kind covered
+	// all of it; otherwise the most of it a band of that kind covered, and
+	// how far the tile's centre stood from that band's middle then, in the
+	// map's tiles. The rock is then decided on the map, tile by tile, and not
+	// on the history's tiles: see handDown.
+	whole [makings]bool
+	share [makings]float32
+	near  [makings]float32
+}
+
+// The three makings of rock a history writes into bands beside a seam.
+const (
+	makingMelt = iota
+	makingPluton
+	makingCrush
+	makings
+)
+
+// banded notes that a band of making k covered share of the tile, its middle
+// near map tiles from the tile's centre. See record.
+func (r *record) banded(k int, share, near float64) {
+	if share >= 1 {
+		r.whole[k] = true
+		return
+	}
+	if float32(share) > r.share[k] {
+		r.share[k], r.near[k] = float32(share), float32(near)
+	}
 }
 
 // history makes a world by running one. It leaves every tile with a height, a
@@ -917,6 +946,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	touch := make([]float64, plateCap*plateCap)
 	weld := make([]float64, plateCap*plateCap)
 
+	if epochWatch != nil {
+		epochWatch(g, cr, plates, -1) // the first plates, before any has moved
+	}
 	for e := 0; e < epochs; e++ {
 		// How far through the era we are, which is how far the world has
 		// cooled: the plates slow as it goes.
@@ -952,6 +984,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		g.expose()
 		plates = w.reshape(g, plates, fl, touch, weld)
 		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
+		if epochWatch != nil {
+			epochWatch(g, cr, plates, e)
+		}
 	}
 
 	// The ages of the floor and how fast the ground is rising are read while
@@ -964,7 +999,10 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	g.base, g.deep = -1, 0
 	g.keepPlates(plates)
 	g.settleRock(book, cr.ocean)
-	for k := 0; k < smoothing; k++ {
+	if g.planet > 0 {
+		d.book = book // the foot of every pile is laid on the map
+	}
+	for k := 0; k < g.passes(smoothing); k++ {
 		g.soften()
 	}
 	return d
@@ -978,6 +1016,10 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 type deepStage struct {
 	ocean                                  []bool
 	depths, shares, uplift, ages, sediment []float64
+	// book is the history's book of what was done to each tile, where the
+	// feet of the piles are still to be laid on the map: a history run on a
+	// grid coarser than the map. See handDown.
+	book []record
 }
 
 // settleHistory lays a finished history on the map: its heights handed the
@@ -1021,7 +1063,7 @@ func (w *Land) molten(g *Grid) {
 	for c := 0; c < moltenChurns; c++ {
 		// Fine cells rather than broad swells, and finer as the churns go on:
 		// convection at this stage is small and furious.
-		cell := w.lattice(g, math.Max(4, float64(g.Span())/float64(2+2*c)))
+		cell := w.lattice(g, g.inTiles(math.Max(4, float64(g.planetSpan())/float64(2+2*c))))
 		for i := range h {
 			h[i] = moltenMemory*h[i] + (1-moltenMemory)*cell[i]
 		}
@@ -1219,7 +1261,7 @@ func spacing(g *Grid, mids int) float64 {
 
 // plateTotal is how many plates a world first breaks into. See plateCount.
 func plateTotal(g *Grid) int {
-	return min(plateMost, max(3, plateCount*g.Span()/plateSpan))
+	return min(plateMost, max(3, plateCount*g.planetSpan()/plateSpan))
 }
 
 // majorCount is how many of a world's first plates are great ones.
@@ -1364,7 +1406,7 @@ const floodStep = 0.5
 func (w *Land) flood(g *Grid, reach float64) *flooding {
 	coarse := w.lattice(g, roughGrain*reach)
 	fine := w.lattice(g, roughGrain*reach/3)
-	fray := w.lattice(g, math.Max(4, roughGrain*reach/9))
+	fray := w.lattice(g, g.inTiles(math.Max(4, roughGrain*reach/9*g.coarseness())))
 	fl := &flooding{
 		cost: make([]float32, len(g.Tiles)),
 		dist: make([]float32, len(g.Tiles)),
@@ -1398,7 +1440,7 @@ func (w *Land) bow(g *Grid) []float64 {
 	// coast a coast.
 	out := make([]float64, len(g.Tiles))
 	amp, total := 1.0, 0.0
-	for span := math.Min(float64(g.Span())/2, bowSpan); span >= bowLeast; span, amp = span/2, amp/2 {
+	for span := math.Min(float64(g.Span())/2, bowSpan/g.coarseness()); span >= bowLeast/g.coarseness(); span, amp = span/2, amp/2 {
 		l := w.lattice(g, span)
 		for i := range out {
 			out[i] += amp * (l[i] - 0.5)
@@ -1418,9 +1460,9 @@ func (w *Land) bow(g *Grid) []float64 {
 // in the same places - which is what an inherited weakness in the crust
 // actually does.
 func (w *Land) grain(g *Grid) []float64 {
-	coarse := w.lattice(g, beltGrain)
-	fine := w.lattice(g, beltGrain/3)
-	spur := w.lattice(g, beltGrain/9)
+	coarse := w.lattice(g, g.inTiles(beltGrain))
+	fine := w.lattice(g, g.inTiles(beltGrain/3))
+	spur := w.lattice(g, g.inTiles(beltGrain/9))
 	out := make([]float64, len(g.Tiles))
 	for i := range out {
 		v := (coarse[i] - 0.5) + 0.5*(fine[i]-0.5) + 0.10*(spur[i]-0.5)
@@ -1462,7 +1504,10 @@ func slow(plates []Plate, before, through float64) {
 // speeds.
 func driftScale(g *Grid) float64 {
 	quoted := math.Sqrt(float64(DefaultWidth*DefaultHeight) / plateCount)
-	return math.Max(1, spacing(g, plateTotal(g))/quoted)
+	// Read at the planet's scale and then in g's tiles, so that a history
+	// grid coarser than the map moves its plates as far over the planet.
+	c := g.coarseness()
+	return math.Max(1, spacing(g, plateTotal(g))*c/quoted) / c
 }
 
 // crust is what the plates carry about with them from epoch to epoch beside
@@ -1622,9 +1667,9 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 			}
 			for a := 0; a < 2; a++ {
 				switch {
-				case cr.acc[k][a] >= 1:
+				case cr.acc[k][a] > 0.5:
 					step[k][a] = 1
-				case cr.acc[k][a] <= -1:
+				case cr.acc[k][a] < -0.5:
 					step[k][a] = -1
 				}
 				cr.acc[k][a] -= float64(step[k][a])
@@ -1636,10 +1681,28 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 		}
 		cr.shift(g, plates, &step)
 	}
+	// A plate steps to the nearest whole tile of its travel, and what is left
+	// over, under half a tile either way, is where its crust stands off the
+	// tiles it is on: the turn below reads the whole plate there. Held back
+	// to the whole tile under its travel instead, a plate lagged most of a
+	// tile of its grid whatever the grid, and a history on a grid twice as
+	// coarse opened a tenth less floor in its first epoch, and more of its
+	// partings left a continent against the ocean than fresh floor between
+	// them. It is the plate's and not each tile's: carried in every tile's own
+	// offset, the offsets that turns had left each tile stopped fitting
+	// together, and the ground came out speckled with lone tiles of the other
+	// crust. See historygrid.go.
+	var shift [plateCap][2]float64
+	for k := range plates {
+		if plates[k].into == uint8(k) {
+			shift[k] = cr.acc[k]
+		}
+	}
 	// And the epoch's turning, all at once. A turn about a plate's middle
 	// and a slide of the whole plate come to the same thing in either order,
-	// so what the slides above did not do is the turns.
-	cr.turn(g, plates)
+	// so what the slides above did not do is the turns, and where what is left
+	// of the slides puts the plate.
+	cr.turn(g, plates, &shift)
 
 	copy(cr.tiles, g.Tiles)
 	copy(cr.height, g.Height)
@@ -1660,7 +1723,7 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 			// drawn over with the outlines of where plates used to be.
 			g.Height[j] = oceanFreeboard
 			t.Bedrock, t.Formed = Basalt, uint8(epoch)
-			book[j] = record{melt: 2 * madeEnough}
+			book[j] = record{melt: 2 * madeEnough, whole: [makings]bool{makingMelt: true}}
 			g.strata[j] = basement(Basalt, uint8(epoch), g.Height[j])
 		} else {
 			g.Height[j] = cr.height[cr.org[j]]
@@ -1807,10 +1870,13 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 // rounding trades a tile here for a tile there, and an arc fed by that would
 // be an arc fed by arithmetic. How hard the seam is closing still counts - see
 // tectonics.
-func (cr *crust) turn(g *Grid, plates []Plate) {
+func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
+	// A plate is read backwards where it turns or where its crust has been
+	// slid short of a whole tile.
+	moves := func(k uint8) bool { return plates[k].Spin != 0 || shift[k] != [2]float64{} }
 	turning := false
 	for k := range plates {
-		turning = turning || (plates[k].into == uint8(k) && plates[k].Spin != 0)
+		turning = turning || (plates[k].into == uint8(k) && moves(uint8(k)))
 	}
 	if !turning {
 		return
@@ -1832,10 +1898,12 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 		}
 		return cos[k]*rx - s*ry, s*rx + cos[k]*ry
 	}
-	// place is where the crust on tile i truly stands, off plate k's middle.
+	// place is where the crust on tile i truly stands, off plate k's middle:
+	// its tile, what earlier turns left it off that, and where the plate's
+	// slide stands short of a whole tile.
 	place := func(k uint8, i int) (float64, float64) {
-		p, o := &plates[k], cr.off[i]
-		return g.across(float64(i%g.W) + float64(o[0]) - p.cx), float64(i/g.W) + float64(o[1]) - p.cy
+		p, o, sh := &plates[k], cr.off[i], shift[k]
+		return g.across(float64(i%g.W) + float64(o[0]) + sh[0] - p.cx), float64(i/g.W) + float64(o[1]) + sh[1] - p.cy
 	}
 
 	for j := range cr.nplate {
@@ -1843,7 +1911,7 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 	}
 	for i := range cr.plate {
 		k := cr.plate[i]
-		if plates[k].Spin == 0 {
+		if !moves(k) {
 			// What is not turning stays where it is.
 			cr.land(plates, i, i)
 			continue
@@ -1874,9 +1942,12 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 					x = g.WrapX(x)
 				}
 				j := y*g.W + x
-				// Where this tile was before the turn, and the tile that is.
+				// Where this tile was before the turn and what is left of the
+				// slide, and the tile that is.
+				// Where this tile was before the turn, and the tile that was,
+				// the plate's slide short of a whole tile taken off.
 				bx, by := spun(k, g.across(float64(x)-p.cx), float64(y)-p.cy, true)
-				fx, fy := int(math.Round(p.cx+bx)), int(math.Round(p.cy+by))
+				fx, fy := int(math.Round(p.cx+bx-shift[k][0])), int(math.Round(p.cy+by-shift[k][1]))
 				if fy < 0 || fy >= g.H || (!g.Wrap && (fx < 0 || fx >= g.W)) {
 					continue
 				}
@@ -1906,7 +1977,10 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
+				// Less the slide, which is the plate's and read again next
+				// epoch from where it then stands.
 				rx, ry := spun(k, dx, dy, false)
+				rx, ry = rx-shift[k][0], ry-shift[k][1]
 				cr.noff[j] = [2]float32{
 					float32(math.Max(-0.5, math.Min(0.5, rx))),
 					float32(math.Max(-0.5, math.Min(0.5, ry))),
@@ -2426,7 +2500,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		k := g.Tiles[i].Plate
 		rise[i] = shift[k] + bowPull*settling*(bow[i]-(g.Height[i]-mean[k]))
 	}
-	for k := 0; k < marginRamp; k++ {
+	for k := 0; k < g.passes(marginRamp); k++ {
 		rise = g.spread(rise)
 	}
 
@@ -2470,7 +2544,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				// from crest to crest, while the ground over them rises as it
 				// would have anyway. Deeper beds are folded as much as shallow
 				// ones - it is the pile that buckles.
-				fold := foldShare * math.Abs(by) * math.Sin(2*math.Pi*s.away/foldWave)
+				fold := foldShare * math.Abs(by) * math.Sin(2*math.Pi*s.away/g.inTiles(foldWave))
 				for k := 1; k < int(col.n); k++ {
 					col.top[k] += float32(fold)
 				}
@@ -2497,10 +2571,36 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// each other for the whole age - had no schist on it at all. It is as
 			// much crushing as the arc's crest takes, since it is fed by the
 			// same floor going down.
-			if s.makes == arc && s.away <= math.Max(0, axisOf(arc, gap, grain[i])-axisWidth) {
-				book[i].crush += math.Abs(s.lift*grain[i]) / 3
+			//
+			// Both bands are a few of the map's tiles wide, and on a history
+			// grid coarser than the map a tile is wider than that: there a
+			// tile takes the share of the band that lies across it, or every
+			// band would be as wide as a tile and the rock it makes as common.
+			// See bandShare.
+			axis := axisOf(s.makes, gap, grain[i])
+			// The book takes what a tile in the band takes, and on a coarser
+			// grid notes how much of the tile the band covers: the rock is
+			// decided on the map's tiles. See record.
+			c := g.coarseness()
+			if s.makes == arc {
+				if front := g.bandShare(s.away <= math.Max(0, axis-axisWidth), s.away, 0, math.Max(0, axis*c-axisWidth)); front > 0 {
+					book[i].crush += math.Abs(s.lift*grain[i]) / 3
+					if g.planet > 0 {
+						book[i].banded(makingCrush, front, s.away*c)
+					}
+				}
 			}
-			if math.Abs(s.away-axisOf(s.makes, gap, grain[i])) <= axisWidth {
+			if share := g.bandShare(math.Abs(s.away-axis) <= axisWidth, s.away, axis*c-axisWidth, axis*c+axisWidth); share > 0 {
+				if g.planet > 0 {
+					k := makingCrush
+					switch s.makes {
+					case arc:
+						k = makingPluton
+					case melt:
+						k = makingMelt
+					}
+					book[i].banded(k, share, math.Abs(s.away-axis)*c)
+				}
 				switch s.makes {
 				case crushed:
 					book[i].crush += math.Abs(by)
@@ -2518,10 +2618,12 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// What comes up floods what is there: a bed of lava
 					// over the pile, which is the hard cap a plateau of
 					// basalt stands on long after the rift has gone quiet.
-					col.bury(Basalt, uint8(epoch), 0, g.Height[i], math.Abs(by))
-					g.ledger[i].bury(byLava, epoch)
+					if share >= 0.5 {
+						col.bury(Basalt, uint8(epoch), 0, g.Height[i], math.Abs(by))
+						g.ledger[i].bury(byLava, epoch)
+					}
 				}
-				if s.makes != nothing {
+				if s.makes != nothing && share >= 0.5 {
 					t.Formed = uint8(epoch)
 				}
 			}
@@ -2891,19 +2993,19 @@ func reachOf(m made, gap, belt float64) float64 {
 // beltOn is how far from a seam, in tiles, a meeting's works reach on this
 // world: beltReach at its deep span, and never under seamLeast.
 func beltOn(g *Grid) float64 {
-	return math.Max(seamLeast, tilesAcross(beltReach, deepSpan(g)))
+	return math.Max(g.inTiles(seamLeast), tilesAcross(beltReach, deepSpan(g)))
 }
 
 // hotspotOn is how far, in tiles, a hotspot's works reach on this world.
 func hotspotOn(g *Grid) float64 {
-	return math.Max(seamLeast, tilesAcross(hotspotReach, deepSpan(g)))
+	return math.Max(g.inTiles(seamLeast), tilesAcross(hotspotReach, deepSpan(g)))
 }
 
 // arcGapOn is how far behind the trench this world's arcs stand: the quoted
 // distance, or a quarter of the way between two plate middles where that is
 // less, and never under seamLeast. See arcGapReach.
 func arcGapOn(g *Grid, mids int) float64 {
-	gap := math.Max(seamLeast, tilesAcross(arcGapReach, deepSpan(g)))
+	gap := math.Max(g.inTiles(seamLeast), tilesAcross(arcGapReach, deepSpan(g)))
 	return math.Min(gap, spacing(g, mids)/4)
 }
 
@@ -3083,7 +3185,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 		// times as wide has a dozen times as many. Left at two, a globe had
 		// two volcanic provinces in half a million tiles and its plate
 		// interiors were ground that nothing had ever happened to.
-		g.hot = make([]geom.Pos, max(hotspots, hotspots*g.Span()/hotspotSpan))
+		g.hot = make([]geom.Pos, max(hotspots, hotspots*g.planetSpan()/hotspotSpan))
 		for i := range g.hot {
 			g.hot[i] = geom.Pos{X: w.RNG.IntN(g.W), Y: w.RNG.IntN(g.H)}
 		}
@@ -3112,6 +3214,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				g.Height[j] += lift
 				cr.lifted[j] += lift
 				book[j].melt += lift
+				book[j].whole[makingMelt] = true
 				// The cone is lava laid on whatever was there.
 				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Height[j]-lift, g.Height[j])
 				// The book: a hotspot is one plate's, with no other.
@@ -3286,7 +3389,6 @@ func (g *Grid) settleRock(book []record, ocean []bool) {
 	}
 
 	for i := range g.Tiles {
-		t := &g.Tiles[i]
 		c := &g.strata[i]
 		b := book[i]
 		fill := carrying(b.laid)
@@ -3303,52 +3405,64 @@ func (g *Grid) settleRock(book []record, ocean []bool) {
 				c.rock[k] = river
 			}
 		}
-		// The foot of the pile is what the crust itself is, and the fire and
-		// the crushing remake what lies over it. The order is the order that
-		// decides it: what came up as melt is what it is, whatever was done to
-		// it after; short of that, what an arc melted at depth; short of that,
-		// what was cooked and squeezed by a collision; and short of everything
-		// at all, basalt if it is ocean floor, granite if it is the old body
-		// of a continent. Where the fire or the crushing outweighs everything
-		// the water laid, it has remade the whole pile; where it does not, only
-		// the beds it buried deep enough.
-		foot := &c.rock[c.n-1]
-		switch {
-		case b.melt > madeEnough && b.melt > b.crush && b.melt > b.pluton:
-			*foot = Basalt
-		case b.pluton > madeEnough && b.pluton > b.crush:
-			// It melted under an arc and cooled at depth, and the weather has
-			// since taken off what stood over it. This is where granite comes
-			// from, and saying so is what gave the rock a place on the map at
-			// all: as the leftover case - ground nothing ever happened to - it
-			// never came up once in sixteen epochs, because something happens
-			// to everything.
-			below := g.Height[i] - plutonDepth
-			if b.pluton > fill {
-				below = math.Inf(1)
-			}
-			c.cook(below, Granite, t.Formed)
-		case b.crush > madeEnough:
-			below := g.Height[i] - cookDepth
-			if b.crush > fill {
-				below = math.Inf(1)
-			}
-			c.cook(below, Schist, t.Formed)
-		case ocean[i]:
-			*foot = Basalt
-		default:
-			// The old body of a continent, which almost nothing on a made map
-			// is: over an age every tile is remade, or buried, or spends half
-			// its life under the sea this history floods itself to. It is left
-			// standing as the statement of what the leftover is, and it should
-			// be read as an admission: a continental shield showing through is
-			// a thing this model cannot make, and letting old crust survive an
-			// age is the change that would.
-			*foot = Granite
+		if g.planet > 0 {
+			continue // the foot is laid on the map: see handDown
 		}
-		c.tidy()
+		g.cookFoot(i, b, ocean[i])
 	}
 	g.expose()
+}
+
+// cookFoot lays the foot of tile i's pile, and remakes what lies over it, by
+// what the book says was done to it. See settleRock.
+func (g *Grid) cookFoot(i int, b record, ocean bool) {
+	t := &g.Tiles[i]
+	c := &g.strata[i]
+	fill := carrying(b.laid)
+	// The foot of the pile is what the crust itself is, and the fire and
+	// the crushing remake what lies over it. The order is the order that
+	// decides it: what came up as melt is what it is, whatever was done to
+	// it after; short of that, what an arc melted at depth; short of that,
+	// what was cooked and squeezed by a collision; and short of everything
+	// at all, basalt if it is ocean floor, granite if it is the old body
+	// of a continent. Where the fire or the crushing outweighs everything
+	// the water laid, it has remade the whole pile; where it does not, only
+	// the beds it buried deep enough.
+	foot := &c.rock[c.n-1]
+	switch {
+	case b.melt > madeEnough && b.melt > b.crush && b.melt > b.pluton:
+		*foot = Basalt
+	case b.pluton > madeEnough && b.pluton > b.crush:
+		// It melted under an arc and cooled at depth, and the weather has
+		// since taken off what stood over it. This is where granite comes
+		// from, and saying so is what gave the rock a place on the map at
+		// all: as the leftover case - ground nothing ever happened to - it
+		// never came up once in sixteen epochs, because something happens
+		// to everything.
+		below := g.Height[i] - plutonDepth
+		if b.pluton > fill {
+			below = math.Inf(1)
+		}
+		c.cook(below, Granite, t.Formed)
+	case b.crush > madeEnough:
+		below := g.Height[i] - cookDepth
+		if b.crush > fill {
+			below = math.Inf(1)
+		}
+		c.cook(below, Schist, t.Formed)
+	case ocean:
+		*foot = Basalt
+	default:
+		// The old body of a continent, which almost nothing on a made map
+		// is: over an age every tile is remade, or buried, or spends half
+		// its life under the sea this history floods itself to. It is left
+		// standing as the statement of what the leftover is, and it should
+		// be read as an admission: a continental shield showing through is
+		// a thing this model cannot make, and letting old crust survive an
+		// age is the change that would.
+		*foot = Granite
+	}
+	c.tidy()
 }
 
 // normalise brings a history's relief back to the scale the rest of the world

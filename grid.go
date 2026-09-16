@@ -239,6 +239,11 @@ type Grid struct {
 	// which mends no reading of its own - the water's labels are read as
 	// they stood when the day's acting began. See island.go.
 	islanded bool
+
+	// planet is the Span of the map a history grid is the planet of, or
+	// nought on a grid that is its own planet: the map, and a history run on
+	// it. See historygrid.go.
+	planet int
 }
 
 // ownRouter is the grid's router, made on first use. It is not safe to reach
