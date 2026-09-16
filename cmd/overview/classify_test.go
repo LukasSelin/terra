@@ -90,7 +90,7 @@ func TestDesertIsHalfTheSteppeLine(t *testing.T) {
 	}
 }
 
-// classOf is koppenOf for a year swinging five degrees either side of mean.
+// classOf is terra.KoppenOf for a year swinging five degrees either side of mean.
 func classOf(mean, rain, warm float64) string {
-	return koppenOf(mean, mean-5, mean+5, rain, warm, false)
+	return terra.KoppenOf(mean, mean-5, mean+5, rain, warm, false)
 }

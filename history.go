@@ -824,19 +824,19 @@ type seam struct {
 // collision from an arc, and the sign of the lift tells a rift, where the
 // plates part and the ground drops, from islands coming up between two
 // floors that are closing.
-func (s *seam) raisedBy() raised {
+func (s *seam) raisedBy() MeetingKind {
 	switch s.makes {
 	case crushed:
-		return byCollision
+		return Collision
 	case arc:
-		return byArc
+		return Arc
 	case melt:
 		if s.lift < 0 {
-			return byRift
+			return Rift
 		}
-		return byIslands
+		return Islands
 	}
-	return unraised
+	return NoMeeting
 }
 
 // made is what a meeting makes of the rock at its axis, as against what it
@@ -3086,7 +3086,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				// The cone is lava laid on whatever was there.
 				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Height[j]-lift, g.Height[j])
 				// The book: a hotspot is one plate's, with no other.
-				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, byHotspot, epoch, lift)
+				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, Hotspot, epoch, lift)
 				g.ledger[j].bury(byLava, epoch)
 				if cr.ocean[j] {
 					cr.built[j] += lift

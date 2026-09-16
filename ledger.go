@@ -17,19 +17,30 @@ package terra
 // reading of these fields, so it is as true as the history and no truer.
 // See docs/perf/scaling-plan.md, track P.
 
-// raised is what kind of meeting did most to a tile's height in one epoch.
-// It is the seam's made, told apart where made does not tell: a rift and an
-// island arc both leave melt, and a hotspot is no meeting at all.
-type raised uint8
+// MeetingKind is what kind of meeting did most to a tile's height in one
+// epoch: what the book writes down and an uplift belt is made of. It is the
+// seam's made, told apart where made does not tell: a rift and islands both
+// leave melt, and a hotspot is no meeting at all.
+type MeetingKind uint8
 
 const (
-	unraised    raised = iota
-	byCollision        // two continents, crumpling: crushed
-	byArc              // a floor going under a continent: arc
-	byIslands          // two floors closing: melt out of open water
-	byRift             // two plates parting: the ground drops and floors with melt
-	byHotspot          // melt up through the middle of a plate
+	NoMeeting MeetingKind = iota
+	Collision             // two continents, crumpling: the crushed rock of a range
+	Arc                   // a floor going under a continent: an arc of volcanoes
+	Islands               // two floors closing: islands up out of open water
+	Rift                  // two plates parting: the ground drops and floors with melt
+	Hotspot               // melt up through the middle of a plate
+	meetingKinds
 )
+
+var meetingNames = [meetingKinds]string{"no meeting", "collision", "arc", "islands", "rift", "hotspot"}
+
+func (k MeetingKind) String() string {
+	if int(k) < len(meetingNames) {
+		return meetingNames[k]
+	}
+	return "meeting?"
+}
 
 // buried is what an epoch's last burial of a tile was: what the water or
 // the fire laid over it. See keepBook and tectonics.
@@ -79,15 +90,15 @@ type ledger struct {
 	buriedIn uint8 // the epoch of the last burial
 }
 
-func (l *ledger) raised() raised { return raised(l.kinds & 0xf) }
-func (l *ledger) buried() buried { return buried(l.kinds >> 4) }
+func (l *ledger) raised() MeetingKind { return MeetingKind(l.kinds & 0xf) }
+func (l *ledger) buried() buried      { return buried(l.kinds >> 4) }
 
 // meet writes down a meeting that did by metres to the tile in epoch e,
 // where that is more than any meeting before it did. What is compared is
 // the size of what was done, so that a rift that dropped a tile a kilometre
 // is the answer over a collision that raised it a metre; the sign is kept.
 // A new answer starts the wear since again.
-func (l *ledger) meet(a, b uint8, kind raised, e int, by float64) {
+func (l *ledger) meet(a, b uint8, kind MeetingKind, e int, by float64) {
 	if abs32(float32(by)) <= abs32(l.lift) {
 		return
 	}

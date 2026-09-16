@@ -85,6 +85,7 @@ func main() {
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
 	start := time.Now()
+	terra.SetNamer(namerFor(*seed))
 	land, err := terra.MakeLand(*seed, t)
 	if err != nil {
 		fail(err)

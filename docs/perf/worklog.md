@@ -49,6 +49,41 @@ the run-to-run noise the budget's slack covers. Nothing per epoch beyond the
 writes; the `record` is not grown, since anything added to it costs its
 bytes too.
 
+**The features (item 2).** `features.go`: a registry built on one goroutine
+in tile order at the end of `Generate` and of `Erode` - uplift belts (the
+tiles whose strongest meeting was one pair of plates in one epoch, joined
+where they touch), drainage basins (the route trees by where the water
+ends, each with its trunk from the outlet up by the most water at every
+fork), lakes, plates and climate regions (connected dry land of one Köppen
+group). The Köppen reading moved from `cmd/overview` into the package as
+`Grid.Koppen` and `KoppenOf`, computing what it computed there, with a
+letters-only form so the registry allocates nothing a tile. Ids are the
+order of the lowest tile, kind by kind. `SetNamer` hands the naming out;
+`cmd/overview` names from the seed.
+
+Two things the counts say. Belts fragment along a range by epoch, since a
+tile's strongest epoch varies along a seam: on ancient 241 belts over 1 930
+tiles, 91 of them one tile; on globe256 1 827 over 19 459. Basins are every
+route tree, and most of a coast's are a tile or two: globe256 has 1 465, of
+which 200 hold ten tiles or more. Both are the record as it is; a floor on
+size is a reader's choice and is left to the reader.
+
+Budget after item 2. The registry's churn is the labels (three ids a tile),
+the ends and the tributary table the basins are read with, and the feature
+list growing by doubling; the first alloc-per-feature version was found by
+`testing.AllocsPerRun` and put right (the feature is appended and filled in
+place, not built through a pointer that escapes):
+
+| world | bytes before | bytes after | per tile | allocs before | allocs after |
+|---|---|---|---|---|---|
+| valley | 10 354 136 | 10 473 792 | +41.5 | 1 312 | 1 333 |
+| ancient | 58 232 048 | 58 455 880 | +77.7 | 10 226 | 10 265 |
+| globe128 | 437 547 440 | 438 381 216 | +101.8 | 33 606 | 33 662 |
+
+Feature counts, seed 1: ancient 279 (241 belts, 26 basins, 2 lakes, 9
+plates, 1 climate region); globe128 1 150; globe256 3 421 (1 827 belts,
+1 465 basins, 3 lakes, 16 plates, 110 climate regions).
+
 ---
 
 

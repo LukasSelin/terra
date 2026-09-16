@@ -224,6 +224,8 @@ func (w *Land) Erode() {
 	// if it is cold enough, and ice that is no longer sea is water again.
 	g.freeze()
 	g.Recount() // the water has moved, and the woods with it
+	// And the features are joined again over the ground as it now lies.
+	g.readFeatures()
 }
 
 // wear is the moving of the ground itself: what an age of weather takes off

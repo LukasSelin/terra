@@ -327,7 +327,7 @@ func classify(land *terra.Land) classes {
 			}
 			p := g.PosOf(i)
 			byRiver := flood[i] && g.Drain[i] < terra.FloodDepth/2
-			c.Koppen[i] = koppen(g, p)
+			c.Koppen[i] = g.Koppen(p)
 			c.Biome[i] = biome(c.Koppen[i], byRiver)
 
 			atSea := false
@@ -372,107 +372,6 @@ func classify(land *terra.Land) classes {
 		}
 	})
 	return c
-}
-
-// koppen is the Köppen–Geiger type of the dry ground at p.
-//
-// The year's months are read off the tile's year as a sine, and its rain as
-// one too: a share w of the year's rain falling in the warmer half is a monthly
-// rain of P/12 (1 + a cos θ) with a = π(w - ½), θ the month's distance from
-// midsummer. That is enough to tell a summer rain from a winter one and a dry
-// season from none, which is all Köppen's second letters ask.
-func koppen(g *terra.Grid, p geom.Pos) string {
-	i := g.Index(p)
-	mean, cold, hot := g.YearAt(i)
-	return koppenOf(mean, cold, hot, g.Rain(i), g.RainWarm(i), g.Barren(p))
-}
-
-// koppenOf is the Köppen–Geiger type of a year with the given mean, coldest
-// and warmest month, rain, and share of that rain in the warmer half, on
-// ground under ice or not.
-func koppenOf(mean, cold, hot, rain, warm float64, ice bool) string {
-	if hot < 10 {
-		if hot < 0 || ice {
-			return "EF"
-		}
-		return "ET"
-	}
-	a := math.Max(-1, math.Min(1, math.Pi*(warm-0.5)))
-	sDry, sWet, wDry, wWet := math.Inf(1), 0.0, math.Inf(1), 0.0
-	for k := range 12 {
-		th := (float64(k)+0.5)*math.Pi/6 - math.Pi
-		m := rain / 12 * (1 + a*math.Cos(th))
-		if math.Abs(th) < math.Pi/2 {
-			sDry, sWet = math.Min(sDry, m), math.Max(sWet, m)
-		} else {
-			wDry, wWet = math.Min(wDry, m), math.Max(wWet, m)
-		}
-	}
-	dry := math.Min(sDry, wDry)
-
-	// The line between dry and not moves with the warmth, because warm air
-	// takes more of the rain back, and with when the rain falls, because rain
-	// in the summer is taken back sooner than rain in the winter. Under half
-	// the line is desert, and under the line steppe.
-	threshold := 20*mean + 140
-	switch {
-	case warm >= 0.7:
-		threshold = 20*mean + 280
-	case warm <= 0.3:
-		threshold = 20 * mean
-	}
-	if rain < threshold {
-		kind, heat := "BS", "k"
-		if rain < threshold/2 {
-			kind = "BW"
-		}
-		if mean >= 18 {
-			heat = "h"
-		}
-		return kind + heat
-	}
-
-	if cold >= 18 {
-		switch {
-		case dry >= 60:
-			return "Af"
-		case dry >= 100-rain/25:
-			return "Am"
-		}
-		return "Aw"
-	}
-	group := "C"
-	if cold <= -3 {
-		group = "D"
-	}
-	season := "f"
-	switch {
-	case sDry < 40 && sDry < wWet/3:
-		season = "s"
-	case wDry < sWet/10:
-		season = "w"
-	}
-	summer := "c"
-	switch {
-	case hot >= 22:
-		summer = "a"
-	case warmMonths(mean, hot) >= 4:
-		summer = "b"
-	}
-	return group + season + summer
-}
-
-// warmMonths is how many months of a sinusoidal year with the given mean and
-// warmest month stand at ten degrees or more.
-func warmMonths(mean, hot float64) int {
-	amp := (hot - mean) / (math.Sin(math.Pi/12) / (math.Pi / 12))
-	n := 0
-	for k := range 12 {
-		if mean+amp*math.Cos((float64(k)+0.5)*math.Pi/6-math.Pi) >= 10 {
-			n++
-		}
-	}
-	return n
 }
 
 // biome is the class a Köppen type is drawn as, and wetland where a river

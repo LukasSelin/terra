@@ -329,6 +329,10 @@ type Grid struct {
 	ledger    []ledger
 	epochs    uint8
 	plateRoot []uint8
+	// features is the registry of the things the tiles make up - belts,
+	// basins, lakes, plates, climates - built when the land is made and
+	// again after each Erode. See features.go.
+	features *Features
 
 	// Scratch: the working memory of the passes that make and wear the
 	// ground, kept between calls so that a pass called thirty times over a
@@ -448,6 +452,7 @@ func (g *Grid) Clone() *Grid {
 	c.strata = slices.Clone(g.strata)
 	c.abyss, c.uplift = g.abyss, g.uplift // laid once, and never written again
 	c.ledger, c.epochs, c.plateRoot = slices.Clone(g.ledger), g.epochs, g.plateRoot
+	c.features = g.features // built once, and never written again; Erode builds the copy its own
 	c.warm = append([]float32(nil), g.warm...)
 	c.swing = append([]float32(nil), g.swing...)
 	c.rainWarm = append([]float32(nil), g.rainWarm...)
