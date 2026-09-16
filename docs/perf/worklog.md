@@ -7,6 +7,64 @@ measurements is in [README.md](README.md).
 ---
 
 
+## 2026-09-16 - A world into a Zarr v3 store: zarr/, sharding, cmd/zarr
+
+**What this is.** On `claude/docker-tree-resources-a9e433`: a way to keep a
+world as a column store, one chunked array for each thing a tile has, that
+Go and Python both read. Three pieces, one commit each:
+
+- `zarr/` (4cd6007, db585d5) is `github.com/LukasSelin/zarr`, a Zarr v3
+  module of its own, standard library only, which terra does not import
+  and which is meant to leave for its own repository as it stands. Arrays,
+  groups, the bytes, gzip and crc32c codecs, and `sharding_indexed` with
+  partial reads through a `RangeGetter`. `TestZarrPython` (skipped unless
+  `ZARR_PYTHON` names a Python with zarr and numpy) has zarr-python 3.4.0
+  write twelve arrays for the module to read and read twelve the module
+  wrote; a shard is laid out byte for byte as zarr-python lays it.
+- `readout.go` (28b7cb2) in the root package: `AppendBeds`, `Record` and
+  `FeatureOf`, read-outs of the beds, the book and the registry, which were
+  kept in shapes of the map's own. They copy and change nothing.
+- `cmd/zarr` (28b7cb2), a module of its own so that terra's `go.mod` stays
+  the standard library's: makes a world and writes 67 arrays in seven
+  groups, in the types the world keeps them in.
+
+**Every world is as it was.** Nothing in the making of a world changed.
+`TERRA_DIGEST=check` passes, and the short tier passes (69.9 s). The budget
+was not rerun, as nothing it measures was touched; the read-outs allocate
+only when called, and nothing in the making calls them.
+
+**What an export costs.** One run, AMD Ryzen 9 3900X, 24 threads, with other
+sessions on the machine - a reading, not a baseline:
+
+| | |
+|---|---|
+| making the 1024 by 512 globe (`-preset globe`) | 49.9 s |
+| writing it: 67 arrays, gzip 5, chunks of 64, shards of 16 chunks | 0.8 s |
+| on disk | 143 files, 41.2 MiB |
+
+The export is two percent of the making, so it is not worth a benchmark of
+its own yet. Unsharded, the same store is 67 arrays of 128 chunks: some
+8 600 files; the shards are what keep a large world to a file count a
+directory or an object store is comfortable with. A shard is written whole,
+so writing costs a shard's worth of memory per array at once (a 1024-square
+shard of float64 is 8 MiB), and the arrays are written over GOMAXPROCS
+goroutines. Reading a 3 by 3 region of a 256-square array in 128-square
+shards fetches two ranges - the index and one 16-square chunk - and not the
+shard (`TestReadingAChunkReadsOnlyItsPartOfTheShard`).
+
+**Held.** The export reads back tile for tile as the world
+(`TestAMadeWorldReadsBackAsItIs`); the same world writes the same store
+byte for byte on one goroutine or eight
+(`TestTheSameWorldWritesTheSameStore`); zarr-python reads the globe's
+heights to the same digits the Go module does.
+
+**Not yet.** The export is the world as made, at tick 0, not a day of its
+weather. Features are not named, as terra names nothing without a namer
+and Zarr v3 has no core string type. xarray has not been tried on a store.
+
+---
+
+
 ## 2026-09-16 - P1: the causal record. The book kept, features, and Why
 
 **What this is.** Track P of the plan (`docs/perf/scaling-plan.md`), the
