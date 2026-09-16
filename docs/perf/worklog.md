@@ -6,6 +6,51 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/zarr experiment loop: kept histories, every term, a store per stage
+
+**What this is.** On `claude/zarr-experiment-loop`: `cmd/zarr` gains
+`-keep-history` and `-from-history` (as `cmd/overview` has them),
+`-wetness`, `-woods`, `-growth`, `-glacial` and `-terms file.json`, and
+`-stages dir`, which writes a store at the end of every stage, with
+`-stages-diff a b` to name the first stage two experiments differ at. The
+recipe is the "experiment loop" section of `cmd/zarr/README.md`.
+
+**The root package.** One hook and nothing else: `StageWatch`, a
+`func(stage string, l *Land, g *Grid)`, which `generateFrom` calls after
+each stage when it is not nil; `Stages()`, the names; and
+`MakeLandWatching(seed, t, history io.Writer, watch)` and
+`LandFromHistoryWatching(in, watch)`, of which `MakeLandKeepingHistory` and
+`LandFromHistory` are now the nil-watch cases. `Generate` passes nil: an
+unwatched making does one nil compare per stage and allocates nothing more.
+`TestAWatchedWorldIsTheSameWorld` holds that a watched world, from the
+plates and from its history, is NewLand's, and that both see the same
+grid at every stage.
+
+**Digest.** `TERRA_DIGEST=write` on the base commit (312900f) rewrote
+`docs/perf/digest.json` to the bytes already committed; `TERRA_DIGEST=check`
+after the change passes. No world moved.
+
+**Budget.** `TestWorldCreationBudget` passes unchanged; not rewritten.
+`perf.sh` and the yardsticks were not run: nothing in the root package but
+the hook changed. `go test -short -timeout 60m .` passes (95 s).
+
+**Demonstrated.** Ryzen 9 3900X, 24 threads, other sessions on the machine,
+so the times are indicative. A globe (`-preset globe`, 1024 by 512):
+
+| run | making | writing |
+|---|---|---|
+| made, `-out` | 76.3 s | 1.4 s |
+| made, `-keep-history` (198 MiB file) | 72.4 s | 1.9 s |
+| `-from-history`, twice | 17.5 s, 16.3 s | 1.8 s, 1.1 s |
+| `-from-history -stages` | 22.5 s with the six stores (0.6-0.9 s each) | |
+| made, `-stages` | 93.8 s with the six stores | |
+
+A globe re-exported from its history takes the later stages' 16-17 s, a
+quarter of the 72-76 s of making it. `zarrdiff` finds the store made from
+the history the same as the made one in all 83 arrays, and `-stages-diff`
+finds every stage's store the same whether the world was made from the
+plates or from the kept history, the ground stage included.
+
 ## 2026-09-16 - zarrdiff: where and by how much two worlds differ
 
 **What this is.** On `claude/zarrdiff`: `cmd/zarr/zarrdiff`, a command in
