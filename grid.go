@@ -127,10 +127,9 @@ func (t *Tile) Deep() bool {
 
 // Grid is the world map, row-major. With Wrap the east edge is joined to the
 // west and the map is a globe drawn as a cylinder; without it the map is a
-// valley with edges. See globe.go.
+// valley with edges. See geom.Map.
 type Grid struct {
-	W, H  int
-	Wrap  bool
+	geom.Map
 	Tiles []Tile
 	// Height is metres above the lowest ground on the map, one entry per
 	// tile and indexed as Tiles is. It is beside the map rather than in the
@@ -378,20 +377,11 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{Map: geom.Map{W: w, H: h}, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
 	return g
-}
-
-// In reports whether p is on the map. On a globe every column is; only a
-// row past a pole is off it.
-func (g *Grid) In(p geom.Pos) bool {
-	if p.Y < 0 || p.Y >= g.H {
-		return false
-	}
-	return g.Wrap || (p.X >= 0 && p.X < g.W)
 }
 
 // At returns the tile at p. The caller must check In first.
@@ -448,7 +438,7 @@ func (v TileView) Wash() float64 { return v.g.washAt(v.i) }
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{Map: g.Map, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)

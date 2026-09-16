@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/LukasSelin/terra"
+	"github.com/LukasSelin/terra/geom"
 )
 
 // mkTemp is a directory for one test binary's files, removed when the tests
@@ -157,7 +158,7 @@ func TestHeightmapTilesShareTheirEdges(t *testing.T) {
 // On a globe the column past the east edge is the west edge again, so the
 // seam meets; on a valley it is the east edge carried on.
 func TestSeamColumnOfAGlobe(t *testing.T) {
-	g := &terra.Grid{W: 8, H: 4, Wrap: true}
+	g := &terra.Grid{Map: geom.Map{W: 8, H: 4, Wrap: true}}
 	if got := vertexTile(g, 8, 2); got != 2*8+0 {
 		t.Errorf("wrapped seam column reads tile %d, want the west edge %d", got, 2*8)
 	}
@@ -171,7 +172,7 @@ func TestSeamColumnOfAGlobe(t *testing.T) {
 	if got := vertexTile(g, 8, 2); got != 2*8+7 {
 		t.Errorf("valley column past the edge reads tile %d, want the east edge %d", got, 2*8+7)
 	}
-	if vw, _ := vertsOf(&terra.Grid{W: 8, H: 4, Wrap: true}); vw != 9 {
+	if vw, _ := vertsOf(&terra.Grid{Map: geom.Map{W: 8, H: 4, Wrap: true}}); vw != 9 {
 		t.Errorf("a globe 8 across has %d vertices across, want 9", vw)
 	}
 }

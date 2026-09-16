@@ -264,3 +264,13 @@ func (g *Grid) rockAt(p, off geom.Pos) float64 {
 	}
 	return rockErodibility(g.At(q))
 }
+
+func sign(v int) int {
+	switch {
+	case v < 0:
+		return -1
+	case v > 0:
+		return 1
+	}
+	return 0
+}
