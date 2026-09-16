@@ -66,16 +66,25 @@ func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
 	}
 }
 
-// Generate is GenerateTerrain on the given terms.
+// Generate is GenerateTerrain on the given terms: every stage, in order, on
+// a new grid. See stages.go.
 func (w *Land) Generate(cfg Terms) {
 	defer phase("Generate")()
-	width, height := cfg.Width, cfg.Height
-	g := NewGrid(width, height)
+	w.generateFrom(w.newGround(cfg), cfg, 0)
+}
+
+// newGround is the grid a world is made on, before any stage has run.
+func (w *Land) newGround(cfg Terms) *Grid {
+	g := NewGrid(cfg.Width, cfg.Height)
 	g.Wrap = cfg.Wrap
 	// The air is the climate's, read row by row, and it is set before the
 	// ground is made because a history rains on its ground while it runs.
 	g.air = w.Climate.airFor(g, cfg.Wetness)
+	return g
+}
 
+// stageGround is the ground and the rock under it: a history's, or drawn.
+func (w *Land) stageGround(g *Grid, cfg Terms) {
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both
 		// what its history left. See history.go.
@@ -86,14 +95,25 @@ func (w *Land) Generate(cfg Terms) {
 		// the water has been anywhere: a river runs over the rock it finds.
 		w.layBedrock(g)
 	}
-	// The sea: poured, where there is a history to say how deep the basins
-	// are, and otherwise the lowest share of the ground. See water.go.
-	poured := cfg.Epochs > 0 && cfg.Water > 0
-	if poured {
+}
+
+// poured reports whether a world's sea is poured from its water rather than
+// flooded to a share. See water.go.
+func (cfg Terms) poured() bool { return cfg.Epochs > 0 && cfg.Water > 0 }
+
+// stageSea is the sea: poured, where there is a history to say how deep the
+// basins are, and otherwise the lowest share of the ground. See water.go.
+func (w *Land) stageSea(g *Grid, cfg Terms) {
+	if cfg.poured() {
 		g.pour(cfg.Water, w.RNG)
 	} else {
 		g.flood(cfg.SeaShare, w.RNG)
 	}
+}
+
+// stageShape is the ground laid again at a map's tile span, and the rock and
+// the drainage read off it.
+func (w *Land) stageShape(g *Grid, cfg Terms) {
 	// The ground as the water would have worn it, with the first-order valleys
 	// cut into its hillsides, and what that leaves too steep to stand brought
 	// down. See shape.go and slide.go.
@@ -107,6 +127,10 @@ func (w *Land) Generate(cfg Terms) {
 	// has too. See strata.go.
 	g.expose()
 	g.drain()
+}
+
+// stageCut is the valleys cut, and the sea levelled on what that leaves.
+func (w *Land) stageCut(g *Grid, cfg Terms) {
 	// The water cuts its valley before the valley is asked where the water
 	// goes: the cutting moves the ground, so the drainage has to be taken
 	// again on the ground it left. See valleyYears.
@@ -117,7 +141,7 @@ func (w *Land) Generate(cfg Terms) {
 	}
 	// And the sea is levelled again on the ground the cutting left. See
 	// Grid.relevel.
-	if poured {
+	if cfg.poured() {
 		g.repour(cfg.Water)
 	} else {
 		g.relevel(cfg.SeaShare)
@@ -125,6 +149,12 @@ func (w *Land) Generate(cfg Terms) {
 	g.drain()
 	g.carve(w.RNG)
 	g.height()
+}
+
+// stageCoast is each tile's year, the sea's ice, the tide and the mud it
+// lays.
+func (w *Land) stageCoast(g *Grid, cfg Terms) {
+	width := g.W
 	// The heights are settled and the coast is where it is going to be, so the
 	// year each tile has can be written down: the year's mean at that
 	// latitude, warmed by how much sea lies round the tile and warmed or
@@ -168,12 +198,18 @@ func (w *Land) Generate(cfg Terms) {
 	// And the mud the rivers have brought the tide since the sea stood where
 	// it stands, which is what a flat is made of. See silt.
 	g.silt(func() {
-		if poured {
+		if cfg.poured() {
 			g.repour(cfg.Water)
 		} else {
 			g.relevel(cfg.SeaShare)
 		}
 	})
+}
+
+// stageCover is what stands on the ground and what it will grow: the woods,
+// the outcrops, the soil; and the things the tiles make up.
+func (w *Land) stageCover(g *Grid, cfg Terms) {
+	width := g.W
 
 	// Woods stand where the ground is damp enough to grow them and gentle
 	// enough to hold soil: the valley sides above the flood, not the crown of
