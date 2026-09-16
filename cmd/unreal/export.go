@@ -66,6 +66,10 @@ func export(land *terra.Land, opt options) (*manifest, error) {
 	if err := x.weightmaps(); err != nil {
 		return nil, err
 	}
+	if err := writeWater(filepath.Join(opt.Out, waterName), waterOf(g, opt.RiverFlow)); err != nil {
+		return nil, err
+	}
+	x.m.add(waterName, "water", "", -1, -1, filepath.Join(opt.Out, waterName))
 	if err := x.m.write(filepath.Join(opt.Out, manifestName)); err != nil {
 		return nil, err
 	}
