@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/LukasSelin/terra"
 	"github.com/LukasSelin/terra/geom"
@@ -39,6 +38,14 @@ type server struct {
 	// pages to be asked about without making them again. See keep.
 	keptMu sync.Mutex
 	kept   []keptLand
+	// The jobs, by id and in the order they came; work is the worker's
+	// queue, and rates the seconds a tile the last job of each kind took.
+	// See jobs.go.
+	jobsMu sync.Mutex
+	jobs   map[string]*job
+	order  []string
+	work   chan *job
+	rates  map[string]float64
 }
 
 type keptLand struct {
@@ -55,9 +62,13 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 func newServer(dir string, o options) *server {
 	mux := http.NewServeMux()
-	s := &server{mux: mux, dir: dir, o: o}
+	s := &server{mux: mux, dir: dir, o: o, jobs: map[string]*job{}, work: make(chan *job, queueCap), rates: map[string]float64{}}
+	go s.worker()
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("POST /generate", s.generate)
+	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
+	mux.HandleFunc("GET /jobs/{id}/status", s.jobState)
+	mux.HandleFunc("POST /jobs/{id}/cancel", s.cancel)
 	mux.HandleFunc("GET /runs/{run}/tile", s.tile)
 	mux.Handle("GET /runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(dir))))
 	return s
@@ -84,8 +95,8 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	s.page(w, http.StatusOK, o.values(), msg)
 }
 
-// generate makes the world the form asks for and sends the browser to its
-// page, or shows the form again with what was wrong.
+// generate queues the world the form asks for and sends the browser to the
+// job's page, or shows the form again with what was wrong.
 func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.page(w, http.StatusBadRequest, nil, err.Error())
@@ -101,27 +112,12 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.one.Lock()
-	defer s.one.Unlock()
-	run := fmt.Sprintf("%s-%s-seed%d", time.Now().Format("20060102-150405.000"), o.Preset, o.Seed)
-	out := filepath.Join(s.dir, run)
-	land, _, err := generate(o, out)
-	if err != nil {
-		os.RemoveAll(out)
-		status := http.StatusInternalServerError
-		if errors.Is(err, terra.ErrTooBig) {
-			status = http.StatusUnprocessableEntity
-		}
-		s.page(w, status, r.PostForm, "making the world: "+err.Error())
+	j, ok := s.queue(o)
+	if !ok {
+		s.page(w, http.StatusServiceUnavailable, r.PostForm, fmt.Sprintf("%d worlds are already waiting to be made; try again when some are done", queueCap))
 		return
 	}
-	if b, err := json.MarshalIndent(o, "", "  "); err == nil {
-		os.WriteFile(filepath.Join(out, settingsFile), b, 0o644)
-	}
-	s.keep(run, land)
-	// The directory and not its index.html, which the file server would send
-	// back to the directory.
-	http.Redirect(w, r, "/runs/"+run+"/", http.StatusSeeOther)
+	http.Redirect(w, r, "/jobs/"+j.ID, http.StatusSeeOther)
 }
 
 // tile answers a click on a run's map: the world's account of the tile at
@@ -173,7 +169,7 @@ func (s *server) landOf(run string) (*terra.Land, int, error) {
 	if land := s.kept1(run); land != nil {
 		return land, 0, nil
 	}
-	land, _, _, err := makeWorld(o)
+	land, _, _, err := makeWorld(o, func(string) {})
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -348,8 +344,9 @@ func (s *server) page(w http.ResponseWriter, status int, form url.Values, msg st
 		Presets []presetView
 		Error   string
 		Runs    []run
+		Jobs    []jobStatus
 		Chunk   int
-	}{fields, views, msg, s.runs(), terra.ChunkSide})
+	}{fields, views, msg, s.runs(), s.active(), terra.ChunkSide})
 }
 
 // runs is the worlds made before, newest first.
@@ -357,7 +354,7 @@ func (s *server) runs() []run {
 	entries, _ := os.ReadDir(s.dir)
 	var runs []run
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || s.unfinished(e.Name()) {
 			continue
 		}
 		r := run{Name: e.Name()}
@@ -424,6 +421,8 @@ a{color:inherit}
 </div>
 <button type="submit">Generate world</button>
 </form>
+{{if .Jobs}}<h2 class="mut">Being made</h2>
+<ul>{{range .Jobs}}<li><a href="/jobs/{{.ID}}">{{.ID}}</a> · <span class="mut">{{if eq .State "queued"}}waiting, {{.Ahead}} ahead{{else}}{{.Stage}}{{end}}</span></li>{{end}}</ul>{{end}}
 {{if .Runs}}<h2 class="mut">Made before</h2>
 <ul>{{range .Runs}}<li><a href="/runs/{{.Name}}/">{{.Name}}</a> · <a class="mut" href="/runs/{{.Name}}/why.html">why</a>{{if .Tune}} · <a class="mut" href="{{.Tune}}">tune from this</a><br><span class="mut">{{.About}}</span>{{end}}</li>{{end}}</ul>{{end}}
 </main>
