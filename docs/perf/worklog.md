@@ -6,6 +6,26 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/overview -serve: a page with a button that makes a world
+
+**What this is.** The first step toward making worlds from a browser, on
+`claude/world-generator-web-ui-c36c93`. `go run ./cmd/overview -serve :8080`
+serves a page with one button; each press makes the world the other flags
+describe into its own directory under `-runs` (default `runs/`) and sends
+the browser to its `index.html`. The body of `main` became
+`generate(options, out)`, which the command line and the server share. A
+mutex keeps the server to one world at a time, because `terra.SetNamer` is
+the package's. No file of the root package changed, so the digest, the
+budget and the yardsticks are what main's are and were not re-run.
+
+**What it measured.** Nothing about world creation. The command line's
+output on the default valley is what it was before the split: stdout and
+every png the same byte for byte, and `index.html` differs only in its
+"made in" time. `go test -short ./cmd/overview` makes a 32x32 valley
+through the server in under half a second.
+
+---
+
 ## 2026-09-16 - U1: cmd/unreal, the Landscape export at 25 m
 
 **What this is.** Milestone U1 of the scaling plan's level 2, on

@@ -11,6 +11,12 @@
 //
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
+//
+//	go run ./cmd/overview -serve :8080         a page with a button that makes one
+//
+// With -serve it makes no world until asked: each press of the button makes
+// the world the other flags describe into its own directory under -runs, and
+// the browser is sent to its page. See serve.go.
 package main
 
 import (
@@ -30,25 +36,55 @@ import (
 	"github.com/LukasSelin/terra/geom"
 )
 
+// options is what a world is made and drawn from: the flags on the command
+// line, or what the server was started with.
+type options struct {
+	Seed   uint64
+	Preset string
+	// W, H, Epochs, Sea and Water override the preset where they are set:
+	// W and H above nought, the rest at nought or above.
+	W, H       int
+	Epochs     int
+	Sea, Water float64
+	Wrap       bool
+	// Scale is pixels per tile, 0 to pick one; Day is the day whose weather
+	// is drawn; Max makes the world as big as memory allows.
+	Scale, Day int
+	Max        bool
+}
+
 func main() {
+	var o options
+	flag.Uint64Var(&o.Seed, "seed", 1, "the seed the world is made from")
+	flag.StringVar(&o.Preset, "preset", "valley", "valley, ancient or globe")
+	flag.IntVar(&o.W, "w", 0, "width in tiles (overrides the preset)")
+	flag.IntVar(&o.H, "h", 0, "height in tiles (overrides the preset)")
+	flag.IntVar(&o.Epochs, "epochs", -1, "ages of history to run (overrides the preset)")
+	flag.Float64Var(&o.Sea, "sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
+	flag.Float64Var(&o.Water, "water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
+	flag.BoolVar(&o.Wrap, "wrap", false, "join the east edge to the west (forced on by -preset globe)")
+	flag.IntVar(&o.Scale, "scale", 0, "pixels per tile (0 picks one)")
+	flag.IntVar(&o.Day, "day", 30, "the day of the world whose weather is drawn")
+	flag.BoolVar(&o.Max, "max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
 	var (
-		seed    = flag.Uint64("seed", 1, "the seed the world is made from")
-		preset  = flag.String("preset", "valley", "valley, ancient or globe")
-		w       = flag.Int("w", 0, "width in tiles (overrides the preset)")
-		h       = flag.Int("h", 0, "height in tiles (overrides the preset)")
-		epochs  = flag.Int("epochs", -1, "ages of history to run (overrides the preset)")
-		sea     = flag.Float64("sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
-		water   = flag.Float64("water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
-		wrap    = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
-		scale   = flag.Int("scale", 0, "pixels per tile (0 picks one)")
-		out     = flag.String("out", "overview", "directory to write into")
-		day     = flag.Int("day", 30, "the day of the world whose weather is drawn")
-		biggest = flag.Bool("max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
+		out   = flag.String("out", "overview", "directory to write into")
+		serve = flag.String("serve", "", "serve a page that makes worlds at this address (e.g. :8080) instead of making one; the other flags are what it makes")
+		runs  = flag.String("runs", "runs", "directory the server writes each world into, one directory a world")
 	)
 	flag.Parse()
 
+	if *serve != "" {
+		fail(listen(*serve, *runs, o))
+	}
+	if _, err := generate(o, *out); err != nil {
+		fail(err)
+	}
+}
+
+// terms is the preset the options name, with their overrides laid over it.
+func (o options) terms() (terra.Terms, error) {
 	var t terra.Terms
-	switch *preset {
+	switch o.Preset {
 	case "valley":
 		t = terra.DefaultTerms()
 	case "ancient":
@@ -56,39 +92,49 @@ func main() {
 	case "globe":
 		t = terra.GlobeTerms()
 	default:
-		fail(fmt.Errorf("unknown preset %q: want valley, ancient or globe", *preset))
+		return t, fmt.Errorf("unknown preset %q: want valley, ancient or globe", o.Preset)
 	}
-	if *w > 0 {
-		t.Width = *w
+	if o.W > 0 {
+		t.Width = o.W
 	}
-	if *h > 0 {
-		t.Height = *h
+	if o.H > 0 {
+		t.Height = o.H
 	}
-	if *epochs >= 0 {
-		t.Epochs = *epochs
+	if o.Epochs >= 0 {
+		t.Epochs = o.Epochs
 	}
-	if *sea >= 0 {
-		t.SeaShare = *sea
+	if o.Sea >= 0 {
+		t.SeaShare = o.Sea
 	}
-	if *water >= 0 {
-		t.Water = *water
+	if o.Water >= 0 {
+		t.Water = o.Water
 	}
-	if *wrap {
+	if o.Wrap {
 		t.Wrap = true
 	}
-	if *biggest {
-		var err error
-		if t, err = t.Largest(); err != nil {
-			fail(err)
-		}
+	if o.Max {
+		return t.Largest()
+	}
+	return t, nil
+}
+
+// generate makes the world the options describe and draws it into out: an
+// index.html, a why.html and a png per layer. It prints a summary to the
+// terminal as it goes and returns the path of index.html.
+//
+// It sets the package's namer, so no two may run at once.
+func generate(o options, out string) (string, error) {
+	t, err := o.terms()
+	if err != nil {
+		return "", err
 	}
 
-	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
+	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
 	start := time.Now()
-	terra.SetNamer(namerFor(*seed))
-	land, err := terra.MakeLand(*seed, t)
+	terra.SetNamer(namerFor(o.Seed))
+	land, err := terra.MakeLand(o.Seed, t)
 	if err != nil {
-		fail(err)
+		return "", err
 	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
@@ -99,19 +145,19 @@ func main() {
 	}
 
 	// The day's weather, run from the founding up to the day asked for.
-	for tick := 0; tick <= max(*day, 0); tick++ {
+	for tick := 0; tick <= max(o.Day, 0); tick++ {
 		land.Tick = tick
 		land.Climate.Advance(tick, land.RNG)
 		land.AdvanceWeather()
 	}
 
-	px := *scale
+	px := o.Scale
 	if px <= 0 {
 		px = max(1, min(12, 1024/max(t.Width, 1)))
 	}
 
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		fail(err)
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return "", err
 	}
 	g := land.Grid
 	stats := measure(land)
@@ -127,18 +173,17 @@ func main() {
 			l.overlay(img, px)
 		}
 		name := l.file + ".png"
-		if err := writePNG(filepath.Join(*out, name), img); err != nil {
-			fail(err)
+		if err := writePNG(filepath.Join(out, name), img); err != nil {
+			return "", err
 		}
 		layers = append(layers, layer{Title: l.title, File: name, About: l.about, Legend: l.legend})
 	}
 
-	page := filepath.Join(*out, "index.html")
+	page := filepath.Join(out, "index.html")
 	f, err := os.Create(page)
 	if err != nil {
-		fail(err)
+		return "", err
 	}
-	defer f.Close()
 	err = pageTmpl.Execute(f, struct {
 		Seed   uint64
 		Terms  terra.Terms
@@ -147,16 +192,20 @@ func main() {
 		Stats  summary
 		Layers []layer
 		Width  int
-	}{*seed, t, *preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px})
+	}{o.Seed, t, o.Preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px})
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
-		fail(err)
+		return "", err
 	}
 	// And the world's account of eight of its tiles. See why.go.
-	if err := writeWhy(filepath.Join(*out, "why.html"), land, *seed, *preset); err != nil {
-		fail(err)
+	if err := writeWhy(filepath.Join(out, "why.html"), land, o.Seed, o.Preset); err != nil {
+		return "", err
 	}
 	abs, _ := filepath.Abs(page)
 	fmt.Printf("\nwrote %d maps, why.html and %s\n", len(layers), abs)
+	return page, nil
 }
 
 func fail(err error) {
