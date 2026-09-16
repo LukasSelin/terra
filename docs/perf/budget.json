@@ -1,21 +1,24 @@
 {
-	"note": "Written by TERRA_PERF_UPDATE=1 go test -run TestWorldCreationBudget. Bytes and allocs are checked; nanos are for reference only. See docs/perf/README.md.",
+	"note": "Written by TERRA_PERF_UPDATE=1 go test -run TestWorldCreationBudget. Bytes and allocs are checked; peak and nanos are for reference only. See docs/perf/README.md.",
 	"workers": 4,
 	"worlds": {
 		"ancient": {
-			"bytes": 58201320,
-			"allocs": 10217,
-			"nanos": 344247600
+			"bytes": 58201832,
+			"allocs": 10222,
+			"peak": 9381040,
+			"nanos": 345644800
 		},
 		"globe128": {
-			"bytes": 437508992,
-			"allocs": 33584,
-			"nanos": 2090988900
+			"bytes": 437509648,
+			"allocs": 33585,
+			"peak": 28585320,
+			"nanos": 2084866200
 		},
 		"valley": {
-			"bytes": 10333208,
-			"allocs": 1299,
-			"nanos": 90761600
+			"bytes": 10333272,
+			"allocs": 1302,
+			"peak": 3328072,
+			"nanos": 88250800
 		}
 	}
 }
