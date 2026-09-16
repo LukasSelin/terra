@@ -6,6 +6,98 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - zarr/: fuzzed, held to what its metadata implies, and measured
+
+**What this is.** `zarr/` only, on `claude/zarr-robust` off 3973917: no
+feature added, no public API changed, nothing in terra or `cmd/zarr`
+touched. Every world is as it was; the digest, budget and yardsticks do
+not see this module.
+
+**Limits** (1123a63). A store could make the module panic or allocate
+without bound. Now an array does not open if its shape counts more
+elements than an int, or if a chunk, a shard or a shard's index would be
+more than 2 GiB (`maxStoredBytes`, the one constant: a chunk is made whole
+when read, and a chunk never written is made of the fill). A gzip chunk
+inflates to no more than its chunk spec implies, carried through the codecs
+before it (the bytes codec exactly, crc32c +4, gzip +1% +1 KiB; an unknown
+codec falls back to the 2 GiB). A shard's index must put every chunk inside
+the shard, clear of the index and of every other chunk. Region ends and
+`NumChunks` no longer overflow near the top of an int. `limit_test.go`
+holds each; on main's code they were:
+
+| case | main | branch |
+|---|---|---|
+| shape [MaxInt64, 4], `Read` | panic: makeslice len out of range | does not open |
+| chunk shape [2^62, 2^62] | panic: slice bounds out of range | does not open |
+| chunk shape [65536, 65536] int16 | opens and reads (8 GiB a chunk) | does not open |
+| shard of 2^32 one-element chunks | 48 GB allocated at open (killed) | does not open |
+| shape [MaxInt64] in chunks of 1024, `Read` of all; a region whose end overflows | panic: makeslice len out of range | error |
+| a 16-byte chunk as 1 MiB of gzip zeros | inflates it whole (5.3 MB allocated), then errors | stops at 16 bytes |
+| shard index entries overlapping, or the same chunk twice | read as data | error |
+
+**Fuzzing** (2f9e5c2). Native Go fuzz targets: `FuzzMetadata` (array and
+group zarr.json; what opens must write and reopen as the same metadata),
+`FuzzOpenAndRead` (zarr.json and two fuzzed keys in a MemoryStore, a region
+and a chunk read by range and with shards read whole), `FuzzBytesCodec`,
+`FuzzGzipCodec`, `FuzzCRC32CCodec` (each round-trips what decodes),
+`FuzzShard` (three sharding layouts; what decodes re-encodes to the same
+elements) and `FuzzShardIndex` (`checkIndex` against a pairwise check).
+The corpus is seeded from all twelve `testdata/interop` cases as this module
+writes them, three more arrays, and the other tests. Each fails on more
+than 256 MiB allocated per input, with chunks lowered to 64 KiB for the run.
+
+| target | branch, 5 min | after the gzip pools, 4 min | main's code, 3 min |
+|---|---:|---:|---:|
+| FuzzOpenAndRead | 24.8 M execs, nothing | 11.5 M, nothing | **found**: chunk grid 6 x 8888888 uint32, 853 MB for a 16-element read |
+| FuzzMetadata | 38.1 M, nothing | | 17.2 M, nothing |
+| FuzzShard | 36.0 M, nothing | 31.0 M, nothing | 21.8 M, nothing |
+| FuzzGzipCodec | 22.1 M, nothing | 18.0 M, nothing | (needs the limit) |
+| FuzzBytesCodec | 28.0 M, nothing | | 27.1 M, nothing |
+| FuzzShardIndex | 37.6 M, nothing | | (new) |
+| FuzzCRC32CCodec | 45.2 M, nothing | | |
+
+The one crasher is kept in `testdata/fuzz/FuzzOpenAndRead` (3dc1115). The
+byte mutator rarely makes a JSON number huge, so the overflow panics above
+were found by reading the code and are held by `limit_test.go`, not by the
+fuzzer.
+
+**Benchmarks** (fb5b111, `bench_test.go`). 512 x 1024 float64, chunks of
+64, gzip 5, MemoryStore; shards are 4 x 4 chunks; the region is 3 x 3
+across four chunks of one shard in a DirStore. AMD Ryzen 9 3900X, 24
+threads, Windows 11, go1.27.0, `-count 6`, main's module and the branch
+back to back with no other test running:
+
+| benchmark | main time/op | branch time/op | main B/op | branch B/op | main allocs | branch allocs |
+|---|---:|---:|---:|---:|---:|---:|
+| Write, chunks | 101.2 ms | 81.2 ms (-20%) | 119.4 MiB | 20.6 MiB (-83%) | 4 868 | 2 709 |
+| Write, shards | 100.8 ms | 89.6 ms (-11%) | 142.2 MiB | 44.5 MiB (-69%) | 4 573 | 2 443 |
+| Read, chunks | 41.9 ms | 38.7 ms (-8%) | 35.9 MiB | 16.1 MiB (-55%) | 4 614 | 2 443 |
+| Read, shards | 41.7 ms | 40.7 ms (-3%) | 35.8 MiB | 16.1 MiB (-55%) | 3 942 | 1 795 |
+| ReadRegion (DirStore, shards) | 1.73 ms | 1.56 ms (-10%) | 1 025 KiB | 394 KiB (-62%) | 173 | 108 |
+| ReadChunk, chunks | 317 µs | 294 µs (~) | 255 KiB | 97 KiB (-62%) | 36 | 19 |
+| ReadChunk, shards | 326 µs | 302 µs (~) | 256 KiB | 98 KiB (-62%) | 42 | 28 |
+| WriteChunk, chunks | 783 µs | 658 µs (-16%) | 923 KiB | 132 KiB (-86%) | 36 | 19 |
+| WriteChunk, shards | 18.0 ms | 17.2 ms (~) | 21.7 MiB | 7.2 MiB (-67%) | 992 | 468 |
+
+(~ is benchstat's no significant difference at p < 0.05.) The waste B/op
+pointed at was gzip: a new
+`gzip.Writer` for every chunk (most of a megabyte of compressor state) and
+a new reader, inflating through `io.ReadAll`'s doublings. 6fe433e keeps
+writers per level and readers in `sync.Pool`s and inflates into one buffer
+sized from the gzip trailer, held to the chunk's bound. A reset writer
+writes what a new one does (`TestAKeptGzipWriterWritesWhatANewOneDoes`),
+and the store `cmd/zarr` writes for seed 3 is the same byte for byte, all
+1 406 keys under four sets of options (chunk 16 shard 2 gzip 1; 64, 0, none;
+32, 4, 5; 16, 0, 9), before and after. Not changed: a sharded WriteChunk
+still decodes and re-encodes its whole shard, as zarr-python does, and the
+ranged read already fetched only the index and the chunks it needs.
+
+**Checked.** `go test ./...` and `go vet ./...` in `zarr/`;
+`TestZarrPython` against zarr-python 3.4.0 and numpy 2.5.3; `cd cmd/zarr &&
+go test -short ./...`, and `TestTheSameWorldWritesTheSameStore`.
+
+---
+
 ## 2026-09-16 - The suite's histories kept between runs
 
 **What this is.** The yardsticks' share of the history file, on
