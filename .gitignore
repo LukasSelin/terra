@@ -1,3 +1,4 @@
 /overview/
 *.test.exe
 *.test
+/cmd/zarr/*.zarr/
