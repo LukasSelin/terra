@@ -4,3 +4,4 @@
 /cmd/zarr/*.zarr/
 /runs/
 *.history
+/.cache/

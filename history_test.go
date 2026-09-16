@@ -96,7 +96,7 @@ func TestAHistoryLeavesAMapTheSettlementCanUse(t *testing.T) {
 // history.
 func TestAHistoryMakesTheRocksThatHaveToHappen(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
-		w := NewLand(seed, historyConfig(16))
+		w := madeLand(seed, historyConfig(16))
 		var seen [BedrockCount]int
 		for i := range w.Grid.Tiles {
 			seen[w.Grid.Tiles[i].Bedrock]++
@@ -122,7 +122,7 @@ func TestAHistoryMakesTheRocksThatHaveToHappen(t *testing.T) {
 // tile dated from the same epoch there would be no history in the record,
 // only in the making of it.
 func TestRockIsDatedToWhenItWasMade(t *testing.T) {
-	w := NewLand(1, historyConfig(16))
+	w := madeLand(1, historyConfig(16))
 	seen := map[uint8]int{}
 	for i := range w.Grid.Tiles {
 		seen[w.Grid.Tiles[i].Formed]++
@@ -134,7 +134,7 @@ func TestRockIsDatedToWhenItWasMade(t *testing.T) {
 
 // Every tile rides a plate, and a history that ran at all has more than one.
 func TestEveryTileRidesAPlate(t *testing.T) {
-	w := NewLand(1, historyConfig(16))
+	w := madeLand(1, historyConfig(16))
 	seen := map[uint8]bool{}
 	for i := range w.Grid.Tiles {
 		seen[w.Grid.Tiles[i].Plate] = true

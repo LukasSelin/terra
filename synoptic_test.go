@@ -114,7 +114,7 @@ func TestTheWeatherChangesFromDayToDay(t *testing.T) {
 	if testing.Short() {
 		t.Skip("makes a globe and a season of its weather")
 	}
-	w := NewLand(3, smallGlobe())
+	w := madeLand(3, smallGlobe())
 	g := w.Grid
 	probe := geom.Pos{X: 40, Y: 30}
 	var lowest, highest, most float64 = 2000, 0, 0

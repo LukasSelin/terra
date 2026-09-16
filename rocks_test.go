@@ -15,7 +15,7 @@ func TestEveryRockAHistoryMakesTurnsUp(t *testing.T) {
 	pooled := map[Bedrock]int{}
 	tiles := 0
 	for seed := uint64(1); seed <= 12; seed++ {
-		w := NewLand(seed, AncientTerms())
+		w := madeLand(seed, AncientTerms())
 		var seen [BedrockCount]int
 		for i := range w.Grid.Tiles {
 			seen[w.Grid.Tiles[i].Bedrock]++
