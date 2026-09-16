@@ -7,6 +7,51 @@ measurements is in [README.md](README.md).
 ---
 
 
+## 2026-09-16 - P1: the causal record. The book kept, features, and Why
+
+**What this is.** Track P of the plan (`docs/perf/scaling-plan.md`), the
+first milestone, on `claude/causal-record`: a history keeps a book of what
+it did to each tile instead of dropping it at `settleRock`; a registry
+joins the tiles into features; `Why(p, aspect)` reads the book and the
+registry back as a chain of causes; `cmd/overview` renders eight of them as
+sentences on a `why.html`. The principle held throughout: an explanation is
+a reading of recorded quantities, never a heuristic invented afterwards.
+The items land one commit each and this entry is extended as they do.
+Every world is as it was: `TERRA_DIGEST=check` passes after every commit.
+
+**The book (item 1).** `ledger.go`: twelve bytes a tile - the meeting that
+did most to its height (the two plates, its kind, its epoch, the metres, as
+`float32`) and the wear since (tens of metres, `uint16`), and the epoch and
+kind of its last burial - written by `tectonics`, `hotspot`, `keepBook` and
+`wear` where they compute the lift, the burial and the wear. The seam
+carries the plate on its far side now (`seam.with`), which the book needs
+and nothing else reads. The metres are the history's own and are not
+rescaled with the heights: a seam raises tens of kilometres in an epoch of
+four million years and the weather and the settling take most of it back,
+while the ground stands a few kilometres high and is handed to the map by
+rank; carrying an increment larger than any height through the rescaling
+of standing heights made a 45 km lift into 4.5 km on a 258 m map, so the
+book says whose metres it gives instead. The final weld map of the plates
+(`plateRoot`, a byte a plate) is kept so a plate number the book wrote
+down in an early epoch can be followed to the plate that stands.
+
+Budget, `TERRA_PERF_UPDATE=1` before and after item 1 (bytes are checked to
+1%, allocations to 3%):
+
+| world | bytes before | bytes after | per history tile | allocs before | allocs after |
+|---|---|---|---|---|---|
+| valley (no history) | 10 348 688 | 10 354 136 | - (run noise) | 1 304 | 1 312 |
+| ancient | 58 195 848 | 58 232 048 | +12.6 | 10 230 | 10 226 |
+| globe128 | 437 453 760 | 437 547 440 | +11.4 | 33 617 | 33 606 |
+
+Twelve bytes a tile is the struct's size, and the rest of the difference is
+the run-to-run noise the budget's slack covers. Nothing per epoch beyond the
+writes; the `record` is not grown, since anything added to it costs its
+bytes too.
+
+---
+
+
 ## 2026-09-16 - S2 to the end: the view, and Flow, Drain, Soil, Sand and Clay beside the map
 
 **What this is.** The owner chose the read-only view over moving the game,
