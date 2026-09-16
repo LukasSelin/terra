@@ -6,6 +6,59 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: a plate is carried the part of a tile a step leaves over
+
+**What this is.** The fix to the lag of the step before, on
+`claude/history-km`, and the world it moves. `move` stepped a plate a whole
+tile of its grid once its travel came to one and held the rest back, so a
+plate stood most of a tile of its grid behind its travel whatever the grid.
+
+**The change.** A plate steps to the nearest whole tile of its travel, and
+the rest - under half a tile either way - is the plate's: `turn` reads the
+whole plate that far off its tiles, from the tile the slide rounds to, the
+way it reads a turn, and a tile's own offset keeps only what turns leave.
+`TestASlowSlideIsNotHeldBack` holds a continent sliding 1, 0.4 and 0.25 tiles
+an epoch into the ocean to its travel within half a tile, whole, for ten
+epochs; on the old move the slow slides lagged.
+
+The first form of it (71e7f1a) put the rest into every tile's own offset and
+looked for a tile's crust two tiles round. It failed the suite: the offsets
+turns had left each tile no longer fitted together, lone tiles of the other
+crust came out ten times as many (37-187 a small globe against 3-9), `shape`
+graded lone continent tiles down to the deep floor beside them, the slides
+took a sixth of small globe 5 after them, and its sea poured at -3,100 m,
+which reads as no sea (`TestTheSeaIsTheWorldsToSay`: -2,599 m held). Held by
+the plate, lone tiles are 2-11 a small globe again.
+
+**What it measured.** Globes 1-8, the map against a half-size history
+(`TERRA_HISTORY_SHRINK=2`), before the per-plate form: collision ground
++38% (t 1.6), schist +17% (t 1.0), granite -23% (t -1.8), nothing past t 2,
+where the same comparison before the fix had schist at t 5.3 and the
+collisions at t 2.8. The globe on the map with the per-plate form: 48.8 s
+(main 47.5 s, three interleaved runs); the first form's search had it at
+55.4 s. Digest (ancient, globe128) and budget rewritten; the drawn valley is
+as it was. The golden chain reads tile 257 of the ancient valley, raised by
+an arc in the first epoch; the tide's flats are read off small globe 4,
+which has 2 (small globes 1-8 now have 1, 1, 1, 2, 0, 0, 0 and 2).
+
+**The suite** (`go test -json -timeout 60m .`, quiet, one binary a side,
+histories not kept). Main at 3a02e42, 399 s, fails
+`TestTheIceEdgeIsNotALineOfLatitude` and `TestTheWeatherChangesFromDayToDay`;
+the branch passes both, in 387 s, and fails six, each at its edge:
+
+| test | reading | range | why it is let stand |
+|---|---|---|---|
+| Hack exponent, globe | 0.6029 | 0.54-0.60 | at the edge, as it was at 0.6005 after T8 |
+| Horton bifurcation ratio, small globe | 5.009 | 3-5 | 0.2% over |
+| meander wavelength, small globe | 14.73 widths | 10-14 | some 21 reaches over 8 globes; one width is its noise |
+| Hack exponent, 2x less 1x, small globe | 0.079 | -0.05-0.05 | the resolution comparison moved with the plates; not yet looked into |
+| channel concavity, 2x less 1x, small globe | 0.077 | -0.1-0.1 | its known gap (B) closed; the marker is taken off |
+| `TestAHistoryLeavesItsBedsInLayers` | 49% layered | 50% | one seed: seeds 1-8 average 0.521 (0.538 before), and seeds 4 and 7 were under 50% before |
+
+Merged by the owner's word with these standing.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: a plate lags a tile of its grid, and opens less floor
 
 **What this is.** The move on a half-size history against the map's, globes

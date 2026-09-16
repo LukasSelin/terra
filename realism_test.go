@@ -215,7 +215,9 @@ var realYardsticks = []realYardstick{
 			return a - b
 		},
 	},
-		gap: "known gap: B - the small globe's concavity swings by seed and by small changes to the coast (see the concavity yardstick), and the two resolutions do not swing together: 0.20 with the softened winters, the deep floor and the warm-sea limestone merged",
+		// It was a known gap (B: 0.20 with the softened winters, the deep floor
+		// and the warm-sea limestone merged) until the plates were carried the
+		// part of a tile a whole step leaves over; it read 0.077 then.
 	},
 	{yardstick: yardstick{
 		name: "hypsometric integral, 2x less 1x, small globe", unit: "", scale: "ground", lo: -0.05, hi: 0.05, slow: true,
