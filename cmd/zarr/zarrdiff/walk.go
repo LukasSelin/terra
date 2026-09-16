@@ -85,3 +85,14 @@ func (n nodes) of(kind string) []string {
 	sort.Strings(paths)
 	return paths
 }
+
+// within is the nodes whose paths keep says to keep.
+func (n nodes) within(keep func(string) bool) nodes {
+	kept := nodes{}
+	for p, k := range n {
+		if keep(p) {
+			kept[p] = k
+		}
+	}
+	return kept
+}
