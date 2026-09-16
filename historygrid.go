@@ -127,7 +127,7 @@ func handDown(from, to *Grid, d *deepStage) *deepStage {
 	to.plateRoot, to.epochs = from.plateRoot, from.epochs
 	to.repatch()
 
-	out := &deepStage{depths: field(d.depths), shares: field(d.shares), uplift: field(d.uplift)}
+	out := &deepStage{depths: field(d.depths), shares: field(d.shares), uplift: field(d.uplift), sediment: field(d.sediment)}
 	// An age is the crust's under the map tile, not a blend of two crusts'.
 	if d.ages != nil {
 		out.ages = make([]float64, n)

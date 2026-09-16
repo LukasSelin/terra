@@ -49,7 +49,7 @@ var realYardsticks = []realYardstick{
 		source:  "Wegener 1915; Amante & Eakins 2009 (ETOPO1): the second peak of the earth's elevations near -4.4 km",
 		measure: func() float64 { _, lo := hypsometricModes(globes()); return lo },
 	},
-		gap: "known gap: T5 - the floor's ages are the earth's now (firstFloorAges) and it lies at Parsons and Sclater's depths, which with those ages heap up at 5.5-6 km; the earth's floor stands shallower under its sediment, hundreds of metres of it, and its plateaus and swells, and a globe's floor carries some twenty metres: -5.875 km",
+		gap: "known gap: T5 - the floor has the earth's ages (firstFloorAges) and its sediment (floorSediment), some 800 m, but its basement lies at Parsons and Sclater's depths, which flatten toward 6.4 km where Stein and Stein's GDH1 has 5.65, and it has no plateaus or seamounts: its depths spread evenly from 3.25 to 5.75 km, and the heap at 5.5-5.75 is a shade above the one at 3.25-3.5: -5.625 km",
 	},
 
 	// 2. The sea floor sinks as it cools. New floor at a ridge stands two and a
@@ -379,6 +379,11 @@ type subsidence struct {
 // of it on the margins of the first rifts - came out a kilometre shallow, and
 // the old floor sank 0.83 as fast as the young. So a tile is read only where
 // it lies that far out.
+//
+// And it is the basement's depth, as theirs was: the floor sounded, with what
+// the sediment on it has raised it by put back (see floorSediment). Read at
+// the top of the sediment, the young floor's first twenty million years of
+// turbidites flattened the young line, and the old sank 0.63 as fast.
 const shelfBreak = 200.0
 
 func seafloorSubsidence(gs []*Grid) subsidence {
@@ -400,7 +405,7 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 					continue
 				}
 				k := min(bins-1, int(g.floorAge[i]/epochMyr))
-				sum[k] += g.sea - g.Height[i]
+				sum[k] += g.sea - g.Height[i] + sedimentLoad*g.sedimentOn(i)
 				n[k]++
 			}
 		}

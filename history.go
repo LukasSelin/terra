@@ -958,7 +958,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
-		d.depths, d.shares, d.ages = g.floorDepths(cr, epochs)
+		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
@@ -976,8 +976,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 // rock is rising. See historygrid.go for how it crosses to a map of another
 // size.
 type deepStage struct {
-	ocean                        []bool
-	depths, shares, uplift, ages []float64
+	ocean                                  []bool
+	depths, shares, uplift, ages, sediment []float64
 }
 
 // settleHistory lays a finished history on the map: its heights handed the
@@ -1004,8 +1004,8 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// And the deep sea floor is laid at the depth its age puts it, below the
 	// ground the slides reach. See abyss.
 	if d.depths != nil {
-		g.layAbyss(d.depths, d.shares)
 		g.floorAge = d.ages
+		g.layAbyss(d.depths, d.shares, d.sediment)
 	}
 	g.expose()
 	g.drain()

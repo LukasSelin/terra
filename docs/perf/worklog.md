@@ -6,6 +6,51 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - sediment on the deep floor, and the floor out of the land's mean hardness
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`, after
+main was merged in for the zarr experiment loop. The deep floor carried some
+twenty metres of sediment: what the history lays on it is squeezed with its
+other beds into the map's spread of heights. `floorSediment` (`abyss.go`)
+gives it what its age gathers: calcareous ooze at 1 cm/kyr under a warm sea
+while the floor is above a 4.5 km compensation depth, red clay at 1 mm/kyr,
+and a turbidite apron off the continents (1.5 km at the slope's foot, e-fold
+300 km, laid over 20 Myr; chosen). The floor stands 0.57 of it higher, for
+the load. `layAbyss` lays what the pile lacks as limestone and shale in the
+order they came. `cmd/zarr` writes `ground/floor_age` and
+`ground/floor_sediment`.
+
+`seafloorSubsidence` reads the basement, the sounded depth with the
+sediment's lift put back, as Parsons and Sclater's depths were: read at the
+sediment's top, flattening came out 0.63.
+
+**What the zarr loop found.** With the sediment, the small globes' Flint R2
+(0.71), Hack exponent (0.523) and Hack at 2x less 1x (0.101) failed. A globe
+before and after, `-stages` and `-stages-diff`: the first stage differs at
+ground, on the floor only; by shape, 95 % of land tiles had moved by up to
+10 m. `meanHard` averaged the rock's hardness over every tile, and the floor
+turned from basalt to limestone and shale softened the land's mean. The
+deep floor, which the weather does not reach, is now left out of it. That
+moves the land once; every yardstick then passes.
+
+`TestTheTideLaysFlatsOnlyWhereItReaches` reads flats off small globe 2 and
+not 3: the tide reads the sea's depth, and the six small globes hold none to
+two flats each.
+
+**Readings.** Globe, seed 1: sediment on ocean crust 797 m on the mean, 745
+on the deep floor; the floor's top rock 28 % limestone. Ridge 2.51 km,
+subsidence 347 m/sqrt(Myr), flattening 0.48, all as before. The oceanic
+hypsometric mode is -5.625 km (was -5.875), still a gap. Gap readings moved
+by the land's move: small-globe concavity 0.312 (0.294), its 2x less 1x
+0.151 (0.199), valley floor soil 0.41 m (0.48), floor over hillslope 1.79x
+(2.11), Oxisols 0.023 (0.024).
+
+**Held.** `go test -short`, `cmd/zarr` tests, and the yardsticks: no
+failures. Digest: `globe128` rewritten; `valley` and `ancient`, which have no
+deep floor, unchanged. `perf.sh check` not run.
+
+---
+
 ## 2026-09-16 - the first plates' ocean floor has ages: flattening closes
 
 **What this is.** On `claude/missing-yardsticks-simulation-b40e20`. The
