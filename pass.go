@@ -1,6 +1,10 @@
 package terra
 
-import "github.com/LukasSelin/terra/tile"
+import (
+	"github.com/LukasSelin/terra/tile"
+
+	"github.com/LukasSelin/terra/internal/kernel"
+)
 
 // The day's pass over the ground, as flat loops over the layers.
 //
@@ -14,8 +18,8 @@ import "github.com/LukasSelin/terra/tile"
 // whether the tile is the kind it is looking for. Nothing in the pass
 // reads a tile. It is the shape the pass has to be in for the arithmetic
 // to be done several tiles at a time, which is what the kernels in
-// kernel_simd_amd64.go do with it where the build and the processor allow;
-// kernel.go is the same loops one tile at a time, and the helpers here are
+// internal/kernel/kernel_simd_amd64.go do with it where the build and the processor allow;
+// internal/kernel/kernel.go is the same loops one tile at a time, and the helpers here are
 // the fillings, which are one tile at a time on every processor.
 //
 // Nothing here changes a result to the last bit. Each tile is given the
@@ -134,7 +138,7 @@ const Fade = 0.995
 // share of one - so ground with none on it is left with none, and there is
 // nothing to ask before multiplying.
 func (g *Grid) FadeWear(lo, hi int, by float64) {
-	fade(g.Traffic[lo:hi], by)
+	kernel.Fade(g.Traffic[lo:hi], by)
 }
 
 // Grow gives the tiles [lo, hi) k of growing weather: what grows on them
@@ -147,7 +151,7 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 	// A stand ages by the weather it gets, not by the calendar; see Ripen.
 	// The age is put on before anything reads it.
 	age := g.Age[lo:hi]
-	grow(age, ks, k)
+	kernel.Grow(age, ks, k, ages[:], aging)
 	// Whatever is coming on fills a little further, bounded by the age it
 	// has had; see fillStand. Each filling is a pass of its own over the run,
 	// in the order the growing table has them.
@@ -166,7 +170,7 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 // vectors have; see stand and logistic. Each is the statement in grow.go
 // with the tile's kind read off ks rather than off the tile. What is done
 // several tiles at once is the ageing and the fading, which touch every
-// tile: fade and grow, in kernel.go and kernel_simd_amd64.go.
+// tile: fade and grow, in package kernel.
 
 // fill fills the stock s on every tile of the given kind over k of
 // growing weather, up to what its age over full accounts for; see fillStand.

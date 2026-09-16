@@ -1,4 +1,10 @@
-package terra
+// Package kernel is the arithmetic a pass does to a run of numbers at once,
+// and the Fourier transform built on it. It knows nothing about a map: a
+// kernel is given runs of numbers and what to do to them, and the land hands
+// it the rows of its layers. Each kernel is written twice, and the two are
+// held to each other bit for bit, so that a world does not depend on which
+// build made it.
+package kernel
 
 import "math"
 
@@ -50,8 +56,9 @@ func fadeScalar(wear []float64, by float64) {
 }
 
 // growScalar puts k of weather on the age of every tile that has something
-// growing on it, which is every tile whose kind is one that ages.
-func growScalar(age []float64, ks []int64, k float64) {
+// growing on it, which is every tile whose kind is one that ages: ages is
+// indexed by the kind in ks, and says whether it does.
+func growScalar(age []float64, ks []int64, k float64, ages []bool) {
 	for j, kk := range ks {
 		if ages[kk] {
 			age[j] += k

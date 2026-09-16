@@ -1,6 +1,6 @@
 //go:build goexperiment.simd && amd64
 
-package terra
+package kernel
 
 import (
 	"math"
@@ -25,7 +25,7 @@ import (
 // vector is whether this processor can do a kernel four lanes at once.
 var vector = archsimd.X86.AVX2()
 
-func fade(wear []float64, by float64) {
+func Fade(wear []float64, by float64) {
 	if !vector {
 		fadeScalar(wear, by)
 		return
@@ -39,13 +39,14 @@ func fade(wear []float64, by float64) {
 	fadeScalar(wear[n:], by)
 }
 
-// grow gates on the tile's kind: the kinds that age, spread across the lanes
-// once, and each lane compared against all of them. A lane the pass is not
+// Grow gates on the tile's kind: the kinds that age, listed in aging and
+// spread across the lanes once, and each lane compared against all of them.
+// aging has to be the kinds ages says yes to. A lane the pass is not
 // for keeps its bits, chosen back by the mask, rather than being multiplied
 // by nought or one, which would turn a negative nought positive.
-func grow(age []float64, ks []int64, k float64) {
+func Grow(age []float64, ks []int64, k float64, ages []bool, aging []int64) {
 	if !vector {
-		growScalar(age, ks, k)
+		growScalar(age, ks, k, ages)
 		return
 	}
 	var want [8]archsimd.Int64x4
@@ -54,7 +55,7 @@ func grow(age []float64, ks []int64, k float64) {
 		// first is not idle: compared against no kind at all, the lanes
 		// would be compared against nought, which is a kind - open grass
 		// with nothing on it - and every such tile would age.
-		growScalar(age, ks, k)
+		growScalar(age, ks, k, ages)
 		return
 	}
 	for i, kk := range aging {
@@ -72,7 +73,7 @@ func grow(age []float64, ks []int64, k float64) {
 		a.Add(kv).IfElse(m, a).Store(age[j : j+lanes])
 	}
 	archsimd.ClearAVXUpperBits()
-	growScalar(age[n:], ks[n:], k)
+	growScalar(age[n:], ks[n:], k, ages)
 }
 
 // The transform's butterflies two complex numbers at a time.
@@ -165,7 +166,7 @@ func butterflies(x []complex128, pl *fftPlan, inverse bool) {
 	archsimd.ClearAVXUpperBits()
 }
 
-func axpy(y, x []float64, a float64) {
+func Axpy(y, x []float64, a float64) {
 	if !vector {
 		axpyScalar(y, x, a)
 		return
@@ -180,7 +181,7 @@ func axpy(y, x []float64, a float64) {
 	axpyScalar(y[n:], x[n:], a)
 }
 
-func lerp(dst, a, b []float64, t float64) {
+func Lerp(dst, a, b []float64, t float64) {
 	if !vector {
 		lerpScalar(dst, a, b, t)
 		return
@@ -196,7 +197,7 @@ func lerp(dst, a, b []float64, t float64) {
 	lerpScalar(dst[n:], a[n:], b[n:], t)
 }
 
-func clamp(v []float64, lo, hi float64) {
+func Clamp(v []float64, lo, hi float64) {
 	if !vector {
 		clampScalar(v, lo, hi)
 		return
@@ -213,7 +214,7 @@ func clamp(v []float64, lo, hi float64) {
 	clampScalar(v[n:], lo, hi)
 }
 
-func sumTree(v []float64) float64 {
+func SumTree(v []float64) float64 {
 	if !vector {
 		return sumTreeScalar(v)
 	}
@@ -228,7 +229,7 @@ func sumTree(v []float64) float64 {
 	return sumTail(s, v[n:])
 }
 
-func stencil5(dst, up, row, down []float64, c, s float64) {
+func Stencil5(dst, up, row, down []float64, c, s float64) {
 	if !vector {
 		stencil5Scalar(dst, up, row, down, c, s)
 		return
@@ -245,7 +246,7 @@ func stencil5(dst, up, row, down []float64, c, s float64) {
 	stencil5Scalar(dst[n:], up[n:], row[n:], down[n:], c, s)
 }
 
-func minmaxSelect(v []float64) (lo, hi float64) {
+func MinmaxSelect(v []float64) (lo, hi float64) {
 	if !vector {
 		return minmaxSelectScalar(v)
 	}

@@ -166,7 +166,7 @@ busy machine is run again before it is believed, like `check`.
 scripts/perf.sh simd
 ```
 
-The kernels in [kernel.go](../../kernel.go) - the day's fade and grow, the
+The kernels in [internal/kernel](../../internal/kernel/kernel.go) - the day's fade and grow, the
 transform's butterflies, axpy, lerp, clamp, sumTree, stencil5 and
 minmaxSelect - are each written twice: the statement one number at a time,
 and the same four lanes at a time in `kernel_simd_amd64.go`, which is built
@@ -184,7 +184,7 @@ so the gain on a world is small (see the work log); the kernels on their
 own are
 
 ```bash
-PERF_BENCH='Kernel|FFT' scripts/perf.sh simd
+PERF_PKG=./internal/kernel PERF_BENCH='Kernel|FFT' scripts/perf.sh simd
 ```
 
 The two binaries run alternately rather than one after the other so that

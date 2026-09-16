@@ -17,7 +17,7 @@ type Grid struct {
 	// tile and indexed as Tiles is. It is beside the map rather than in the
 	// tile because it is what every pass that moves the ground reads and
 	// writes over every tile, and a run of heights is what a kernel takes
-	// (kernel.go); the tile keeps what is read one tile at a time. HeightAt
+	// (package kernel); the tile keeps what is read one tile at a time. HeightAt
 	// reads it by position, off the map included.
 	Height []float64
 	// Flow is the water running through each tile in cubic metres a second,

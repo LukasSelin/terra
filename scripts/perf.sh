@@ -21,6 +21,7 @@
 #   PERF_COUNT      runs per world    (default 6: benchstat's least for a
 #                                      confidence interval)
 #   PERF_THRESHOLD  percent slower that fails check (default 10)
+#   PERF_PKG        the package simd builds its test binaries from (default .)
 #   PERF_NEW        check this file, already run, instead of running now
 #   PERF_SCALING    ns/tile at 512 over ns/tile at 256 that fails scaling
 #                   (default 1.3: an n log n pass costs 1.13 per doubling of
@@ -32,7 +33,7 @@
 #
 # simd never fails: it is the vector build's gain as a number, and the scalar
 # build run beside it so that neither path rots unmeasured. The kernels on their
-# own are PERF_BENCH='Kernel|FFT' scripts/perf.sh simd.
+# own are PERF_PKG=./internal/kernel PERF_BENCH='Kernel|FFT' scripts/perf.sh simd.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,6 +43,7 @@ bench="${PERF_BENCH:-NewLand/(valley|ancient|globe256)$}"
 count="${PERF_COUNT:-6}"
 threshold="${PERF_THRESHOLD:-10}"
 scaling="${PERF_SCALING:-1.3}"
+pkg="${PERF_PKG:-.}"
 scount="${PERF_COUNT:-3}"
 basedir="docs/perf/baseline"
 
@@ -166,8 +168,8 @@ simd)
 	dir="$(mktemp -d -t terra-perf-simd.XXXXXX)"
 	exe="$(go env GOEXE)"
 	echo "perf: building the test binary with and without GOEXPERIMENT=simd" >&2
-	go test -c -o "$dir/scalar$exe" .
-	GOEXPERIMENT=simd go test -c -o "$dir/simd$exe" .
+	go test -c -o "$dir/scalar$exe" "$pkg"
+	GOEXPERIMENT=simd go test -c -o "$dir/simd$exe" "$pkg"
 	: >"$dir/scalar.txt"
 	: >"$dir/simd.txt"
 	for ((i = 1; i <= count; i++)); do
@@ -179,7 +181,7 @@ simd)
 	echo "perf: the runs are in $dir (scalar.txt, simd.txt)" >&2
 	;;
 *)
-	sed -n '2,35p' "$0" | sed 's/^# {0,1}//'
+	sed -n '2,36p' "$0" | sed 's/^# {0,1}//'
 	exit 2
 	;;
 esac

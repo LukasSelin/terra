@@ -1,4 +1,4 @@
-package terra
+package kernel
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestTheTransformGivesTheFieldBack(t *testing.T) {
 		x[i] = complex(math.Cos(2*math.Pi*5*float64(i)/n), 0)
 	}
 	y := append([]complex128(nil), x...)
-	fft(y, false)
+	FFT(y, false)
 	for k := range y {
 		want := 0.0
 		if k == 5 || k == n-5 {
@@ -28,7 +28,7 @@ func TestTheTransformGivesTheFieldBack(t *testing.T) {
 			t.Fatalf("mode %d of a wave of five is %v, want %v", k, y[k], want)
 		}
 	}
-	fft(y, true)
+	FFT(y, true)
 	for i := range x {
 		if cmplx.Abs(y[i]-x[i]) > 1e-12 {
 			t.Fatalf("element %d came back %v, was %v", i, y[i], x[i])
@@ -89,8 +89,8 @@ func BenchmarkFFT(b *testing.B) {
 				x[i] = complex(math.Sin(float64(i)), math.Cos(3*float64(i)))
 			}
 			for b.Loop() {
-				fft(x, false)
-				fft(x, true)
+				FFT(x, false)
+				FFT(x, true)
 			}
 		})
 	}
