@@ -906,6 +906,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	for i := range g.Tiles {
 		cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
 	}
+	cr.firstFloorAges(g, epochs)
 	grain := w.grain(g)
 	bow := w.bow(g)
 	book := make([]record, len(g.Tiles))
@@ -957,7 +958,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
-		d.depths, d.shares = g.floorDepths(cr, epochs)
+		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
@@ -975,8 +976,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 // rock is rising. See historygrid.go for how it crosses to a map of another
 // size.
 type deepStage struct {
-	ocean                  []bool
-	depths, shares, uplift []float64
+	ocean                                  []bool
+	depths, shares, uplift, ages, sediment []float64
 }
 
 // settleHistory lays a finished history on the map: its heights handed the
@@ -1003,7 +1004,8 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// And the deep sea floor is laid at the depth its age puts it, below the
 	// ground the slides reach. See abyss.
 	if d.depths != nil {
-		g.layAbyss(d.depths, d.shares)
+		g.floorAge = d.ages
+		g.layAbyss(d.depths, d.shares, d.sediment)
 	}
 	g.expose()
 	g.drain()
@@ -1470,6 +1472,11 @@ func driftScale(g *Grid) float64 {
 // not allocate a map's worth of it.
 type crust struct {
 	born []uint8
+	// aged is how old, in years, each tile's crust already was when the
+	// history began: the first plates' ocean floor, which the planet had been
+	// making before the history takes it up, and nothing on any crust the
+	// history made. See firstFloorAges.
+	aged []float32
 	// ocean is whether each tile's crust is ocean floor rather than
 	// continent. It is the tile's and not its plate's: crust is what it is
 	// made of wherever it is carried and whichever plate it is carried on,
@@ -1497,6 +1504,7 @@ type crust struct {
 	org, norg     []int32
 	fresh, nfresh []bool
 	nborn         []uint8
+	naged         []float32
 	nocean        []bool
 	nbuilt        []float64
 	// off is how far each tile's crust truly stands from the tile it is
@@ -1565,6 +1573,7 @@ func newCrust(g *Grid) *crust {
 		org: make([]int32, n), norg: make([]int32, n),
 		fresh: make([]bool, n), nfresh: make([]bool, n),
 		nborn: make([]uint8, n), mark: make([]bool, n),
+		aged: make([]float32, n), naged: make([]float32, n),
 		off: make([][2]float32, n), noff: make([][2]float32, n),
 		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), sand: make([]float64, n), clay: make([]float64, n), book: make([]record, n), strata: make([]column, n),
 	}
@@ -1752,7 +1761,7 @@ func (cr *crust) land(plates []Plate, i, j int) {
 			return
 		}
 	}
-	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i]
+	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i], cr.aged[i]
 	cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[i], cr.built[i], cr.rise[i]
 	cr.noff[j] = cr.off[i]
 }
@@ -1765,6 +1774,7 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 	cr.org, cr.norg = cr.norg, cr.org
 	cr.fresh, cr.nfresh = cr.nfresh, cr.fresh
 	cr.born, cr.nborn = cr.nborn, cr.born
+	cr.aged, cr.naged = cr.naged, cr.aged
 	cr.ocean, cr.nocean = cr.nocean, cr.ocean
 	cr.built, cr.nbuilt = cr.nbuilt, cr.built
 	cr.rise, cr.nrise = cr.nrise, cr.rise
@@ -1891,7 +1901,7 @@ func (cr *crust) turn(g *Grid, plates []Plate) {
 				if cur := cr.nplate[j]; cur == k || (cur != noPlate && !sinks(cur, cr.nocean[j], cr.nborn[j], k, cr.ocean[best], cr.born[best])) {
 					continue
 				}
-				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j] = k, cr.org[best], cr.fresh[best], cr.born[best]
+				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = k, cr.org[best], cr.fresh[best], cr.born[best], cr.aged[best]
 				cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[best], cr.built[best], cr.rise[best]
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
@@ -1979,6 +1989,7 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 		}
 		for r, j := range ring {
 			cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.nocean[j] = picks[r].plate, picks[r].from, true, cr.now, true
+			cr.naged[j] = 0
 			cr.nbuilt[j], cr.nrise[j] = 0, 0
 			cr.noff[j] = [2]float32{}
 		}

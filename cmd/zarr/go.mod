@@ -6,10 +6,7 @@ go 1.27.0
 
 require (
 	github.com/LukasSelin/terra v0.0.0
-	github.com/LukasSelin/zarr v0.0.0
+	github.com/LukasSelin/zarr v0.1.0
 )
 
-replace (
-	github.com/LukasSelin/terra => ../..
-	github.com/LukasSelin/zarr => ../../zarr
-)
+replace github.com/LukasSelin/terra => ../..
