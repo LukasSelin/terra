@@ -92,13 +92,13 @@ type Weather struct {
 	Day int
 
 	rng   *rand.Rand
-	winds *Winds // the climate the day's weather stands on
-	env   *airEnv
-	// u, v and p are the day's wind toward the east and the north, in metres
+	Winds *Winds // the climate the day's weather stands on
+	Env   *Env
+	// U, V and P are the day's wind toward the east and the north, in metres
 	// a second, and pressure at sea level in hPa, on the air cells; warm is
 	// how many degrees warmer than an ordinary day of the year the air there
 	// is, for what the wind has carried in.
-	u, v, p []float32
+	U, V, P []float32
 	warm    []float64
 }
 
@@ -112,13 +112,13 @@ const (
 	lowsADay   = 2.0
 	highsADay  = 0.8
 	stormsADay = 0.45
-	// stormSea is the warmth, in degrees, the sea under a storm has to have
+	// StormSea is the warmth, in degrees, the sea under a storm has to have
 	// for it to be born or live: twenty-six and a half, the real threshold
 	// (Gray, 1968; Dare and McBride, 2011). It used to be read against a
 	// world whose tropics were seven degrees too cool, as a degree and a half
 	// under its equator's mean; the energy balance gives the tropics their
 	// real warmth, and the threshold its real figure.
-	stormSea = 26.5
+	StormSea = 26.5
 	// steerHeight is the height, in metres, of the wind that carries a system:
 	// the 500 hPa level's, some five and a half kilometres up (the steering
 	// level of both lows and tropical cyclones; Holton, 2004; Chan and Gray,
@@ -168,30 +168,30 @@ const (
 // weatherStream is what the seed is mixed with for the weather's chance.
 const weatherStream = 0x5745415448455221
 
-// yearSin is how far into the north's summer day is.
-func yearSin(day int) float64 { return math.Sin(2 * math.Pi * float64(day) / Year) }
+// YearSin is how far into the north's summer day is.
+func YearSin(day int) float64 { return math.Sin(2 * math.Pi * float64(day) / Year) }
 
 // lon is the longitude of cell cx on row cy.
-func (e *airEnv) lon(cx, cy int) float64 {
-	if e.wrap {
-		return 360*(float64(cx)+0.5)/float64(e.w) - 180
+func (e *Env) lon(cx, cy int) float64 {
+	if e.Wrap {
+		return 360*(float64(cx)+0.5)/float64(e.W) - 180
 	}
-	return (float64(cx) + 0.5 - float64(e.w)/2) * e.dx[cy] / (111320 * math.Cos(e.lat[cy]*math.Pi/180))
+	return (float64(cx) + 0.5 - float64(e.W)/2) * e.Dx[cy] / (111320 * math.Cos(e.lat[cy]*math.Pi/180))
 }
 
-// cellOf is where a latitude and longitude lie among the cells, in cells, and
+// CellOf is where a latitude and longitude lie among the cells, in cells, and
 // whether that is over the map at all.
-func (e *airEnv) cellOf(lat, lon float64) (fx, fy float64, on bool) {
-	if e.wrap {
-		fy = (90-lat)/180*float64(e.h) - 0.5
-		fx = (wrapLon(lon)+180)/360*float64(e.w) - 0.5
+func (e *Env) CellOf(lat, lon float64) (fx, fy float64, on bool) {
+	if e.Wrap {
+		fy = (90-lat)/180*float64(e.H) - 0.5
+		fx = (wrapLon(lon)+180)/360*float64(e.W) - 0.5
 		return fx, fy, true
 	}
-	mid := (e.lat[0] + e.lat[e.h-1]) / 2
-	cy := float64(e.h)/2 - 0.5 - (lat-mid)*111195/e.dy
-	row := min(max(int(math.Round(cy)), 0), e.h-1)
-	cx := float64(e.w)/2 - 0.5 + lon*111320*math.Cos(e.lat[row]*math.Pi/180)/e.dx[row]
-	return cx, cy, cx >= -0.5 && cx <= float64(e.w)-0.5 && cy >= -0.5 && cy <= float64(e.h)-0.5
+	mid := (e.lat[0] + e.lat[e.H-1]) / 2
+	cy := float64(e.H)/2 - 0.5 - (lat-mid)*111195/e.Dy
+	row := min(max(int(math.Round(cy)), 0), e.H-1)
+	cx := float64(e.W)/2 - 0.5 + lon*111320*math.Cos(e.lat[row]*math.Pi/180)/e.Dx[row]
+	return cx, cy, cx >= -0.5 && cx <= float64(e.W)-0.5 && cy >= -0.5 && cy <= float64(e.H)-0.5
 }
 
 // wrapLon is a longitude brought round into [-180, 180).
@@ -199,13 +199,13 @@ func wrapLon(lon float64) float64 {
 	return math.Mod(math.Mod(lon+180, 360)+360, 360) - 180
 }
 
-// step moves the systems on to day: carried by the air aloft, aged, the dead
+// Step moves the systems on to day: carried by the air aloft, aged, the dead
 // taken away, and the day's new ones born.
-func (wx *Weather) step(day int) {
-	e := wx.env
-	sinT := yearSin(day)
+func (wx *Weather) Step(day int) {
+	e := wx.Env
+	sinT := YearSin(day)
 	live := wx.Systems[:0]
-	temp := e.blur(e.blur(e.airTemp(sinT), synopticReach), synopticReach)
+	temp := e.blur(e.blur(e.AirTemp(sinT), synopticReach), synopticReach)
 	for _, s := range wx.Systems {
 		hemi := math.Copysign(1, s.Lat)
 		east, north := wx.aloft(temp, s.Lat, s.Lon, day)
@@ -222,8 +222,8 @@ func (wx *Weather) step(day int) {
 		s.Lat += (hemi*pole + north) * kmADay / 111.2
 		s.Lat = math.Max(-89, math.Min(89, s.Lat))
 		s.Lon = wrapLon(s.Lon + east*kmADay/(111.32*math.Max(0.1, math.Cos(s.Lat*math.Pi/180))))
-		fx, fy, _ := e.cellOf(s.Lat, s.Lon)
-		sea := e.sample(e.sea, fx, fy)
+		fx, fy, _ := e.CellOf(s.Lat, s.Lon)
+		sea := e.Sample(e.Sea, fx, fy)
 		s.Age++
 		switch s.Kind {
 		case Low:
@@ -239,7 +239,7 @@ func (wx *Weather) step(day int) {
 					s.Age = s.Life
 				}
 			}
-			if e.seaTemp(fx, fy, sinT) < stormSea {
+			if e.SeaTemp(fx, fy, sinT) < StormSea {
 				s.Age++
 			}
 		}
@@ -267,8 +267,8 @@ func (wx *Weather) step(day int) {
 				// looks; a map with no warm sea has no storms.
 				for range 12 {
 					lat, lon := hemi*(7+13*r.Float64()), 360*r.Float64()-180
-					fx, fy, on := e.cellOf(lat, lon)
-					if sst := e.seaTemp(fx, fy, sinT); on && e.sample(e.sea, fx, fy) > 0.8 && sst >= stormSea {
+					fx, fy, on := e.CellOf(lat, lon)
+					if sst := e.SeaTemp(fx, fy, sinT); on && e.Sample(e.Sea, fx, fy) > 0.8 && sst >= StormSea {
 						// Few storms reach the most the sea could make of them:
 						// the share they do is spread from a fifth to four fifths
 						// (Emanuel, 2000).
@@ -287,14 +287,14 @@ func (wx *Weather) step(day int) {
 // from one place to the next, which is where lows get their energy - the
 // polar front, and the edge of a continent in winter.
 func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT float64) (lat, lon float64) {
-	e := wx.env
+	e := wx.Env
 	for range 8 {
 		lat, lon = hemi*(32+30*r.Float64()), 360*r.Float64()-180
-		fx, fy, _ := e.cellOf(lat, lon)
+		fx, fy, _ := e.CellOf(lat, lon)
 		// How fast a wave on the front would grow here, by Eady's rate,
 		// against how fast it grows under the planet's own fall of warmth.
-		gx := (e.seaTempAt(fx+1, fy, sinT) - e.seaTempAt(fx-1, fy, sinT)) / (2 * e.dx[e.row(fy)])
-		gy := (e.seaTempAt(fx, fy-1, sinT) - e.seaTempAt(fx, fy+1, sinT)) / (2 * e.dy)
+		gx := (e.seaTempAt(fx+1, fy, sinT) - e.seaTempAt(fx-1, fy, sinT)) / (2 * e.Dx[e.row(fy)])
+		gy := (e.seaTempAt(fx, fy-1, sinT) - e.seaTempAt(fx, fy+1, sinT)) / (2 * e.Dy)
 		t := e.seaTempAt(fx, fy, sinT)
 		if r.Float64() < math.Max(0.2, math.Min(1, eady(math.Hypot(gx, gy), t)/eady(0.7e-5, 7))) {
 			return lat, lon
@@ -316,28 +316,28 @@ func eady(grad, temp float64) float64 {
 // ground, temp, blurred to the scale of the weather. A valley's air has the
 // planet's fall of warmth across its latitude and not its own.
 func (wx *Weather) aloft(temp []float64, lat, lon float64, day int) (east, north float64) {
-	e := wx.env
-	fx, fy, _ := e.cellOf(lat, lon)
+	e := wx.Env
+	fx, fy, _ := e.CellOf(lat, lon)
 	for k, m := range seasonWeights(day) {
-		east += m * e.sample32(wx.winds.u[k], fx, fy)
-		north += m * e.sample32(wx.winds.v[k], fx, fy)
+		east += m * e.Sample32(wx.Winds.U[k], fx, fy)
+		north += m * e.Sample32(wx.Winds.V[k], fx, fy)
 	}
 	// The fall of warmth toward the pole, along the row: the planet's, which
 	// is what the westerlies aloft stand on. A coast's contrast between land
 	// and sea is a sea breeze's, and not the jet's.
 	var gy float64
-	if e.wrap {
+	if e.Wrap {
 		cy := e.row(fy)
-		north, south := max(cy-1, 0), min(cy+1, e.h-1)
-		gy = (rowMean(temp, e.w, north) - rowMean(temp, e.w, south)) / (float64(south-north) * e.dy)
+		north, south := max(cy-1, 0), min(cy+1, e.H-1)
+		gy = (rowMean(temp, e.W, north) - rowMean(temp, e.W, south)) / (float64(south-north) * e.Dy)
 	} else {
-		gy = (zonalMean(lat+0.5) - zonalMean(lat-0.5)) / 111195
+		gy = (ZonalMean(lat+0.5) - ZonalMean(lat-0.5)) / 111195
 	}
 	// The balance holds poleward of the tropics, and comes in over steerLeast
 	// to twice that.
 	a := math.Max(math.Abs(lat), steerLeast)
 	f := 2 * omega * math.Sin(a*math.Pi/180)
-	shear := gravity / (f * (e.sample(temp, fx, fy) + 273.15)) * steerHeight * smoothstep(steerLeast, 2*steerLeast, math.Abs(lat))
+	shear := gravity / (f * (e.Sample(temp, fx, fy) + 273.15)) * steerHeight * smoothstep(steerLeast, 2*steerLeast, math.Abs(lat))
 	return east - math.Copysign(shear, lat)*gy, north
 }
 
@@ -371,27 +371,27 @@ func stormWindOf(depth float64) float64 {
 }
 
 // row is the row of cells nearest fy, held on the map.
-func (e *airEnv) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e.h-1) }
+func (e *Env) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e.H-1) }
 
 // seaTempAt is the temperature of the air at sea level at a place among the
 // cells, in an ordinary year sinT of the way into the north's summer.
-func (e *airEnv) seaTempAt(fx, fy, sinT float64) float64 {
+func (e *Env) seaTempAt(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	cont := e.sample(e.cont, fx, fy)
-	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, cont)
-	if e.coast != nil {
-		t += e.sample(e.coast, fx, fy)
+	cont := e.Sample(e.Cont, fx, fy)
+	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, cont)
+	if e.Coast != nil {
+		t += e.Sample(e.Coast, fx, fy)
 	}
 	return t
 }
 
-// seaTemp is the warmth of the sea at a place among the cells: the air's over
+// SeaTemp is the warmth of the sea at a place among the cells: the air's over
 // it, with the sea's own small swing and what the currents have brought.
-func (e *airEnv) seaTemp(fx, fy, sinT float64) float64 {
+func (e *Env) SeaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	t := e.mean[cy] + seasonTemp(e.hemi[cy], sinT, 0) + seaOverAir
-	if e.warm != nil {
-		t += e.sample(e.warm, fx, fy)
+	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, 0) + seaOverAir
+	if e.Warm != nil {
+		t += e.Sample(e.Warm, fx, fy)
 	}
 	return t
 }
@@ -417,14 +417,14 @@ func poisson(r *rand.Rand, m float64) int {
 	return k
 }
 
-// solve works the day's wind out: the climate's pressure for the day with
+// Solve works the day's wind out: the climate's pressure for the day with
 // the systems added, and the warmth the air has carried in since yesterday.
-func (wx *Weather) solve(day int) {
-	e := wx.env
-	n := e.w * e.h
-	sinT := yearSin(day)
-	if len(wx.u) != n {
-		wx.u, wx.v, wx.p = make([]float32, n), make([]float32, n), make([]float32, n)
+func (wx *Weather) Solve(day int) {
+	e := wx.Env
+	n := e.W * e.H
+	sinT := YearSin(day)
+	if len(wx.U) != n {
+		wx.U, wx.V, wx.P = make([]float32, n), make([]float32, n), make([]float32, n)
 		wx.warm = make([]float64, n)
 	}
 	wx.carry(day)
@@ -437,22 +437,22 @@ func (wx *Weather) solve(day int) {
 		}
 		reach := 3 * s.Radius
 		dlat := reach / 111.2
-		for cy := 0; cy < e.h; cy++ {
+		for cy := 0; cy < e.H; cy++ {
 			if math.Abs(e.lat[cy]-s.Lat) > dlat {
 				continue
 			}
 			ky := (e.lat[cy] - s.Lat) * 111.2
 			coslat := math.Cos((e.lat[cy] + s.Lat) / 2 * math.Pi / 180)
-			for cx := 0; cx < e.w; cx++ {
+			for cx := 0; cx < e.W; cx++ {
 				kx := wrapLon(e.lon(cx, cy)-s.Lon) * 111.32 * coslat
 				if math.Abs(kx) > reach {
 					continue
 				}
-				extra[cy*e.w+cx] += depth * math.Exp(-(kx*kx+ky*ky)/(2*s.Radius*s.Radius))
+				extra[cy*e.W+cx] += depth * math.Exp(-(kx*kx+ky*ky)/(2*s.Radius*s.Radius))
 			}
 		}
 	}
-	e.solve(sinT, e.airTempOn(day), extra, wx.warm, wx.u, wx.v, wx.p)
+	e.Solve(sinT, e.airTempOn(day), extra, wx.warm, wx.U, wx.V, wx.P)
 }
 
 // carry moves the warmth of the air on by a day of yesterday's wind, and lets
@@ -460,108 +460,110 @@ func (wx *Weather) solve(day int) {
 // the warmth the climate's own wind would have brought - that is already the
 // place's - but what it brings over and above it.
 func (wx *Weather) carry(day int) {
-	e := wx.env
-	n := e.w * e.h
+	e := wx.Env
+	n := e.W * e.H
 	clim := e.airTempOn(day)
 	// The climate's own wind today, to be taken from the day's.
 	cu, cv := make([]float32, n), make([]float32, n)
 	for k, m := range seasonWeights(day) {
 		for i := range cu {
-			cu[i] += float32(m) * wx.winds.u[k][i]
-			cv[i] += float32(m) * wx.winds.v[k][i]
+			cu[i] += float32(m) * wx.Winds.U[k][i]
+			cv[i] += float32(m) * wx.Winds.V[k][i]
 		}
 	}
 	next := make([]float64, n)
 	keep := math.Exp(-1 / warmTime)
 	e.rows(func(cy int) {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			du, dv := float64(wx.u[i]-cu[i]), float64(wx.v[i]-cv[i])
-			if wx.p[i] == 0 {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
+			du, dv := float64(wx.U[i]-cu[i]), float64(wx.V[i]-cv[i])
+			if wx.P[i] == 0 {
 				du, dv = 0, 0 // no day has been worked out yet
 			}
 			// Where the air over this cell was a day ago, in cells.
-			fx := float64(cx) - du*86400/e.dx[cy]
-			fy := float64(cy) + dv*86400/e.dy
-			w := e.sample(wx.warm, fx, fy) + e.sample(clim, fx, fy) - clim[i]
+			fx := float64(cx) - du*86400/e.Dx[cy]
+			fy := float64(cy) + dv*86400/e.Dy
+			w := e.Sample(wx.warm, fx, fy) + e.Sample(clim, fx, fy) - clim[i]
 			next[i] = math.Max(-warmMost, math.Min(warmMost, w*keep))
 		}
 	})
 	wx.warm = next
 }
 
-// newWeather is the day's weather over the winds w, on the day before day,
+// NewWeather is the day's weather over the winds w, on the day before day,
 // for a world of seed: with some weeks of systems already behind it, or,
 // where was is the weather the ground stood under before it changed, with
 // was's systems and its chance, and the air started over.
-func newWeather(seed uint64, w *Winds, day int, was *Weather) *Weather {
-	wx := &Weather{
-		rng:   rand.New(rand.NewPCG(seed^weatherStream, seed*0x9E3779B97F4A7C15+weatherStream)),
-		winds: w,
-		env:   w.airEnv,
-		Day:   day - 1,
-	}
+func NewWeather(seed uint64, w *Winds, day int, was *Weather) *Weather {
+	wx := StillWeather(rand.New(rand.NewPCG(seed^weatherStream, seed*0x9E3779B97F4A7C15+weatherStream)), w)
+	wx.Day = day - 1
 	if was != nil {
 		// The ground has changed under the weather: keep its systems
 		// and its chance, and start the air over.
 		wx.rng, wx.Systems = was.rng, was.Systems
 	} else {
 		for d := spinUp; d > 0; d-- {
-			wx.step(day - d)
+			wx.Step(day - d)
 		}
 	}
 	return wx
 }
 
-// over reports whether the weather stands over the winds w: whether it was
-// worked out for the ground they were.
-func (wx *Weather) over(w *Winds) bool {
-	return wx != nil && w != nil && wx.env == w.airEnv
+// StillWeather is the weather over the winds w drawing its chance from rng,
+// with no systems in it and no days behind it.
+func StillWeather(rng *rand.Rand, w *Winds) *Weather {
+	return &Weather{rng: rng, Winds: w, Env: w.Env}
 }
 
-// advance moves the weather on to day.
-func (wx *Weather) advance(day int) {
-	wx.step(day)
-	wx.solve(day)
+// Over reports whether the weather stands Over the winds w: whether it was
+// worked out for the ground they were.
+func (wx *Weather) Over(w *Winds) bool {
+	return wx != nil && w != nil && wx.Env == w.Env
+}
+
+// Advance moves the weather on to day.
+func (wx *Weather) Advance(day int) {
+	wx.Step(day)
+	wx.Solve(day)
 	wx.Day = day
 }
 
-// worked reports whether the day's air has been worked out at all.
-func (wx *Weather) worked() bool { return len(wx.u) > 0 }
+// Worked reports whether the day's air has been Worked out at all.
+func (wx *Weather) Worked() bool { return len(wx.U) > 0 }
 
 // sampleTile reads a field of the day's weather at tile i.
 func (wx *Weather) sampleTile(field []float32, i int) float64 {
-	e := wx.env
-	fx, fy := e.cellAt(i)
-	return e.sample32(field, fx, fy)
+	e := wx.Env
+	fx, fy := e.CellAt(i)
+	return e.Sample32(field, fx, fy)
 }
 
-// windAt, pressureAt and warmthAt are the day's wind, pressure and warmth at
+// WindAt, pressureAt and warmthAt are the day's wind, pressure and warmth at
 // tile i: see Land.WindAt, Land.PressureAt and Land.WarmthAt.
-func (wx *Weather) windAt(i int) (east, north float64) {
-	return wx.sampleTile(wx.u, i), wx.sampleTile(wx.v, i)
+func (wx *Weather) WindAt(i int) (east, north float64) {
+	return wx.sampleTile(wx.U, i), wx.sampleTile(wx.V, i)
 }
 
-func (wx *Weather) pressureAt(i int) float64 { return wx.sampleTile(wx.p, i) }
+func (wx *Weather) PressureAt(i int) float64 { return wx.sampleTile(wx.P, i) }
 
-func (wx *Weather) warmthAt(i int) float64 {
-	e := wx.env
-	fx, fy := e.cellAt(i)
-	return e.sample(wx.warm, fx, fy)
+func (wx *Weather) WarmthAt(i int) float64 {
+	e := wx.Env
+	fx, fy := e.CellAt(i)
+	return e.Sample(wx.warm, fx, fy)
 }
 
-// gust is how hard a wind of speed s gusts over tile i: see Land.GustAt.
-func (e *airEnv) gust(i int, s float64) float64 {
-	fx, fy := e.cellAt(i)
-	land := 1 - e.sample(e.sea, fx, fy)
-	rough := math.Min(1, e.sample(e.rough, fx, fy)/dragRough)
+// Gust is how hard a wind of speed s gusts over tile i: see Land.GustAt.
+func (e *Env) Gust(i int, s float64) float64 {
+	fx, fy := e.CellAt(i)
+	land := 1 - e.Sample(e.Sea, fx, fy)
+	rough := math.Min(1, e.Sample(e.rough, fx, fy)/dragRough)
 	return s * (1.35 + land*(0.15+0.3*rough))
 }
 
-// place is where a system at lat, lon stands on the map, in tiles, and
+// Place is where a system at lat, lon stands on the map, in tiles, and
 // whether that is on the map at all: see Land.Place.
-func (e *airEnv) place(lat, lon float64) (x, y float64, on bool) {
-	fx, fy, on := e.cellOf(lat, lon)
-	k := float64(e.cell)
+func (e *Env) Place(lat, lon float64) (x, y float64, on bool) {
+	fx, fy, on := e.CellOf(lat, lon)
+	k := float64(e.Cell)
 	return (fx + 0.5) * k, (fy + 0.5) * k, on
 }

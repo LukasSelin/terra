@@ -99,7 +99,7 @@ func (c Climate) TempAt(y int) float64 {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	season := swingAt(lat, contMiddling) * seasonAt(c.tick, lagAt(contMiddling))
+	season := SwingAt(lat, ContMiddling) * SeasonAt(c.tick, LagAt(ContMiddling))
 	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
@@ -108,7 +108,7 @@ func (c Climate) MeanAt(y int) float64 {
 	if !c.globe {
 		return MeanTemp
 	}
-	return zonalMean(c.latitude(y))
+	return ZonalMean(c.latitude(y))
 }
 
 // GrowthAt is Growth on row y, and ChillAt is Chill there.
@@ -238,7 +238,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 	}
 	i := p.Y*g.W + p.X
 	cont := g.contAt(i)
-	t := c.MeanAt(p.Y) + swingAt(c.latitude(p.Y), cont)*seasonAt(c.tick, lagAt(cont)) + c.Drift - Lapse*h
+	t := c.MeanAt(p.Y) + SwingAt(c.latitude(p.Y), cont)*SeasonAt(c.tick, LagAt(cont)) + c.Drift - Lapse*h
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -263,7 +263,7 @@ func (w *Land) yearAt(i int) (mean, swing float64) {
 	if g.Wrap {
 		mean += g.CoastWarmth(i)
 	}
-	return mean, swingAt(c.latitude(y), g.contAt(i))
+	return mean, SwingAt(c.latitude(y), g.contAt(i))
 }
 
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt
@@ -278,7 +278,7 @@ func (w *Land) GrowthAt(p geom.Pos) float64 {
 	}
 	i := w.Grid.Index(p)
 	mean, swing := w.yearAt(i)
-	return climateGrowth(temp, mean, swing, w.Grid.Rain(i))
+	return ClimateGrowth(temp, mean, swing, w.Grid.Rain(i))
 }
 
 // ChillAt is Chill at p.

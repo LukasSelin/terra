@@ -137,7 +137,7 @@ func TestCalibrate(t *testing.T) {
 		for _, band := range [][2]float64{{0, 10}, {10, 20}, {20, 30}, {30, 40}, {40, 55}, {55, 65}, {65, 80}, {80, 90}} {
 			var p, r, n float64
 			for i := range g.Tiles {
-				lat := math.Abs(g.air.lat[i/g.W])
+				lat := math.Abs(g.air.Lat[i/g.W])
 				if g.underSea(i) || lat < band[0] || lat >= band[1] {
 					continue
 				}

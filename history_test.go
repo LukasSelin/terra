@@ -183,7 +183,7 @@ func TestLimestoneIsLaidInWarmSeas(t *testing.T) {
 	g.air = Climate{rows: g.H, globe: true}.airFor(g, 1)
 	var equator, forty float64
 	for y := 0; y < g.H; y++ {
-		lat := g.air.lat[y]
+		lat := g.air.Lat[y]
 		rock, bed := g.quietFloor(y * g.W)
 		want := Limestone
 		if lat > 66 || lat < -66 {
@@ -193,7 +193,7 @@ func TestLimestoneIsLaidInWarmSeas(t *testing.T) {
 			continue // the polar front falls somewhere in here
 		}
 		if rock != want {
-			t.Errorf("a quiet floor at %.0f degrees, %.1f degrees warm, lays %s", lat, g.air.mean[y], rock)
+			t.Errorf("a quiet floor at %.0f degrees, %.1f degrees warm, lays %s", lat, g.air.Mean[y], rock)
 		}
 		if bed <= 0 {
 			t.Errorf("a quiet floor at %.0f degrees lays nothing", lat)

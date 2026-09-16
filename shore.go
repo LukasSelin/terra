@@ -567,7 +567,7 @@ var tidalFall = func() (w [Grains]float64) {
 	for gr := range w {
 		w[gr] = fallSpeed[gr]
 		if Grain(gr) != Sand {
-			floc := (grainDensity - seaDensity) * gravity * grainSize[gr] * mm * flocSize / (18 * seaViscosity)
+			floc := (grainDensity - SeaDensity) * gravity * grainSize[gr] * mm * flocSize / (18 * seaViscosity)
 			w[gr] = math.Max(w[gr], floc)
 		}
 	}
@@ -598,7 +598,7 @@ func (g *Grid) flatShare(i int, f float64) [Grains]float64 {
 	flow := tideOmega * a * (a - z) / slope / depth
 	under := half / math.Pi * m2Period
 	for gr := range out {
-		still := math.Sqrt(depositStress[gr] / (seaDensity * bedDrag))
+		still := math.Sqrt(depositStress[gr] / (SeaDensity * bedDrag))
 		out[gr] = -math.Expm1(-tidalFall[gr] * kroneMean(flow/still) * under / depth)
 	}
 	return out

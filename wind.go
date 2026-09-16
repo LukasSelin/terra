@@ -41,18 +41,18 @@ import (
 // a thing of scales far larger than a tile of a globe, and because the rain is
 // read off it every time the drainage is.
 
-// The seasons the wind is worked out for, as phases of the year: midwinter in
+// The seasons the wind is worked out for, as AirPhases of the year: midwinter in
 // the north, the spring equinox (tick zero), midsummer, and the autumn
 // equinox. Any day between is read off the four by the year's first harmonic;
 // see seasonWeights.
-const phases = 4
+const AirPhases = 4
 
 // phaseSin is sin of each phase's place in the year, which is how far into
 // the summer of the north the year stands there: see seasonal.
-var phaseSin = [phases]float64{-1, 0, 1, 0}
+var phaseSin = [AirPhases]float64{-1, 0, 1, 0}
 
 // dayOf is the day of the year at the middle of each phase.
-var dayOf = [phases]int{3 * Year / 4, 0, Year / 4, Year / 2}
+var dayOf = [AirPhases]int{3 * Year / 4, 0, Year / 4, Year / 2}
 
 // The planet's air.
 const (
@@ -147,9 +147,9 @@ const (
 	// what keeps a hurricane's wind at fifty metres a second rather than two
 	// hundred. Land's is twice the sea's.
 	dragQuadratic = 2.0e-6
-	// windMost is more wind than the air near the ground ever has, in metres a
+	// WindMost is more wind than the air near the ground ever has, in metres a
 	// second, as a guard against the arithmetic.
-	windMost = 85.0
+	WindMost = 85.0
 )
 
 // What the ground does to the wind.
@@ -164,13 +164,13 @@ const (
 	blockReach = 300.0
 	blockSteps = 8
 	blockCells = 4.0
-	// exposeReach is how many cells round count as the country a cell stands
-	// over or sinks under. A hill h over it and some exposeReach cells to its
+	// ExposeReach is how many cells round count as the country a cell stands
+	// over or sinks under. A hill h over it and some ExposeReach cells to its
 	// half-height quickens the wind on its crest by 2h/L (Jackson and Hunt,
 	// 1975; Taylor and Lee, 1984: ΔS ≈ 1.6-2 h/L), and a hollow slows it as
 	// much; the wind is never less than exposeLeast of itself nor more than
 	// exposeMost.
-	exposeReach = 2
+	ExposeReach = 2
 	exposeLeast = 0.5
 	exposeMost  = 2.0
 	// The wind that drains off an ice cap under its own weight: a layer
@@ -206,51 +206,51 @@ const (
 // level on each air cell. It is made afresh whenever the rain is, and is not
 // changed afterwards, so copies of a map share it.
 type Winds struct {
-	*airEnv
-	// u is the wind toward the east and v toward the north, in metres a
-	// second; p is the pressure at sea level in hPa.
-	u, v, p [phases][]float32
-	// budget is the water in the air in each phase, as the rain was last
+	*Env
+	// U is the wind toward the east and V toward the north, in metres a
+	// second; P is the pressure at sea level in hPa.
+	U, V, P [AirPhases][]float32
+	// Budget is the water in the air in each phase, as the rain was last
 	// worked out over the wind: see vapour.go.
-	budget [phases]vapourOut
+	Budget [AirPhases]vapourOut
 }
 
-// airEnv is the ground as the air reads it: the lattice of air cells and
+// Env is the ground as the air reads it: the lattice of air cells and
 // everything about the ground under each that the wind is worked out from.
-type airEnv struct {
-	cell, w, h int // tiles to a cell's side, and cells across and down
-	wrap       bool
+type Env struct {
+	Cell, W, H int // tiles to a cell's side, and cells across and down
+	Wrap       bool
 
 	lat  []float64 // the latitude of each row of cells on the planet, degrees
 	hemi []float64 // how much of the temperate year's swing a row's air has, signed by hemisphere
-	mean []float64 // the year's mean temperature at sea level on each row
-	dx   []float64 // metres across a cell along each row
-	dy   float64   // and down one
+	Mean []float64 // the year's mean temperature at sea level on each row
+	Dx   []float64 // metres across a cell along each row
+	Dy   float64   // and down one
 	f    []float64 // the Coriolis parameter on each row, per second
 
-	sea    []float64 // how much of each cell lies under the water the air takes its fill from
-	cont   []float64 // how much of the country round each cell is land
-	height []float64 // the mean height of each cell above that water, metres
-	gx, gy []float64 // the lie of the smoothed ground, metres a metre, rising east and north
+	Sea    []float64 // how much of each cell lies under the water the air takes its fill from
+	Cont   []float64 // how much of the country round each cell is land
+	Height []float64 // the mean height of each cell above that water, metres
+	Gx, Gy []float64 // the lie of the smoothed ground, metres a metre, rising east and north
 	rough  []float64 // how broken the ground in each cell is, metres
-	expose []float64 // how far each cell stands over the country round it, metres
+	Expose []float64 // how far each cell stands over the country round it, metres
 	depth  []float64 // how deep the air near the ground is over each cell, metres
 	// climb is the most ground within blockReach of each cell stands over it,
 	// in metres, whichever way the wind comes: no wind faster than buoyancy
 	// times this is blocked there, and the looking ahead is spared.
 	climb []float64
 
-	// warm is how many degrees the sea over each cell stands over its
-	// latitude's mean for the currents, and coast what that is worth to the
+	// Warm is how many degrees the sea over each cell stands over its
+	// latitude's mean for the currents, and Coast what that is worth to the
 	// country round it: see currents. Both are nil on a valley.
-	warm, coast []float64
+	Warm, Coast []float64
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's
 // width and height are whole numbers of cells.
 func airCell(m *geom.Map, a *Air) int {
 	cell := 1
-	for float64(2*cell)*a.dy <= airReach*1.2 && m.W%(2*cell) == 0 && m.H%(2*cell) == 0 &&
+	for float64(2*cell)*a.Dy <= airReach*1.2 && m.W%(2*cell) == 0 && m.H%(2*cell) == 0 &&
 		m.W/(2*cell) >= airLeast && m.H/(2*cell) >= airLeast {
 		cell *= 2
 	}
@@ -263,22 +263,22 @@ func airCell(m *geom.Map, a *Air) int {
 // not be is so few cells that the ground has nothing to say to the wind.
 const airLeast = 16
 
-// newAirEnv reads the ground of a map m as the air sees it, under the air a:
+// NewEnv reads the ground of a map m as the air sees it, under the air a:
 // above is how far each tile stands over the water the air takes its fill
 // from, and wet is one where the tile is under that water and nothing where
 // it is not.
-func newAirEnv(m *geom.Map, a *Air, above, wet []float64) *airEnv {
+func NewEnv(m *geom.Map, a *Air, above, wet []float64) *Env {
 	cell := airCell(m, a)
-	e := &airEnv{cell: cell, w: m.W / cell, h: m.H / cell, wrap: m.Wrap}
-	n := e.w * e.h
-	e.lat, e.hemi, e.mean, e.dx, e.f = make([]float64, e.h), make([]float64, e.h), make([]float64, e.h), make([]float64, e.h), make([]float64, e.h)
-	e.dy = a.dy * 1000 * float64(cell)
-	for cy := 0; cy < e.h; cy++ {
+	e := &Env{Cell: cell, W: m.W / cell, H: m.H / cell, Wrap: m.Wrap}
+	n := e.W * e.H
+	e.lat, e.hemi, e.Mean, e.Dx, e.f = make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H)
+	e.Dy = a.Dy * 1000 * float64(cell)
+	for cy := 0; cy < e.H; cy++ {
 		var lat, mean, dx float64
 		for y := cy * cell; y < (cy+1)*cell; y++ {
-			lat += a.lat[y]
-			mean += a.mean[y]
-			dx += a.dx[y]
+			lat += a.Lat[y]
+			mean += a.Mean[y]
+			dx += a.Dx[y]
 		}
 		k := float64(cell)
 		lat, mean, dx = lat/k, mean/k, dx/k
@@ -295,10 +295,10 @@ func newAirEnv(m *geom.Map, a *Air, above, wet []float64) *airEnv {
 			// A valley is one latitude's weather, but the planet under it
 			// is still round: the pressure the belts lay down still falls
 			// across it from south to north, or the air would not move.
-			lat -= (float64(cy) + 0.5 - float64(e.h)/2) * e.dy / 111195
+			lat -= (float64(cy) + 0.5 - float64(e.H)/2) * e.Dy / 111195
 		}
-		e.lat[cy], e.mean[cy] = lat, mean
-		e.dx[cy] = dx * 1000 * k
+		e.lat[cy], e.Mean[cy] = lat, mean
+		e.Dx[cy] = dx * 1000 * k
 		e.f[cy] = 2 * omega * math.Sin(lat*math.Pi/180)
 	}
 
@@ -328,23 +328,23 @@ func newAirEnv(m *geom.Map, a *Air, above, wet []float64) *airEnv {
 			broken[i] = math.Sqrt(math.Max(0, sq/k-m*m))
 		}
 	})
-	e.height, e.sea, e.rough = e.gather(above), e.gather(wet), e.gather(broken)
+	e.Height, e.Sea, e.rough = e.gather(above), e.gather(wet), e.gather(broken)
 
 	land := make([]float64, n)
 	for i := range land {
-		land[i] = 1 - e.sea[i]
+		land[i] = 1 - e.Sea[i]
 	}
-	e.cont = e.blur(land, contReach)
-	smooth := e.blurCells(e.height, 1)
-	e.expose = make([]float64, n)
-	round := e.blurCells(e.height, exposeReach)
-	e.gx, e.gy, e.depth = make([]float64, n), make([]float64, n), make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			e.gx[i], e.gy[i] = e.grad(smooth, cx, cy)
-			e.expose[i] = e.height[i] - round[i]
-			e.depth[i] = layerDepth * math.Exp(-e.height[i]/layerScale)
+	e.Cont = e.blur(land, contReach)
+	smooth := e.blurCells(e.Height, 1)
+	e.Expose = make([]float64, n)
+	round := e.blurCells(e.Height, ExposeReach)
+	e.Gx, e.Gy, e.depth = make([]float64, n), make([]float64, n), make([]float64, n)
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
+			e.Gx[i], e.Gy[i] = e.grad(smooth, cx, cy)
+			e.Expose[i] = e.Height[i] - round[i]
+			e.depth[i] = layerDepth * math.Exp(-e.Height[i]/layerScale)
 		}
 	}
 	e.climb = e.climbs()
@@ -353,53 +353,53 @@ func newAirEnv(m *geom.Map, a *Air, above, wet []float64) *airEnv {
 
 // climbs is climb for every cell: the highest ground in the square of cells a
 // wind at the cell could look ahead over, less the cell's own.
-func (e *airEnv) climbs() []float64 {
-	n := e.w * e.h
+func (e *Env) climbs() []float64 {
+	n := e.W * e.H
 	stepKm := blockReach / blockSteps
-	ry := int(math.Ceil(math.Min(stepKm*1000/e.dy, blockCells)*blockSteps)) + 1
+	ry := int(math.Ceil(math.Min(stepKm*1000/e.Dy, blockCells)*blockSteps)) + 1
 	mid := make([]float64, n)
 	e.rows(func(cy int) {
-		rx := int(math.Ceil(math.Min(stepKm*1000/e.dx[cy], blockCells)*blockSteps)) + 1
-		rx = min(rx, e.w)
-		for cx := 0; cx < e.w; cx++ {
+		rx := int(math.Ceil(math.Min(stepKm*1000/e.Dx[cy], blockCells)*blockSteps)) + 1
+		rx = min(rx, e.W)
+		for cx := 0; cx < e.W; cx++ {
 			top := 0.0
 			for k := -rx; k <= rx; k++ {
-				top = math.Max(top, e.height[e.at(cx+k, cy)])
+				top = math.Max(top, e.Height[e.at(cx+k, cy)])
 			}
-			mid[cy*e.w+cx] = top
+			mid[cy*e.W+cx] = top
 		}
 	})
 	out := make([]float64, n)
 	e.rows(func(cy int) {
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			top := 0.0
-			for k := max(cy-ry, 0); k <= min(cy+ry, e.h-1); k++ {
-				top = math.Max(top, mid[k*e.w+cx])
+			for k := max(cy-ry, 0); k <= min(cy+ry, e.H-1); k++ {
+				top = math.Max(top, mid[k*e.W+cx])
 			}
-			i := cy*e.w + cx
-			out[i] = top - e.height[i]
+			i := cy*e.W + cx
+			out[i] = top - e.Height[i]
 		}
 	})
 	return out
 }
 
 // gather is the mean of a reading of the map's tiles over each air cell.
-func (e *airEnv) gather(v []float64) []float64 {
-	if e.cell == 1 {
+func (e *Env) gather(v []float64) []float64 {
+	if e.Cell == 1 {
 		return append([]float64(nil), v...)
 	}
-	out := make([]float64, e.w*e.h)
-	k := float64(e.cell * e.cell)
-	across := e.w * e.cell
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
+	out := make([]float64, e.W*e.H)
+	k := float64(e.Cell * e.Cell)
+	across := e.W * e.Cell
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
 			var s float64
-			for y := cy * e.cell; y < (cy+1)*e.cell; y++ {
-				for x := cx * e.cell; x < (cx+1)*e.cell; x++ {
+			for y := cy * e.Cell; y < (cy+1)*e.Cell; y++ {
+				for x := cx * e.Cell; x < (cx+1)*e.Cell; x++ {
 					s += v[y*across+x]
 				}
 			}
-			out[cy*e.w+cx] = s / k
+			out[cy*e.W+cx] = s / k
 		}
 	}
 	return out
@@ -408,41 +408,41 @@ func (e *airEnv) gather(v []float64) []float64 {
 // rows runs f for every row of cells, spread over goroutines where there are
 // cells enough to be worth it, under the same rule as Grid.EachRow: f writes
 // only at its own row's cells.
-func (e *airEnv) rows(f func(cy int)) {
-	if e.w*e.h < spreadTiles {
-		for cy := 0; cy < e.h; cy++ {
+func (e *Env) rows(f func(cy int)) {
+	if e.W*e.H < spreadTiles {
+		for cy := 0; cy < e.H; cy++ {
 			f(cy)
 		}
 		return
 	}
-	InParallel(e.h, WorkersFor(e.h), func(cy, _ int) { f(cy) })
+	InParallel(e.H, WorkersFor(e.H), func(cy, _ int) { f(cy) })
 }
 
 // at is the cell cx, cy, with the column taken round the seam or held at the
 // edge and the row held at the poles or the edge.
-func (e *airEnv) at(cx, cy int) int {
-	if uint(cx) < uint(e.w) && uint(cy) < uint(e.h) {
-		return cy*e.w + cx
+func (e *Env) at(cx, cy int) int {
+	if uint(cx) < uint(e.W) && uint(cy) < uint(e.H) {
+		return cy*e.W + cx
 	}
-	if e.wrap {
-		cx = ((cx % e.w) + e.w) % e.w
+	if e.Wrap {
+		cx = ((cx % e.W) + e.W) % e.W
 	} else {
-		cx = min(max(cx, 0), e.w-1)
+		cx = min(max(cx, 0), e.W-1)
 	}
-	cy = min(max(cy, 0), e.h-1)
-	return cy*e.w + cx
+	cy = min(max(cy, 0), e.H-1)
+	return cy*e.W + cx
 }
 
 // grad is the slope of v at a cell, per metre, rising toward the east and
 // toward the north.
-func (e *airEnv) grad(v []float64, cx, cy int) (east, north float64) {
-	east = (v[e.at(cx+1, cy)] - v[e.at(cx-1, cy)]) / (2 * e.dx[cy])
-	north = (v[e.at(cx, cy-1)] - v[e.at(cx, cy+1)]) / (2 * e.dy)
+func (e *Env) grad(v []float64, cx, cy int) (east, north float64) {
+	east = (v[e.at(cx+1, cy)] - v[e.at(cx-1, cy)]) / (2 * e.Dx[cy])
+	north = (v[e.at(cx, cy-1)] - v[e.at(cx, cy+1)]) / (2 * e.Dy)
 	return east, north
 }
 
-// sample is v read between the cells, at a place given in cells.
-func (e *airEnv) sample(v []float64, fx, fy float64) float64 {
+// Sample is v read between the cells, at a place given in cells.
+func (e *Env) Sample(v []float64, fx, fy float64) float64 {
 	x0, y0 := math.Floor(fx), math.Floor(fy)
 	tx, ty := fx-x0, fy-y0
 	x, y := int(x0), int(y0)
@@ -454,17 +454,17 @@ func (e *airEnv) sample(v []float64, fx, fy float64) float64 {
 // blur is v averaged over the square reach kilometres either way of each
 // cell, which is a different number of cells along a row near a pole than at
 // the equator.
-func (e *airEnv) blur(v []float64, reach float64) []float64 {
-	across := make([]int, e.h)
+func (e *Env) blur(v []float64, reach float64) []float64 {
+	across := make([]int, e.H)
 	for cy := range across {
-		across[cy] = int(math.Round(reach / (e.dx[cy] / 1000)))
+		across[cy] = int(math.Round(reach / (e.Dx[cy] / 1000)))
 	}
-	return e.box(v, across, int(math.Round(reach/(e.dy/1000))))
+	return e.box(v, across, int(math.Round(reach/(e.Dy/1000))))
 }
 
 // blurCells is v averaged over the square r cells either way of each cell.
-func (e *airEnv) blurCells(v []float64, r int) []float64 {
-	across := make([]int, e.h)
+func (e *Env) blurCells(v []float64, r int) []float64 {
+	across := make([]int, e.H)
 	for cy := range across {
 		across[cy] = r
 	}
@@ -474,59 +474,59 @@ func (e *airEnv) blurCells(v []float64, r int) []float64 {
 // box is the running mean of v, across[cy] cells either way along each row
 // and down cells either way down each column, clipped at the edges and taken
 // round the seam.
-func (e *airEnv) box(v []float64, across []int, down int) []float64 {
+func (e *Env) box(v []float64, across []int, down int) []float64 {
 	mid := make([]float64, len(v))
 	e.rows(func(cy int) {
 		r := across[cy]
-		row := cy * e.w
-		if e.wrap && 2*r+1 >= e.w {
+		row := cy * e.W
+		if e.Wrap && 2*r+1 >= e.W {
 			var s float64
-			for cx := 0; cx < e.w; cx++ {
+			for cx := 0; cx < e.W; cx++ {
 				s += v[row+cx]
 			}
-			for cx := 0; cx < e.w; cx++ {
-				mid[row+cx] = s / float64(e.w)
+			for cx := 0; cx < e.W; cx++ {
+				mid[row+cx] = s / float64(e.W)
 			}
 			return
 		}
 		var s float64
 		var k int
 		for cx := -r; cx <= r; cx++ {
-			if e.wrap || (cx >= 0 && cx < e.w) {
+			if e.Wrap || (cx >= 0 && cx < e.W) {
 				s += v[e.at(cx, cy)]
 				k++
 			}
 		}
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			mid[row+cx] = s / float64(k)
 			out, in := cx-r, cx+r+1
-			if e.wrap || out >= 0 {
+			if e.Wrap || out >= 0 {
 				s -= v[e.at(out, cy)]
 				k--
 			}
-			if e.wrap || in < e.w {
+			if e.Wrap || in < e.W {
 				s += v[e.at(in, cy)]
 				k++
 			}
 		}
 	})
 	out := make([]float64, len(v))
-	down = min(down, e.h)
-	for cx := 0; cx < e.w; cx++ {
+	down = min(down, e.H)
+	for cx := 0; cx < e.W; cx++ {
 		var s float64
 		var k int
-		for cy := 0; cy <= down && cy < e.h; cy++ {
-			s += mid[cy*e.w+cx]
+		for cy := 0; cy <= down && cy < e.H; cy++ {
+			s += mid[cy*e.W+cx]
 			k++
 		}
-		for cy := 0; cy < e.h; cy++ {
-			out[cy*e.w+cx] = s / float64(k)
+		for cy := 0; cy < e.H; cy++ {
+			out[cy*e.W+cx] = s / float64(k)
 			if leave := cy - down; leave >= 0 {
-				s -= mid[leave*e.w+cx]
+				s -= mid[leave*e.W+cx]
 				k--
 			}
-			if enter := cy + down + 1; enter < e.h {
-				s += mid[enter*e.w+cx]
+			if enter := cy + down + 1; enter < e.H {
+				s += mid[enter*e.W+cx]
 				k++
 			}
 		}
@@ -534,47 +534,47 @@ func (e *airEnv) box(v []float64, across []int, down int) []float64 {
 	return out
 }
 
-// windsFor works out the climate of the wind over a map m as its ground now
+// WindsFor works out the climate of the wind over a map m as its ground now
 // lies: see newAirEnv for above and wet. The phases are independent of one
 // another and are worked out side by side; each writes only its own slices.
-func windsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
-	e := newAirEnv(m, a, above, wet)
-	w := &Winds{airEnv: e}
-	n := e.w * e.h
-	for k := range phases {
-		w.u[k], w.v[k], w.p[k] = make([]float32, n), make([]float32, n), make([]float32, n)
+func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
+	e := NewEnv(m, a, above, wet)
+	w := &Winds{Env: e}
+	n := e.W * e.H
+	for k := range AirPhases {
+		w.U[k], w.V[k], w.P[k] = make([]float32, n), make([]float32, n), make([]float32, n)
 	}
 	workers := 1
 	if n >= spreadTiles {
-		workers = WorkersFor(phases)
+		workers = WorkersFor(AirPhases)
 	}
 	// The two equinoxes are the same day to the air, so the autumn's is the
 	// spring's.
-	InParallel(phases-1, workers, func(k, _ int) {
-		e.solve(phaseSin[k], e.airTemp(phaseSin[k]), nil, nil, w.u[k], w.v[k], w.p[k])
+	InParallel(AirPhases-1, workers, func(k, _ int) {
+		e.Solve(phaseSin[k], e.AirTemp(phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
 	})
-	copy(w.u[3], w.u[1])
-	copy(w.v[3], w.v[1])
-	copy(w.p[3], w.p[1])
+	copy(w.U[3], w.U[1])
+	copy(w.V[3], w.V[1])
+	copy(w.P[3], w.P[1])
 	// The water under the year's wind, on a globe. See ocean.go.
-	if e.wrap {
-		e.warm = e.currents(w.u, w.v)
-		e.coast = e.coastal(e.warm)
+	if e.Wrap {
+		e.Warm = e.currents(w.U, w.V)
+		e.Coast = e.coastal(e.Warm)
 	}
 	return w
 }
 
-// airTemp is the temperature of the air at sea level over each cell in an
+// AirTemp is the temperature of the air at sea level over each cell in an
 // ordinary year, sinT of the way into the north's summer. The phases of the
 // wind's year are its thermal seasons - the warmest, the coldest and the turn
 // between - so each cell is read at the crest of its own swing, whatever its
 // lag behind the sun. The swing is the one Land.TempAt reads: see seasonTemp.
-func (e *airEnv) airTemp(sinT float64) []float64 {
-	temp := make([]float64, e.w*e.h)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			temp[i] = e.mean[cy] + seasonTemp(e.hemi[cy], sinT, e.cont[i])
+func (e *Env) AirTemp(sinT float64) []float64 {
+	temp := make([]float64, e.W*e.H)
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
+			temp[i] = e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, e.Cont[i])
 		}
 	}
 	return temp
@@ -583,15 +583,15 @@ func (e *airEnv) airTemp(sinT float64) []float64 {
 // airTempOn is airTemp on a day of the calendar: each cell at its own place in
 // its swing, lagging the sun by as much as the land round it makes it lag. A
 // valley's year has no lag, and is airTemp at the day's sun to the bit.
-func (e *airEnv) airTempOn(day int) []float64 {
-	if !e.wrap {
-		return e.airTemp(yearSin(day))
+func (e *Env) airTempOn(day int) []float64 {
+	if !e.Wrap {
+		return e.AirTemp(YearSin(day))
 	}
-	temp := make([]float64, e.w*e.h)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			temp[i] = e.mean[cy] + seasonTemp(e.hemi[cy], seasonAt(day, lagAt(e.cont[i])), e.cont[i])
+	temp := make([]float64, e.W*e.H)
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
+			temp[i] = e.Mean[cy] + seasonTemp(e.hemi[cy], SeasonAt(day, LagAt(e.Cont[i])), e.Cont[i])
 		}
 	}
 	return temp
@@ -604,12 +604,12 @@ func hypsometric(p, temp, depth float64) float64 {
 	return p * gravity * depth / (dryGas * t * t)
 }
 
-// solve works out the wind over the cells with the year sinT of the way into
+// Solve works out the wind over the cells with the year sinT of the way into
 // the north's summer, over air at sea level of temp degrees. extra is pressure added to what the climate lays down,
 // in hPa, and warm the degrees the day's weather has carried in; either may be
 // nil. The wind and the pressure are written to u, v and p.
-func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []float32) {
-	n := e.w * e.h
+func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32) {
+	n := e.W * e.H
 
 	// The warmth of the air at sea level, and the pressure it and the belts
 	// make between them.
@@ -618,22 +618,22 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 		warm = e.blur(e.blur(warm, synopticReach), synopticReach)
 	}
 	pres := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		row := cy * e.w
+	for cy := 0; cy < e.H; cy++ {
+		row := cy * e.W
 		var zonal float64
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			zonal += temp[row+cx]
 		}
-		zonal /= float64(e.w)
+		zonal /= float64(e.W)
 		belt := beltPressure(e.lat[cy], sinT)
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			i := row + cx
 			dt := temp[i] - zonal
 			depth := boundaryCold
 			if dt > 0 {
 				depth = boundaryWarm
 			}
-			depth = boundarySea + (depth-boundarySea)*e.cont[i]
+			depth = boundarySea + (depth-boundarySea)*e.Cont[i]
 			pres[i] = belt - hypsometric(belt, temp[i], depth)*dt
 			if warm != nil {
 				pres[i] -= hypsometric(belt, temp[i], warmDepth) * warm[i]
@@ -650,11 +650,11 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 	wind := [2][]float64{make([]float64, n), make([]float64, n)}
 	e.rows(func(cy int) {
 		f := e.f[cy]
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			px, py := e.grad(pres, cx, cy)
 			px, py = px*100/airDensity, py*100/airDensity // hPa to Pa, and a force on a kilogram
-			land := 1 - e.sea[i]
+			land := 1 - e.Sea[i]
 			r0 := dragSea + (dragLand*(1+e.rough[i]/dragRough)-dragSea)*land
 			q := dragQuadratic * (1 + land)
 			r := r0
@@ -665,7 +665,7 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 				r = (r + r0 + q*math.Hypot(uu, vv)) / 2
 			}
 			free[0][i], free[1][i] = uu, vv
-			uu, vv = e.ground(cx, cy, uu, vv)
+			uu, vv = e.Ground(cx, cy, uu, vv)
 			wind[0][i], wind[1][i] = uu, vv
 		}
 	})
@@ -673,19 +673,19 @@ func (e *airEnv) solve(sinT float64, temp, extra, warm []float64, u, v, p []floa
 
 	for i := 0; i < n; i++ {
 		uu, vv := wind[0][i], wind[1][i]
-		if s := math.Hypot(uu, vv); s > windMost {
-			uu, vv = uu*windMost/s, vv*windMost/s
+		if s := math.Hypot(uu, vv); s > WindMost {
+			uu, vv = uu*WindMost/s, vv*WindMost/s
 		}
 		u[i], v[i], p[i] = float32(uu), float32(vv), float32(pres[i])
 	}
 }
 
-// ground is the wind uu, vv at a cell after the ground there has had its say:
+// Ground is the wind uu, vv at a cell after the Ground there has had its say:
 // turned aside by a range it cannot climb, quickened on a crest and slowed in
 // a hollow, and joined by the air draining off the ice.
-func (e *airEnv) ground(cx, cy int, uu, vv float64) (float64, float64) {
-	i := cy*e.w + cx
-	gx, gy := e.gx[i], e.gy[i]
+func (e *Env) Ground(cx, cy int, uu, vv float64) (float64, float64) {
+	i := cy*e.W + cx
+	gx, gy := e.Gx[i], e.Gy[i]
 	slope := math.Hypot(gx, gy)
 
 	// Blocking. The ground ahead along the wind, and how much of it the wind
@@ -694,11 +694,11 @@ func (e *airEnv) ground(cx, cy int, uu, vv float64) (float64, float64) {
 	if s := math.Hypot(uu, vv); s > 0.1 && slope > 1e-6 && s < buoyancy*e.climb[i] {
 		ex, ny := uu/s, vv/s
 		stepKm := blockReach / blockSteps
-		sx := math.Min(stepKm*1000/e.dx[cy], blockCells) // cells a step along the row
-		sy := math.Min(stepKm*1000/e.dy, blockCells)
-		here, top := e.height[i], e.height[i]
+		sx := math.Min(stepKm*1000/e.Dx[cy], blockCells) // cells a step along the row
+		sy := math.Min(stepKm*1000/e.Dy, blockCells)
+		here, top := e.Height[i], e.Height[i]
 		for k := 1; k <= blockSteps; k++ {
-			h := e.sample(e.height, float64(cx)+ex*sx*float64(k), float64(cy)-ny*sy*float64(k))
+			h := e.Sample(e.Height, float64(cx)+ex*sx*float64(k), float64(cy)-ny*sy*float64(k))
 			top = math.Max(top, h)
 		}
 		if climb := top - here; climb > 0 {
@@ -713,13 +713,13 @@ func (e *airEnv) ground(cx, cy int, uu, vv float64) (float64, float64) {
 
 	// Exposure: Jackson and Hunt's speed-up over a hill of the country's
 	// breadth.
-	half := float64(exposeReach) * math.Min(e.dx[cy], e.dy)
-	k := math.Max(exposeLeast, math.Min(exposeMost, 1+2*e.expose[i]/half))
+	half := float64(ExposeReach) * math.Min(e.Dx[cy], e.Dy)
+	k := math.Max(exposeLeast, math.Min(exposeMost, 1+2*e.Expose[i]/half))
 	uu, vv = uu*k, vv*k
 
 	// The ice's own wind.
 	if slope > 1e-6 {
-		air := e.mean[cy] - Lapse*e.height[i]
+		air := e.Mean[cy] - Lapse*e.Height[i]
 		cold := math.Min(katabaticCold, -air)
 		if cold > 0 {
 			sine := slope / math.Sqrt(1+slope*slope)
@@ -742,8 +742,8 @@ func (e *airEnv) ground(cx, cy int, uu, vv float64) (float64, float64) {
 // the gaps in a range and round its ends. The convergence the free wind had
 // of its own is left, because that is the planet's circulation and not the
 // ground's doing.
-func (e *airEnv) channel(free, wind [2][]float64) {
-	n := e.w * e.h
+func (e *Env) channel(free, wind [2][]float64) {
+	n := e.W * e.H
 	fu, fv := make([]float64, n), make([]float64, n)
 	for i := range fu {
 		fu[i], fv[i] = e.depth[i]*wind[0][i], e.depth[i]*wind[1][i]
@@ -753,8 +753,8 @@ func (e *airEnv) channel(free, wind [2][]float64) {
 	// now has, less that of the free wind at the depth over the sea.
 	push := make([]float64, n)
 	e.rows(func(cy int) {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			push[i] = e.div(fu, fv, cx, cy) - layerDepth*e.div(free[0], free[1], cx, cy)
 		}
 	})
@@ -765,24 +765,24 @@ func (e *airEnv) channel(free, wind [2][]float64) {
 	for range channelRounds {
 		for colour := range 2 {
 			e.rows(func(cy int) {
-				ax := 1 / (e.dx[cy] * e.dx[cy])
-				ay := 1 / (e.dy * e.dy)
+				ax := 1 / (e.Dx[cy] * e.Dx[cy])
+				ay := 1 / (e.Dy * e.Dy)
 				norm := 1 / (2*ax + 2*ay)
-				row := cy * e.w
-				north, south := max(cy-1, 0)*e.w, min(cy+1, e.h-1)*e.w
-				for cx := (cy + colour) % 2; cx < e.w; cx += 2 {
+				row := cy * e.W
+				north, south := max(cy-1, 0)*e.W, min(cy+1, e.H-1)*e.W
+				for cx := (cy + colour) % 2; cx < e.W; cx += 2 {
 					west, east := cx-1, cx+1
 					switch {
-					case west < 0 && e.wrap:
-						west = e.w - 1
+					case west < 0 && e.Wrap:
+						west = e.W - 1
 					case west < 0:
 						west = 0
 					}
 					switch {
-					case east == e.w && e.wrap:
+					case east == e.W && e.Wrap:
 						east = 0
-					case east >= e.w:
-						east = e.w - 1
+					case east >= e.W:
+						east = e.W - 1
 					}
 					sx := lam[row+east] + lam[row+west]
 					sy := lam[north+cx] + lam[south+cx]
@@ -793,8 +793,8 @@ func (e *airEnv) channel(free, wind [2][]float64) {
 		}
 	}
 	e.rows(func(cy int) {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			gx, gy := e.grad(lam, cx, cy)
 			wind[0][i] = (fu[i] - gx) / e.depth[i]
 			wind[1][i] = (fv[i] - gy) / e.depth[i]
@@ -804,34 +804,34 @@ func (e *airEnv) channel(free, wind [2][]float64) {
 
 // div is the divergence of the field fu, fv at a cell, per metre, with the
 // parallels shortening toward the poles.
-func (e *airEnv) div(fu, fv []float64, cx, cy int) float64 {
-	east := (fu[e.at(cx+1, cy)] - fu[e.at(cx-1, cy)]) / (2 * e.dx[cy])
-	nr, sr := max(cy-1, 0), min(cy+1, e.h-1)
-	north := (fv[e.at(cx, nr)]*e.dx[nr] - fv[e.at(cx, sr)]*e.dx[sr]) / (2 * e.dy * e.dx[cy])
+func (e *Env) div(fu, fv []float64, cx, cy int) float64 {
+	east := (fu[e.at(cx+1, cy)] - fu[e.at(cx-1, cy)]) / (2 * e.Dx[cy])
+	nr, sr := max(cy-1, 0), min(cy+1, e.H-1)
+	north := (fv[e.at(cx, nr)]*e.Dx[nr] - fv[e.at(cx, sr)]*e.Dx[sr]) / (2 * e.Dy * e.Dx[cy])
 	return east + north
 }
 
 // seasonWeights is how much each phase of the year is worth on a day: the
 // year's mean and its first harmonic, read off the four phases, which lie a
 // quarter of a year apart.
-func seasonWeights(day int) [phases]float64 {
+func seasonWeights(day int) [AirPhases]float64 {
 	th := 2 * math.Pi * float64(day) / Year
 	s, c := math.Sin(th), math.Cos(th)
 	// A field over the year is m + S sin + C cos, and the phases are its values
 	// at sin -1, cos 1, sin 1 and cos -1.
-	return [phases]float64{0.25 - s/2, 0.25 + c/2, 0.25 + s/2, 0.25 - c/2}
+	return [AirPhases]float64{0.25 - s/2, 0.25 + c/2, 0.25 + s/2, 0.25 - c/2}
 }
 
-// cellAt is where tile i's centre lies among the air cells, in cells.
-func (e *airEnv) cellAt(i int) (fx, fy float64) {
-	across := e.w * e.cell
+// CellAt is where tile i's centre lies among the air cells, in cells.
+func (e *Env) CellAt(i int) (fx, fy float64) {
+	across := e.W * e.Cell
 	x, y := i%across, i/across
-	k := float64(e.cell)
+	k := float64(e.Cell)
 	return (float64(x)+0.5)/k - 0.5, (float64(y)+0.5)/k - 0.5
 }
 
-// sample32 is sample for a reading kept in single precision.
-func (e *airEnv) sample32(v []float32, fx, fy float64) float64 {
+// Sample32 is sample for a reading kept in single precision.
+func (e *Env) Sample32(v []float32, fx, fy float64) float64 {
 	x0, y0 := math.Floor(fx), math.Floor(fy)
 	tx, ty := fx-x0, fy-y0
 	x, y := int(x0), int(y0)
@@ -841,32 +841,32 @@ func (e *airEnv) sample32(v []float32, fx, fy float64) float64 {
 	return a + (b-a)*ty
 }
 
-// windOn is Grid.WindOn for a tile of the map.
-func (w *Winds) windOn(i, day int) (east, north float64) {
-	fx, fy := w.cellAt(i)
+// WindOn is Grid.WindOn for a tile of the map.
+func (w *Winds) WindOn(i, day int) (east, north float64) {
+	fx, fy := w.CellAt(i)
 	for k, m := range seasonWeights(day) {
-		east += m * w.sample32(w.u[k], fx, fy)
-		north += m * w.sample32(w.v[k], fx, fy)
+		east += m * w.Sample32(w.U[k], fx, fy)
+		north += m * w.Sample32(w.V[k], fx, fy)
 	}
 	return east, north
 }
 
-// meanWind is Grid.MeanWind for a tile of the map.
-func (w *Winds) meanWind(i int) (east, north float64) {
-	fx, fy := w.cellAt(i)
-	for k := range phases {
-		east += w.sample32(w.u[k], fx, fy) / phases
-		north += w.sample32(w.v[k], fx, fy) / phases
+// MeanWind is Grid.MeanWind for a tile of the map.
+func (w *Winds) MeanWind(i int) (east, north float64) {
+	fx, fy := w.CellAt(i)
+	for k := range AirPhases {
+		east += w.Sample32(w.U[k], fx, fy) / AirPhases
+		north += w.Sample32(w.V[k], fx, fy) / AirPhases
 	}
 	return east, north
 }
 
-// pressureOn is Grid.PressureOn for a tile of the map.
-func (w *Winds) pressureOn(i, day int) float64 {
-	fx, fy := w.cellAt(i)
+// PressureOn is Grid.PressureOn for a tile of the map.
+func (w *Winds) PressureOn(i, day int) float64 {
+	fx, fy := w.CellAt(i)
 	var p float64
 	for k, m := range seasonWeights(day) {
-		p += m * w.sample32(w.p[k], fx, fy)
+		p += m * w.Sample32(w.P[k], fx, fy)
 	}
 	return p
 }

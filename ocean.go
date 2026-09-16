@@ -47,8 +47,8 @@ import (
 
 // The sea.
 const (
-	// seaDensity is the density of sea water, kg a cubic metre.
-	seaDensity = 1025.0
+	// SeaDensity is the density of sea water, kg a cubic metre.
+	SeaDensity = 1025.0
 	// planetRadius is the planet's radius, in metres.
 	planetRadius = 6.371e6
 	// stressDrag is the drag of the sea surface on the wind over it: the
@@ -141,10 +141,10 @@ const (
 // currents works out the water under the year's mean wind u, v and gives
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land.
-func (e *airEnv) currents(u, v [phases][]float32) []float64 {
+func (e *Env) currents(u, v [AirPhases][]float32) []float64 {
 	defer phase.Start("airEnv.currents")()
-	n := e.w * e.h
-	wet := func(i int) bool { return e.sea[i] > 0.5 }
+	n := e.W * e.H
+	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 
 	// The wind's stress on the sea, in newtons a square metre, from the year's
 	// mean wind; and the current it drifts the surface at.
@@ -152,9 +152,9 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	cu, cv := make([]float64, n), make([]float64, n)
 	for i := range n {
 		var mu, mv float64
-		for k := range phases {
-			mu += float64(u[k][i]) / phases
-			mv += float64(v[k][i]) / phases
+		for k := range AirPhases {
+			mu += float64(u[k][i]) / AirPhases
+			mv += float64(v[k][i]) / AirPhases
 		}
 		s := math.Hypot(mu, mv)
 		tx[i] = airDensity * stressDrag * s * mu
@@ -163,25 +163,25 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	ekman := func(i, cy int) (east, north float64) {
 		f := 2 * omega * math.Max(math.Sin(math.Abs(e.lat[cy])*math.Pi/180), math.Sin(upwellLow*math.Pi/180))
 		f = math.Copysign(f, e.lat[cy])
-		return ty[i] / (seaDensity * f), -tx[i] / (seaDensity * f)
+		return ty[i] / (SeaDensity * f), -tx[i] / (SeaDensity * f)
 	}
 
 	// The gyres. On each row, each stretch of sea between shores is driven
 	// toward the equator or the pole by the turning of the wind's stress, and
 	// what that takes one way comes back the other against the western shore.
-	for cy := 0; cy < e.h; cy++ {
+	for cy := 0; cy < e.H; cy++ {
 		lat := e.lat[cy]
 		a := math.Abs(lat)
 		if a < gyreCalm || a > gyreCap {
 			continue
 		}
 		beta := 2 * omega * math.Cos(lat*math.Pi/180) / planetRadius
-		row := cy * e.w
+		row := cy * e.W
 		// Where the row's first shore is: the eastern end of a stretch of land,
 		// from which the stretches of sea can be walked eastward round the
 		// seam. A row with no land has no shore.
 		start := -1
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			if !wet(row+cx) && wet(e.at(cx+1, cy)) {
 				start = cx + 1
 				break
@@ -190,12 +190,12 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 		if start < 0 {
 			continue
 		}
-		if !e.wrap {
+		if !e.Wrap {
 			start = 0
 		}
-		dx := e.dx[cy]
+		dx := e.Dx[cy]
 		wall := max(1, int(math.Round(westWall/dx)))
-		span := e.w
+		span := e.W
 		for k := 0; k < span; {
 			i := e.at(start+k, cy)
 			if !wet(i) {
@@ -208,12 +208,12 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 				k++
 			}
 			last := k - 1
-			if !e.wrap && (first == 0 || last == span-1) {
+			if !e.Wrap && (first == 0 || last == span-1) {
 				// A valley's sea runs off the map, and the map has no say in
 				// where its gyre closes.
 				continue
 			}
-			if last-first+1 <= wall || float64(last-first+1) > gyreOpen*float64(e.w) {
+			if last-first+1 <= wall || float64(last-first+1) > gyreOpen*float64(e.W) {
 				// Too narrow to turn in, or an ocean so nearly all the way
 				// round that the islands in it do not close it: the Southern
 				// Ocean's current goes round Drake Passage, not back up it.
@@ -224,8 +224,8 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 				c := e.at(start+j, cy)
 				cx := c - row
 				curl := (ty[e.at(cx+1, cy)]-ty[e.at(cx-1, cy)])/(2*dx) -
-					(tx[e.at(cx, cy-1)]-tx[e.at(cx, cy+1)])/(2*e.dy)
-				flow := curl / (seaDensity * beta)
+					(tx[e.at(cx, cy-1)]-tx[e.at(cx, cy+1)])/(2*e.Dy)
+				flow := curl / (SeaDensity * beta)
 				cv[c] = flow / gyreDepth
 				interior += flow * dx
 			}
@@ -246,7 +246,7 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 				mask[i] = 1
 			}
 		}
-		flat := make([]int, e.h)
+		flat := make([]int, e.H)
 		held, share := e.box(cv, flat, gyreRows), e.box(mask, flat, gyreRows)
 		for i := range cv {
 			if wet(i) && share[i] > 0 {
@@ -260,15 +260,15 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	// it. This is what takes the western current across the ocean where the
 	// gyre it runs round ends, the Gulf Stream into the North Atlantic Drift.
 	gu := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		nr, sr := max(cy-1, 0), min(cy+1, e.h-1)
-		row := cy * e.w
-		dx := e.dx[cy]
+	for cy := 0; cy < e.H; cy++ {
+		nr, sr := max(cy-1, 0), min(cy+1, e.H-1)
+		row := cy * e.W
+		dx := e.Dx[cy]
 		// Walked westward from each eastern shore, round the seam on a globe.
 		start := -1
-		for cx := 0; cx < e.w; cx++ {
+		for cx := 0; cx < e.W; cx++ {
 			if !wet(row+cx) && wet(e.at(cx-1, cy)) {
-				start = (cx - 1 + e.w) % e.w
+				start = (cx - 1 + e.W) % e.W
 				break
 			}
 		}
@@ -286,21 +286,21 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 			}
 			flow, stretch = 0, stretch[:0]
 		}
-		for k := 0; k <= e.w; k++ {
-			cx := ((start-k)%e.w + e.w) % e.w
+		for k := 0; k <= e.W; k++ {
+			cx := ((start-k)%e.W + e.W) % e.W
 			i := row + cx
-			if !wet(i) || k == e.w {
+			if !wet(i) || k == e.W {
 				shut()
 				continue
 			}
-			north := (cv[nr*e.w+cx] - cv[sr*e.w+cx]) / (2 * e.dy)
+			north := (cv[nr*e.W+cx] - cv[sr*e.W+cx]) / (2 * e.Dy)
 			flow += north * dx
 			gu[i] = flow
 			stretch = append(stretch, i)
 		}
 	}
 	for i := range n {
-		mx, my := ekman(i, i/e.w)
+		mx, my := ekman(i, i/e.W)
 		cu[i] += gu[i] + mx/ekmanDepth
 		cv[i] += my / ekmanDepth
 		if !wet(i) {
@@ -316,14 +316,14 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	deep := make([]float64, n)
 	land := make([]float64, n)
 	for i := range land {
-		land[i] = 1 - e.sea[i]
+		land[i] = 1 - e.Sea[i]
 	}
-	for cy := 0; cy < e.h; cy++ {
+	for cy := 0; cy < e.H; cy++ {
 		lat := e.lat[cy]
 		c := math.Cos(lat * math.Pi / 180)
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
-			deep[i] = e.mean[cy] - upwellContrast*c*c
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
+			deep[i] = e.Mean[cy] - upwellContrast*c*c
 			if !wet(i) || math.Abs(lat) < gyreCalm {
 				continue
 			}
@@ -336,13 +336,13 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 			// the north and to the left in the south, and how much of it goes
 			// away from the land.
 			f := e.f[cy]
-			mx, my := ty[i]/(seaDensity*f), -tx[i]/(seaDensity*f)
+			mx, my := ty[i]/(SeaDensity*f), -tx[i]/(SeaDensity*f)
 			off := -(mx*gx + my*gy) / g
 			// Near the equator the turning that sends the water off the
 			// shore goes to nothing, and what sends it there instead is the
 			// open ocean's business rather than a coast's.
 			if off > 0 {
-				rise[i] = off / math.Min(e.dx[cy], e.dy) * smoothstep(gyreCalm, upwellLow, math.Abs(lat))
+				rise[i] = off / math.Min(e.Dx[cy], e.Dy) * smoothstep(gyreCalm, upwellLow, math.Abs(lat))
 			}
 		}
 	}
@@ -354,9 +354,9 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	// moisture.
 	temp := make([]float64, n)
 	for i := range temp {
-		temp[i] = e.mean[i/e.w]
+		temp[i] = e.Mean[i/e.W]
 	}
-	depth, relax := make([]float64, e.h), make([]float64, e.h)
+	depth, relax := make([]float64, e.H), make([]float64, e.H)
 	for cy := range depth {
 		depth[cy] = mixedTropic + (mixedPolar-mixedTropic)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
 		relax[cy] = seaExchange / (seaHeat * depth[cy])
@@ -372,7 +372,7 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	warm := make([]float64, n)
 	for i := range warm {
 		if wet(i) {
-			warm[i] = math.Max(-seaWarmMost, math.Min(seaWarmMost, temp[i]-e.mean[i/e.w]))
+			warm[i] = math.Max(-seaWarmMost, math.Min(seaWarmMost, temp[i]-e.Mean[i/e.W]))
 		}
 	}
 	// The land along a shore is given the warmth of the sea beside it, so
@@ -380,15 +380,15 @@ func (e *airEnv) currents(u, v [phases][]float32) []float64 {
 	// and not half the land's nothing: the coldest water there is lies against
 	// the shore.
 	shore := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			if wet(i) {
 				continue
 			}
 			var s, k float64
 			for dy := -1; dy <= 1; dy++ {
-				if cy+dy < 0 || cy+dy >= e.h {
+				if cy+dy < 0 || cy+dy >= e.H {
 					continue
 				}
 				for dx := -1; dx <= 1; dx++ {
@@ -436,33 +436,33 @@ type seaLinks struct {
 // each cell's base and take are written over its rise and deep water, and its
 // weights over its currents, after they are read. A cell's are the only ones
 // it reads.
-func (e *airEnv) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
-	n := e.w * e.h
+func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
+	n := e.W * e.H
 	l := &seaLinks{
-		w: e.w, h: e.h,
+		w: e.W, h: e.H,
 		base: rise, take: deep,
 		wa: cu, wb: cv,
 		ja: make([]int32, n), jb: make([]int32, n),
 	}
-	dy := e.dy
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	dy := e.Dy
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			l.ja[i], l.jb[i] = -1, -1
-			if e.sea[i] <= 0.5 {
+			if e.Sea[i] <= 0.5 {
 				l.take[i] = 0
 				continue
 			}
 			r := rise[i] / depth[cy]
-			sum := relax[cy]*e.mean[cy] + r*deep[i]
+			sum := relax[cy]*e.Mean[cy] + r*deep[i]
 			take := relax[cy] + r
-			a := math.Abs(cu[i]) / e.dx[cy]
+			a := math.Abs(cu[i]) / e.Dx[cy]
 			b := math.Abs(cv[i]) / dy
 			cvi := cv[i]
 			if a > 0 {
 				ux := cx - int(math.Copysign(1, cu[i]))
-				if e.wrap || (ux >= 0 && ux < e.w) {
-					if j := e.at(ux, cy); e.sea[j] > 0.5 {
+				if e.Wrap || (ux >= 0 && ux < e.W) {
+					if j := e.at(ux, cy); e.Sea[j] > 0.5 {
 						take += a
 						l.ja[i], l.wa[i] = int32(j), a
 					}
@@ -473,15 +473,15 @@ func (e *airEnv) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks 
 			// due north and south comes in round the corner of it: from the
 			// nearest sea along the row behind it, within cornerReach.
 			if b > 0 {
-				if uy := cy + int(math.Copysign(1, cvi)); uy >= 0 && uy < e.h {
-					reach := int(math.Ceil(cornerReach / e.dx[uy]))
+				if uy := cy + int(math.Copysign(1, cvi)); uy >= 0 && uy < e.H {
+					reach := int(math.Ceil(cornerReach / e.Dx[uy]))
 					for side := 0; side <= reach; side++ {
-						if j := e.at(cx+side, uy); e.sea[j] > 0.5 {
+						if j := e.at(cx+side, uy); e.Sea[j] > 0.5 {
 							take += b
 							l.jb[i], l.wb[i] = int32(j), b
 							break
 						}
-						if j := e.at(cx-side, uy); side > 0 && e.sea[j] > 0.5 {
+						if j := e.at(cx-side, uy); side > 0 && e.Sea[j] > 0.5 {
 							take += b
 							l.jb[i], l.wb[i] = int32(j), b
 							break
@@ -548,13 +548,13 @@ func (l *seaLinks) gaussSeidel(t []float64) {
 // mean warmth of the sea within coastReach of it, felt in full where a third
 // of that country is sea and less where less is. A coast in a warm current
 // has all of it, and a place a few hundred kilometres inland none.
-func (e *airEnv) coastal(warm []float64) []float64 {
+func (e *Env) coastal(warm []float64) []float64 {
 	out := make([]float64, len(warm))
 	for i, t := range warm {
-		out[i] = t * e.sea[i]
+		out[i] = t * e.Sea[i]
 	}
 	out = e.blur(out, coastReach)
-	share := e.blur(e.sea, coastReach)
+	share := e.blur(e.Sea, coastReach)
 	for i, s := range share {
 		if s > 1e-6 {
 			out[i] = out[i] / s * smoothstep(0, coastShare, s)
@@ -584,20 +584,20 @@ func inversion(warm float64) float64 {
 	return 1 - inversionMost*c*c/(1+c*c)
 }
 
-// seaWarmth is Grid.SeaWarmth for a tile of the map.
-func (w *Winds) seaWarmth(i int) float64 {
-	if w.warm == nil {
+// SeaWarmth is Grid.SeaWarmth for a tile of the map.
+func (w *Winds) SeaWarmth(i int) float64 {
+	if w.Warm == nil {
 		return 0
 	}
-	fx, fy := w.cellAt(i)
-	return w.sample(w.warm, fx, fy)
+	fx, fy := w.CellAt(i)
+	return w.Sample(w.Warm, fx, fy)
 }
 
-// coastWarmth is Grid.CoastWarmth for a tile of the map.
-func (w *Winds) coastWarmth(i int) float64 {
-	if w.coast == nil {
+// CoastWarmth is Grid.CoastWarmth for a tile of the map.
+func (w *Winds) CoastWarmth(i int) float64 {
+	if w.Coast == nil {
 		return 0
 	}
-	fx, fy := w.cellAt(i)
-	return w.sample(w.coast, fx, fy)
+	fx, fy := w.CellAt(i)
+	return w.Sample(w.Coast, fx, fy)
 }

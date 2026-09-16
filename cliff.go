@@ -48,7 +48,7 @@ func (g *Grid) cliffs(s *surf, years float64, supply []float64) {
 			if !first {
 				// Behind a platform, the waves that reach the cliff are the
 				// broken ones the high water over the platform can carry.
-				force := seaDensity * gravity * breakerIndex * tide(j)
+				force := SeaDensity * gravity * breakerIndex * tide(j)
 				for b := range attack {
 					attack[b] = 0
 					if x := force / (cliffThreshold * strength(b)); x > 1 {

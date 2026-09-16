@@ -53,13 +53,13 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 		wetness = 1
 	}
 	a := &Air{
-		lat: make([]float64, g.H), mean: make([]float64, g.H),
-		dx: make([]float64, g.H), pet: make([][]float64, g.H),
-		wetness: wetness,
+		Lat: make([]float64, g.H), Mean: make([]float64, g.H),
+		Dx: make([]float64, g.H), PET: make([][]float64, g.H),
+		Wetness: wetness,
 	}
-	a.dy = airSpan / km
+	a.Dy = airSpan / km
 	if c.globe {
-		a.dy = 20015 / float64(g.H)
+		a.Dy = 20015 / float64(g.H)
 	}
 	for y := 0; y < g.H; y++ {
 		lat, mean := Temperate, MeanTemp
@@ -68,8 +68,8 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 			lat, mean = c.latitude(y), c.MeanAt(y)
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
 		}
-		a.lat[y], a.mean[y], a.dx[y] = lat, mean, dx
-		a.pet[y] = petTable(lat)
+		a.Lat[y], a.Mean[y], a.Dx[y] = lat, mean, dx
+		a.PET[y] = PetTable(lat)
 	}
 	return a
 }
@@ -108,7 +108,7 @@ func (g *Grid) weather() {
 	was := g.winds
 	g.winds = g.windsFor()
 	if was != nil {
-		g.winds.budget = was.budget
+		g.winds.Budget = was.Budget
 	}
 	g.rainOn()
 	g.aired = g.airedGround(g.aired)
@@ -153,7 +153,7 @@ func (g *Grid) airedGround(into []float32) []float32 {
 func (g *Grid) windsFor() *Winds {
 	defer phase.Start("windsFor")()
 	above, wet := g.airGround()
-	return windsFor(&g.Map, g.air, above, wet)
+	return WindsFor(&g.Map, g.air, above, wet)
 }
 
 // airGround is the ground of g as the air reads it, tile by tile: how far each
@@ -206,7 +206,7 @@ func (g *Grid) rainOn() {
 	defer phase.Start("rainOn")()
 	a := g.air
 	w := g.winds
-	e := w.airEnv
+	e := w.Env
 
 	// The ground the air rises over, tile by tile, in metres above the water
 	// the air takes its fill from.
@@ -218,30 +218,30 @@ func (g *Grid) rainOn() {
 		}
 	}
 
-	carried, lift, given := rainCells(&g.Map, a, w, ground)
+	carried, lift, given := RainCells(&g.Map, a, w, ground)
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
 	// out of the air there.
 	g.EachRow(func(y int) {
-		fy := (float64(y)+0.5)/float64(e.cell) - 0.5
+		fy := (float64(y)+0.5)/float64(e.Cell) - 0.5
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
-			fx := (float64(x)+0.5)/float64(e.cell) - 0.5
-			cell := e.cellOfTile(i)
+			fx := (float64(x)+0.5)/float64(e.Cell) - 0.5
+			cell := e.CellOfTile(i)
 			var p float64
-			var each [phases]float64
-			for k := range phases {
-				air := e.sample32(carried[k], fx, fy)
+			var each [AirPhases]float64
+			for k := range AirPhases {
+				air := e.Sample32(carried[k], fx, fy)
 				if r := lift[k][i]; r > 0 {
-					air += float64(r) * given[k][cell] * secondsPerYear * a.wetness
+					air += float64(r) * given[k][cell] * secondsPerYear * a.Wetness
 				}
-				p += air / phases
+				p += air / AirPhases
 				each[k] = air
 			}
 			// The warmer half of the year is its summer phase and half of each
 			// turn either side of it: the north's summer is the south's winter.
 			summer := each[2]
-			if a.lat[y] < 0 {
+			if a.Lat[y] < 0 {
 				summer = each[0]
 			}
 			g.rainWarm[i] = 0.5
@@ -250,10 +250,10 @@ func (g *Grid) rainOn() {
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
-				t := a.mean[y] - Lapse*g.laidHeight(i)
-				pe := petAt(a.pet[y], t)
-				g.dayRange[i] = float32(diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
-				g.runoff[i] = p - fu(p, pe*float64(g.dayRange[i]))
+				t := a.Mean[y] - Lapse*g.laidHeight(i)
+				pe := PetAt(a.PET[y], t)
+				g.dayRange[i] = float32(Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
+				g.runoff[i] = p - Fu(p, pe*float64(g.dayRange[i]))
 			}
 		}
 	})
@@ -287,7 +287,7 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := petAt(g.air.pet[y], g.air.mean[y]-Lapse*g.laidHeight(i))
+	p := PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}
@@ -299,7 +299,7 @@ func (g *Grid) pet(i int) float64 {
 // near or far from, whose year is a temperate latitude's.
 func (g *Grid) rangeCont(i int) float64 {
 	if !g.Wrap {
-		return contValley
+		return ContValley
 	}
 	return g.contAt(i)
 }

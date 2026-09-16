@@ -513,7 +513,7 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // season, whichever is the stricter. See treeMean.
 func (g *Grid) Treeless(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < treeLineMean(float64(g.swing[i]))
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < TreeLineMean(float64(g.swing[i]))
 }
 
 // Barren reports whether the ground here is under ice: a summer too cold to
@@ -524,8 +524,8 @@ func (g *Grid) Barren(p geom.Pos) bool {
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
-	summer := g.meanOn(i, g.Height[i]) + summerPeak*math.Abs(float64(g.swing[i]))
-	return summer < iceSummer(g.Rain(i))
+	summer := g.meanOn(i, g.Height[i]) + SummerPeak*math.Abs(float64(g.swing[i]))
+	return summer < IceSummer(g.Rain(i))
 }
 
 // Freezing reports whether the water at p never thaws: high enough, or far
@@ -566,7 +566,7 @@ func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
 		return 0, 0, 0
 	}
 	mean = g.meanOn(i, g.Height[i])
-	d := monthPeak * math.Abs(float64(g.swing[i]))
+	d := MonthPeak * math.Abs(float64(g.swing[i]))
 	return mean, mean - d, mean + d
 }
 
@@ -583,11 +583,11 @@ func (g *Grid) RainWarm(i int) float64 {
 // it, and a middling amount where the air has not been read.
 func (g *Grid) contAt(i int) float64 {
 	if g.winds == nil {
-		return contMiddling
+		return ContMiddling
 	}
-	e := g.winds.airEnv
-	fx, fy := e.cellAt(i)
-	return e.sample(e.cont, fx, fy)
+	e := g.winds.Env
+	fx, fy := e.CellAt(i)
+	return e.Sample(e.Cont, fx, fy)
 }
 
 // freeze turns the water that never thaws to ice, and gives back to the water

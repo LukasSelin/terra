@@ -82,7 +82,7 @@ func moistLapse(temp float64) float64 {
 // a is read in: a power of two, patchReach across or more, and no more than
 // patchMost.
 func orographicPatch(a *Air) int {
-	span := a.dy // km a tile, down the rows
+	span := a.Dy // km a tile, down the rows
 	p := patchLeast
 	for p < patchMost && float64(p)*span < patchReach {
 		p *= 2
@@ -94,7 +94,7 @@ func orographicPatch(a *Air) int {
 // kg/m²/s on each tile, under the wind u, v of one phase over air at sea level
 // of temp degrees, both on the air cells, over a map m under the air a. ground
 // is the height of each tile over the water the air takes its fill from.
-func orographic(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, ground []float64) []float32 {
+func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64) []float32 {
 	defer phase.Start("orographic")()
 	if !m.Wrap {
 		return orographicWhole(m, a, e, u, v, temp, ground)
@@ -164,7 +164,7 @@ func orographic(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, ground []f
 		}
 		// The air over the middle of the patch.
 		mx, my := pt.x0+step, min(max(pt.y0+step, 0), m.H-1)
-		fx, fy := e.cellAt(at(mx, my))
+		fx, fy := e.CellAt(at(mx, my))
 		// The patch is laid in the middle of a field twice its size, so that
 		// what the waves and the drifting cloud carry past its edges is not
 		// carried round onto its other side.
@@ -180,7 +180,7 @@ func orographic(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, ground []f
 				buf[(dy+pad)*box+dx+pad] = complex(ground[at(pt.x0+dx, pt.y0+dy)]*taper[dx]*taper[dy], 0)
 			}
 		}
-		if !liftField(buf, col, box, box, e.sample32(u, fx, fy), e.sample32(v, fx, fy), e.sample(temp, fx, fy), a.dx[my]*km, a.dy*km) {
+		if !liftField(buf, col, box, box, e.Sample32(u, fx, fy), e.Sample32(v, fx, fy), e.Sample(temp, fx, fy), a.Dx[my]*km, a.Dy*km) {
 			return
 		}
 		sum := make([]float32, box*box)
@@ -276,7 +276,7 @@ func liftField(buf, col []complex128, bw, bh int, uu, vv, temp, dxm, dym float64
 // orographicWhole is orographic on a map that is not a globe: a valley is a
 // few score kilometres, under one wind, and is taken whole, in a field with
 // room round it into which its edges fall away to nothing.
-func orographicWhole(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, ground []float64) []float32 {
+func orographicWhole(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64) []float32 {
 	out := make([]float32, m.W*m.H)
 	padX, padY := patchLeast, patchLeast
 	bw, bh := nextPowerOfTwo(m.W+2*padX), nextPowerOfTwo(m.H+2*padY)
@@ -309,7 +309,7 @@ func orographicWhole(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, groun
 	if top-bottom < reliefLeast {
 		return out
 	}
-	n := e.w * e.h
+	n := e.W * e.H
 	var uu, vv, t float64
 	for i := range n {
 		uu += float64(u[i]) / float64(n)
@@ -317,7 +317,7 @@ func orographicWhole(m *geom.Map, a *Air, e *airEnv, u, v []float32, temp, groun
 		t += temp[i] / float64(n)
 	}
 	col := make([]complex128, max(bw, bh))
-	if !liftField(buf, col[:bh], bw, bh, uu, vv, t, a.dx[m.H/2]*km, a.dy*km) {
+	if !liftField(buf, col[:bh], bw, bh, uu, vv, t, a.Dx[m.H/2]*km, a.Dy*km) {
 		return out
 	}
 	for y := 0; y < m.H; y++ {

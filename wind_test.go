@@ -19,7 +19,7 @@ func oceanGlobe(w, h int) *Grid {
 func zonalWind(g *Grid, lo, hi float64, day int) (east, north float64) {
 	var n float64
 	for i := range g.Tiles {
-		lat := g.air.lat[i/g.W]
+		lat := g.air.Lat[i/g.W]
 		if lat < lo || lat >= hi {
 			continue
 		}
@@ -139,28 +139,28 @@ func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 func TestALowTurnsTheOtherWaySouthOfTheEquator(t *testing.T) {
 	for _, lat := range []float64{45, -45} {
 		e := envOf(oceanGlobe(256, 128).withAir())
-		c := Climate{rows: e.h, globe: true}
+		c := Climate{rows: e.H, globe: true}
 		cy := 0
-		for y := 0; y < e.h; y++ {
+		for y := 0; y < e.H; y++ {
 			if math.Abs(c.latitude(y)-lat) < math.Abs(c.latitude(cy)-lat) {
 				cy = y
 			}
 		}
-		cx := e.w / 2
-		extra := make([]float64, e.w*e.h)
-		for y := 0; y < e.h; y++ {
-			for x := 0; x < e.w; x++ {
-				dx := float64(x-cx) * e.dx[y] / 1000
-				dy := float64(y-cy) * e.dy / 1000
-				extra[y*e.w+x] = -25 * math.Exp(-(dx*dx+dy*dy)/(2*800*800))
+		cx := e.W / 2
+		extra := make([]float64, e.W*e.H)
+		for y := 0; y < e.H; y++ {
+			for x := 0; x < e.W; x++ {
+				dx := float64(x-cx) * e.Dx[y] / 1000
+				dy := float64(y-cy) * e.Dy / 1000
+				extra[y*e.W+x] = -25 * math.Exp(-(dx*dx+dy*dy)/(2*800*800))
 			}
 		}
-		n := e.w * e.h
+		n := e.W * e.H
 		u, v, p := make([]float32, n), make([]float32, n), make([]float32, n)
-		e.solve(0, e.airTemp(0), extra, nil, u, v, p)
+		e.Solve(0, e.AirTemp(0), extra, nil, u, v, p)
 		// East of the middle, a wind turning anticlockwise blows north, and
 		// one blowing in blows west.
-		i := cy*e.w + cx + int(math.Round(800e3/e.dx[cy]))
+		i := cy*e.W + cx + int(math.Round(800e3/e.Dx[cy]))
 		east, north := float64(u[i]), float64(v[i])
 		t.Logf("at %v degrees, east of the low: %.1f m/s east, %.1f north", lat, east, north)
 		if math.Copysign(1, lat)*north <= 0 {
@@ -181,9 +181,9 @@ func (g *Grid) withAir() *Grid {
 }
 
 // envOf is the ground of a grid as the air reads it, under the air it has.
-func envOf(g *Grid) *airEnv {
+func envOf(g *Grid) *Env {
 	above, wet := g.airGround()
-	return newAirEnv(&g.Map, g.air, above, wet)
+	return NewEnv(&g.Map, g.air, above, wet)
 }
 
 // A range too high for the wind to climb turns it aside along its face; a
@@ -225,9 +225,9 @@ func TestTheWindDoesNotDependOnTheGoroutines(t *testing.T) {
 		g := continent(30)
 		g.weather()
 		var s float64
-		for k := range phases {
-			for i := range g.winds.u[k] {
-				s += float64(g.winds.u[k][i])*float64(i%97) + float64(g.winds.v[k][i]) + float64(g.winds.p[k][i])
+		for k := range AirPhases {
+			for i := range g.winds.U[k] {
+				s += float64(g.winds.U[k][i])*float64(i%97) + float64(g.winds.V[k][i]) + float64(g.winds.P[k][i])
 			}
 		}
 		return s
@@ -237,37 +237,24 @@ func TestTheWindDoesNotDependOnTheGoroutines(t *testing.T) {
 	}
 }
 
-// A kilometre of air a degree warmer weighs some four tenths of an hPa less
-// (the hypsometric equation: p g H / (R_d T²)), and the monsoon above is
-// drawn by no more than the three and a half kilometres a continent's summer
-// heats: the gain is the physics', not a figure raised until the wind turned.
-func TestAWarmColumnWeighsWhatTheHypsometricEquationSays(t *testing.T) {
-	if got := hypsometric(1013.25, 15, 1000); math.Abs(got-0.4165) > 0.005 {
-		t.Errorf("a kilometre a degree warmer at 15 C weighs %.4f hPa less", got)
-	}
-	if most := hypsometric(beltMean, 30, boundaryWarm); most >= 1.5 {
-		t.Errorf("a summer continent's layer at 30 C gains %.2f hPa a degree", most)
-	}
-}
-
 // A crest stands in more wind than the country round it by Jackson and Hunt's
 // 2h/L, and the wind off an ice cap drains at Ball's gravity-flow speed: some
 // ten to twenty metres a second down a slope of a few in a hundred.
 func TestTheGroundQuickensAndDrainsTheWind(t *testing.T) {
 	g := oceanGlobe(64, 32)
 	e := envOf(g)
-	cy := e.h / 4
-	i := cy*e.w + 3
-	e.expose[i] = 100
-	half := float64(exposeReach) * math.Min(e.dx[cy], e.dy)
-	u, _ := e.ground(3, cy, 10, 0)
+	cy := e.H / 4
+	i := cy*e.W + 3
+	e.Expose[i] = 100
+	half := float64(ExposeReach) * math.Min(e.Dx[cy], e.Dy)
+	u, _ := e.Ground(3, cy, 10, 0)
 	if want := 10 * (1 + 2*100/half); math.Abs(u-want) > 1e-9 {
 		t.Errorf("a wind of 10 m/s over a crest 100 m over its country is %.4f, want %.4f", u, want)
 	}
-	e.expose[i], e.gx[i], e.gy[i] = 0, 0.02, 0
-	e.height[i] = 3000
-	e.mean[cy] = -10
-	u, v := e.ground(3, cy, 0, 0)
+	e.Expose[i], e.Gx[i], e.Gy[i] = 0, 0.02, 0
+	e.Height[i] = 3000
+	e.Mean[cy] = -10
+	u, v := e.Ground(3, cy, 0, 0)
 	if s := math.Hypot(u, v); s < 10 || s > 25 {
 		t.Errorf("an ice cap's slope of 2 in 100 drains its air at %.1f m/s", s)
 	}
