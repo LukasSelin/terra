@@ -9,10 +9,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
-// The button makes a world and sends the browser to its page, which is there
-// to be read, and the home page lists it after.
+// The button queues a world and sends the browser to the job's page, which
+// goes on to the world's page once it is made; that is there to be read, and
+// the home page lists it after.
 func TestTheButtonMakesAWorldAndShowsIt(t *testing.T) {
 	srv := httptest.NewServer(newServer(t.TempDir(), options{Preset: "valley"}))
 	defer srv.Close()
@@ -28,9 +30,9 @@ func TestTheButtonMakesAWorldAndShowsIt(t *testing.T) {
 	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("generate answered %s, want 303 See Other", res.Status)
 	}
-	page := res.Header.Get("Location")
+	page := made(t, srv, res)
 	if !strings.HasPrefix(page, "/runs/") || !strings.HasSuffix(page, "/") {
-		t.Fatalf("generate sent the browser to %q, want /runs/<run>/", page)
+		t.Fatalf("the job went on to %q, want /runs/<run>/", page)
 	}
 
 	for _, p := range []string{page, page + "why.html", page + "terrain.png"} {
@@ -136,7 +138,7 @@ func TestATileSaysWhyItIsSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	page := res.Header.Get("Location")
+	page := made(t, srv, res)
 
 	ask := func(query string) (int, string) {
 		t.Helper()
@@ -189,5 +191,148 @@ func TestATileSaysWhyItIsSo(t *testing.T) {
 		if res.StatusCode != c.want {
 			t.Errorf("GET %s answered %s, want %d", c.path, res.Status, c.want)
 		}
+	}
+}
+
+// made follows a press of the button: the job it queued, asked after until
+// it is done. It is the page of the world made.
+func made(t *testing.T, srv *httptest.Server, res *http.Response) string {
+	t.Helper()
+	job := res.Header.Get("Location")
+	if res.StatusCode != http.StatusSeeOther || !strings.HasPrefix(job, "/jobs/") {
+		t.Fatalf("generate answered %s to %q, want 303 to /jobs/<id>", res.Status, job)
+	}
+	for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		st := statusOf(t, srv, job)
+		switch st.State {
+		case jobDone:
+			return st.Page
+		case jobFailed, jobCancelled:
+			t.Fatalf("job %s: %s %s", job, st.State, st.Error)
+		}
+	}
+	t.Fatalf("job %s was not made in two minutes", job)
+	return ""
+}
+
+func statusOf(t *testing.T, srv *httptest.Server, job string) jobStatus {
+	t.Helper()
+	res, err := srv.Client().Get(srv.URL + job + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var st jobStatus
+	if err := json.NewDecoder(res.Body).Decode(&st); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// Jobs wait their turn behind the one being made, say how many are ahead of
+// them, and one still waiting can be called off and makes nothing.
+func TestJobsWaitTheirTurnAndCanBeCalledOff(t *testing.T) {
+	dir := t.TempDir()
+	h := newServer(dir, options{Preset: "valley"})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// Hold the worker off, as a world being made would.
+	h.one.Lock()
+	var jobs []string
+	for _, seed := range []string{"1", "2", "3"} {
+		res, err := client.PostForm(srv.URL+"/generate", url.Values{"seed": {seed}, "w": {"24"}, "h": {"16"}, "day": {"0"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		jobs = append(jobs, res.Header.Get("Location"))
+	}
+	for k, job := range jobs {
+		if st := statusOf(t, srv, job); st.State != jobQueued || st.Ahead != k {
+			t.Errorf("job %d is %s with %d ahead, want queued with %d", k, st.State, st.Ahead, k)
+		}
+	}
+	res, err := client.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "Being made") || !strings.Contains(string(body), `href="`+jobs[2]+`"`) {
+		t.Errorf("the home page does not list the jobs waiting")
+	}
+
+	res, err = client.Post(srv.URL+jobs[1]+"/cancel", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Errorf("calling off a queued job answered %s", res.Status)
+	}
+	if st := statusOf(t, srv, jobs[2]); st.Ahead != 1 {
+		t.Errorf("the last job has %d ahead once the middle one is called off, want 1", st.Ahead)
+	}
+	h.one.Unlock()
+
+	for _, k := range []int{0, 2} {
+		res, _ := client.Get(srv.URL + jobs[k])
+		res.Body.Close()
+		made(t, srv, &http.Response{StatusCode: http.StatusSeeOther, Header: http.Header{"Location": {jobs[k]}}})
+	}
+	if st := statusOf(t, srv, jobs[1]); st.State != jobCancelled {
+		t.Errorf("the called-off job is %s", st.State)
+	}
+	res, err = client.Post(srv.URL+jobs[0]+"/cancel", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Errorf("calling off a job already made answered %s, want 409", res.Status)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 2 {
+		t.Errorf("%d runs made, want the 2 not called off", len(entries))
+	}
+	// A job made sends its page on to the world.
+	res, err = client.Get(srv.URL + jobs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if loc := res.Header.Get("Location"); res.StatusCode != http.StatusSeeOther || !strings.HasPrefix(loc, "/runs/") {
+		t.Errorf("a made job's page answered %s to %q, want 303 to its world", res.Status, loc)
+	}
+}
+
+// A world that cannot be made fails its job with the reason, and leaves no
+// run behind.
+func TestAJobThatFailsSaysWhy(t *testing.T) {
+	dir := t.TempDir()
+	h := newServer(dir, options{Preset: "valley"})
+	j, ok := h.queue(options{Seed: 1, Preset: "valley", W: 40000, H: 40000, Epochs: -1, Sea: -1, Water: -1})
+	if !ok {
+		t.Fatal("the queue is full")
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(20 * time.Millisecond) {
+		h.jobsMu.Lock()
+		state, msg := j.State, j.Err
+		h.jobsMu.Unlock()
+		if state == jobFailed {
+			if !strings.Contains(msg, "memory") {
+				t.Errorf("the job failed saying %q, want it to be about memory", msg)
+			}
+			break
+		}
+		if state == jobDone || time.Now().After(deadline) {
+			t.Fatalf("the job is %s, want failed", state)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) > 0 {
+		t.Errorf("a failed job left %d runs", len(entries))
 	}
 }

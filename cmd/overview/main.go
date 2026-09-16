@@ -90,7 +90,7 @@ func main() {
 	if *serve != "" {
 		fail(listen(*serve, *runs, o))
 	}
-	if _, _, err := generate(o, *out); err != nil {
+	if _, _, err := generate(o, *out, nil); err != nil {
 		fail(err)
 	}
 }
@@ -182,10 +182,14 @@ func makeLand(o options, t terra.Terms) (*terra.Land, error) {
 // generate makes the world the options describe and draws it into out: an
 // index.html, a why.html and a png per layer. It prints a summary to the
 // terminal as it goes and returns the world and the path of index.html.
+// Where stage is not nil it is told what is being done, as it starts.
 //
 // It sets the package's namer, so no two may run at once.
-func generate(o options, out string) (*terra.Land, string, error) {
-	land, t, took, err := makeWorld(o)
+func generate(o options, out string, stage func(string)) (*terra.Land, string, error) {
+	if stage == nil {
+		stage = func(string) {}
+	}
+	land, t, took, err := makeWorld(o, stage)
 	if err != nil {
 		return nil, "", err
 	}
@@ -193,7 +197,7 @@ func generate(o options, out string) (*terra.Land, string, error) {
 		// The seed and the terms are the history's, whatever the flags said.
 		o.Seed, o.Preset = land.Seed(), presetOf(t)
 	}
-	page, err := draw(land, o, t, took, out)
+	page, err := draw(land, o, t, took, out, stage)
 	return land, page, err
 }
 
@@ -203,7 +207,7 @@ func generate(o options, out string) (*terra.Land, string, error) {
 // file is made on the seed and terms the file carries.
 //
 // It sets the package's namer, so no two may run at once.
-func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
+func makeWorld(o options, stage func(string)) (*terra.Land, terra.Terms, time.Duration, error) {
 	var t terra.Terms
 	var err error
 	from := ""
@@ -218,6 +222,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 	}
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)%s...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap, from)
+	stage("making the world")
 	start := time.Now()
 	terra.SetNamer(namerFor(o.Seed))
 	land, err := makeLand(o, t)
@@ -233,6 +238,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 	}
 
 	// The day's weather, run from the founding up to the day asked for.
+	stage(fmt.Sprintf("running the weather to day %d", o.Day))
 	for tick := 0; tick <= max(o.Day, 0); tick++ {
 		land.Tick = tick
 		land.Climate.Advance(tick, land.RNG)
@@ -242,7 +248,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 }
 
 // draw draws a made world into out. See generate.
-func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string) (string, error) {
+func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string, stage func(string)) (string, error) {
 	px := o.Scale
 	if px <= 0 {
 		px = max(1, min(12, 1024/max(t.Width, 1)))
@@ -252,6 +258,7 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 		return "", err
 	}
 	g := land.Grid
+	stage("measuring the world")
 	stats := measure(land)
 	cls := classify(land)
 	stats.Biomes = legendOf(cls.Biome, biomeClasses, biomeOf)
@@ -259,7 +266,9 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 	stats.print()
 
 	var layers []layer
-	for _, l := range drawings(land, stats, cls) {
+	all := drawings(land, stats, cls)
+	for k, l := range all {
+		stage(fmt.Sprintf("drawing %s, %d of %d", l.title, k+1, len(all)))
 		img := render(g, px, l.color)
 		if l.overlay != nil {
 			l.overlay(img, px)
@@ -293,6 +302,7 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 		return "", err
 	}
 	// And the world's account of eight of its tiles. See why.go.
+	stage("writing why.html")
 	if err := writeWhy(filepath.Join(out, "why.html"), land, o.Seed, o.Preset); err != nil {
 		return "", err
 	}

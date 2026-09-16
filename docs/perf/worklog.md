@@ -6,6 +6,33 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/overview -serve: worlds made in the background
+
+**What this is.** The fourth step of the web page, on
+`claude/world-generator-web-ui-c36c93`. A press of the button no longer
+holds the request open while the world is made: it queues a job and sends
+the browser to `/jobs/<id>`, which asks `/jobs/<id>/status` every second
+and goes on to the world's page when it is drawn. One worker makes the
+jobs in the order they came (up to 64 waiting), under the same lock as a
+tile's world made again. The page shows the stage `generate` reports
+(making the world, running the weather, drawing each layer), the time so
+far, and, once a job of the same kind (history or not, globe or not) has
+been made, a guess at the time left from its seconds a tile. A job still
+waiting can be called off; one running is made to the end, since nothing
+in making a world can stop part way. A failed job says why and links back
+to the form filled in with its settings. The home page lists the jobs
+being made, and leaves their half-drawn directories out of the runs.
+Jobs live as long as the server.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed. On this machine, with a 128x64 globe made first to learn
+the pace, a 512x256 globe guessed 20 s at 6 s in and was drawn at about
+20 s. `go test -short -race ./cmd/overview` passes in 11 s: it holds the
+worker off to check the order and the count ahead, calls a job off, and
+fails one that asks for more memory than there is.
+
+---
+
 ## 2026-09-16 - Generate in stages, and a history kept in a file
 
 **What this is.** The first step of phase 3 of the scaling plan ("stages as
