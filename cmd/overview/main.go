@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/LukasSelin/terra"
@@ -515,7 +516,7 @@ func (s summary) print() {
 		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
 	fmt.Printf("\npermafrost %.1f%% of land, flowing water %.1f%% of map, %d waterfalls\n", s.Frozen.Pct, s.Rivers.Pct, s.Waterfalls)
-	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %.0f m3/s\n", s.LandRain, s.LandRunoff, s.FlowMax)
+	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %s m3/s\n", s.LandRain, s.LandRunoff, sig(s.FlowMax))
 	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
 		s.Moon, 2*(terra.TideM2+terra.TideS2), 2*(terra.TideM2-terra.TideS2), s.RangeP50, s.RangeP90, s.RangeMax, s.Flats.Pct)
 }
@@ -552,6 +553,8 @@ var terrainColor = [terra.TerrainCount]color.RGBA{
 	terra.Rock:   {150, 140, 130, 255},
 	terra.Ice:    {226, 238, 246, 255},
 	terra.Flat:   {158, 146, 118, 255},
+	terra.Salt:   {96, 164, 158, 255},
+	terra.Pan:    {232, 226, 212, 255},
 }
 
 var rockColor = [terra.BedrockCount]color.RGBA{
@@ -586,6 +589,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		rockLegend = append(rockLegend, x)
 	}
 
+	soils := soilDrawings(land, shade)
 	return []drawing{
 		{
 			file: "terrain", title: "Terrain", legend: terrLegend,
@@ -618,6 +622,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				return scaleRGB(c, shade(p))
 			},
 		},
+		koppenDrawing(land, cls, shade),
 		{
 			file: "landform", title: "Landform", legend: s.Forms,
 			about: "What the ground makes of each tile, read off the country round it: peaks stand above their neighbours and valleys below them, mountains and plateaus are the highest ground, rough or flat, hills the rough or steep ground below that, and a coast or a cliff is ground beside the sea.",
@@ -644,7 +649,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		},
 		{
 			file: "flow", title: "Drainage",
-			about: fmt.Sprintf("Water through each tile on a log scale, up to %.0f m³/s: the rivers the land has had an age to find.", s.FlowMax),
+			about: fmt.Sprintf("Water through each tile on a log scale, up to %s m³/s: the rivers the land has had an age to find.", sig(s.FlowMax)),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				if g.Flow[i] <= 0 {
 					return color.RGBA{10, 14, 24, 255}
@@ -762,6 +767,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				return color.RGBA{byte(255 * clamp(g.Sand[i], 0, 1)), byte(255 * clamp(g.Tile(i).Silt(), 0, 1)), byte(255 * clamp(g.Clay[i], 0, 1)), 255}
 			},
 		},
+		soils[0], soils[1], soils[2], soils[3],
 		{
 			file: "temperature", title: "Temperature",
 			about: fmt.Sprintf("Today's temperature, by latitude and height: %.1f to %.1f C. Frozen ground hatched white.", s.TempMin, s.TempMax),
@@ -908,11 +914,21 @@ func hue(h, s, v float64) color.RGBA {
 
 func hex(c color.RGBA) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
 
+// sig is v to two significant figures, and to the unit once it is past a
+// hundred: a trickle of 0.062 m³/s reads as that and not as nothing.
+func sig(v float64) string {
+	if v == 0 || math.Abs(v) >= 100 || math.IsInf(v, 0) || math.IsNaN(v) {
+		return fmt.Sprintf("%.0f", v)
+	}
+	return strconv.FormatFloat(v, 'f', max(0, 1-int(math.Floor(math.Log10(math.Abs(v))))), 64)
+}
+
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
 var pageTmpl = template.Must(template.New("page").Funcs(template.FuncMap{
 	"pct": func(v float64) string { return fmt.Sprintf("%.1f%%", v) },
 	"m":   func(v float64) string { return fmt.Sprintf("%.0f", v) },
+	"sig": sig,
 	"c":   func(v float64) string { return fmt.Sprintf("%.1f", v) },
 	"css": func(s string) template.CSS { return template.CSS(s) },
 	// rule is a woods or growth rule's name, or nothing for the map's own.
@@ -969,7 +985,7 @@ figcaption{margin-top:8px}
  <div class="stat"><span class="mut">Frozen land</span><b>{{pct .Stats.Frozen.Pct}}</b></div>
  <div class="stat"><span class="mut">Flowing water</span><b>{{pct .Stats.Rivers.Pct}}</b></div>
  <div class="stat"><span class="mut">Rain / runoff on land (mm)</span><b>{{m .Stats.LandRain}} / {{m .Stats.LandRunoff}}</b></div>
- <div class="stat"><span class="mut">Greatest river (m³/s)</span><b>{{m .Stats.FlowMax}}</b></div>
+ <div class="stat"><span class="mut">Greatest river (m³/s)</span><b>{{sig .Stats.FlowMax}}</b></div>
  <div class="stat"><span class="mut">Moon on day one</span><b>{{.Stats.Moon}}</b></div>
  <div class="stat"><span class="mut">Coastal spring range (m)</span><b>{{c .Stats.RangeP50}} / {{c .Stats.RangeMax}}</b></div>
  <div class="stat"><span class="mut">Tidal flats</span><b>{{pct .Stats.Flats.Pct}}</b></div>
