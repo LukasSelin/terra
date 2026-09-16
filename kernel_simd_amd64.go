@@ -211,3 +211,18 @@ func clamp(v []float64, lo, hi float64) {
 	archsimd.ClearAVXUpperBits()
 	clampScalar(v[n:], lo, hi)
 }
+
+func sumTree(v []float64) float64 {
+	if !vector {
+		return sumTreeScalar(v)
+	}
+	n := whole(len(v))
+	acc := archsimd.BroadcastFloat64x4(0)
+	for j := 0; j < n; j += lanes {
+		acc = acc.Add(archsimd.LoadFloat64x4(v[j : j+lanes]))
+	}
+	var s [lanes]float64
+	acc.StoreArray(&s)
+	archsimd.ClearAVXUpperBits()
+	return sumTail(s, v[n:])
+}

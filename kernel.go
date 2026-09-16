@@ -117,3 +117,33 @@ func clampScalar(v []float64, lo, hi float64) {
 		v[i] = x
 	}
 }
+
+// sumTreeScalar is the sum of v in a fixed order, the same on both paths: the
+// entries are dealt round the lanes and each lane summed on its own, the
+// lane sums are added as a tree - the first two, the last two, then those -
+// and the tail, what is left over after the whole vectors, is added on last
+// one by one. A sum is only the same number if it is added in the same
+// order, and this is the order a vector adds in, so the statement adds in
+// it too. It is not the order a plain loop adds in: a sum a pass takes with
+// a loop today comes to different bits summed this way, so it is for sums
+// that are new or that mean to move.
+func sumTreeScalar(v []float64) float64 {
+	var s [lanes]float64
+	n := whole(len(v))
+	for i := 0; i < n; i += lanes {
+		s[0] = float64(s[0] + v[i])
+		s[1] = float64(s[1] + v[i+1])
+		s[2] = float64(s[2] + v[i+2])
+		s[3] = float64(s[3] + v[i+3])
+	}
+	return sumTail(s, v[n:])
+}
+
+// sumTail is the tree over the lane sums and the tail after it.
+func sumTail(s [lanes]float64, tail []float64) float64 {
+	total := float64(float64(s[0]+s[1]) + float64(s[2]+s[3]))
+	for _, x := range tail {
+		total = float64(total + x)
+	}
+	return total
+}

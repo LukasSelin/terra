@@ -160,6 +160,13 @@ func BenchmarkKernel(b *testing.B) {
 			clamp(y, -0.5, 0.5)
 		}
 	})
+	b.Run("sumTree", func(b *testing.B) {
+		var total float64
+		for b.Loop() {
+			total += sumTree(x)
+		}
+		_ = total
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -247,6 +254,18 @@ func FuzzClamp(f *testing.F) {
 			clamp(got, lo, hi)
 			clampScalar(want, lo, hi)
 			sameBits(t, "clamp", n, got, want)
+		}
+	})
+}
+
+func FuzzSumTree(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 7))
+		for _, n := range lengths(rng) {
+			v := run(rng, n)
+			got, want := sumTree(v), sumTreeScalar(v)
+			sameBits(t, "sumTree", n, []float64{got}, []float64{want})
 		}
 	})
 }
