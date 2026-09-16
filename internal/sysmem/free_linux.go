@@ -1,4 +1,4 @@
-package terra
+package sysmem
 
 import (
 	"bufio"
@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// freeMemory is MemAvailable: what the kernel reckons can be handed out
+// Free is MemAvailable: what the kernel reckons can be handed out
 // without swapping.
-func freeMemory() (uint64, bool) {
+func Free() (uint64, bool) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0, false

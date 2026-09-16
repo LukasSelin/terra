@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"slices"
+
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The sea as an amount of water, and not a share of the map.
@@ -174,7 +176,7 @@ func (g *Grid) room() float64 {
 // the floor, having been raised by the continent's ramp, and the continent's
 // edge the lowest of the continent, so each side meets the foot from its own.
 func (w *Land) basins(g *Grid, ocean []bool) {
-	defer phase("basins")()
+	defer phase.Start("basins")()
 	n := len(g.Tiles)
 	floor := 0
 	for i := range g.Tiles {

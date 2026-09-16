@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/internal/phase"
+)
 
 // The water in the air: where the rain falls, how much of it the air takes
 // back, and how much is left to run off the ground.
@@ -113,7 +117,7 @@ func defaultAir(g *Grid) *Air {
 // together: a monsoon coast is wet for the summer's onshore wind whatever the
 // winter's offshore one does.
 func (g *Grid) weather() {
-	defer phase("weather")()
+	defer phase.Start("weather")()
 	if g.air == nil {
 		g.air = defaultAir(g)
 	}
@@ -197,7 +201,7 @@ func (g *Grid) weatherStale() bool {
 
 // rainOn is the rain and the runoff of g under the winds it has.
 func (g *Grid) rainOn() {
-	defer phase("rainOn")()
+	defer phase.Start("rainOn")()
 	a := g.air
 	w := g.winds
 	e := w.airEnv

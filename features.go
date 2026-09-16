@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // Features: the things the tiles make up.
@@ -211,7 +212,7 @@ func (g *Grid) PlateOf(k uint8) FeatureID {
 // on one goroutine in tile order, so that the ids are the same on every
 // run: see the file comment.
 func (g *Grid) readFeatures() {
-	defer phase("readFeatures")()
+	defer phase.Start("readFeatures")()
 	f := &Features{}
 	n := len(g.Tiles)
 	stack := make([]int32, 0, 1024)

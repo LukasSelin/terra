@@ -1,4 +1,4 @@
-package terra
+package sysmem
 
 import (
 	"syscall"
@@ -20,10 +20,10 @@ type memoryStatusEx struct {
 	availExtendedVirtual uint64
 }
 
-// freeMemory is how much a program may still allocate on this machine: what
+// Free is how much a program may still allocate on this machine: what
 // is left to commit, which is where an allocation fails, but never more than
 // the machine has in it - a world made in the page file is not finished.
-func freeMemory() (uint64, bool) {
+func Free() (uint64, bool) {
 	var m memoryStatusEx
 	m.length = uint32(unsafe.Sizeof(m))
 	if ok, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&m))); ok == 0 {

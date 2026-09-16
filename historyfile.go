@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"runtime"
 	"unsafe"
+
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // A history file is a world stopped between its ground stage and its sea
@@ -80,7 +82,7 @@ func MakeLandWatching(seed uint64, t Terms, out io.Writer, watch StageWatch) (*L
 	if err := t.fits(); err != nil {
 		return nil, err
 	}
-	defer phase("Generate")()
+	defer phase.Start("Generate")()
 	l := unmade(seed, t)
 	g := l.newGround(t)
 	l.generateFrom(g, t, stageGround, stageSea, watch)
@@ -128,7 +130,7 @@ func LandFromHistoryWatching(in io.Reader, watch StageWatch) (*Land, error) {
 	if g.W != h.terms.Width || g.H != h.terms.Height {
 		return nil, fmt.Errorf("%w: a %dx%d grid under %dx%d terms", ErrHistoryFile, g.W, g.H, h.terms.Width, h.terms.Height)
 	}
-	defer phase("Generate")()
+	defer phase.Start("Generate")()
 	if watch != nil {
 		watch(Stages()[h.next-1], l, g)
 	}

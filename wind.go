@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/internal/phase"
+)
 
 // The wind, worked out rather than written down.
 //
@@ -542,7 +546,7 @@ func (e *airEnv) box(v []float64, across []int, down int) []float64 {
 // The phases are independent of one another and are worked out side by side;
 // each writes only its own slices.
 func windsFor(g *Grid) *Winds {
-	defer phase("windsFor")()
+	defer phase.Start("windsFor")()
 	e := newAirEnv(g)
 	w := &Winds{airEnv: e}
 	n := e.w * e.h

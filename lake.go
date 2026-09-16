@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // Standing water, and the way the water goes.
@@ -206,7 +207,7 @@ func (t *basins) full(x int32) bool {
 // many tiles drain through each one, which is what the guards against the
 // grid's own patterns are read in. See spreadUntil.
 func (g *Grid) drain() {
-	defer phase("drain")()
+	defer phase.Start("drain")()
 	if g.weatherStale() {
 		g.weather()
 	}
@@ -241,7 +242,7 @@ type poolScratch struct {
 // pool finds every hollow on the map and how full the weather keeps it, and
 // writes down the lakes and the salt flats that leaves.
 func (g *Grid) pool() {
-	defer phase("pool")()
+	defer phase.Start("pool")()
 	n := len(g.Tiles)
 	s := &g.poolScratch
 	// Every tile by height, and then by index, which is a total order: it is
@@ -759,7 +760,7 @@ type flowScratch struct {
 }
 
 func (g *Grid) flow() {
-	defer phase("flow")()
+	defer phase.Start("flow")()
 	n := len(g.Tiles)
 	s := &g.flowScratch
 	s.stand, s.reached, s.from = sized(s.stand, n), sized(s.reached, n), sized(s.from, n)

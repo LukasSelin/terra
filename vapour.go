@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/internal/kernel"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The water in the column of air over each cell, kept as a budget.
@@ -196,7 +197,7 @@ type vapourCell struct {
 
 // vapour settles one phase's budget.
 func (e *airEnv) vapour(in vapourIn) vapourOut {
-	defer phase("airEnv.vapour")()
+	defer phase.Start("airEnv.vapour")()
 	n := e.w * e.h
 	dy := e.dy
 	f := e.vapourFluxes(in.u, in.v)

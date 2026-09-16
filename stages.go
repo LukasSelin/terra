@@ -1,5 +1,7 @@
 package terra
 
+import "github.com/LukasSelin/terra/internal/phase"
+
 // A world is made in stages, each a function of the grid the stage before
 // it left, the world's terms and the land's chance:
 //
@@ -46,7 +48,7 @@ const (
 // where there is one, of each as it ends.
 func (w *Land) generateFrom(g *Grid, cfg Terms, from, to int, watch StageWatch) {
 	for _, s := range stages[from:to] {
-		stop := phase(s.name)
+		stop := phase.Start(s.name)
 		s.run(w, g, cfg)
 		stop()
 		if watch != nil {

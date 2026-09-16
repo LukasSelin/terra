@@ -261,8 +261,9 @@ Things that are easy to misread here:
 ## Wall clock per pass
 
 The profiles do not say how long each pass took on the clock. The timer
-in [phases.go](../../phases.go) does: every pass worth a line in the work
-log starts with `defer phase("name")()`, and with `TERRA_PHASES=1` in the
+in [internal/phase](../../internal/phase/phase.go) does, with the passes
+named in [phases.go](../../phases.go): every pass worth a line in the work
+log starts with `defer phase.Start("name")()`, and with `TERRA_PHASES=1` in the
 environment the wall time and the calls are summed under that name. Off, a
 pass pays one bool read; on, nothing is allocated while a world is made, so
 the heap budget holds either way.
