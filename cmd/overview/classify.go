@@ -30,7 +30,8 @@ type class struct {
 
 // Water is named the same way in both readings, and so is the mud the tide
 // covers and leaves, which is neither a climate nor a lie of the ground but the
-// sea's: see terra.Flat.
+// sea's: see terra.Flat. So is the crust a closed lake leaves as the air takes
+// it back, which is the lake's: see terra.Pan.
 const (
 	cDeep uint8 = iota
 	cShelf
@@ -38,16 +39,20 @@ const (
 	cRiver
 	cSeaIce
 	cFlat
+	cSaltLake
+	cPan
 	waterClasses
 )
 
 var waterClass = [waterClasses]class{
-	cDeep:   {"deep sea", color.RGBA{30, 62, 118, 255}},
-	cShelf:  {"shallow sea", color.RGBA{62, 120, 178, 255}},
-	cLake:   {"lake", color.RGBA{70, 150, 190, 255}},
-	cRiver:  {"river", color.RGBA{100, 180, 230, 255}},
-	cSeaIce: {"sea ice", color.RGBA{214, 230, 242, 255}},
-	cFlat:   {"tidal flat", color.RGBA{158, 146, 118, 255}},
+	cDeep:     {"deep sea", color.RGBA{30, 62, 118, 255}},
+	cShelf:    {"shallow sea", color.RGBA{62, 120, 178, 255}},
+	cLake:     {"lake", color.RGBA{70, 150, 190, 255}},
+	cRiver:    {"river", color.RGBA{100, 180, 230, 255}},
+	cSeaIce:   {"sea ice", color.RGBA{214, 230, 242, 255}},
+	cFlat:     {"tidal flat", color.RGBA{158, 146, 118, 255}},
+	cSaltLake: {"salt lake", color.RGBA{96, 164, 158, 255}},
+	cPan:      {"salt flat", color.RGBA{232, 226, 212, 255}},
 }
 
 // Biomes, after the water. Each is one of Köppen's types, or a few of them
@@ -256,6 +261,8 @@ func classify(land *terra.Land) classes {
 		switch {
 		case t.Terrain == terra.Ice:
 			c.Biome[i] = cSeaIce
+		case t.Terrain == terra.Salt:
+			c.Biome[i] = cSaltLake
 		case channel(i):
 			c.Biome[i] = cRiver
 			floodOut(g, flood, g.PosOf(i), int(math.Sqrt(g.Flow[i])/floodReach))
@@ -321,8 +328,12 @@ func classify(land *terra.Land) classes {
 			if t.Wet() {
 				continue
 			}
-			if t.Terrain == terra.Flat {
+			switch t.Terrain {
+			case terra.Flat:
 				c.Biome[i], c.Form[i] = cFlat, cFlat
+				continue
+			case terra.Pan:
+				c.Biome[i], c.Form[i] = cPan, cPan
 				continue
 			}
 			p := g.PosOf(i)
@@ -428,15 +439,21 @@ func floodOut(g *terra.Grid, flood []bool, p geom.Pos, r int) {
 }
 
 // seaOf marks the water that belongs to a sea: any body of water, not
-// counting the channels, holding at least a two-hundredth of the map. The
+// counting the channels or the salt lakes, holding at least a two-hundredth of the map. The
 // rest is lakes.
 func seaOf(g *terra.Grid, channel func(i int) bool) []bool {
 	n := len(g.Tiles)
 	seen := make([]bool, n)
 	sea := make([]bool, n)
+	// A salt lake is never the sea, however large: it is what is left of a
+	// lake the air drinks faster than its rivers fill it.
+	open := func(i int) bool {
+		t := &g.Tiles[i]
+		return t.Wet() && t.Terrain != terra.Salt && !channel(i)
+	}
 	var stack, body []int
 	for s := range g.Tiles {
-		if seen[s] || !g.Tiles[s].Wet() || channel(s) {
+		if seen[s] || !open(s) {
 			continue
 		}
 		body = body[:0]
@@ -453,7 +470,7 @@ func seaOf(g *terra.Grid, channel func(i int) bool) []bool {
 					continue
 				}
 				j := g.Index(q)
-				if !seen[j] && g.Tiles[j].Wet() && !channel(j) {
+				if !seen[j] && open(j) {
 					seen[j] = true
 					stack = append(stack, j)
 				}
