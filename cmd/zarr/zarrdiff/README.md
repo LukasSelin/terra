@@ -30,10 +30,10 @@ are listed. For each group in both, the attributes (`seed`, `terms`,
   *tiles* changed, a tile being a cell of the first two dimensions (`y`,
   `x`), changed if any of its elements did, so a bed of `strata/` counts
   once for its tile; and the bounding box of the changed tiles.
-- **codes**, for an integer array with a `legend` (or CF `flag_values` and
-  `flag_meanings`): the commonest changes of code, named from each side's
-  own legend, so that `climate/koppen`, whose codes are numbered per world,
-  reads right.
+- **codes**, for an integer array with CF `flag_values` and
+  `flag_meanings` (or a `legend`, as stores before the xarray layout have):
+  the commonest changes of code, each named from its own side's flags, so
+  that a store whose codes were numbered differently still reads right.
 
 How the arrays are chunked, sharded and compressed is not compared: a store
 written with `-shard 0 -gzip -1` is the same as one written with the
