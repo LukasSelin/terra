@@ -178,6 +178,12 @@ predates the sweep precompute and the SIMD butterflies:
 
 These are the numbers a check of B and C should be read against.
 
+Rebased last onto main at 43d76a8, with B's hydrology and C's guards in it:
+budget and digest are main's own, `TestPassCountsArePinned` passes with the
+clock on, the yardsticks pass outright on main's tip and on the branch, and
+`scripts/perf.sh check` against the 07:18 baseline reads valley -3.8%,
+ancient -1.7%, globe256 -1.3%, within the limit, so that baseline stands.
+
 ---
 
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
