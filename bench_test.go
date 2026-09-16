@@ -7,10 +7,13 @@ import "testing"
 // run them before and after a change, a handful of times each, and hand both
 // runs to benchstat. See docs/perf/README.md for the commands.
 //
-// The worlds are the presets a game is actually made on, and one between
-// them: a quarter-scale globe, which runs every pass the globe does over a
-// sixteenth of its tiles, so that a change can be measured in seconds and
-// only confirmed on the full globe.
+// The worlds are the presets a game is actually made on, and a ladder of
+// globes between them: the preset's width halved, quartered and cut to an
+// eighth, each running every pass the globe does over a fraction of its
+// tiles, so that a change can be measured in seconds and only confirmed on
+// the full globe. Read side by side, the ladder says how the cost of a tile
+// grows with the map: scripts/perf.sh scaling fails when a tile at 512
+// costs much more than one at 256.
 //
 // With TERRA_PHASES=1 in the environment each pass is reported as a metric
 // too, s/<pass>, so that benchstat can compare passes between runs, and the
@@ -21,12 +24,20 @@ var benchWorlds = []struct {
 }{
 	{"valley", DefaultTerms},
 	{"ancient", AncientTerms},
-	{"globe256", func() Terms {
-		t := GlobeTerms()
-		t.Width, t.Height = 256, 128
-		return t
-	}},
+	{"globe128", globeAt(128)},
+	{"globe256", globeAt(256)},
+	{"globe512", globeAt(512)},
 	{"globe", GlobeTerms},
+}
+
+// globeAt is GlobeTerms cut to a width, twice as wide as it is high like the
+// preset, so that the globe's passes run over fewer tiles.
+func globeAt(width int) func() Terms {
+	return func() Terms {
+		t := GlobeTerms()
+		t.Width, t.Height = width, width/2
+		return t
+	}
 }
 
 func BenchmarkNewLand(b *testing.B) {

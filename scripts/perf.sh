@@ -7,6 +7,9 @@
 #   scripts/perf.sh baseline   run the benchmarks and write a new dated baseline
 #   scripts/perf.sh compare A B
 #                              benchstat two files already run
+#   scripts/perf.sh scaling    make globes at 128, 256 and 512 wide, PERF_COUNT (3)
+#                              times each, and fail if a tile at 512 costs more
+#                              than PERF_SCALING times a tile at 256
 #
 # Settings, from the environment:
 #   PERF_BENCH      benchmark regex   (default: the worlds that take seconds,
@@ -15,6 +18,9 @@
 #                                      confidence interval)
 #   PERF_THRESHOLD  percent slower that fails check (default 10)
 #   PERF_NEW        check this file, already run, instead of running now
+#   PERF_SCALING    ns/tile at 512 over ns/tile at 256 that fails scaling
+#                   (default 1.3: an n log n pass costs 1.13 per doubling of
+#                   width, a quadratic one 4)
 #
 # Baselines are only comparable on the machine they were taken on: check
 # refuses a baseline whose cpu line is not this machine's. Nothing else heavy
@@ -27,6 +33,8 @@ cd "$root"
 bench="${PERF_BENCH:-NewLand/(valley|ancient|globe256)$}"
 count="${PERF_COUNT:-6}"
 threshold="${PERF_THRESHOLD:-10}"
+scaling="${PERF_SCALING:-1.3}"
+scount="${PERF_COUNT:-3}"
 basedir="docs/perf/baseline"
 
 benchstat() {
@@ -100,8 +108,49 @@ compare)
 	[[ $# -eq 3 ]] || { echo "usage: $0 compare old.txt new.txt" >&2; exit 2; }
 	benchstat "$2" "$3"
 	;;
+scaling)
+	# One world per run (-benchtime 1x), PERF_COUNT runs per width, and the
+	# median ns/tile of each width read against the next. This catches a
+	# pass whose cost per tile grows with the map - a superlinear step - and
+	# not a slower constant, which moves every width alike and is check's
+	# to catch. The median stands up to one run that the machine interrupted.
+	if [[ -n "${PERF_NEW:-}" ]]; then
+		new="$PERF_NEW"
+	else
+		new="$(mktemp -t terra-perf-scaling.XXXXXX)"
+		echo "perf: go test -bench 'NewLand/globe(128|256|512)$' -benchtime 1x -count $scount > $new" >&2
+		go test -run '^$' -bench 'NewLand/globe(128|256|512)$' -benchmem -benchtime 1x -count "$scount" -timeout 120m . >"$new"
+	fi
+	awk -v limit="$scaling" '
+		/^BenchmarkNewLand\/globe(128|256|512)-/ {
+			name = $1; sub(/^BenchmarkNewLand\//, "", name); sub(/-[0-9]+$/, "", name)
+			for (i = 2; i < NF; i++) if ($(i + 1) == "ns/tile") { v[name, ++n[name]] = $i + 0 }
+		}
+		function median(name,    k, m, i, j, t, a) {
+			m = n[name]
+			for (i = 1; i <= m; i++) a[i] = v[name, i]
+			for (i = 2; i <= m; i++) for (j = i; j > 1 && a[j-1] > a[j]; j--) { t = a[j]; a[j] = a[j-1]; a[j-1] = t }
+			if (m % 2) return a[(m + 1) / 2]
+			return (a[m / 2] + a[m / 2 + 1]) / 2
+		}
+		END {
+			split("globe128 globe256 globe512", w, " ")
+			for (i = 1; i <= 3; i++) {
+				if (!n[w[i]]) { printf "perf: no ns/tile for %s in the output\n", w[i]; exit 2 }
+				med[w[i]] = median(w[i])
+				printf "perf: %-9s %8.1f ns/tile  (median of %d: ", w[i], med[w[i]], n[w[i]]
+				for (k = 1; k <= n[w[i]]; k++) printf "%s%.1f", (k > 1 ? ", " : ""), v[w[i], k]
+				printf ")\n"
+			}
+			r = med["globe512"] / med["globe256"]
+			printf "perf: 512/256 = %.3f (limit %s); 256/128 = %.3f\n", r, limit, med["globe256"] / med["globe128"]
+			if (r > limit + 0) { printf "perf: FAILED - a tile costs %.0f%% more at 512 than at 256: a pass is growing faster than the map\n", 100 * (r - 1); exit 1 }
+			print "perf: ok"
+		}
+	' "$new"
+	;;
 *)
-	sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
 	exit 2
 	;;
 esac

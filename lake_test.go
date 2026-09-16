@@ -326,6 +326,9 @@ func TestOverflowIsCountedWhereItLands(t *testing.T) {
 // than what runs off the water alone. Read on every closed lake of eight
 // small globes, since one globe's few can all sit in the middle of a desert.
 func TestSaltLakesStandInDryCountry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("eight small globes; see docs/perf/suite.md")
+	}
 	closed := 0
 	for s, g := range smallGlobes(networkGlobes) {
 		loss := make([]float64, len(g.Lakes))

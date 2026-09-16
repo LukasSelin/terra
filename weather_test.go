@@ -9,7 +9,7 @@ import (
 // where the air sinks, and more again in the westerlies. On land, which is
 // where anyone would notice.
 func TestRainFallsInBelts(t *testing.T) {
-	g := NewLand(1, smallGlobe()).Grid
+	g := yardWorld("small", 1, smallGlobe()) // read only, so shared
 	band := func(lo, hi float64) float64 {
 		var sum, n float64
 		for i := range g.Tiles {
@@ -120,7 +120,7 @@ func TestARangeAtAnAngleCastsItsShadowDownwind(t *testing.T) {
 // What runs off is what fell less what the air took back, and the air never
 // takes back more than fell or more than it could hold.
 func TestRunoffIsWhatTheRainLeaves(t *testing.T) {
-	g := NewLand(2, smallGlobe()).Grid
+	g := yardWorld("small", 2, smallGlobe()) // read only, so shared
 	for i := range g.Tiles {
 		if r, p := g.runoff[i], g.rain[i]; r < -1e-9 || r > p+1e-9 {
 			t.Fatalf("tile %d has %.1f mm of rain and %.1f of runoff", i, p, r)

@@ -49,6 +49,9 @@ func madeOver(t *testing.T, seed uint64, terms Terms, workers int) string {
 }
 
 func TestMakingAWorldDoesNotDependOnTheGoroutines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a globe made five times over is a minute; see docs/perf/suite.md")
+	}
 	// A quarter of the globe preset's width and a quarter of its height, and
 	// everything else about it the same: wrapped, salted with a sea, and made
 	// out of sixteen epochs of its own history. What is being asked here is

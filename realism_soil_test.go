@@ -29,7 +29,7 @@ var soilYardsticks = []realYardstick{
 		measure: func() float64 { return soilDepths(valleys(5)).hillslope },
 	}},
 	{yardstick: yardstick{
-		name: "mean hillslope soil depth, small globe", unit: "m", scale: "ground", lo: 0.2, hi: 1.5,
+		name: "mean hillslope soil depth, small globe", unit: "m", scale: "ground", lo: 0.2, hi: 1.5, slow: true,
 		source:  "Pelletier et al. 2016 (gridded soil and sedimentary deposit thickness): upland hillslope soils mostly under 2 m, typically about 1 m",
 		measure: func() float64 { return soilDepths(smallGlobes(networkGlobes)).hillslope },
 	}},
@@ -41,7 +41,7 @@ var soilYardsticks = []realYardstick{
 		gap: "known gap: I - a made map's soil is laid at its steady depth, which production holds under ~2 m (soilDeepest), and what its water laid on the floors is height, not soil: 1.9 m",
 	},
 	{yardstick: yardstick{
-		name: "mean valley floor soil depth, small globe", unit: "m", scale: "ground", lo: 3, hi: 50,
+		name: "mean valley floor soil depth, small globe", unit: "m", scale: "ground", lo: 3, hi: 50, slow: true,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment",
 		measure: func() float64 { return soilDepths(smallGlobes(networkGlobes)).floor },
 	},
@@ -53,7 +53,7 @@ var soilYardsticks = []realYardstick{
 		measure: func() float64 { d := soilDepths(valleys(5)); return d.floor / d.hillslope },
 	}},
 	{yardstick: yardstick{
-		name: "valley floor over hillslope soil depth, small globe", unit: "x", scale: "ground", lo: 3, hi: 50,
+		name: "valley floor over hillslope soil depth, small globe", unit: "x", scale: "ground", lo: 3, hi: 50, slow: true,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
 	},

@@ -7,11 +7,14 @@ one sub-benchmark per world:
 |------------|--------------------------------|---------|----------|
 | `valley`   | `DefaultTerms` (80x36, drawn)  | 2 880   | ~0.14 s  |
 | `ancient`  | `AncientTerms` (80x36, 16 epochs) | 2 880 | ~0.42 s  |
+| `globe128` | `GlobeTerms` at 128x64         | 8 192   | ~1.2 s   |
 | `globe256` | `GlobeTerms` at 256x128        | 32 768  | ~7.3 s   |
+| `globe512` | `GlobeTerms` at 512x256        | 131 072 | ~35 s    |
 | `globe`    | `GlobeTerms` (1024x512)        | 524 288 | ~80-110 s |
 
-`globe256` runs every pass the globe does; iterate against it and confirm on
-`globe`. Besides `ns/op` each reports `ns/tile`, `B/op` and `allocs/op`.
+Every globe on the ladder runs every pass the full globe does; iterate
+against `globe256` and confirm on `globe`. Besides `ns/op` each reports
+`ns/tile`, `B/op` and `allocs/op`.
 
 The work log - what was measured, what was found, what was changed and what
 it bought - is [worklog.md](worklog.md). Raw benchmark output that later runs
@@ -22,7 +25,7 @@ with `go run` rather than added to `go.mod`.
 
 ## Keeping it from drifting
 
-There are two guards, one for each thing that can drift.
+There are three guards: the heap, the clock, and how the clock grows with the map.
 
 ### Heap: `TestWorldCreationBudget` (in the normal suite)
 
@@ -38,6 +41,42 @@ goroutine count pinned to 4, the bytes vary by a few hundredths of a percent
 between runs, so a pass that starts making a new tile-sized slice shows up
 right away. The time is written to the file and logged (`time +7%, not
 checked`), but it is never enforced there.
+
+The file also carries a `peak`: the most the heap held at once while the
+world was made, over what it held before. `bytes` is churn, what the world
+asks of the allocator over its whole run; `peak` is what a machine has to
+have, and so what bounds the size of world it can make. A sampler goroutine
+reads the heap's live-objects metric every millisecond while the world is
+made and keeps the highest reading, less the reading after the collection
+that precedes the world.
+
+**The peak is logged (`peak -3%, not checked`) and not enforced**, because
+no reading taken from outside the world holds still under load. Three runs
+on 2026-09-15 with two other test runs on the machine:
+
+| world | sampled `HeapAlloc`, MiB | live at the collector's marks, MiB | live at a forced mark every MiB allocated, MiB |
+|---|---|---|---|
+| valley | 3.8, 3.8, 6.1 | 1.8, 2.1, 2.7 | 2.1, 3.8, 2.1 |
+| ancient | 6.2, 14.1, 8.3 | 3.3, 6.3, 8.2 | 7.2, 6.7, 4.1 |
+| globe128 | 21.0, 21.6, 22.1 | 11.3, 11.3, 15.8 | 20.7, 16.4, 15.0 |
+
+Three ways of reading it spread by 40-130%, so it is not the sampler
+missing the top and not the pacer's choice of when to collect. It is that
+the collector is concurrent: whatever the world allocates during a mark is
+counted live, and a mark takes longer when the machine is busy. Turning the
+collector's percent down (25, 10) did not narrow the spread, and cost the
+globe two seconds and a few hundred allocations. On a quiet machine the
+sampled `HeapAlloc` came out within 1-5% run to run, which is why it is
+the reading kept in the file: it is the honest one on the machine the
+budget is written on, and the one to compare when a change means to move
+the peak.
+
+A steady peak needs the world to hold still while the heap is read: a hook
+at each pass boundary (the phase timer in `phases.go`) that runs a
+collection and reads `HeapAlloc` when the budget test asks it to. Every
+pass then contributes one reading taken with nothing allocating, and the
+largest of them is the peak, the same on any machine. When that exists,
+set `peakSlack` in `budget_test.go` and the test holds it like the bytes.
 
 When a change is meant to move the heap, rewrite the budget and commit the
 diff with the change:
@@ -88,6 +127,38 @@ Why 10%: a quiet run on the 2026-09-15 machine has confidence intervals of
 out 30% slower. A tighter limit would fail on noise.
 The significance test is what keeps a single slow run from failing. For
 changes smaller than 10%, read the benchstat table the script prints.
+
+### Scaling: `scripts/perf.sh scaling` (by hand, when a pass changes shape)
+
+```bash
+scripts/perf.sh scaling
+```
+
+This makes `globe128`, `globe256` and `globe512` three times each, one world
+per run, and reads the median `ns/tile` of each width against the next. It
+**exits 1 when a tile at 512 costs more than 1.3 times a tile at 256**
+(`PERF_SCALING`), printing the three figures and the two ratios. About four
+minutes on a quiet machine.
+
+What it catches is a superlinear step: a pass whose cost per tile grows with
+the map, which a quadratic pass shows as a ratio near 4 and a pass that
+walks the whole map per row as one near 2. An `n log n` pass, the FFT, costs
+about 1.13 per doubling of width, well inside the limit, so the limit is
+not a proof of linearity: it is a tripwire for a step that would take a
+user's big map from minutes to hours. What it does not catch is a slower
+constant. A pass that got twice as slow at every size moves both medians
+alike and leaves the ratio where it was; that is `check`'s to catch against
+the baseline.
+
+The check is 512 against 256 and not 256 against 128 because the bottom
+rung is still paid for mostly by the constant each world carries (the
+2026-09-15 run, under load, had `globe128` at twice the ns/tile of
+`globe256`); `256/128` is printed for the record only.
+
+The ratio is read from three runs' medians, not one run, because one
+interrupted run of `globe512` would otherwise fail it. It still moves under
+load, which slows a long run more than a short one: a failure taken on a
+busy machine is run again before it is believed, like `check`.
 
 ## A before/after comparison by hand
 

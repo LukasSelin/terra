@@ -8,11 +8,10 @@ import (
 
 // plateWorld is a wrapped world big enough to hold a proper crust - a valley
 // is one plate boundary seen close to and cannot show any of this - and small
-// enough to make several of in a test.
+// enough to make several of in a test. It is the river and lake tests' small
+// globe, shared through the yardstick registry; nothing here writes to it.
 func plateWorld(seed uint64) *Grid {
-	cfg := GlobeTerms()
-	cfg.Width, cfg.Height = 256, 128
-	return NewLand(seed, cfg).Grid
+	return yardWorld("small", seed, smallGlobe())
 }
 
 // pieces is how many tiles each piece of crust holds, by the plate it is.
