@@ -47,7 +47,13 @@ type manifest struct {
 	// world with no sea.
 	SeaLevel *float64 `json:"sea_level"`
 	Origin   origin   `json:"origin"`
-	Files    []file   `json:"files"`
+	// Layers are the weightmap layers, in the order they are numbered, and
+	// RiverFlow the least flow a river reach carries, in cubic metres a
+	// second.
+	Layers    []string `json:"layers"`
+	RiverFlow float64  `json:"river_flow"`
+	// Files is every file written, the manifest itself last.
+	Files []file `json:"files"`
 }
 
 // origin is where the world's coordinates start, and which way they run.
@@ -100,6 +106,8 @@ func newManifest(x *exporter, lo, hi float64) *manifest {
 	if sea := x.g.SeaLevel(); sea >= 0 {
 		m.SeaLevel = &sea
 	}
+	m.Layers = append(m.Layers, layerNames[:]...)
+	m.RiverFlow = x.opt.RiverFlow
 	return m
 }
 
