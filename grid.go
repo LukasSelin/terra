@@ -330,7 +330,8 @@ func (g *Grid) Clone() *Grid {
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
-	c.abyss, c.uplift = g.abyss, g.uplift // laid once, and never written again
+	c.abyss, c.uplift, c.floorAge = g.abyss, g.uplift, g.floorAge       // laid once, and never written again
+	c.hot, c.welds, c.deep, c.planet = g.hot, g.welds, g.deep, g.planet // hot, like abyss, is never written once drawn
 	c.ledger, c.epochs, c.plateRoot = slices.Clone(g.ledger), g.epochs, g.plateRoot
 	c.features = g.features // built once, and never written again; Erode builds the copy its own
 	c.warm = append([]float32(nil), g.warm...)
@@ -342,13 +343,29 @@ func (g *Grid) Clone() *Grid {
 	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
+	// pet reads dayRange: a copy without it evaporates otherwise, and reads
+	// its soil's climate otherwise with it.
+	c.dayRange = slices.Clone(g.dayRange)
 	c.area = append([]float64(nil), g.area...)
 	c.water = g.water
+	c.exported, c.bankLoad = g.exported, slices.Clone(g.bankLoad) // the next Erode carries the bank load on
+	// The woods are read as the map was last read, not afresh off the ground
+	// as it stands now, which is what TooSteep would take on a copy with none.
+	c.steepAt, c.steepLine, c.woodsLine, c.woodsRead = g.steepAt, g.steepLine, g.woodsLine, g.woodsRead
+	c.twiMean, c.holds = g.twiMean, slices.Clone(g.holds)
+	// Which chunks are awake, and what each last had of the walking and the
+	// weather. Recount below takes their counts afresh and leaves the rest.
+	c.Active = slices.Clone(g.Active)
+	c.CW, c.CH, c.Chunks = g.CW, g.CH, slices.Clone(g.Chunks)
+	c.waters = g.waters
 	c.lenders = make([]uint8, len(g.Tiles))
-	// The scratch fields - floodScratch, slideScratch, fillScratch and the
-	// four structs of them - are left nil: they mean nothing between calls,
-	// and the pass that needs one remakes it.
-	c.layChunks()
+	// The scratch fields - floodScratch, slideScratch, fillScratch, the four
+	// structs of them, and a history's seam and seamQueue - are left nil:
+	// they mean nothing between calls, and the pass that needs one remakes
+	// it. So is what a copy takes afresh off its own ground when first asked,
+	// and would take the same: the patches and lenders (laid below), the
+	// regions, the landmarks and the router. aired is left for the reason
+	// given where it is declared, and islanded is a view's, not a copy's.
 	c.layPatches()
 	c.Recount()
 	return c
