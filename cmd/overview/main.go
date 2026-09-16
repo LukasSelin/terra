@@ -9,8 +9,22 @@
 //	go run ./cmd/overview -seed 7 -w 256 -h 128 -epochs 16 -sea 0.3
 //	go run ./cmd/overview -preset globe -max    the biggest globe memory allows
 //
+// A history is two thirds of making a globe. -keep-history writes it to a
+// file as the world is made, and -from-history makes the world again from
+// that file, on the seed and terms it was made on, without running it:
+//
+//	go run ./cmd/overview -preset globe -keep-history globe.history
+//	go run ./cmd/overview -from-history globe.history
+//
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
+//
+//	go run ./cmd/overview -serve :8080         a page with a form that makes one
+//
+// With -serve it makes no world until asked: the page's form holds the
+// options above, filled in with the flags given; each press of its button
+// makes that world into its own directory under -runs, and the browser is
+// sent to its page. See serve.go.
 package main
 
 import (
@@ -30,25 +44,61 @@ import (
 	"github.com/LukasSelin/terra/geom"
 )
 
+// options is what a world is made and drawn from: the flags on the command
+// line, or what the server was started with.
+type options struct {
+	Seed   uint64
+	Preset string
+	// W, H, Epochs, Sea and Water override the preset where they are set:
+	// W and H above nought, the rest at nought or above.
+	W, H       int
+	Epochs     int
+	Sea, Water float64
+	Wrap       bool
+	// Scale is pixels per tile, 0 to pick one; Day is the day whose weather
+	// is drawn; Max makes the world as big as memory allows.
+	Scale, Day int
+	Max        bool
+	// KeepHistory is a file to write the world's history to as it is made;
+	// FromHistory a file to make the world from instead, on the seed and
+	// terms it carries. See terra.LandFromHistory.
+	KeepHistory, FromHistory string
+}
+
 func main() {
+	var o options
+	flag.Uint64Var(&o.Seed, "seed", 1, "the seed the world is made from")
+	flag.StringVar(&o.Preset, "preset", "valley", "valley, ancient or globe")
+	flag.IntVar(&o.W, "w", 0, "width in tiles (overrides the preset)")
+	flag.IntVar(&o.H, "h", 0, "height in tiles (overrides the preset)")
+	flag.IntVar(&o.Epochs, "epochs", -1, "ages of history to run (overrides the preset)")
+	flag.Float64Var(&o.Sea, "sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
+	flag.Float64Var(&o.Water, "water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
+	flag.BoolVar(&o.Wrap, "wrap", false, "join the east edge to the west (forced on by -preset globe)")
+	flag.IntVar(&o.Scale, "scale", 0, "pixels per tile (0 picks one)")
+	flag.IntVar(&o.Day, "day", 30, "the day of the world whose weather is drawn")
+	flag.BoolVar(&o.Max, "max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
+	flag.StringVar(&o.KeepHistory, "keep-history", "", "write the world's history to this file as it is made")
+	flag.StringVar(&o.FromHistory, "from-history", "", "make the world from a history file -keep-history wrote, on the seed and terms it carries, instead of from the other flags")
 	var (
-		seed    = flag.Uint64("seed", 1, "the seed the world is made from")
-		preset  = flag.String("preset", "valley", "valley, ancient or globe")
-		w       = flag.Int("w", 0, "width in tiles (overrides the preset)")
-		h       = flag.Int("h", 0, "height in tiles (overrides the preset)")
-		epochs  = flag.Int("epochs", -1, "ages of history to run (overrides the preset)")
-		sea     = flag.Float64("sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
-		water   = flag.Float64("water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
-		wrap    = flag.Bool("wrap", false, "join the east edge to the west (forced on by -preset globe)")
-		scale   = flag.Int("scale", 0, "pixels per tile (0 picks one)")
-		out     = flag.String("out", "overview", "directory to write into")
-		day     = flag.Int("day", 30, "the day of the world whose weather is drawn")
-		biggest = flag.Bool("max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
+		out   = flag.String("out", "overview", "directory to write into")
+		serve = flag.String("serve", "", "serve a page that makes worlds at this address (e.g. :8080) instead of making one; the other flags are what it makes")
+		runs  = flag.String("runs", "runs", "directory the server writes each world into, one directory a world")
 	)
 	flag.Parse()
 
+	if *serve != "" {
+		fail(listen(*serve, *runs, o))
+	}
+	if _, _, err := generate(o, *out, nil); err != nil {
+		fail(err)
+	}
+}
+
+// terms is the preset the options name, with their overrides laid over it.
+func (o options) terms() (terra.Terms, error) {
 	var t terra.Terms
-	switch *preset {
+	switch o.Preset {
 	case "valley":
 		t = terra.DefaultTerms()
 	case "ancient":
@@ -56,39 +106,128 @@ func main() {
 	case "globe":
 		t = terra.GlobeTerms()
 	default:
-		fail(fmt.Errorf("unknown preset %q: want valley, ancient or globe", *preset))
+		return t, fmt.Errorf("unknown preset %q: want valley, ancient or globe", o.Preset)
 	}
-	if *w > 0 {
-		t.Width = *w
+	if o.W > 0 {
+		t.Width = o.W
 	}
-	if *h > 0 {
-		t.Height = *h
+	if o.H > 0 {
+		t.Height = o.H
 	}
-	if *epochs >= 0 {
-		t.Epochs = *epochs
+	if o.Epochs >= 0 {
+		t.Epochs = o.Epochs
 	}
-	if *sea >= 0 {
-		t.SeaShare = *sea
+	if o.Sea >= 0 {
+		t.SeaShare = o.Sea
 	}
-	if *water >= 0 {
-		t.Water = *water
+	if o.Water >= 0 {
+		t.Water = o.Water
 	}
-	if *wrap {
+	if o.Wrap {
 		t.Wrap = true
 	}
-	if *biggest {
-		var err error
-		if t, err = t.Largest(); err != nil {
-			fail(err)
+	if o.Max {
+		return t.Largest()
+	}
+	return t, nil
+}
+
+// historyTerms is the seed and the terms of the history file at path.
+func historyTerms(path string) (uint64, terra.Terms, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, terra.Terms{}, err
+	}
+	defer f.Close()
+	return terra.HistoryTerms(f)
+}
+
+// presetOf is the name of the preset t is, where it is one unchanged, and
+// "custom" where it is not: the name a page gives a world whose terms came
+// from a history file rather than from the flags.
+func presetOf(t terra.Terms) string {
+	for name, p := range map[string]terra.Terms{"valley": terra.DefaultTerms(), "ancient": terra.AncientTerms(), "globe": terra.GlobeTerms()} {
+		if t == p {
+			return name
 		}
 	}
+	return "custom"
+}
 
-	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, *seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
-	start := time.Now()
-	terra.SetNamer(namerFor(*seed))
-	land, err := terra.MakeLand(*seed, t)
+// makeLand makes the land on t: from o's history file if it names one, and
+// keeping its history in the file o names for that if it does.
+func makeLand(o options, t terra.Terms) (*terra.Land, error) {
+	switch {
+	case o.FromHistory != "":
+		f, err := os.Open(o.FromHistory)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return terra.LandFromHistory(f)
+	case o.KeepHistory != "":
+		f, err := os.Create(o.KeepHistory)
+		if err != nil {
+			return nil, err
+		}
+		land, err := terra.MakeLandKeepingHistory(o.Seed, t, f)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return land, err
+	}
+	return terra.MakeLand(o.Seed, t)
+}
+
+// generate makes the world the options describe and draws it into out: an
+// index.html, a why.html and a png per layer. It prints a summary to the
+// terminal as it goes and returns the world and the path of index.html.
+// Where stage is not nil it is told what is being done, as it starts.
+//
+// It sets the package's namer, so no two may run at once.
+func generate(o options, out string, stage func(string)) (*terra.Land, string, error) {
+	if stage == nil {
+		stage = func(string) {}
+	}
+	land, t, took, err := makeWorld(o, stage)
 	if err != nil {
-		fail(err)
+		return nil, "", err
+	}
+	if o.FromHistory != "" {
+		// The seed and the terms are the history's, whatever the flags said.
+		o.Seed, o.Preset = land.Seed(), presetOf(t)
+	}
+	page, err := draw(land, o, t, took, out, stage)
+	return land, page, err
+}
+
+// makeWorld makes the world the options describe and runs its weather up to
+// the day they ask for: everything a drawing or a tile's account reads. The
+// same options make the same world, every time. A world made from a history
+// file is made on the seed and terms the file carries.
+//
+// It sets the package's namer, so no two may run at once.
+func makeWorld(o options, stage func(string)) (*terra.Land, terra.Terms, time.Duration, error) {
+	var t terra.Terms
+	var err error
+	from := ""
+	if o.FromHistory != "" {
+		o.Seed, t, err = historyTerms(o.FromHistory)
+		from = " from the history in " + o.FromHistory
+	} else {
+		t, err = o.terms()
+	}
+	if err != nil {
+		return nil, t, 0, err
+	}
+
+	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)%s...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap, from)
+	stage("making the world")
+	start := time.Now()
+	terra.SetNamer(namerFor(o.Seed))
+	land, err := makeLand(o, t)
+	if err != nil {
+		return nil, t, 0, err
 	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
@@ -99,21 +238,27 @@ func main() {
 	}
 
 	// The day's weather, run from the founding up to the day asked for.
-	for tick := 0; tick <= max(*day, 0); tick++ {
+	stage(fmt.Sprintf("running the weather to day %d", o.Day))
+	for tick := 0; tick <= max(o.Day, 0); tick++ {
 		land.Tick = tick
 		land.Climate.Advance(tick, land.RNG)
 		land.AdvanceWeather()
 	}
+	return land, t, took, nil
+}
 
-	px := *scale
+// draw draws a made world into out. See generate.
+func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string, stage func(string)) (string, error) {
+	px := o.Scale
 	if px <= 0 {
 		px = max(1, min(12, 1024/max(t.Width, 1)))
 	}
 
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		fail(err)
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return "", err
 	}
 	g := land.Grid
+	stage("measuring the world")
 	stats := measure(land)
 	cls := classify(land)
 	stats.Biomes = legendOf(cls.Biome, biomeClasses, biomeOf)
@@ -121,24 +266,25 @@ func main() {
 	stats.print()
 
 	var layers []layer
-	for _, l := range drawings(land, stats, cls) {
+	all := drawings(land, stats, cls)
+	for k, l := range all {
+		stage(fmt.Sprintf("drawing %s, %d of %d", l.title, k+1, len(all)))
 		img := render(g, px, l.color)
 		if l.overlay != nil {
 			l.overlay(img, px)
 		}
 		name := l.file + ".png"
-		if err := writePNG(filepath.Join(*out, name), img); err != nil {
-			fail(err)
+		if err := writePNG(filepath.Join(out, name), img); err != nil {
+			return "", err
 		}
 		layers = append(layers, layer{Title: l.title, File: name, About: l.about, Legend: l.legend})
 	}
 
-	page := filepath.Join(*out, "index.html")
+	page := filepath.Join(out, "index.html")
 	f, err := os.Create(page)
 	if err != nil {
-		fail(err)
+		return "", err
 	}
-	defer f.Close()
 	err = pageTmpl.Execute(f, struct {
 		Seed   uint64
 		Terms  terra.Terms
@@ -147,16 +293,22 @@ func main() {
 		Stats  summary
 		Layers []layer
 		Width  int
-	}{*seed, t, *preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px})
+		W, H   int
+	}{o.Seed, t, o.Preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px, t.Width, t.Height})
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
-		fail(err)
+		return "", err
 	}
 	// And the world's account of eight of its tiles. See why.go.
-	if err := writeWhy(filepath.Join(*out, "why.html"), land, *seed, *preset); err != nil {
-		fail(err)
+	stage("writing why.html")
+	if err := writeWhy(filepath.Join(out, "why.html"), land, o.Seed, o.Preset); err != nil {
+		return "", err
 	}
 	abs, _ := filepath.Abs(page)
 	fmt.Printf("\nwrote %d maps, why.html and %s\n", len(layers), abs)
+	return page, nil
 }
 
 func fail(err error) {
@@ -754,7 +906,12 @@ figcaption{margin-top:8px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:22px}
 .grid figure{padding:8px;cursor:pointer} .grid img{width:100%;image-rendering:pixelated;display:block}
 .grid figcaption{margin-top:4px;font-size:13px}
-</style></head><body><main>
+.map{position:relative}
+.pick{position:absolute;pointer-events:none;box-sizing:border-box;border:2px solid #fff;outline:2px solid #000;border-radius:2px}
+#tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:10px}
+#tile h2{font-size:15px;margin:0 0 2px} #tile h3{font-size:13px;margin:12px 0 2px;text-transform:capitalize}
+#tile p{margin:2px 0}
+</style></head><body><main data-w="{{.W}}" data-h="{{.H}}">
 <h1>A world from seed {{.Seed}}</h1>
 <div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · {{if and (gt .Terms.Epochs 0) (gt .Terms.Water 0.0)}}water {{.Terms.Water}} m, {{pct .Stats.SeaPct}} sea{{else}}sea {{.Terms.SeaShare}}{{end}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}} · made in {{.Took}}</div>
 <div class="stats">
@@ -773,12 +930,13 @@ figcaption{margin-top:8px}
 </div>
 <div class="tabs" id="tabs">{{range $i, $l := .Layers}}<button data-i="{{$i}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$l.Title}}</button>{{end}}</div>
 <div class="zoom"><button id="zout" title="Zoom out (-)">−</button><output id="zlevel">100%</output><button id="zin" title="Zoom in (+)">+</button><button id="zfit" title="Fit to width (0)">Fit</button><button id="zone" title="Actual size (1)">1:1</button>
- <span class="mut">Scroll to zoom, drag to pan.</span></div>
+ <span class="mut">Scroll to zoom, drag to pan, click a tile to ask why it is so.</span></div>
 {{range $i, $l := .Layers}}<figure class="big" data-i="{{$i}}"{{if ne $i 0}} hidden{{end}}>
- <div class="map"><img src="{{$l.File}}" width="{{$.Width}}" alt="{{$l.Title}}"></div>
+ <div class="map"><img src="{{$l.File}}" width="{{$.Width}}" alt="{{$l.Title}}"><div class="pick" hidden></div></div>
  <figcaption><b>{{$l.Title}}</b> <span class="mut">{{$l.About}}</span>
  {{if $l.Legend}}<div class="legend">{{range $l.Legend}}<span><i style="background:{{css .Color}}"></i>{{.Name}} <span class="mut">{{pct .Pct}}</span></span>{{end}}</div>{{end}}
  </figcaption></figure>{{end}}
+<section id="tile" aria-live="polite" hidden></section>
 <div class="grid">{{range $i, $l := .Layers}}<figure data-i="{{$i}}"><img src="{{$l.File}}" alt="{{$l.Title}}"><figcaption>{{$l.Title}}</figcaption></figure>{{end}}</div>
 </main>
 <script>
@@ -797,6 +955,45 @@ function setZoom(z,cx,cy){
  bigs.forEach(f=>f.querySelector('img').style.width=(base*zoom)+'px');
  m.scrollLeft=x*zoom-cx; m.scrollTop=y*zoom-cy;
  document.getElementById('zlevel').value=Math.round(zoom*100)+'%';
+ placePick();
+}
+// A click on a tile asks the server why it is so; see serve.go. The page
+// written by the command line alone has no server to ask, and says so.
+const W=+document.querySelector('main').dataset.w;
+let picked=null;
+function placePick(){
+ const s=base*zoom/W, side=Math.max(s,8);
+ bigs.forEach(f=>{
+  const d=f.querySelector('.pick');
+  d.hidden=!picked; if(!picked)return;
+  d.style.width=d.style.height=side+'px';
+  d.style.left=((picked.x+.5)*s-side/2)+'px'; d.style.top=((picked.y+.5)*s-side/2)+'px';
+ });
+}
+function el(tag,text,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;return e}
+async function pick(x,y){
+ picked={x,y}; placePick();
+ const box=document.getElementById('tile');
+ box.hidden=false; box.replaceChildren(el('h2','Tile ('+x+', '+y+')'),el('p','Asking…','mut'));
+ let a;
+ try{
+  if(location.protocol==='file:')throw new Error('Tiles answer only when the page is served: go run ./cmd/overview -serve :8080');
+  const r=await fetch('tile?x='+x+'&y='+y);
+  a=await r.json();
+  if(!r.ok)throw new Error(a.error||r.statusText);
+ }catch(err){
+  if(picked.x!==x||picked.y!==y)return;
+  box.replaceChildren(el('h2','Tile ('+x+', '+y+')'),el('p',err.message,'mut'));
+  return;
+ }
+ if(picked.x!==x||picked.y!==y)return;
+ const head=[el('h2','Tile ('+x+', '+y+'): '+a.terrain+', '+a.height)];
+ if(a.features&&a.features.length)head.push(el('p','Part of '+a.features.join(', '),'mut'));
+ box.replaceChildren(...head);
+ for(const as of a.aspects){
+  box.append(el('h3',as.name));
+  for(const s of as.sentences||[])box.append(el('p',s));
+ }
 }
 function show(i){
  // Read before hiding: a hidden element has no scroll position.
@@ -821,7 +1018,16 @@ bigs.forEach(f=>{
  m.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,l:m.scrollLeft,t:m.scrollTop};m.setPointerCapture(e.pointerId);m.classList.add('drag')});
  m.addEventListener('pointermove',e=>{if(drag){m.scrollLeft=drag.l-(e.clientX-drag.x);m.scrollTop=drag.t-(e.clientY-drag.y)}});
  const end=()=>{drag=null;m.classList.remove('drag')};
- m.addEventListener('pointerup',end); m.addEventListener('pointercancel',end);
+ // A press that barely moved is a click, not a pan.
+ m.addEventListener('pointerup',e=>{
+  if(drag&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<4){
+   const r=f.querySelector('img').getBoundingClientRect(), s=r.width/W;
+   const x=Math.floor((e.clientX-r.left)/s), y=Math.floor((e.clientY-r.top)/s);
+   if(x>=0&&y>=0&&x<W&&y<+document.querySelector('main').dataset.h)pick(x,y);
+  }
+  end();
+ });
+ m.addEventListener('pointercancel',end);
 });
 document.querySelectorAll('#tabs button, .grid figure').forEach(e=>e.onclick=()=>{show(e.dataset.i);window.scrollTo({top:0,behavior:'smooth'})});
 document.addEventListener('keydown',e=>{

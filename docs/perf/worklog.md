@@ -6,7 +6,6 @@ measurements is in [README.md](README.md).
 
 ---
 
-
 ## 2026-09-16 - A world into a Zarr v3 store: zarr/, sharding, cmd/zarr
 
 **What this is.** On `claude/docker-tree-resources-a9e433`: a way to keep a
@@ -63,6 +62,222 @@ weather. Features are not named, as terra names nothing without a namer
 and Zarr v3 has no core string type. xarray has not been tried on a store.
 
 ---
+
+
+## 2026-09-16 - cmd/overview -serve: worlds made in the background
+
+**What this is.** The fourth step of the web page, on
+`claude/world-generator-web-ui-c36c93`. A press of the button no longer
+holds the request open while the world is made: it queues a job and sends
+the browser to `/jobs/<id>`, which asks `/jobs/<id>/status` every second
+and goes on to the world's page when it is drawn. One worker makes the
+jobs in the order they came (up to 64 waiting), under the same lock as a
+tile's world made again. The page shows the stage `generate` reports
+(making the world, running the weather, drawing each layer), the time so
+far, and, once a job of the same kind (history or not, globe or not) has
+been made, a guess at the time left from its seconds a tile. A job still
+waiting can be called off; one running is made to the end, since nothing
+in making a world can stop part way. A failed job says why and links back
+to the form filled in with its settings. The home page lists the jobs
+being made, and leaves their half-drawn directories out of the runs.
+Jobs live as long as the server.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed. On this machine, with a 128x64 globe made first to learn
+the pace, a 512x256 globe guessed 20 s at 6 s in and was drawn at about
+20 s. `go test -short -race ./cmd/overview` passes in 11 s: it holds the
+worker off to check the order and the count ahead, calls a job off, and
+fails one that asks for more memory than there is.
+
+---
+
+## 2026-09-16 - Generate in stages, and a history kept in a file
+
+**What this is.** The first step of phase 3 of the scaling plan ("stages as
+values"), on `claude/app-performance-structural-956966` from main at
+ad943a2. Two commits' worth, neither moving any world: `TERRA_DIGEST=check`
+passes after each, the budget passes unchanged, the pinned pass counts
+hold, and the short tier passes (70 s).
+
+**The stages.** `Generate` was one function of three hundred lines. It is
+six methods on `Land` run from a table in `stages.go` -
+`ground -> sea -> shape -> cut -> coast -> cover` - each over the grid the
+one before it left; the hand-off is the `Grid` and the position of
+`Land.RNG`, and no stage reads another's locals (the one that did,
+`poured`, is `Terms.poured`). With `TERRA_PHASES=1` each is timed as
+`stage.<name>`. The globe, quiet machine, one run:
+
+| stage | wall s | share |
+|---|---:|---:|
+| `stage.ground` (the history) | 36.74 | 78% |
+| `stage.cut` | 4.00 | 8% |
+| `stage.coast` | 3.14 | 7% |
+| `stage.shape` | 2.76 | 6% |
+| `stage.cover` | 0.37 | 1% |
+| `stage.sea` | 0.05 | 0% |
+| `Generate` | 47.14 | 100% |
+
+**The history file.** `historyfile.go`: `MakeLandKeepingHistory(seed,
+terms, w)` makes a world and writes it, stopped between the ground stage
+and the sea, to `w`; `LandFromHistory(r)` runs the other five stages on
+what it reads. `cmd/overview -keep-history f` and `-from-history f` use
+them. What is kept is every field of the `Grid` found by reflection, less
+the ten `historyDropped` names with a reason each (the seven scratch
+slices, the router, the landmarks, the features), so that a field added
+later is kept without anybody remembering to, and a field of a kind the
+file cannot hold fails the write rather than being left out. Fields are
+written as their memory, flat runs of numbers as one run of bytes; the
+header carries the architecture and a fingerprint of the layout of every
+type held, and a reader refuses anything else. It is a cache of a history,
+not an interchange format: nothing in it says whether the history code
+that wrote it is today's.
+
+What had to be kept that a hand-written list would have missed: the
+weather's winds with the vapour budget each reading warm-starts from, and
+`aired`, which the weather gate compares against - without them the first
+drain after the history rebuilds the weather, which it does not do in a
+world made straight through, and the world moves. And the chance: `Land`
+keeps its `*rand.PCG` now, whose state is sixteen bytes of the header.
+
+**What it measured.** The full globe, quiet machine:
+
+| | wall |
+|---|---:|
+| made straight through, keeping the history | 47.1 s |
+| made from the kept history | 10.5 s |
+
+The file is 198 MB (396 bytes a tile); the stages' times against the whole
+put the write and the read at about a tenth of a second each, on a warm
+page cache. Every one of the 21 maps
+`cmd/overview` draws is byte-identical between the two runs, as are the
+summary and the why page. `TestAWorldResumedFromItsHistoryIsTheSameWorld`
+holds valley, ancient and globe128 to the digest and every kept field bit
+for bit (NaN included, which the deep floor marks tiles with), the
+features and the chance; `TestAHistoryResumesTheSameOverAnyGoroutines`
+resumes ancient over 1, 3 and 8; `TestAHistoryFileIsRefusedWhenItIsNotOne`
+feeds it nothing, a PNG header, half a file, another version and another
+layout. History sizes: valley 0.6 MiB, ancient 1.1 MiB, globe128 4.9 MiB.
+
+**What it is for.** A change to anything after the history - the shaping,
+the cutting, the coast, the woods, the soil - is run on a kept history in
+a fifth of the time, and the history grid of phase 3 plugs in at the same
+boundary: the ground stage's output is what a coarse history will have to
+hand the map.
+
+**What is next.** The yardsticks read many small globes each made from
+scratch; making their histories once per run and resuming is the test
+suite's share of this. A second boundary kept (after `cut`) would do the
+same for the coast and the cover.
+
+**`scripts/perf.sh check`**, quiet machine, against the 07:18 baseline:
+passes, valley -5.9%, ancient -4.3%, globe256 -5.4% (p=0.002, intervals
+±1-3%), with B/op -18..-31%. The branch adds six timer calls to a world and
+nothing else to `NewLand`'s path, so the gain is what main has merged since
+07:18 (the hydrology's scratch on the grid, among it), not this change; the
+baseline stands until a change of its own moves it.
+
+---
+
+## 2026-09-16 - cmd/overview -serve: click a tile to ask why it is so
+
+**What this is.** The third step of the web page, on
+`claude/world-generator-web-ui-c36c93`. A click on a served run's map (a
+press that moves less than four pixels; more is a pan) marks the tile and
+asks `GET /runs/<run>/tile?x=&y=`, which answers with the world's account
+of that tile as JSON: its terrain, height and features, and `terra.Why`'s
+chain for height, rock, rain and cover, rendered by the same sentences
+`why.html` uses. The account shows under the map. `why.html`'s eight tiles
+are now built by the same `describe`.
+
+**How the world is found.** `generate` became `makeWorld`, which makes the
+world and runs its weather to the asked day, and `draw`. The server keeps
+the worlds it made last, up to 2^20 tiles together (a few valleys or one
+globe; the newest always), and makes a world it has let go again from the
+run's `settings.json`, under the same lock as making one. The test holds
+that the answer from a world made again is the answer from the one kept,
+byte for byte. Runs from before `settings.json` say they cannot answer.
+A page opened from disk, without the server, says it needs `-serve`.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed, so the digest, the budget and the yardsticks are what
+main's are. The command line's stdout and every png and `why.html` on the
+default valley are what they were byte for byte; `index.html` gains the
+click script. `go test -short ./cmd/overview` runs in under two seconds.
+
+---
+
+## 2026-09-16 - cmd/overview -serve: the options on a form
+
+**What this is.** The second step of the web page, on
+`claude/world-generator-web-ui-c36c93`. The home page is now a form of
+`cmd/overview`'s options - preset, seed (with a random one a click away),
+width, height, epochs, sea share, water, day, scale and wrap - filled in
+from the flags the server was started with. An empty field is the
+preset's own value, shown greyed, as a flag left off is. What the terms
+would refuse (a globe not a whole number of chunks round, a sea share
+past 1, a picture over 16384 pixels a side, a world that will not fit in
+memory) comes back as 422 with the reason above the form as it was
+filled in, and nothing is made. Each run keeps `settings.json`; the list
+of runs says what each was made from and links "tune from this", which
+fills the form in with it. `-max` is not on the form. No file of the
+root package changed, so the digest, the budget and the yardsticks are
+what main's are and were not re-run.
+
+**What it measured.** Nothing about world creation. `go test -short
+./cmd/overview` makes a 32x24 world through the form, turns away six
+forms that cannot be made, and reads options back from the fields they
+wrote, in under two seconds.
+
+---
+
+## 2026-09-16 - cmd/overview -serve: a page with a button that makes a world
+
+**What this is.** The first step toward making worlds from a browser, on
+`claude/world-generator-web-ui-c36c93`. `go run ./cmd/overview -serve :8080`
+serves a page with one button; each press makes the world the other flags
+describe into its own directory under `-runs` (default `runs/`) and sends
+the browser to its `index.html`. The body of `main` became
+`generate(options, out)`, which the command line and the server share. A
+mutex keeps the server to one world at a time, because `terra.SetNamer` is
+the package's. No file of the root package changed, so the digest, the
+budget and the yardsticks are what main's are and were not re-run.
+
+**What it measured.** Nothing about world creation. The command line's
+output on the default valley is what it was before the split: stdout and
+every png the same byte for byte, and `index.html` differs only in its
+"made in" time. `go test -short ./cmd/overview` makes a 32x32 valley
+through the server in under half a second.
+
+---
+
+## 2026-09-16 - U1: cmd/unreal, the Landscape export at 25 m
+
+**What this is.** Milestone U1 of the scaling plan's level 2, on
+`claude/unreal-export`: a command with `cmd/overview`'s flags that writes
+the world for Unreal's Landscape import. New files only under
+`cmd/unreal`; no file of the root package changed, so the digest, the
+budget and the yardsticks are what main's are and were not re-run. The
+tests (`go test ./cmd/unreal`) make the valley on seed 1 once and export
+it once, cut into 17-vertex tiles so that tile edges can be checked, and
+run in under two seconds.
+
+**What it writes.** A 16-bit heightmap per Landscape tile (1009, 2017,
+4033 or 8129 vertices, the largest not wider than the world, edges
+shared, padded by edge extension, the seam column of a globe written
+twice), ten 8-bit weightmaps per tile summing to 255 a vertex, the sea,
+lakes and river reaches as JSON with Finnegan's width and Manning's depth
+at the mean flow, one tree per forest tile as CSV with a species by
+overview's Köppen reading, and a manifest with the scales and the exact
+formula back to metres. The valley export is 14 files and 0.2 MB; globe256
+is 14 files and 0.3 MB; both are one tile of 1009.
+
+**What it measured.** Nothing about world creation. The export itself is
+about 0.1 s on the valley and on globe256, under load, and is not the
+point. The README's "What the metre level needs" lists what the root
+package would have to expose for U2: the channel constants, a lake tile
+index, the ebb per tile, the abyssal flag, the strata's bed tops, the
+meander phase, a shared Köppen reading, a gradient vector, and
+`DetailChunk` itself.
 
 
 ## 2026-09-16 - P1: the causal record. The book kept, features, and Why
