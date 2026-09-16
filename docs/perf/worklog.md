@@ -6,6 +6,41 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: a plate lags a tile of its grid, and opens less floor
+
+**What this is.** The move on a half-size history against the map's, globes
+1-8 made both ways, read through `epochWatch` each epoch; a throwaway test on
+`claude/history-km`. The lag is how far a plate has travelled and not yet
+moved - `cr.acc`, what is left over below a whole tile of its grid - in the
+map's tiles; fresh floor is the share of the planet `move` opened that epoch.
+
+| epoch | fresh floor, map / half | t | lag, mean over plates, map / half | t | plate speed, map tiles an epoch |
+|---:|---|---:|---|---:|---:|
+| 0 | 0.0414 / 0.0369 (-11%) | -3.5 | 0.65 / 1.43 | 21 | 5.33 / 5.33 |
+| 4 | 0.0365 / 0.0367 (+1%) | 0.2 | 0.76 / 1.31 | 12 | 4.20 / 4.20 |
+| 8 | 0.0291 / 0.0266 (-9%) | -1.8 | 0.71 / 1.48 | 17 | 3.06 / 3.06 |
+| 10 | 0.0261 / 0.0231 (-11%) | -3.4 | 0.74 / 1.50 | 13 | 2.49 / 2.49 |
+| 13 | 0.0185 / 0.0166 (-10%) | -3.0 | 0.75 / 1.42 | 30 | 1.64 / 1.64 |
+| 15 | 0.0138 / 0.0135 (-2%) | -0.5 | 0.71 / 1.42 | 15 | 1.07 / 1.07 |
+| all | 0.477 / 0.451 (**-5%**) | | 0.72 / 1.41 (**+95%**) | | 51.2 / 51.2 |
+
+The plates go as fast on both grids, to the digit. What they have not yet
+moved is a tile of their grid's worth, whatever the grid: 0.72 of the map's
+tiles on the map and 1.41 on a half-size history, every epoch. The floor a
+parting opens comes 5% short over the history, 11% in the first epoch and
+9-11% in the slow late epochs, where a plate's step is a larger share of
+what it travels. That is the first move's missing floor of the step before,
+and the rifts and islands short throughout.
+
+The move is right in taking many steps an epoch: it moves every plate a tile
+and settles, over and over, until the travel is used. What makes the grid's
+size matter is that a step is a tile of the grid, and what is below one is
+held back. The turn does not: it is read backwards once an epoch and each
+tile keeps how far its crust stands off it (`cr.off`), so a slow turn still
+goes round.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: the boundary is read alike; the first move changes it
 
 **What this is.** Whether a half-size history reads the same boundary
