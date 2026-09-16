@@ -2,7 +2,9 @@ package terra
 
 import (
 	"math"
+	"os"
 	"sort"
+	"strconv"
 )
 
 // A history runs on a grid of its own. Today that grid is the map itself:
@@ -39,8 +41,18 @@ import (
 
 // historyShrink is how many map tiles a side one history tile is. One is the
 // map itself. It is a variable so that the tests can run a history on a grid
-// of another size; nothing else sets it.
-var historyShrink = 1
+// of another size, and TERRA_HISTORY_SHRINK sets it for an experiment - a
+// cmd/zarr store of a world on a coarser history to diff against one on the
+// map. It is read once, when the package is initialised; nothing else sets it,
+// and a world made under it is not the world its seed and terms make.
+var historyShrink = shrinkFromEnv()
+
+func shrinkFromEnv() int {
+	if n, err := strconv.Atoi(os.Getenv("TERRA_HISTORY_SHRINK")); err == nil && n > 1 {
+		return n
+	}
+	return 1
+}
 
 // historyGround is the grid a history runs on for the map g: g itself, or a
 // grid historyShrink times coarser with an air of its own.

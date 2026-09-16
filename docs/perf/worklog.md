@@ -6,6 +6,39 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: the collision belts spread on a coarse history
+
+**What this is.** The first use of main's `cmd/zarr -stages` and `zarrdiff
+-by` on the schist left over, on `claude/history-km` after merging main
+(d1856d3). `TERRA_HISTORY_SHRINK=n`, read once at start-up, runs a history
+on a grid n times coarser than the map, so that `cmd/zarr` can write a world
+on one; nothing else changes and no world moves.
+
+**What it found.** The book's `meeting` - the kind of meeting that raised
+each tile most - counted in the ground stage's store of each world, seed 1:
+
+| world, history grid | a belt, history tiles | collision | arc | islands | rift | no meeting |
+|---|---:|---:|---:|---:|---:|---:|
+| small globe, 256x128 | 5.2 | 2 079 | 3 786 | 3 098 | 10 420 | 13 309 |
+| small globe, 64x32 | 1.3 | **4 592** | 3 024 | 2 384 | 10 544 | 12 144 |
+| globe, 1024x512 | 14.7 | 24 426 | 70 586 | 74 957 | 171 649 | 181 664 |
+| globe, 512x256 | 7.3 | 26 232 | 82 388 | 62 100 | 147 864 | 204 500 |
+| globe, 256x128 | 3.7 | **40 400** | 75 088 | 47 632 | 161 264 | 198 544 |
+
+(`zarrdiff -only book/meeting -by book/meeting -by-side b`; a belt's
+reach is `beltOn` in the map's tiles over the coarseness.) Where a belt is
+a few history tiles wide the ground a collision raises most spreads: by
+65% on the globe at 3.7 tiles and 120% on the small globe at 1.3, and by 7%
+on the globe at 7.3, inside one seed's noise. The seam is a whole tile of
+the grid on either side of the line between the plates, and a belt's reach
+is cut at whole tiles of it, so a belt resolved by a handful of tiles is as
+wide as those tiles and not as its reach. The schist is the crushing in
+that ground. This is a floor on how coarse a history can be for the belts it
+raises, rather than a count still made per tile; the arcs and islands lose
+ground to it.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: the rock decided on the map, and the band share made exact
 
 **What this is.** Two changes toward a coarser history making the same
