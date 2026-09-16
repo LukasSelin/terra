@@ -6,6 +6,49 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: the history's tiles counted against the planet
+
+**What this is.** Step 2 of the history grid, on `claude/history-km` from
+main at 91daf2d. No world moves: `TERRA_DIGEST=check` passes and the short
+tier passes.
+
+**What changed.** A history grid remembers the Span of the map it is the
+planet of (`Grid.planet`), and `historygrid.go` reads the history's counts
+through it: `planetSpan` for the plate and hotspot counts, `coarseness`
+for how many map tiles a history tile is, `inTiles` for a length counted in
+map tiles (never under one tile), `passes` for a softening's passes (over
+the coarseness squared). Through them: `plateTotal`, `driftScale` (and so
+`deepSpan`, which grows with the coarseness), the molten era's cells, the
+crust's fray, the bow's octaves, the belts' grain, `seamLeast`, `axisWidth`,
+`foldWave`, `marginRamp`, `smoothing` in `soften` and `upliftOf`, the
+hotspot count. On the map every one is the number it was to the bit.
+
+**What it measured** (`TERRA_PLANET=1 go test -run TestAPlanetOnCoarserHistories`,
+mean ± spread over seeds, small globes 1-8 and globes 1-2; the machine was
+not quiet for the globes, so read their seconds as relative):
+
+| world, history grid | s | plates | land | ocean crust | belts | rain mm | forest | granite | schist | basalt | limestone | shale |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| small, 256x128 | 4.1 | 16 | 0.38±0.05 | 0.53±0.05 | 0.28±0.03 | 648±55 | 0.21 | 0.42 | 0.11 | 0.08 | 0.19 | 0.16 |
+| small, 128x64 | 2.6 | 16 | 0.36±0.06 | 0.55±0.07 | 0.31±0.03 | 703±58 | 0.22 | 0.36 | 0.19 | 0.11 | 0.15 | 0.16 |
+| small, 64x32 | 1.5 | 16.1 | 0.41±0.03 | 0.44±0.05 | 0.32±0.04 | 679±52 | 0.21 | 0.25 | 0.32 | 0.11 | 0.11 | 0.17 |
+| globe, 1024x512 | 69 | 29.5 | 0.45±0.05 | 0.48±0.05 | 0.31±0.02 | 671±130 | 0.20 | 0.36 | 0.06 | 0.02 | 0.25 | 0.24 |
+| globe, 512x256 | 38 | 29.5 | 0.39±0.06 | 0.58±0.06 | 0.30±0.01 | 837±140 | 0.23 | 0.34 | 0.10 | 0.02 | 0.24 | 0.22 |
+| globe, 256x128 | 23 | 31 | 0.40±0.03 | 0.54±0.03 | 0.29±0.00 | 835±45 | 0.23 | 0.31 | 0.14 | 0.05 | 0.20 | 0.23 |
+
+What holds: the plate count (the quarter-size globe had 31 against 27
+before this step), the land share, the belts, the forest, the shale and the
+sandstone, within the spread between seeds. What does not: **the rock**.
+Schist doubles at half size and doubles again at a quarter on both worlds,
+at granite's and limestone's expense, and basalt rises. Schist is ground
+buried and squeezed; something that decides how deep a tile is buried or
+how much a meeting crushes is still counted per tile. The globe's rain at
+half size (837 against 671) is inside two seeds' spread and wants more
+seeds before it is believed. That is the next thing step 2 finds before a
+history size is chosen.
+
+---
+
 ## 2026-09-16 - Phase 3, step 1: the history on a grid of its own
 
 **What this is.** The first step of the history grid (phase 3 of

@@ -256,7 +256,7 @@ const upliftMemory = 2.5 * myr
 // softened as the heights are, so that it lies where they do. See smoothing.
 func (g *Grid) upliftOf(cr *crust) []float64 {
 	u := append([]float64(nil), cr.rise...)
-	for k := 0; k < smoothing; k++ {
+	for k := 0; k < g.passes(smoothing); k++ {
 		u = g.spread(u)
 	}
 	return u

@@ -963,7 +963,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	g.base, g.deep = -1, 0
 	g.keepPlates(plates)
 	g.settleRock(book, cr.ocean)
-	for k := 0; k < smoothing; k++ {
+	for k := 0; k < g.passes(smoothing); k++ {
 		g.soften()
 	}
 	return d
@@ -1019,7 +1019,7 @@ func (w *Land) molten(g *Grid) {
 	for c := 0; c < moltenChurns; c++ {
 		// Fine cells rather than broad swells, and finer as the churns go on:
 		// convection at this stage is small and furious.
-		cell := w.lattice(g, math.Max(4, float64(g.Span())/float64(2+2*c)))
+		cell := w.lattice(g, g.inTiles(math.Max(4, float64(g.planetSpan())/float64(2+2*c))))
 		for i := range h {
 			h[i] = moltenMemory*h[i] + (1-moltenMemory)*cell[i]
 		}
@@ -1217,7 +1217,7 @@ func spacing(g *Grid, mids int) float64 {
 
 // plateTotal is how many plates a world first breaks into. See plateCount.
 func plateTotal(g *Grid) int {
-	return min(plateMost, max(3, plateCount*g.Span()/plateSpan))
+	return min(plateMost, max(3, plateCount*g.planetSpan()/plateSpan))
 }
 
 // majorCount is how many of a world's first plates are great ones.
@@ -1362,7 +1362,7 @@ const floodStep = 0.5
 func (w *Land) flood(g *Grid, reach float64) *flooding {
 	coarse := w.lattice(g, roughGrain*reach)
 	fine := w.lattice(g, roughGrain*reach/3)
-	fray := w.lattice(g, math.Max(4, roughGrain*reach/9))
+	fray := w.lattice(g, g.inTiles(math.Max(4, roughGrain*reach/9*g.coarseness())))
 	fl := &flooding{
 		cost: make([]float32, len(g.Tiles)),
 		dist: make([]float32, len(g.Tiles)),
@@ -1396,7 +1396,7 @@ func (w *Land) bow(g *Grid) []float64 {
 	// coast a coast.
 	out := make([]float64, len(g.Tiles))
 	amp, total := 1.0, 0.0
-	for span := math.Min(float64(g.Span())/2, bowSpan); span >= bowLeast; span, amp = span/2, amp/2 {
+	for span := math.Min(float64(g.Span())/2, bowSpan/g.coarseness()); span >= bowLeast/g.coarseness(); span, amp = span/2, amp/2 {
 		l := w.lattice(g, span)
 		for i := range out {
 			out[i] += amp * (l[i] - 0.5)
@@ -1416,9 +1416,9 @@ func (w *Land) bow(g *Grid) []float64 {
 // in the same places - which is what an inherited weakness in the crust
 // actually does.
 func (w *Land) grain(g *Grid) []float64 {
-	coarse := w.lattice(g, beltGrain)
-	fine := w.lattice(g, beltGrain/3)
-	spur := w.lattice(g, beltGrain/9)
+	coarse := w.lattice(g, g.inTiles(beltGrain))
+	fine := w.lattice(g, g.inTiles(beltGrain/3))
+	spur := w.lattice(g, g.inTiles(beltGrain/9))
 	out := make([]float64, len(g.Tiles))
 	for i := range out {
 		v := (coarse[i] - 0.5) + 0.5*(fine[i]-0.5) + 0.10*(spur[i]-0.5)
@@ -1460,7 +1460,10 @@ func slow(plates []Plate, before, through float64) {
 // speeds.
 func driftScale(g *Grid) float64 {
 	quoted := math.Sqrt(float64(DefaultWidth*DefaultHeight) / plateCount)
-	return math.Max(1, spacing(g, plateTotal(g))/quoted)
+	// Read at the planet's scale and then in g's tiles, so that a history
+	// grid coarser than the map moves its plates as far over the planet.
+	c := g.coarseness()
+	return math.Max(1, spacing(g, plateTotal(g))*c/quoted) / c
 }
 
 // crust is what the plates carry about with them from epoch to epoch beside
@@ -2415,7 +2418,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		k := g.Tiles[i].Plate
 		rise[i] = shift[k] + bowPull*settling*(bow[i]-(g.Height[i]-mean[k]))
 	}
-	for k := 0; k < marginRamp; k++ {
+	for k := 0; k < g.passes(marginRamp); k++ {
 		rise = g.spread(rise)
 	}
 
@@ -2459,7 +2462,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				// from crest to crest, while the ground over them rises as it
 				// would have anyway. Deeper beds are folded as much as shallow
 				// ones - it is the pile that buckles.
-				fold := foldShare * math.Abs(by) * math.Sin(2*math.Pi*s.away/foldWave)
+				fold := foldShare * math.Abs(by) * math.Sin(2*math.Pi*s.away/g.inTiles(foldWave))
 				for k := 1; k < int(col.n); k++ {
 					col.top[k] += float32(fold)
 				}
@@ -2486,10 +2489,10 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// each other for the whole age - had no schist on it at all. It is as
 			// much crushing as the arc's crest takes, since it is fed by the
 			// same floor going down.
-			if s.makes == arc && s.away <= math.Max(0, axisOf(arc, gap, grain[i])-axisWidth) {
+			if s.makes == arc && s.away <= math.Max(0, axisOf(arc, gap, grain[i])-g.inTiles(axisWidth)) {
 				book[i].crush += math.Abs(s.lift*grain[i]) / 3
 			}
-			if math.Abs(s.away-axisOf(s.makes, gap, grain[i])) <= axisWidth {
+			if math.Abs(s.away-axisOf(s.makes, gap, grain[i])) <= g.inTiles(axisWidth) {
 				switch s.makes {
 				case crushed:
 					book[i].crush += math.Abs(by)
@@ -2880,19 +2883,19 @@ func reachOf(m made, gap, belt float64) float64 {
 // beltOn is how far from a seam, in tiles, a meeting's works reach on this
 // world: beltReach at its deep span, and never under seamLeast.
 func beltOn(g *Grid) float64 {
-	return math.Max(seamLeast, tilesAcross(beltReach, deepSpan(g)))
+	return math.Max(g.inTiles(seamLeast), tilesAcross(beltReach, deepSpan(g)))
 }
 
 // hotspotOn is how far, in tiles, a hotspot's works reach on this world.
 func hotspotOn(g *Grid) float64 {
-	return math.Max(seamLeast, tilesAcross(hotspotReach, deepSpan(g)))
+	return math.Max(g.inTiles(seamLeast), tilesAcross(hotspotReach, deepSpan(g)))
 }
 
 // arcGapOn is how far behind the trench this world's arcs stand: the quoted
 // distance, or a quarter of the way between two plate middles where that is
 // less, and never under seamLeast. See arcGapReach.
 func arcGapOn(g *Grid, mids int) float64 {
-	gap := math.Max(seamLeast, tilesAcross(arcGapReach, deepSpan(g)))
+	gap := math.Max(g.inTiles(seamLeast), tilesAcross(arcGapReach, deepSpan(g)))
 	return math.Min(gap, spacing(g, mids)/4)
 }
 
@@ -3072,7 +3075,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 		// times as wide has a dozen times as many. Left at two, a globe had
 		// two volcanic provinces in half a million tiles and its plate
 		// interiors were ground that nothing had ever happened to.
-		g.hot = make([]geom.Pos, max(hotspots, hotspots*g.Span()/hotspotSpan))
+		g.hot = make([]geom.Pos, max(hotspots, hotspots*g.planetSpan()/hotspotSpan))
 		for i := range g.hot {
 			g.hot[i] = geom.Pos{X: w.RNG.IntN(g.W), Y: w.RNG.IntN(g.H)}
 		}

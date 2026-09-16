@@ -21,10 +21,18 @@ import "math"
 //   - the water, the weather and the lakes do not cross: the map reads them
 //     afresh on its own ground, in settleHistory's drain.
 //
-// What does not cross yet is anything the history knows only in tiles of its
-// own: the plate count, the reach of a seam, the width of a margin are still
-// counted in tiles, so a history grid of another size is a planet of another
-// make and not the same planet more coarsely. That is step 2 of phase 3.
+// The planet is the map's: how many plates it breaks into, how many hotspots
+// it has, how far a plate goes in an epoch and so how many kilometres a tile
+// is while the history runs (deepSpan) all follow from the map's size, as they
+// did when the history ran on the map. A history grid is that planet read
+// coarser, and whatever the history counts in tiles - the grain of the crust
+// and of the ranges, the swells the plates ride in, the fewest tiles a belt is
+// drawn over, the fold's wave, the passes that soften a margin - is counted in
+// the map's tiles and read in the history grid's through coarseness, inTiles
+// and passes. On the map each of those is the number it always was, to the
+// bit. What cannot be the same on a coarser grid is the chance: a draw a tile
+// is a different stream over fewer tiles, so a coarser history is the same
+// planet in its measures and not in its bits.
 
 // historyShrink is how many map tiles a side one history tile is. One is the
 // map itself. It is a variable so that the tests can run a history on a grid
@@ -40,6 +48,7 @@ func (w *Land) historyGround(g *Grid, cfg Terms) *Grid {
 	}
 	h := NewGrid(hw, hh)
 	h.Wrap = g.Wrap
+	h.planet = g.Span()
 	// The air reads the rows as latitudes, so it is the climate of a map as
 	// many rows high as the history's grid.
 	h.air = NewClimateOn(Terms{Width: hw, Height: hh, Wrap: cfg.Wrap}).airFor(h, cfg.Wetness)
@@ -135,6 +144,43 @@ func handDown(from, to *Grid, d *deepStage) *deepStage {
 		}
 	}
 	return out
+}
+
+// planetSpan is the Span of the planet g's history is of: the map's.
+func (g *Grid) planetSpan() int {
+	if g.planet > 0 {
+		return g.planet
+	}
+	return g.Span()
+}
+
+// coarseness is how many of the map's tiles one of g's is across: one on the
+// map, and exactly one, so that a count read through it is the count.
+func (g *Grid) coarseness() float64 {
+	if g.planet <= 0 {
+		return 1
+	}
+	return float64(g.planet) / float64(g.Span())
+}
+
+// inTiles is a length counted in the map's tiles, read in g's, and never less
+// than one of them: nothing is drawn finer than a tile.
+func (g *Grid) inTiles(mapTiles float64) float64 {
+	if g.planet <= 0 {
+		return mapTiles
+	}
+	return math.Max(1, mapTiles/g.coarseness())
+}
+
+// passes is how many passes of the nine-tile spread on g soften as far as n
+// passes do on the map: a spread reaches as the root of its passes, so a grid
+// c times coarser needs n over c squared.
+func (g *Grid) passes(n int) int {
+	if g.planet <= 0 {
+		return n
+	}
+	c := g.coarseness()
+	return int(math.Round(float64(n) / (c * c)))
 }
 
 func clampInt(v, lo, hi int) int { return min(hi, max(lo, v)) }
