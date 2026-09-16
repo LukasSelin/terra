@@ -79,6 +79,40 @@ tile. Nothing here runs while a world is made.
 
 ---
 
+## 2026-09-16 - A clone reads as its original
+
+**What this is.** A fix to `Grid.Clone`, on `claude/clone-day-range`. Clone
+dropped `dayRange`, so `pet` on a clone left out the day's temperature range.
+The soil climate's wetness read differently too, and laying the soil state
+again on a clone of the 1024x512 globe (seed 1) gave different lime, salt
+and leaching on 1-8 % of tiles. With `dayRange` copied they match bit for bit.
+
+Checking every `Grid` field against Clone turned up more that it dropped:
+- `floorAge`, shared now as `abyss` and `uplift` are.
+- `bankLoad` and `exported`, so the next Erode carries the bank load on.
+- The woods readings (`steepAt`, `steepLine`, `woodsLine`, `woodsRead`,
+  `twiMean`, `holds`). A clone used to take these again from the ground as
+  it stands.
+- `Active` and each chunk's wake state (`Trodden`, `Trod`, `Grown`,
+  `Weathered`), which `layChunks` used to reset.
+- `waters`, `welds`, `hot`, `deep` and `planet`.
+
+Clone still leaves some fields out on purpose, and its comment now lists
+them: the scratch (with a history's `seam` and `seamQueue`), `aired`, and
+what a clone takes again from its own ground (patches, lenders, regions,
+landmarks, router). `islanded` is left out too.
+`TestACloneReadsAsItsOriginal` checks that `pet`, `Runoff`, `YearAt`, `SoilAt`,
+the soil climate and `FloorAge` match on the valley and on small globe 1. The
+small globe is skipped under `-short`. Without the `dayRange` copy, 9999 of
+the small globe's 32768 tiles read differently.
+
+**Checked.** World making doesn't use Clone. `TERRA_DIGEST=check` passes.
+`go test -short` fails only `TestAHistoryLeavesItsBedsInLayers`, as main
+does. Timing and the heap budget weren't taken, because nothing that makes a
+world changed.
+
+---
+
 ## 2026-09-16 - The pass clock and the memory probe leave the root package
 
 **What this is.** The fourth move of splitting the root package, on
