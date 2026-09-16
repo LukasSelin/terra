@@ -6,6 +6,60 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - zarrdiff: where and by how much two worlds differ
+
+**What this is.** On `claude/zarrdiff`: `cmd/zarr/zarrdiff`, a command in
+the `cmd/zarr` module that compares two stores `cmd/zarr` wrote. The digest
+says whether a change moved a world; this says which fields moved, over how
+much of the map, by how much, and where, as evidence to set beside the
+yardsticks. Recipe and output in `cmd/zarr/zarrdiff/README.md`. Nothing
+outside `cmd/zarr` changed besides this entry, and nothing in `zarr/`,
+`main.go` or `export.go`: every world, the digest and the budget are main's,
+and `perf.sh` and the yardsticks were not run.
+
+**What it does.** Walks both directory stores for `zarr.json` (the store
+interface cannot list); lists the arrays and groups in one alone; compares
+group attributes; for each array in both, shape, type, attributes, then
+elements: count changed with NaN equal to NaN, max and mean `|a-b|`, share
+of tiles changed (beds folded into their tile), the bounding box in y/x,
+and for arrays with a legend the commonest code changes named from each
+side's legend. Text by share of tiles changed, `-json`, `-png dir`. Exit 0
+the same, 1 different, 2 error.
+
+**Demonstrated.** One run, Ryzen 9 3900X, 24 threads, other sessions on
+the machine. Three globes (`-preset globe`, 1024 by 512, 67 arrays, 41 MiB
+each) exported from this branch, whose world code is main's (3973917):
+
+| | exit | wall | peak working set |
+|---|---|---|---|
+| seed 1 against seed 1, made and written twice | 0 | 1.3 s | ~120 MiB |
+| seed 1 against seed 2 | 1 | 0.9 s | ~130 MiB |
+
+Seed 1 made twice is the same store in every element, a second check,
+from outside the package, of what the digest holds. Seed 2 moves 60 of 67
+arrays: the climate means and rain on every tile (`climate/mean` max 41 °C,
+mean 19 °C), `ground/height` on 96 % (mean 2 927 m), `tile/terrain` on 58 %
+(commonest: 76 755 water to open, 55 583 ice to open), `features/lake` on
+2 %, and all 15 columns of `features/table` not compared, as the tables are
+28 576 and 27 820 features long. A seed is the loudest change there is; an
+algorithm change is expected to light a few arrays over part of the map.
+
+**Memory.** Arrays are read in blocks of whole chunks: one chunk high and as
+wide as `-budget` (2^20 elements) allows, one array a processor, so the most
+held is about 2 x 2^20 x 8 B x 24, some 400 MiB, however large the world;
+the two globes whole would be several hundred MiB. Not run on two `-max`
+worlds, which take this machine's memory to make.
+
+**Held.** `cd cmd/zarr && go test -short ./...`: the stores written with
+the zarr package (identical; one element and one code changed, at a budget
+of one element and of 2^20; NaN fills against numbers; a shape mismatch;
+an array in one store alone; attributes; arguments that cannot be
+compared), and `TestZarrdiffSeesTheSameWorldAsTheSame`, which builds the
+command, exports an ancient world twice with `export` and another seed
+once, and expects exit 0 and 1.
+
+---
+
 ## 2026-09-16 - The suite's histories kept between runs
 
 **What this is.** The yardsticks' share of the history file, on
