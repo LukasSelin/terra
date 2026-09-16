@@ -6,6 +6,30 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/overview -serve: the options on a form
+
+**What this is.** The second step of the web page, on
+`claude/world-generator-web-ui-c36c93`. The home page is now a form of
+`cmd/overview`'s options - preset, seed (with a random one a click away),
+width, height, epochs, sea share, water, day, scale and wrap - filled in
+from the flags the server was started with. An empty field is the
+preset's own value, shown greyed, as a flag left off is. What the terms
+would refuse (a globe not a whole number of chunks round, a sea share
+past 1, a picture over 16384 pixels a side, a world that will not fit in
+memory) comes back as 422 with the reason above the form as it was
+filled in, and nothing is made. Each run keeps `settings.json`; the list
+of runs says what each was made from and links "tune from this", which
+fills the form in with it. `-max` is not on the form. No file of the
+root package changed, so the digest, the budget and the yardsticks are
+what main's are and were not re-run.
+
+**What it measured.** Nothing about world creation. `go test -short
+./cmd/overview` makes a 32x24 world through the form, turns away six
+forms that cannot be made, and reads options back from the fields they
+wrote, in under two seconds.
+
+---
+
 ## 2026-09-16 - cmd/overview -serve: a page with a button that makes a world
 
 **What this is.** The first step toward making worlds from a browser, on

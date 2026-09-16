@@ -12,11 +12,12 @@
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
 //
-//	go run ./cmd/overview -serve :8080         a page with a button that makes one
+//	go run ./cmd/overview -serve :8080         a page with a form that makes one
 //
-// With -serve it makes no world until asked: each press of the button makes
-// the world the other flags describe into its own directory under -runs, and
-// the browser is sent to its page. See serve.go.
+// With -serve it makes no world until asked: the page's form holds the
+// options above, filled in with the flags given; each press of its button
+// makes that world into its own directory under -runs, and the browser is
+// sent to its page. See serve.go.
 package main
 
 import (
