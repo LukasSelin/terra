@@ -405,6 +405,21 @@ history size is chosen.
 
 ---
 
+## 2026-09-16 - zarr/ leaves for github.com/LukasSelin/zarr
+
+**What this is.** `zarr/` moved to its own repository,
+[LukasSelin/zarr](https://github.com/LukasSelin/zarr), with its history
+(`git subtree split`), and is tagged `v0.1.0`. `cmd/zarr` now requires
+`github.com/LukasSelin/zarr v0.1.0` in place of the `../../zarr` replace.
+Nothing in the root package imported it, so no world moves: no digest,
+budget or yardstick run is owed.
+
+**Checked.** `go test -short ./...` in the new repository; `go vet ./...` and
+`go test -short ./...` in `cmd/zarr` against the published tag. Entries
+below that name `zarr/` mean that module, now in its own repository.
+
+---
+
 ## 2026-09-16 - What cmd/zarr's export holds beside the world
 
 **What this is.** `cmd/zarr` (merged 6ede026) had only been timed, on the
