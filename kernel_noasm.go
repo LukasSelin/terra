@@ -20,3 +20,6 @@ func axpy(y, x []float64, a float64)      { axpyScalar(y, x, a) }
 func lerp(dst, a, b []float64, t float64) { lerpScalar(dst, a, b, t) }
 func clamp(v []float64, lo, hi float64)   { clampScalar(v, lo, hi) }
 func sumTree(v []float64) float64         { return sumTreeScalar(v) }
+func stencil5(dst, up, row, down []float64, c, s float64) {
+	stencil5Scalar(dst, up, row, down, c, s)
+}

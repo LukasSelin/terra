@@ -167,6 +167,12 @@ func BenchmarkKernel(b *testing.B) {
 		}
 		_ = total
 	})
+	b.Run("stencil5", func(b *testing.B) {
+		y := make([]float64, n-2)
+		for b.Loop() {
+			stencil5(y, x[:n-2], x, x[2:], 0.5, 0.125)
+		}
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -266,6 +272,21 @@ func FuzzSumTree(f *testing.F) {
 			v := run(rng, n)
 			got, want := sumTree(v), sumTreeScalar(v)
 			sameBits(t, "sumTree", n, []float64{got}, []float64{want})
+		}
+	})
+}
+
+func FuzzStencil5(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 8))
+		for _, n := range lengths(rng) {
+			c, s := draw(rng), draw(rng)
+			up, row, down := run(rng, n+rng.IntN(3)), run(rng, n+2+rng.IntN(3)), run(rng, n+rng.IntN(3))
+			got, want := make([]float64, n), make([]float64, n)
+			stencil5(got, up, row, down, c, s)
+			stencil5Scalar(want, up, row, down, c, s)
+			sameBits(t, "stencil5", n, got, want)
 		}
 	})
 }

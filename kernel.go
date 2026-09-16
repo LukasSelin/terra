@@ -147,3 +147,22 @@ func sumTail(s [lanes]float64, tail []float64) float64 {
 	}
 	return total
 }
+
+// stencil5Scalar is a five-point stencil over a row, reading old values into
+// a new slice: for each entry, c times the entry itself and s times the sum
+// of its four neighbours, west, east, north and south. row carries a halo -
+// it is two longer than dst, the entry west of the first and east of the
+// last - so that a row of a map can be done without asking about its ends,
+// and up and down are the rows above and below, as long as dst. The
+// neighbours are summed as (west + east) + (up + down), then scaled, then
+// added to the scaled centre, each operation rounded, on both paths. It
+// reads old values only, so a map of rows can be done in any order and on
+// any goroutine; it is not a sweep.
+func stencil5Scalar(dst, up, row, down []float64, c, s float64) {
+	up, down, row = up[:len(dst)], down[:len(dst)], row[:len(dst)+2]
+	for i := range dst {
+		h := float64(row[i] + row[i+2])
+		v := float64(up[i] + down[i])
+		dst[i] = float64(float64(c*row[i+1]) + float64(s*float64(h+v)))
+	}
+}

@@ -226,3 +226,20 @@ func sumTree(v []float64) float64 {
 	archsimd.ClearAVXUpperBits()
 	return sumTail(s, v[n:])
 }
+
+func stencil5(dst, up, row, down []float64, c, s float64) {
+	if !vector {
+		stencil5Scalar(dst, up, row, down, c, s)
+		return
+	}
+	up, down, row = up[:len(dst)], down[:len(dst)], row[:len(dst)+2]
+	n := whole(len(dst))
+	cv, sv := archsimd.BroadcastFloat64x4(c), archsimd.BroadcastFloat64x4(s)
+	for j := 0; j < n; j += lanes {
+		h := archsimd.LoadFloat64x4(row[j : j+lanes]).Add(archsimd.LoadFloat64x4(row[j+2 : j+2+lanes]))
+		v := archsimd.LoadFloat64x4(up[j : j+lanes]).Add(archsimd.LoadFloat64x4(down[j : j+lanes]))
+		cv.Mul(archsimd.LoadFloat64x4(row[j+1 : j+1+lanes])).Add(sv.Mul(h.Add(v))).Store(dst[j : j+lanes])
+	}
+	archsimd.ClearAVXUpperBits()
+	stencil5Scalar(dst[n:], up[n:], row[n:], down[n:], c, s)
+}
