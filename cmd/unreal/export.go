@@ -63,6 +63,9 @@ func export(land *terra.Land, opt options) (*manifest, error) {
 	if err := x.heightmaps(); err != nil {
 		return nil, err
 	}
+	if err := x.weightmaps(); err != nil {
+		return nil, err
+	}
 	if err := x.m.write(filepath.Join(opt.Out, manifestName)); err != nil {
 		return nil, err
 	}
@@ -79,6 +82,23 @@ func (x *exporter) heightmaps() error {
 				return err
 			}
 			x.m.add(name, "heightmap", "", i, j, filepath.Join(x.opt.Out, name))
+		}
+	}
+	return nil
+}
+
+// weightmaps writes one 8-bit tile per layer per Landscape tile.
+func (x *exporter) weightmaps() error {
+	w := allWeights(x.g, x.opt.RiverFlow)
+	for k := 0; k < layerCount; k++ {
+		for j := 0; j < x.tile.NY; j++ {
+			for i := 0; i < x.tile.NX; i++ {
+				name := tileName(x.opt.Name, layerNames[k], i, j)
+				if err := x.writePNG(name, weightTile(x.g, w, x.tile, k, i, j)); err != nil {
+					return err
+				}
+				x.m.add(name, "weightmap", layerNames[k], i, j, filepath.Join(x.opt.Out, name))
+			}
 		}
 	}
 	return nil
