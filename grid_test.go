@@ -84,3 +84,24 @@ func TestTheMarketCannotBeRazed(t *testing.T) {
 		t.Fatal("the market was taken down")
 	}
 }
+
+// A tile read whole through the view is the tile and what the map keeps
+// beside it, and the view follows the map: it is a reading, not a copy.
+func TestTheTileViewReadsTheTileWhole(t *testing.T) {
+	g := NewGrid(8, 4)
+	p := geom.Pos{X: 3, Y: 2}
+	i := g.Index(p)
+	g.Height[i] = 12.5
+	g.Tiles[i].Terrain = Water
+	v := g.Tile(i)
+	if v.Height() != 12.5 || v.Terrain != Water || !v.Wet() || v.Index() != i {
+		t.Fatalf("the view of tile %d reads height %v, terrain %v, wet %v, index %d", i, v.Height(), v.Terrain, v.Wet(), v.Index())
+	}
+	if w := g.TileAt(p); w.Height() != 12.5 || w.Index() != i {
+		t.Fatalf("the view at %v reads height %v, index %d", p, w.Height(), w.Index())
+	}
+	g.Height[i] = 3
+	if v.Height() != 3 {
+		t.Fatalf("the view kept a copy: %v after the map went to 3", v.Height())
+	}
+}

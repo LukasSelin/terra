@@ -378,6 +378,32 @@ func (g *Grid) At(p geom.Pos) *Tile {
 	return &g.Tiles[g.Index(p)]
 }
 
+// TileView is one tile read whole, for a reader that asks by tile: what the
+// tile keeps and what the map keeps beside it, as Height is, behind one
+// name. It is what a game reads a tile through - g.Tile(i).Height() - so
+// that which fields sit in the Tile and which sit in a slice on the Grid
+// is the map-maker's business and moves without the game moving. It is
+// read-only: what is beside the map is written on the map, g.Height[i].
+// The tile's own fields and methods come through it as they are.
+type TileView struct {
+	*Tile
+	g *Grid
+	i int
+}
+
+// Tile is the tile at index i, read whole.
+func (g *Grid) Tile(i int) TileView { return TileView{&g.Tiles[i], g, i} }
+
+// TileAt is the tile at p, read whole. The caller must check In first.
+func (g *Grid) TileAt(p geom.Pos) TileView { return g.Tile(g.Index(p)) }
+
+// Index is which tile this is.
+func (v TileView) Index() int { return v.i }
+
+// Height is metres above the lowest ground on the map: Grid.Height at
+// this tile.
+func (v TileView) Height() float64 { return v.g.Height[v.i] }
+
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
 	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
