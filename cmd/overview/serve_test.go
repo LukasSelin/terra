@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/LukasSelin/terra"
 )
 
 // The button queues a world and sends the browser to the job's page, which
@@ -79,6 +81,8 @@ func TestTheFormTurnsAwayWhatCannotBeMade(t *testing.T) {
 		{url.Values{"sea": {"1.5"}}, "sea"},
 		{url.Values{"preset": {"globe"}, "w": {"100"}}, "multiple of"},
 		{url.Values{"w": {"4096"}, "scale": {"8"}}, "scale"},
+		{url.Values{"wetness": {"0"}}, "wetness"},
+		{url.Values{"woods": {"sometimes"}}, "woods"},
 	} {
 		res, err := srv.Client().PostForm(srv.URL+"/generate", c.form)
 		if err != nil {
@@ -100,7 +104,7 @@ func TestTheFormTurnsAwayWhatCannotBeMade(t *testing.T) {
 func TestTheFormReadsBackWhatItWrote(t *testing.T) {
 	for _, o := range []options{
 		{Seed: 1, Preset: "valley", Epochs: -1, Sea: -1, Water: -1, Day: 30},
-		{Seed: 1 << 63, Preset: "globe", W: 256, H: 128, Epochs: 4, Sea: 0.3, Water: 0, Wrap: true, Scale: 2, Day: 0},
+		{Seed: 1 << 63, Preset: "globe", W: 256, H: 128, Epochs: 4, Sea: 0.3, Water: 0, Wrap: true, Wetness: 1.5, Woods: "tuned", Growth: "climate", Glacial: true, Scale: 2, Day: 0},
 	} {
 		got, err := optionsFrom(o.values())
 		if err != nil || got != o {
@@ -334,5 +338,36 @@ func TestAJobThatFailsSaysWhy(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) > 0 {
 		t.Errorf("a failed job left %d runs", len(entries))
+	}
+}
+
+// The settings for the climate and the cover reach the world: a wetter one
+// rains more, and each lands on the terms of its name.
+func TestTheClimateSettingsReachTheWorld(t *testing.T) {
+	o := options{Seed: 5, Preset: "valley", W: 48, H: 32, Epochs: -1, Sea: -1, Water: -1, Day: 0}
+	wet := o
+	wet.Wetness, wet.Woods, wet.Growth, wet.Glacial = 2, "climate", "tuned", true
+	tm, err := wet.terms()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm.Wetness != 2 || tm.Woods != terra.ByClimate || tm.Growth != terra.Tuned || !tm.Glacial {
+		t.Errorf("the terms are %+v, want wetness 2, woods by climate, growth tuned, glacial", tm)
+	}
+	if bad := (options{Preset: "valley", Woods: "sometimes"}); func() error { _, err := bad.terms(); return err }() == nil {
+		t.Error("an unknown woods rule made terms")
+	}
+
+	rain := func(o options) float64 {
+		land, _, _, err := makeWorld(o, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return measure(land).LandRain
+	}
+	o.Glacial, wet.Glacial = false, false
+	wet.Woods, wet.Growth = "", ""
+	if dry, wetter := rain(o), rain(wet); !(wetter > 1.5*dry) {
+		t.Errorf("rain on land is %.0f mm at wetness 2 against %.0f mm at 1, want well over half again", wetter, dry)
 	}
 }

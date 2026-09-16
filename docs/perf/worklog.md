@@ -6,6 +6,30 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/overview: wetness, woods, growth and glacial, on the flags and the form
+
+**What this is.** The four terms `cmd/overview` could not set, on
+`claude/world-generator-web-ui-c36c93`: `-wetness` (rain against the real
+world's; 0 keeps the preset's), `-woods` and `-growth` (`tuned` or
+`climate`; empty is the map's own, climate where it wraps and the rules
+where it does not) and `-glacial`. The form has them under "Climate and
+cover": the empty rule shows which one the map would take, and the glacial
+box is off unless the map is drawn (epochs 0), which is the only map it
+cuts. They go into `settings.json`, the list of runs and "tune from this",
+and the map page's summary line names them where they are set. Runs from
+before read them as unset.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed. The command line's stdout and every png and `why.html` on
+the default valley are what they were byte for byte. A 48x32 valley at
+wetness 2 rains more than half again what it does at 1, which the test
+holds; `go test -short ./cmd/overview` runs in under four seconds.
+
+---
+
+
+---
+
 ## 2026-09-16 - A world into a Zarr v3 store: zarr/, sharding, cmd/zarr
 
 **What this is.** On `claude/docker-tree-resources-a9e433`: a way to keep a
