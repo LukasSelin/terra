@@ -6,6 +6,39 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - geom.Map and package tile leave the root package
+
+**What this is.** The first two moves of splitting the root package into
+sub-packages. On `claude/root-file-organization-d117ef`.
+
+- `globe.go` is now `geom.Map` (`geom/map.go`): `W`, `H`, `Wrap` and the
+  arithmetic on them, `In` included. `Grid` embeds one, so `g.Index` and
+  `g.W` read as before; a Grid made field by field names its map.
+- `kind.go`, `mark.go` and `claim.go`, `Tile` and `Terrain` from `grid.go`,
+  the rock kinds, their strength and chemistry from `bedrock.go`, the move
+  cost table from `move.go` and the soil-chemistry fields' accessors from
+  `pedogenesis.go` are now package `tile`. Every method on `Tile` had to go
+  with it, so the tables those methods read went too. `tile.go` in the root
+  keeps the old names as aliases, so `terra.Tile` and `terra.Forest` mean
+  what they meant.
+- Table lookups outside the package became method calls: `markCost[m]` is
+  `m.Cost()`, `moveCost[t]` is `t.Cost()`, `hardness[b]` is
+  `b.Hardness()`. `Terrain.Cost` keeps the range guard it already had, so
+  the router's step pays one predicted branch it did not before.
+
+**Checked.** `TERRA_DIGEST=check` passes on the base commit and after each
+move, with `TestMakingAWorldDoesNotDependOnTheGoroutines`.
+`TestWorldCreationBudget` passes without an update. `go vet ./...` and
+`go test -short ./...` pass. The yardsticks were not run: no world moved.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small.txt`
+passes: valley -4.2 %, ancient -2.6 %, globe256 -4.5 % a tile. Nothing
+here makes a world faster, and the baseline is older than work merged since
+(its bytes and allocations a run are 18-31 % higher than now), so this reads
+as no slower and nothing more.
+
+---
+
 ## 2026-09-16 - zarr/ leaves for github.com/LukasSelin/zarr
 
 **What this is.** `zarr/` moved to its own repository,

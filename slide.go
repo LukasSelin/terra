@@ -166,7 +166,7 @@ func (g *Grid) landslide(keep bool) {
 	// every edge of every tile the slides pass, and there are six rocks.
 	var stands [BedrockCount]float64
 	for b := range stands {
-		stands[b] = stand(hardness[b] * soft)
+		stands[b] = stand(Bedrock(b).Hardness() * soft)
 	}
 	for head := 0; head < len(queue); head++ {
 		// Take back the front of the queue now and then, so that it does not

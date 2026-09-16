@@ -1,4 +1,22 @@
-package terra
+package tile
+
+// Terrain is what a tile is made of.
+type Terrain uint8
+
+const (
+	Grass Terrain = iota
+	Forest
+	Water
+	Field
+	Rock // an outcrop: stone to cut, nothing to grow
+	Ice  // sea that never thaws: nothing to take, and walked over, not swum
+	Flat // mud the tide covers and leaves: see shore.go
+	Salt // a lake with no outlet, where the air takes all the water brings
+	Pan  // the dry floor of one: a crust of salt nothing grows on
+	// TerrainCount is how many kinds of ground there are. It sizes the
+	// tables that have to carry a row for each; see terrains.
+	TerrainCount
+)
 
 // What a kind of ground is, in one place.
 //
@@ -196,3 +214,52 @@ func Kinds(ts ...Terrain) KindSet {
 
 // Has reports whether t is in the set.
 func (s KindSet) Has(t Terrain) bool { return s&(1<<t) != 0 }
+
+// moveCost is the effort of entering a tile of each terrain, measured in
+// ticks. Grass is the unit. Ground that fights back costs more of both things
+// an agent has to spend: time, because a slow tile is several ticks of walking
+// instead of one, and body, because the exertion drains the physiological
+// tier in proportion. Terrain is therefore not decoration; it is a standing
+// tax on every plan that crosses it, and the map shapes where people settle,
+// what they walk to, and which side of the river they give up on.
+//
+// Water stays where it was, and the reason is worth recording. A settlement
+// grows on both banks, because the ground worth farming is the ground near
+// the river, so a quarter of its people were spending their lives wading. The
+// obvious fix was to make the water dearer. It was tried at 5, 7 and 9 and it
+// was the wrong fix: a river nobody can afford to cross is a river nobody
+// wears a ford in, and a ford nobody wears is a ford nobody bridges. Dearer
+// water cut the wading barely at all and cost up to a quarter of the
+// population. What answers a river is a bridge, and the cheapest water is
+// what gets one built.
+var moveCost = [TerrainCount]float64{
+	Grass:  1,
+	Field:  1.3,
+	Forest: 2.2,
+	Water:  3.5,
+	Rock:   1.8,
+	// Ice is flat and it is treacherous, and the two nearly cancel: a little
+	// dearer than open grass and cheaper than anything with a slope on it.
+	// It is not water's 3.5 because nobody is swimming - see Tile.Deep.
+	Ice: 1.4,
+	// A flat the tide has left is mud: dearer than grass or ice, cheaper than
+	// a wood. Covered, it is waded like water; see Grid.Covered.
+	Flat: 1.6,
+	// A salt lake is swum like any other water. A salt flat is level and
+	// firm, and costs what open grass does.
+	Salt: 3.5,
+	Pan:  1,
+}
+
+// Recovers reports whether ground of this kind puts something back on its
+// own when it is left alone, besides what grows on it by its age: the fish
+// in the water, the rest a worn field gets, the grass on open ground. See
+// Replenish, which is where the pace is; an outcrop is stone and does not
+// grow, and that is meant.
+func (k Terrain) Recovers() bool {
+	switch k {
+	case Water, Field, Grass:
+		return true
+	}
+	return false
+}

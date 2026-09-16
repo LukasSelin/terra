@@ -1,4 +1,4 @@
-package terra
+package tile
 
 // What a game has put on a tile.
 //
@@ -114,3 +114,25 @@ func (m Mark) Cost() float64 { return markCost[m] }
 // Drain is how hard on the body a tick of walking on this mark is, as a
 // share of what bare ground costs.
 func (m Mark) Drain() float64 { return markDrain[m] }
+
+// Settles reports whether ground carrying this mark is a place.
+func (m Mark) Settles() bool { return markSettles[m] }
+
+// Roofs reports whether this mark is something a body stands inside.
+func (m Mark) Roofs() bool { return markRoofs[m] }
+
+// Fixed reports whether this mark cannot be taken down.
+func (m Mark) Fixed() bool { return markFixed[m] }
+
+// alive is whether anything grows on each kind of ground under each mark. It
+// is the land's growth table read as one bit, because every tile on the map
+// is asked it on every tick: the land's SetGrowth writes it, and nothing else
+// should.
+var alive [MarkCount][TerrainCount]bool
+
+// SetAlive says whether anything grows on terrain t under mark m. It is
+// written by the land's SetGrowth, which keeps the rest of what grows.
+func SetAlive(m Mark, t Terrain, v bool) { alive[m][t] = v }
+
+// Alive reports whether anything grows on terrain t under mark m.
+func Alive(m Mark, t Terrain) bool { return alive[m][t] }

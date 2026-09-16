@@ -1,6 +1,10 @@
 package terra
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/LukasSelin/terra/tile"
+)
 
 // A growth registered is a growth the day's pass knows about. The pass keeps
 // tables of its own, laid out the way it wants them and read off the growth
@@ -16,7 +20,7 @@ func TestRegisteringAGrowthReachesTheDaysPass(t *testing.T) {
 	stock := func(g *Grid) []float64 { return g.Wild }
 	SetGrowth(blocking, Grass, []Growth{{Full: 100, Rate: 0.01, Stock: stock}})
 
-	if !alive[blocking][Grass] {
+	if !tile.Alive(blocking, Grass) {
 		t.Error("ground something was said to grow on carries nothing")
 	}
 	if ripe[blocking][Grass] != 100 {
@@ -38,7 +42,7 @@ func TestRegisteringAGrowthReachesTheDaysPass(t *testing.T) {
 
 	// And taking it away again takes it out of the pass.
 	SetGrowth(blocking, Grass, nil)
-	if alive[blocking][Grass] || ages[k] {
+	if tile.Alive(blocking, Grass) || ages[k] {
 		t.Error("ground nothing grows on still ages")
 	}
 	for _, e := range stocked {

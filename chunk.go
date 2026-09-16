@@ -87,7 +87,7 @@ func (c *Chunk) count(t *Tile, d int) {
 	c.Marks[t.Mark] += int32(d)
 	if t.Mark != None {
 		c.Built += d
-		if markSettles[t.Mark] {
+		if t.Mark.Settles() {
 			c.Places += d
 		}
 	}
@@ -101,7 +101,7 @@ func (g *Grid) Build(p geom.Pos, s Mark) {
 	i := g.Index(p)
 	t, c := &g.Tiles[i], &g.Chunks[g.ChunkOf(i)]
 	c.count(t, -1)
-	lent, deep, was := t.lends(), t.Deep(), tableCost(t)
+	lent, deep, was := lends(t), t.Deep(), tableCost(t)
 	t.Mark = s
 	g.Kinds[i] = kindOf(t)
 	c.count(t, 1)
@@ -136,12 +136,12 @@ func (g *Grid) Turn(p geom.Pos, tr Terrain) {
 }
 
 // Claim makes p somebody's, or nobody's when id is zero. Who the holder is
-// is not the land's business; see claim.go.
+// is not the land's business; see tile/claim.go.
 func (g *Grid) Claim(p geom.Pos, id Holder) {
 	i := g.Index(p)
 	t, c := &g.Tiles[i], &g.Chunks[g.ChunkOf(i)]
 	c.count(t, -1)
-	lent := t.lends()
+	lent := lends(t)
 	t.Owner = id
 	c.count(t, 1)
 	g.relend(i, lent)
@@ -150,7 +150,7 @@ func (g *Grid) Claim(p geom.Pos, id Holder) {
 // relend settles the neighbours' lender counts after tile i has changed,
 // given whether it lent before.
 func (g *Grid) relend(i int, lent bool) {
-	if now := g.Tiles[i].lends(); now != lent {
+	if now := lends(&g.Tiles[i]); now != lent {
 		if now {
 			g.lend(i, 1)
 		} else {
@@ -181,7 +181,7 @@ func (g *Grid) Recount() {
 	for i := range g.Tiles {
 		g.Chunks[g.ChunkOf(i)].Height += g.laidHeight(i) // the sea's, over the deep floor: see laidHeight
 		g.Chunks[g.ChunkOf(i)].count(&g.Tiles[i], 1)
-		if g.Tiles[i].lends() {
+		if lends(&g.Tiles[i]) {
 			g.lend(i, 1)
 		}
 	}
@@ -242,7 +242,7 @@ func (g *Grid) sum(of func(*Chunk) int) int {
 // lends reports whether a tile lends its wear to the tiles beside it: it
 // is neither open ground nor a road, so the errands in and out of it are
 // walked on the ground around it. See Draw.
-func (t *Tile) lends() bool { return !t.Pavable() && !markWay[t.Mark] }
+func lends(t *Tile) bool { return !t.Pavable() && !t.Mark.Way() }
 
 // lend adds d to the lender count of each of i's eight neighbours.
 func (g *Grid) lend(i int, d int8) {
