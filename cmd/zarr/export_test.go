@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"math"
+	"reflect"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/LukasSelin/terra"
@@ -31,15 +34,29 @@ func read[T zarr.Element](t *testing.T, s zarr.Store, path string) []T {
 	return v
 }
 
+// legend is what each code of a coded array means, read from its CF flags
+// with the underscores made spaces again.
 func legend(t *testing.T, s zarr.Store, path string) map[int]string {
 	t.Helper()
 	a, err := zarr.OpenArray(ctx, s, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var l map[int]string
-	if ok, err := a.Attribute("legend", &l); !ok || err != nil {
-		t.Fatalf("%s: no legend: %v", path, err)
+	var values []int
+	var meanings string
+	if ok, err := a.Attribute("flag_values", &values); !ok || err != nil {
+		t.Fatalf("%s: no flag_values: %v", path, err)
+	}
+	if ok, err := a.Attribute("flag_meanings", &meanings); !ok || err != nil {
+		t.Fatalf("%s: no flag_meanings: %v", path, err)
+	}
+	words := strings.Fields(meanings)
+	if len(words) != len(values) {
+		t.Fatalf("%s: %d flag values and %d meanings", path, len(values), len(words))
+	}
+	l := map[int]string{}
+	for i, v := range values {
+		l[v] = strings.ReplaceAll(words[i], "_", " ")
 	}
 	return l
 }
@@ -63,9 +80,13 @@ func TestAMadeWorldReadsBackAsItIs(t *testing.T) {
 		t.Fatal(err)
 	}
 	var seed uint64
+	var raw string
 	var terms terra.Terms
 	root.Attribute("seed", &seed)
-	root.Attribute("terms", &terms)
+	root.Attribute("terms", &raw)
+	if err := json.Unmarshal([]byte(raw), &terms); err != nil {
+		t.Error(err)
+	}
 	if seed != 1 || terms != land.Terms {
 		t.Errorf("seed %d, terms %+v", seed, terms)
 	}
@@ -191,5 +212,98 @@ func TestTheSameWorldWritesTheSameStore(t *testing.T) {
 		if !bytes.Equal(va, vb) {
 			t.Errorf("%s differs", k)
 		}
+	}
+}
+
+// Every type the world can give dry ground has a code in the one table, so
+// that a code means the same type in every world.
+func TestEveryKoppenTypeHasACode(t *testing.T) {
+	have := map[string]bool{}
+	for _, k := range koppenTypes {
+		if have[k] {
+			t.Errorf("%s is in the table twice", k)
+		}
+		have[k] = true
+	}
+	given := map[string]bool{}
+	for _, ice := range []bool{false, true} {
+		for hot := -10.0; hot <= 40; hot += 1 {
+			for cold := hot - 50; cold <= hot; cold += 1 {
+				for rain := 0.0; rain <= 4000; rain += 50 {
+					for warm := 0.0; warm <= 1; warm += 0.05 {
+						given[terra.KoppenOf((hot+cold)/2, cold, hot, rain, warm, ice)] = true
+					}
+				}
+			}
+		}
+	}
+	for k := range given {
+		if !have[k] {
+			t.Errorf("the world gives %s, which has no code", k)
+		}
+	}
+	if len(given) != len(koppenTypes) {
+		t.Logf("the sweep gave %d types of the table's %d", len(given), len(koppenTypes))
+	}
+}
+
+func TestAStoreHasCoordinatesAndConsolidatedMetadata(t *testing.T) {
+	land := terra.NewLand(1, terra.AncientTerms())
+	g := land.Grid
+	s := exported(t, land, small)
+	for _, grp := range []string{"ground", "tile", "layers", "climate", "strata", "book", "features"} {
+		y, x := read[float64](t, s, grp+"/y"), read[float64](t, s, grp+"/x")
+		if len(y) != g.H || len(x) != g.W || y[1] != terra.TileSpan || x[g.W-1] != float64(g.W-1)*terra.TileSpan {
+			t.Errorf("%s: y %d long, x %d long, y[1] %v", grp, len(y), len(x), y[1])
+		}
+	}
+	if bed := read[uint8](t, s, "strata/bed"); len(bed) != terra.BedsMax || bed[terra.BedsMax-1] != uint8(terra.BedsMax-1) {
+		t.Errorf("bed is %v", bed)
+	}
+	ids := read[int32](t, s, "features/table/feature")
+	if len(ids) != len(g.Features().All) || ids[0] != 1 || ids[len(ids)-1] != int32(len(ids)) {
+		t.Errorf("feature ids run %d to %d over %d", ids[0], ids[len(ids)-1], len(ids))
+	}
+
+	rock, count := read[uint8](t, s, "strata/rock"), read[uint8](t, s, "strata/count")
+	for i := range count {
+		for k := int(count[i]); k < terra.BedsMax; k++ {
+			if rock[i*terra.BedsMax+k] != noBed {
+				t.Fatalf("tile %d bed %d past its pile is rock %d", i, k, rock[i*terra.BedsMax+k])
+			}
+		}
+	}
+
+	b, err := s.Get(ctx, "zarr.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root struct {
+		Consolidated struct {
+			Kind     string                     `json:"kind"`
+			Metadata map[string]json.RawMessage `json:"metadata"`
+		} `json:"consolidated_metadata"`
+	}
+	if err := json.Unmarshal(b, &root); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range s.Keys() {
+		node, ok := strings.CutSuffix(k, "/zarr.json")
+		if !ok {
+			continue
+		}
+		own, _ := s.Get(ctx, k)
+		var a, c any
+		json.Unmarshal(own, &a)
+		json.Unmarshal(root.Consolidated.Metadata[node], &c)
+		if !reflect.DeepEqual(a, c) {
+			t.Errorf("%s: the consolidated metadata is not the node's", node)
+		}
+	}
+	if n := len(root.Consolidated.Metadata); root.Consolidated.Kind != "inline" || n == 0 {
+		t.Errorf("consolidated %q with %d nodes", root.Consolidated.Kind, n)
+	}
+	if _, err := zarr.OpenGroup(ctx, s, ""); err != nil {
+		t.Errorf("the consolidated root does not open: %v", err)
 	}
 }

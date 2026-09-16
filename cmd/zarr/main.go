@@ -10,7 +10,7 @@
 //
 // It is run from cmd/zarr, which is a module of its own (see go.mod), or from
 // the root as go run -C cmd/zarr . with -out given as a path from cmd/zarr.
-// What it writes is laid out in export.go.
+// What it writes is laid out in README.md and export.go.
 package main
 
 import (

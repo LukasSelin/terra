@@ -6,6 +6,79 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/zarr stores that xarray reads: coordinates, CF flags, stable Köppen codes
+
+**What this is.** On `claude/zarr-xarray`, off main at 3973917: the first
+time xarray was pointed at a store, and the fixes to `cmd/zarr` for what
+it found. Only `cmd/zarr` changed; `zarr/` and the root package did not, so
+every world, the digest and the budget are main's.
+
+**What xarray reported before.** xarray 2026.7.0, zarr-python 3.4.0,
+numpy 2.5.3, on the seed 1 globe (1024 by 512) and the default valley,
+both written by main's command:
+
+- No errors, and every array's values came back equal to zarr-python's.
+  The valley has no `book` group, which is right for a drawn map.
+- Every default `open_zarr` and `open_datatree` warned: *Failed to open
+  Zarr store with consolidated metadata* (RuntimeWarning).
+- No coordinates: `Dimensions without coordinates: y, x`, so no `.sel` by
+  place, and no tile size anywhere in the store.
+- `to_netcdf` of `tile` or `climate` failed: `Invalid value for attr
+  'legend'` (a JSON object). The whole datatree's failed with `Object
+  dtype dtype('O') has no native HDF5 equivalent`, and h5netcdf refuses a
+  bool attribute such as the root's `wrap`.
+- Misdecoded meaning, not bits: `strata/rock` and `strata/formed` held 0
+  past the bottom of a pile, which reads as granite laid in epoch 0 (70 %
+  of the globe's beds); `climate/koppen` numbered only the types present,
+  so code 9 was `Cfb` in the globe and nothing in the valley (whose
+  `Cfb` was 1); the legends of the other coded arrays stopped at the
+  largest code present.
+- xarray does not use a Zarr v3 `fill_value` as a mask unless told to,
+  so the only masking it would do is by a `_FillValue` attribute.
+
+**What changed.** `y`/`x` coordinate arrays (float64 metres of the tile
+centre, index times `terra.TileSpan`) in every group of the map, `bed` in
+strata and `feature` (the id) in the features table; `long_name` for
+`about` and UDUNITS spellings of units; `flag_values`/`flag_meanings`
+over every code the type has, instead of `legend` (dropped: a dict attribute
+cannot go to netCDF, and two tables of one thing can disagree); one fixed
+table of the 27 Köppen types `koppenCode` can give, checked by a sweep of
+`KoppenOf`, with an export error for a type not in it; `_FillValue` 255
+(and fill 255) on `strata/rock` and `strata/formed`; `scale_factor` on
+`leached`, `lime`, `salt` and `strata/sand`; the root's `terms` as JSON
+text, `wrap` as 0/1, and `tile_span`; and the root's metadata written
+again last with every node's inline under `consolidated_metadata`
+(`must_understand: false`), as zarr-python consolidates v3. Every array
+keeps the world's type. `cmd/zarr/README.md` documents the layout.
+
+**What xarray reports after.** On both stores, opening and loading every
+group with defaults raises no warning (also under `python -W error`), every
+array decodes to zarr-python's elements with its scale and mask applied,
+`.sel(x=, y=)` finds tiles by metres, `cf_xarray` sees the coded arrays as
+flag variables (`koppen.cf == "Cfb"` works), and the whole datatree writes
+to netCDF with h5netcdf. That write still warns once each for the four
+scaled integer arrays (no `_FillValue` to keep for NaN): they have no
+spare value, as 65535 and 255 are real shares.
+
+`TestXarrayReadsAStore` (skipped unless `ZARR_PYTHON` names a Python with
+xarray) writes a small made world and runs `testdata/read_xarray.py`; it
+fails when the strata mask is removed. `TestEveryKoppenTypeHasACode` and
+`TestAStoreHasCoordinatesAndConsolidatedMetadata` are Go-only.
+
+**What it costs.** The globe store is 83 arrays, 176 files and 41.4 MiB
+(was 67, 143 and 41.2 MiB), written in 1.26 s against 0.76 s, one run
+with other sessions on the machine: a reading, not a baseline.
+
+**Existing stores.** The layout change breaks readers of stores written
+before it, not the stores: Go and zarr-python still open them. What
+changed under a reader: `legend` is gone for `flag_values`/`flag_meanings`
+(and meanings use underscores), Köppen codes are renumbered, `terms` is
+a string and `wrap` a number, `about` is `long_name` on arrays, units are
+spelt differently, and `strata/rock`/`formed` past a pile are 255, not 0.
+Old stores have no coordinates; rewrite them to get them.
+
+---
+
 ## 2026-09-16 - The suite's histories kept between runs
 
 **What this is.** The yardsticks' share of the history file, on
