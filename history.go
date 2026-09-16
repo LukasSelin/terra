@@ -887,7 +887,7 @@ type record struct {
 // the drainage worked out, so that everything after it in Generate - the
 // woods, the outcrops, the soils, the market - reads the same kind of ground
 // it would have read from the picture.
-func (w *Land) history(g *Grid, epochs int, sea, water float64) {
+func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	defer phase("history")()
 	// The tiles are pieces of a planet until the history is over. See
 	// epochYears.
@@ -955,10 +955,10 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
-	var depths, shares, uplift []float64
+	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
-		depths, shares = g.floorDepths(cr, epochs)
-		uplift = g.upliftOf(cr)
+		d.depths, d.shares = g.floorDepths(cr, epochs)
+		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
 	g.keepPlates(plates)
@@ -966,14 +966,32 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	for k := 0; k < smoothing; k++ {
 		g.soften()
 	}
+	return d
+}
+
+// deepStage is what a history hands the map beside the grid it ran on: which
+// tiles are ocean crust, and, for a world given water, how deep the floor lies
+// by its age, how far each tile is from the continent's edge, and how fast the
+// rock is rising. See historygrid.go for how it crosses to a map of another
+// size.
+type deepStage struct {
+	ocean                  []bool
+	depths, shares, uplift []float64
+}
+
+// settleHistory lays a finished history on the map: its heights handed the
+// spread of a map's, the ground too steep for a map's tiles brought down, the
+// deep floor laid and the water read. g is the map, which the history has
+// been handed down onto if it ran on a grid of its own.
+func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// A world given water keeps the basins its plates made, for the water to
 	// fill; one that is not keeps the drawn map's spread whole. See basins.
 	// The beds are carried through the rescaling with the ground over them.
 	was := g.heights()
 	if water > 0 {
-		w.basins(g, cr.ocean)
-		g.restrata(was, g.heights(), cr.ocean)
-		g.uplift = uplift
+		w.basins(g, d.ocean)
+		g.restrata(was, g.heights(), d.ocean)
+		g.uplift = d.uplift
 	} else {
 		w.normalise(g)
 		g.restrata(was, g.heights(), nil)
@@ -984,8 +1002,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	g.landslide(false)
 	// And the deep sea floor is laid at the depth its age puts it, below the
 	// ground the slides reach. See abyss.
-	if depths != nil {
-		g.layAbyss(depths, shares)
+	if d.depths != nil {
+		g.layAbyss(d.depths, d.shares)
 	}
 	g.expose()
 	g.drain()
