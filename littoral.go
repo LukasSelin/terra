@@ -192,7 +192,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 				soil := float64(g.Soil[i])
 				rest := soil - e
 				if rest > 1e-12 {
-					t.Clay = t.Clay * soil / rest
+					g.Clay[i] = g.Clay[i] * soil / rest
 					g.Sand[i] = (bed - e) / rest
 				} else {
 					rest = 0

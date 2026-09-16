@@ -88,7 +88,7 @@ func ridge(soil float32) *Grid {
 	g.Wrap = true
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Terrain, g.Soil[i], g.Sand[i], t.Clay = Grass, soil, 0.3, 0.3
+		t.Terrain, g.Soil[i], g.Sand[i], g.Clay[i] = Grass, soil, 0.3, 0.3
 	}
 	return g
 }

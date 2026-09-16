@@ -153,8 +153,7 @@ func TestSpitsPointDownDrift(t *testing.T) {
 func TestTheCoastConservesTheGround(t *testing.T) {
 	g, _ := headland()
 	for i := range g.Tiles {
-		t := &g.Tiles[i]
-		g.Soil[i], g.Sand[i], t.Clay = 2, 0.5, 0.2
+		g.Soil[i], g.Sand[i], g.Clay[i] = 2, 0.5, 0.2
 		if p := g.PosOf(i); p.X < 20 && p.X > 14 {
 			g.Height[i] = 9.5 // a shallow shelf the sand moves over
 		}

@@ -103,8 +103,8 @@ func TestSoilStaysAMixtureThroughTheWeather(t *testing.T) {
 	g := w.Grid
 	for i := range g.Tiles {
 		t2 := g.Tile(i)
-		if t2.Sand() < 0 || t2.Clay < 0 || t2.Sand()+t2.Clay > 1+1e-9 || t2.Silt() < 0 {
-			t.Fatalf("tile %d is sand %v silt %v clay %v", i, t2.Sand(), t2.Silt(), t2.Clay)
+		if t2.Sand() < 0 || t2.Clay() < 0 || t2.Sand()+t2.Clay() > 1+1e-9 || t2.Silt() < 0 {
+			t.Fatalf("tile %d is sand %v silt %v clay %v", i, t2.Sand(), t2.Silt(), t2.Clay())
 		}
 	}
 }

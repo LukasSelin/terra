@@ -565,7 +565,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				if t.Wet() {
 					return color.RGBA{20, 20, 20, 255}
 				}
-				return color.RGBA{byte(255 * clamp(g.Sand[i], 0, 1)), byte(255 * clamp(g.Tile(i).Silt(), 0, 1)), byte(255 * clamp(t.Clay, 0, 1)), 255}
+				return color.RGBA{byte(255 * clamp(g.Sand[i], 0, 1)), byte(255 * clamp(g.Tile(i).Silt(), 0, 1)), byte(255 * clamp(g.Clay[i], 0, 1)), 255}
 			},
 		},
 		{

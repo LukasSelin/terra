@@ -187,7 +187,7 @@ func (g *Grid) winnow(s *surf, years float64) {
 		}
 		soil := float64(g.Soil[i])
 		share := -math.Expm1(-mixingDepth * s.storm[c] * years / yr / soil)
-		silt, clay := share*soil*g.siltAt(i), share*soil*t.Clay
+		silt, clay := share*soil*g.siltAt(i), share*soil*g.Clay[i]
 		gone := silt + clay
 		if gone <= 0 {
 			continue
@@ -196,7 +196,7 @@ func (g *Grid) winnow(s *surf, years float64) {
 		sand := soil * g.Sand[i]
 		if rest > 1e-12 {
 			g.Sand[i] = sand / rest
-			t.Clay = (soil*t.Clay - clay) / rest
+			g.Clay[i] = (soil*g.Clay[i] - clay) / rest
 		}
 		g.Soil[i] = float32(math.Max(0, rest))
 		g.Height[i] -= gone

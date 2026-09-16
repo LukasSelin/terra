@@ -100,7 +100,7 @@ func exposure() (*Grid, func(i, k int) (float64, float64)) {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		g.Height[i], g.Soil[i], g.Sand[i], t.Clay = 10.2, 1, 0.4, 0.2
+		g.Height[i], g.Soil[i], g.Sand[i], g.Clay[i] = 10.2, 1, 0.4, 0.2
 		switch {
 		case p.X < 30 && !(p.X == 20 && p.Y >= 16):
 			g.Height[i], t.Terrain = 9, Water

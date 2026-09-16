@@ -152,8 +152,8 @@ func soilStateReadings() {
 // The state fits in the padding the tile already had: a map pays nothing a
 // tile for its soil's age and chemistry. See memory.go.
 func TestTheSoilStateCostsATileNothing(t *testing.T) {
-	if got := unsafe.Sizeof(Tile{}); got != 40 {
-		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 40 since the height, the flow, the drain, the soil and the sand went beside the map", got)
+	if got := unsafe.Sizeof(Tile{}); got != 32 {
+		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 32 since the height, the flow, the drain and the soil with its sand and clay went beside the map", got)
 	}
 }
 

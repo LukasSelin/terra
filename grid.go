@@ -74,7 +74,6 @@ type Tile struct {
 	// Bedrock, so that the soil's Lime can have the two after it.
 	Fenced bool
 	Lime   uint16
-	Clay   float64
 
 	// Plate is which piece of the crust this tile rides, and Formed the
 	// epoch its rock dates from. Both are written by a world made from its
@@ -151,9 +150,9 @@ type Grid struct {
 	// single precision because it is a thickness of a few metres read to a
 	// tenth of a millimetre. See soil.go.
 	Soil []float32
-	// Sand is the share of each tile's soil that is sand, the rest being
-	// clay (on the tile) and silt. See bedrock.go.
-	Sand []float64
+	// Sand and Clay are the shares of each tile's soil that are one and the
+	// other, the rest being silt. See bedrock.go.
+	Sand, Clay []float64
 	// Layers is the ground that changes by the day, one slice per reading
 	// and indexed as Tiles is; see layers.go.
 	Layers
@@ -363,7 +362,7 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
@@ -422,17 +421,18 @@ func (v TileView) Drain() float64 { return v.g.Drain[v.i] }
 // Grid.Soil at this tile.
 func (v TileView) Soil() float32 { return v.g.Soil[v.i] }
 
-// Sand is the share of this tile's soil that is sand: Grid.Sand at this
-// tile. Silt, Loam and Wash are read off the sand and the clay together;
-// see bedrock.go.
+// Sand and Clay are the shares of this tile's soil that are one and the
+// other: Grid.Sand and Grid.Clay at this tile. Silt, Loam and Wash are read
+// off the two together; see bedrock.go.
 func (v TileView) Sand() float64 { return v.g.Sand[v.i] }
+func (v TileView) Clay() float64 { return v.g.Clay[v.i] }
 func (v TileView) Silt() float64 { return v.g.siltAt(v.i) }
 func (v TileView) Loam() float64 { return v.g.loamAt(v.i) }
 func (v TileView) Wash() float64 { return v.g.washAt(v.i) }
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)

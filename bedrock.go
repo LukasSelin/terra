@@ -274,7 +274,7 @@ func Bedrocks() []Bedrock {
 // TileView.Silt the same for a reader that asks by tile. It is not
 // stored, because three shares of one thing are two numbers and a
 // subtraction, and storing the third is storing a chance to disagree.
-func (g *Grid) siltAt(i int) float64 { return siltOf(g.Sand[i], g.Tiles[i].Clay) }
+func (g *Grid) siltAt(i int) float64 { return siltOf(g.Sand[i], g.Clay[i]) }
 
 // siltOf is the silt share of a soil with the given sand and clay.
 func siltOf(sand, clay float64) float64 { return clamp01(1 - sand - clay) }
@@ -295,7 +295,7 @@ const (
 // is what the fertility of a tile is multiplied by: the same damp, gentle,
 // sunny ground is a good field over a loam and a poor one over sand that will
 // not hold what it is given or clay that will not let go of it.
-func (g *Grid) loamAt(i int) float64 { return loamOf(g.Sand[i], g.Tiles[i].Clay) }
+func (g *Grid) loamAt(i int) float64 { return loamOf(g.Sand[i], g.Clay[i]) }
 
 // loamOf is Loam for a soil with the given sand and clay.
 func loamOf(sand, clay float64) float64 {
@@ -314,7 +314,7 @@ func loamOf(sand, clay float64) float64 {
 // sand as clay weathers at the rate the whole thing was measured at. Pure
 // sand reads 1.6 and pure clay 0.4: the reading is a multiplier and is not
 // held to a share, only to being positive.
-func (g *Grid) washAt(i int) float64 { return washOf(g.Sand[i], g.Tiles[i].Clay) }
+func (g *Grid) washAt(i int) float64 { return washOf(g.Sand[i], g.Clay[i]) }
 
 // washOf is Wash for a soil with the given sand and clay.
 func washOf(sand, clay float64) float64 { return math.Max(0, 1+0.6*(sand-clay)) }
@@ -467,6 +467,6 @@ func (g *Grid) swellAt(seed uint64, x, y int) float64 {
 func (g *Grid) soilTexture() {
 	for i := range g.Tiles {
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		g.Sand[i], g.Tiles[i].Clay = g.TextureAt(p)
+		g.Sand[i], g.Clay[i] = g.TextureAt(p)
 	}
 }

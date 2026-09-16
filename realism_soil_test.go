@@ -194,7 +194,7 @@ func clayByClimate(gs []*Grid, wet bool) float64 {
 				if wet {
 					k = g.wetOf(i)
 				}
-				byRock[t.Bedrock] = append(byRock[t.Bedrock], sample{k, t.Clay})
+				byRock[t.Bedrock] = append(byRock[t.Bedrock], sample{k, g.Clay[i]})
 			}
 		}
 		sum, weight := 0.0, 0.0

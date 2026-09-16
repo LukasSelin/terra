@@ -712,7 +712,7 @@ func diffusivity() float64 {
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		t.Terrain, t.Mark, t.Owner, g.Flow[i] = Grass, None, 0, 0
-		g.Sand[i], t.Clay = 0.3, 0.3
+		g.Sand[i], g.Clay[i] = 0.3, 0.3
 		x := float64(i%g.W-mid) * TileSpan
 		g.Height[i] = 1000 - curve*x*x/2
 	}

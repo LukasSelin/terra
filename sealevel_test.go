@@ -40,7 +40,7 @@ func bruunShore(sand float64) (*Grid, *surf) {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		g.Soil[i], g.Sand[i], t.Clay = 5, sand, 0.05
+		g.Soil[i], g.Sand[i], g.Clay[i] = 5, sand, 0.05
 		switch {
 		case p.X < 2 || p.Y == 0 || p.Y == 29:
 			g.Height[i] = 13

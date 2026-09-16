@@ -56,7 +56,7 @@ const (
 // parts is what tile i's soil is made of, as the three shares. It is the
 // composition a stripping takes away and a deposit arrives with.
 func (g *Grid) parts(i int) [Grains]float64 {
-	return [Grains]float64{Sand: g.Sand[i], Silt: g.siltAt(i), Clay: g.Tiles[i].Clay}
+	return [Grains]float64{Sand: g.Sand[i], Silt: g.siltAt(i), Clay: g.Clay[i]}
 }
 
 // hold is how much of the soil on tile i the creep moves in an age, by what is
@@ -708,9 +708,8 @@ func (g *Grid) blend(i int, held float64, laid [Grains]float64) {
 		return
 	}
 	held = math.Max(0, held)
-	t := &g.Tiles[i]
 	g.Sand[i] = (g.Sand[i]*held + laid[Sand]) / (held + d)
-	t.Clay = (t.Clay*held + laid[Clay]) / (held + d)
+	g.Clay[i] = (g.Clay[i]*held + laid[Clay]) / (held + d)
 }
 
 // waterStep is the water's step over years, set up to be solved: how hard it cuts

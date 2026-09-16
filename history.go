@@ -1465,9 +1465,9 @@ type crust struct {
 	mark       []bool
 	ring, next []int32
 	tiles      []Tile
-	height     []float64 // the tiles' heights, soil and sand, beside them as on the Grid
+	height     []float64 // the tiles' heights, soil, sand and clay, beside them as on the Grid
 	soil       []float32
-	sand       []float64
+	sand, clay []float64
 	book       []record
 	strata     []column
 }
@@ -1523,7 +1523,7 @@ func newCrust(g *Grid) *crust {
 		fresh: make([]bool, n), nfresh: make([]bool, n),
 		nborn: make([]uint8, n), mark: make([]bool, n),
 		off: make([][2]float32, n), noff: make([][2]float32, n),
-		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), sand: make([]float64, n), book: make([]record, n), strata: make([]column, n),
+		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), sand: make([]float64, n), clay: make([]float64, n), book: make([]record, n), strata: make([]column, n),
 	}
 }
 
@@ -1593,11 +1593,13 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 	copy(cr.height, g.Height)
 	copy(cr.soil, g.Soil)
 	copy(cr.sand, g.Sand)
+	copy(cr.clay, g.Clay)
 	copy(cr.book, book)
 	copy(cr.strata, g.strata)
 	for j := range g.Tiles {
 		t := cr.tiles[cr.org[j]]
-		g.Soil[j], g.Sand[j] = cr.soil[cr.org[j]], cr.sand[cr.org[j]] // the soil goes with the tile, fresh floor taking its neighbour's
+		// The soil goes with the tile, fresh floor taking its neighbour's.
+		g.Soil[j], g.Sand[j], g.Clay[j] = cr.soil[cr.org[j]], cr.sand[cr.org[j]], cr.clay[cr.org[j]]
 		if cr.fresh[j] {
 			// New floor, with the soil of the tile beside it: basalt, dated
 			// from now, at the level ocean floor rides at. Set higher, as a
@@ -3111,7 +3113,7 @@ func (g *Grid) keepBook(book []record, epoch int) {
 		if g.Drain[i] < FloodDepth/2 {
 			book[i].laid[Sand] += g.Sand[i] * fill
 			book[i].laid[Silt] += g.siltAt(i) * fill
-			book[i].laid[Clay] += t.Clay * fill
+			book[i].laid[Clay] += g.Clay[i] * fill
 			t.Formed = uint8(epoch)
 			// The epoch's fill is a bed, coarse or fine as the water sorted
 			// it. Which of the two it finally counts as is read against the
