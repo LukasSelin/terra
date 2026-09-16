@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -136,11 +136,11 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []floa
 	sums := make([][]float32, len(patches))
 	workers := 1
 	if m.W*m.H >= spreadTiles {
-		workers = WorkersFor(len(patches))
+		workers = workersFor(len(patches))
 	}
 	bufs := make([][]complex128, workers)
 	cols := make([][]complex128, workers)
-	InParallel(len(patches), workers, func(pi, worker int) {
+	inParallel(len(patches), workers, func(pi, worker int) {
 		pt := patches[pi]
 		at := func(x, y int) int {
 			y = min(max(y, 0), m.H-1)

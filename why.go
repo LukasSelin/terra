@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Why: the world answering for itself.
@@ -11,7 +12,7 @@ import (
 // Why(p, aspect) is a chain of causes for one thing about one tile - its
 // height, its rock, its rain, its cover - read off what the passes wrote
 // down: the book a history kept (ledger.go), the beds under the tile
-// (strata.go), the air's budget (vapour.go) and the readings the woods were
+// (strata.go), the air's budget (atmos/vapour.go) and the readings the woods were
 // scored on (woods.go). Every cause carries the number the pass computed
 // and the unit it computed it in. Nothing here runs a model or guesses: an
 // explanation is a reading of recorded quantities, so it is as true as the
@@ -259,8 +260,8 @@ func (g *Grid) whyRock(i int) []Cause {
 var buriedNames = [...]string{"nothing", "a river's fill", "mud off a shore", "lime of a quiet sea", "lava"}
 
 // phaseNamesOfYear names the four phases of the year the wind and the rain
-// are worked out in, by the sun: see wind.go.
-var phaseNamesOfYear = [AirPhases]string{"the northern midwinter quarter", "the spring quarter", "the northern midsummer quarter", "the autumn quarter"}
+// are worked out in, by the sun: see package atmos.
+var phaseNamesOfYear = [atmos.Phases]string{"the northern midwinter quarter", "the spring quarter", "the northern midsummer quarter", "the autumn quarter"}
 
 func (g *Grid) whyRain(i int) []Cause {
 	if len(g.rain) != len(g.Tiles) {
@@ -285,7 +286,7 @@ func (g *Grid) whyRain(i int) []Cause {
 	}
 	// The phase that carries most of the cell's water.
 	k, most := 0, -1.0
-	for ph := range AirPhases {
+	for ph := range atmos.Phases {
 		if len(w.Budget[ph].Rain) <= c || len(w.Budget[ph].Oro) <= c {
 			continue
 		}
@@ -307,7 +308,7 @@ func (g *Grid) whyRain(i int) []Cause {
 // the wind u, v: the cells walked back against the wind until one is more
 // than half sea, or the air's rows run out. A cell already more than half
 // sea is nothing away; a wind of nothing has no upwind.
-func (g *Grid) upwindSea(e *Env, u, v []float32, c int) (float64, bool) {
+func (g *Grid) upwindSea(e *atmos.Env, u, v []float32, c int) (float64, bool) {
 	if len(e.Sea) <= c || len(u) <= c || len(v) <= c {
 		return 0, false
 	}

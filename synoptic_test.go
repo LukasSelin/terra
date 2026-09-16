@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // weatherOver is the day's weather over a grid made by hand, with no systems
 // in it yet.
 func weatherOver(g *Grid) *Weather {
 	g.weather()
-	return StillWeather(rand.New(rand.NewPCG(1, 2)), g.winds)
+	return atmos.StillWeather(rand.New(rand.NewPCG(1, 2)), g.winds)
 }
 
 // A low in the middle latitudes is carried east by the westerlies aloft, some
@@ -149,7 +150,7 @@ func TestTheWeatherChangesFromDayToDay(t *testing.T) {
 	if lowest < 870 || highest > 1084 {
 		t.Errorf("pressure ran from %.0f to %.0f hPa", lowest, highest)
 	}
-	if most > WindMost || most < 10 {
+	if most > atmos.WindMost || most < 10 {
 		t.Errorf("the strongest wind in sixty days was %.0f m/s", most)
 	}
 	if changed < 20 {

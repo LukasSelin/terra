@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // twoOceans is an ocean globe with two continents running from seventy degrees
@@ -177,20 +179,20 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 		wx.Step(Year / 4)
 		s := wx.Systems[0]
 		fx, fy, _ := wx.Env.CellOf(s.Lat, s.Lon)
-		return s.Age, wx.Env.Sample(wx.Env.Sea, fx, fy), wx.Env.SeaTemp(fx, fy, YearSin(Year/4))
+		return s.Age, wx.Env.Sample(wx.Env.Sea, fx, fy), wx.Env.SeaTemp(fx, fy, atmos.YearSin(Year/4))
 	}
 	// The first ocean runs from -123.75 degrees to 0.
 	cold, coldSea, coldWarm := day(-1, true)
 	still, _, stillWarm := day(-1, false)
 	warm, warmSea, warmWarm := day(-117.5, true)
 	t.Logf("off the eastern shore the sea is %.1f degrees and a storm ages %.0f days in a day; with no currents %.1f and %.0f; off the western shore %.1f and %.0f (a storm needs %.1f)",
-		coldWarm, cold, stillWarm, still, warmWarm, warm, StormSea)
+		coldWarm, cold, stillWarm, still, warmWarm, warm, atmos.StormSea)
 	if coldSea < 0.9 || warmSea < 0.9 {
 		t.Fatalf("the storms came down on sea %.2f and %.2f, not open water", coldSea, warmSea)
 	}
-	if coldWarm >= StormSea || warmWarm < StormSea || stillWarm < StormSea {
+	if coldWarm >= atmos.StormSea || warmWarm < atmos.StormSea || stillWarm < atmos.StormSea {
 		t.Errorf("the sea is %.1f off the eastern shore, %.1f off the western and %.1f with no currents, against the %.1f a storm needs",
-			coldWarm, warmWarm, stillWarm, StormSea)
+			coldWarm, warmWarm, stillWarm, atmos.StormSea)
 	}
 	if cold <= still || cold <= warm {
 		t.Errorf("a storm over the cold current aged %.0f days, over the same water with no currents %.0f, over the warm western water %.0f", cold, still, warm)

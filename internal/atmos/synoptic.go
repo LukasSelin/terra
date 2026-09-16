@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -539,7 +539,7 @@ func (wx *Weather) sampleTile(field []float32, i int) float64 {
 }
 
 // WindAt, pressureAt and warmthAt are the day's wind, pressure and warmth at
-// tile i: see Land.WindAt, Land.PressureAt and Land.WarmthAt.
+// tile i: see terra.Land.WindAt, terra.Land.PressureAt and terra.Land.WarmthAt.
 func (wx *Weather) WindAt(i int) (east, north float64) {
 	return wx.sampleTile(wx.U, i), wx.sampleTile(wx.V, i)
 }
@@ -552,7 +552,7 @@ func (wx *Weather) WarmthAt(i int) float64 {
 	return e.Sample(wx.warm, fx, fy)
 }
 
-// Gust is how hard a wind of speed s gusts over tile i: see Land.GustAt.
+// Gust is how hard a wind of speed s gusts over tile i: see terra.Land.GustAt.
 func (e *Env) Gust(i int, s float64) float64 {
 	fx, fy := e.CellAt(i)
 	land := 1 - e.Sample(e.Sea, fx, fy)
@@ -561,7 +561,7 @@ func (e *Env) Gust(i int, s float64) float64 {
 }
 
 // Place is where a system at lat, lon stands on the map, in tiles, and
-// whether that is on the map at all: see Land.Place.
+// whether that is on the map at all: see terra.Land.Place.
 func (e *Env) Place(lat, lon float64) (x, y float64, on bool) {
 	fx, fy, on := e.CellOf(lat, lon)
 	k := float64(e.Cell)

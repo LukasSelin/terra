@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // oceanGlobe is a globe w by h tiles with nothing on it but the sea.
@@ -181,9 +183,9 @@ func (g *Grid) withAir() *Grid {
 }
 
 // envOf is the ground of a grid as the air reads it, under the air it has.
-func envOf(g *Grid) *Env {
+func envOf(g *Grid) *atmos.Env {
 	above, wet := g.airGround()
-	return NewEnv(&g.Map, g.air, above, wet)
+	return atmos.NewEnv(&g.Map, g.air, above, wet)
 }
 
 // A range too high for the wind to climb turns it aside along its face; a
@@ -225,7 +227,7 @@ func TestTheWindDoesNotDependOnTheGoroutines(t *testing.T) {
 		g := continent(30)
 		g.weather()
 		var s float64
-		for k := range AirPhases {
+		for k := range atmos.Phases {
 			for i := range g.winds.U[k] {
 				s += float64(g.winds.U[k][i])*float64(i%97) + float64(g.winds.V[k][i]) + float64(g.winds.P[k][i])
 			}
@@ -246,7 +248,7 @@ func TestTheGroundQuickensAndDrainsTheWind(t *testing.T) {
 	cy := e.H / 4
 	i := cy*e.W + 3
 	e.Expose[i] = 100
-	half := float64(ExposeReach) * math.Min(e.Dx[cy], e.Dy)
+	half := float64(atmos.ExposeReach) * math.Min(e.Dx[cy], e.Dy)
 	u, _ := e.Ground(3, cy, 10, 0)
 	if want := 10 * (1 + 2*100/half); math.Abs(u-want) > 1e-9 {
 		t.Errorf("a wind of 10 m/s over a crest 100 m over its country is %.4f, want %.4f", u, want)

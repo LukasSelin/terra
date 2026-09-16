@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -141,7 +141,7 @@ const (
 // currents works out the water under the year's mean wind u, v and gives
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land.
-func (e *Env) currents(u, v [AirPhases][]float32) []float64 {
+func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
@@ -152,9 +152,9 @@ func (e *Env) currents(u, v [AirPhases][]float32) []float64 {
 	cu, cv := make([]float64, n), make([]float64, n)
 	for i := range n {
 		var mu, mv float64
-		for k := range AirPhases {
-			mu += float64(u[k][i]) / AirPhases
-			mv += float64(v[k][i]) / AirPhases
+		for k := range Phases {
+			mu += float64(u[k][i]) / Phases
+			mv += float64(v[k][i]) / Phases
 		}
 		s := math.Hypot(mu, mv)
 		tx[i] = airDensity * stressDrag * s * mu
@@ -584,7 +584,7 @@ func inversion(warm float64) float64 {
 	return 1 - inversionMost*c*c/(1+c*c)
 }
 
-// SeaWarmth is Grid.SeaWarmth for a tile of the map.
+// SeaWarmth is terra.Grid.SeaWarmth for a tile of the map.
 func (w *Winds) SeaWarmth(i int) float64 {
 	if w.Warm == nil {
 		return 0
@@ -593,7 +593,7 @@ func (w *Winds) SeaWarmth(i int) float64 {
 	return w.Sample(w.Warm, fx, fy)
 }
 
-// CoastWarmth is Grid.CoastWarmth for a tile of the map.
+// CoastWarmth is terra.Grid.CoastWarmth for a tile of the map.
 func (w *Winds) CoastWarmth(i int) float64 {
 	if w.Coast == nil {
 		return 0

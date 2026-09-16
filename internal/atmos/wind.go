@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -41,18 +41,18 @@ import (
 // a thing of scales far larger than a tile of a globe, and because the rain is
 // read off it every time the drainage is.
 
-// The seasons the wind is worked out for, as AirPhases of the year: midwinter in
+// The seasons the wind is worked out for, as Phases of the year: midwinter in
 // the north, the spring equinox (tick zero), midsummer, and the autumn
 // equinox. Any day between is read off the four by the year's first harmonic;
 // see seasonWeights.
-const AirPhases = 4
+const Phases = 4
 
 // phaseSin is sin of each phase's place in the year, which is how far into
 // the summer of the north the year stands there: see seasonal.
-var phaseSin = [AirPhases]float64{-1, 0, 1, 0}
+var phaseSin = [Phases]float64{-1, 0, 1, 0}
 
 // dayOf is the day of the year at the middle of each phase.
-var dayOf = [AirPhases]int{3 * Year / 4, 0, Year / 4, Year / 2}
+var dayOf = [Phases]int{3 * Year / 4, 0, Year / 4, Year / 2}
 
 // The planet's air.
 const (
@@ -209,10 +209,10 @@ type Winds struct {
 	*Env
 	// U is the wind toward the east and V toward the north, in metres a
 	// second; P is the pressure at sea level in hPa.
-	U, V, P [AirPhases][]float32
+	U, V, P [Phases][]float32
 	// Budget is the water in the air in each phase, as the rain was last
 	// worked out over the wind: see vapour.go.
-	Budget [AirPhases]vapourOut
+	Budget [Phases]vapourOut
 }
 
 // Env is the ground as the air reads it: the lattice of air cells and
@@ -406,7 +406,7 @@ func (e *Env) gather(v []float64) []float64 {
 }
 
 // rows runs f for every row of cells, spread over goroutines where there are
-// cells enough to be worth it, under the same rule as Grid.EachRow: f writes
+// cells enough to be worth it, under the same rule as terra.Grid.EachRow: f writes
 // only at its own row's cells.
 func (e *Env) rows(f func(cy int)) {
 	if e.W*e.H < spreadTiles {
@@ -415,7 +415,7 @@ func (e *Env) rows(f func(cy int)) {
 		}
 		return
 	}
-	InParallel(e.H, WorkersFor(e.H), func(cy, _ int) { f(cy) })
+	inParallel(e.H, workersFor(e.H), func(cy, _ int) { f(cy) })
 }
 
 // at is the cell cx, cy, with the column taken round the seam or held at the
@@ -541,16 +541,16 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
 	e := NewEnv(m, a, above, wet)
 	w := &Winds{Env: e}
 	n := e.W * e.H
-	for k := range AirPhases {
+	for k := range Phases {
 		w.U[k], w.V[k], w.P[k] = make([]float32, n), make([]float32, n), make([]float32, n)
 	}
 	workers := 1
 	if n >= spreadTiles {
-		workers = WorkersFor(AirPhases)
+		workers = workersFor(Phases)
 	}
 	// The two equinoxes are the same day to the air, so the autumn's is the
 	// spring's.
-	InParallel(AirPhases-1, workers, func(k, _ int) {
+	inParallel(Phases-1, workers, func(k, _ int) {
 		e.Solve(phaseSin[k], e.AirTemp(phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
 	})
 	copy(w.U[3], w.U[1])
@@ -568,7 +568,7 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
 // ordinary year, sinT of the way into the north's summer. The phases of the
 // wind's year are its thermal seasons - the warmest, the coldest and the turn
 // between - so each cell is read at the crest of its own swing, whatever its
-// lag behind the sun. The swing is the one Land.TempAt reads: see seasonTemp.
+// lag behind the sun. The swing is the one terra.Land.TempAt reads: see seasonTemp.
 func (e *Env) AirTemp(sinT float64) []float64 {
 	temp := make([]float64, e.W*e.H)
 	for cy := 0; cy < e.H; cy++ {
@@ -814,12 +814,12 @@ func (e *Env) div(fu, fv []float64, cx, cy int) float64 {
 // seasonWeights is how much each phase of the year is worth on a day: the
 // year's mean and its first harmonic, read off the four phases, which lie a
 // quarter of a year apart.
-func seasonWeights(day int) [AirPhases]float64 {
+func seasonWeights(day int) [Phases]float64 {
 	th := 2 * math.Pi * float64(day) / Year
 	s, c := math.Sin(th), math.Cos(th)
 	// A field over the year is m + S sin + C cos, and the phases are its values
 	// at sin -1, cos 1, sin 1 and cos -1.
-	return [AirPhases]float64{0.25 - s/2, 0.25 + c/2, 0.25 + s/2, 0.25 - c/2}
+	return [Phases]float64{0.25 - s/2, 0.25 + c/2, 0.25 + s/2, 0.25 - c/2}
 }
 
 // CellAt is where tile i's centre lies among the air cells, in cells.
@@ -841,7 +841,7 @@ func (e *Env) Sample32(v []float32, fx, fy float64) float64 {
 	return a + (b-a)*ty
 }
 
-// WindOn is Grid.WindOn for a tile of the map.
+// WindOn is terra.Grid.WindOn for a tile of the map.
 func (w *Winds) WindOn(i, day int) (east, north float64) {
 	fx, fy := w.CellAt(i)
 	for k, m := range seasonWeights(day) {
@@ -851,17 +851,17 @@ func (w *Winds) WindOn(i, day int) (east, north float64) {
 	return east, north
 }
 
-// MeanWind is Grid.MeanWind for a tile of the map.
+// MeanWind is terra.Grid.MeanWind for a tile of the map.
 func (w *Winds) MeanWind(i int) (east, north float64) {
 	fx, fy := w.CellAt(i)
-	for k := range AirPhases {
-		east += w.Sample32(w.U[k], fx, fy) / AirPhases
-		north += w.Sample32(w.V[k], fx, fy) / AirPhases
+	for k := range Phases {
+		east += w.Sample32(w.U[k], fx, fy) / Phases
+		north += w.Sample32(w.V[k], fx, fy) / Phases
 	}
 	return east, north
 }
 
-// PressureOn is Grid.PressureOn for a tile of the map.
+// PressureOn is terra.Grid.PressureOn for a tile of the map.
 func (w *Winds) PressureOn(i, day int) float64 {
 	fx, fy := w.CellAt(i)
 	var p float64
@@ -872,7 +872,7 @@ func (w *Winds) PressureOn(i, day int) float64 {
 }
 
 // eachTileRow runs f for every row of the map's tiles, spread over goroutines
-// under the same rule as Grid.EachRow: f writes only at its own row's tiles.
+// under the same rule as terra.Grid.EachRow: f writes only at its own row's tiles.
 func eachTileRow(m *geom.Map, f func(y int)) {
 	if m.W*m.H < spreadTiles {
 		for y := 0; y < m.H; y++ {
@@ -880,5 +880,5 @@ func eachTileRow(m *geom.Map, f func(y int)) {
 		}
 		return
 	}
-	InParallel(m.H, WorkersFor(m.H), func(y, _ int) { f(y) })
+	inParallel(m.H, workersFor(m.H), func(y, _ int) { f(y) })
 }

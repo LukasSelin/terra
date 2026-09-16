@@ -3,6 +3,7 @@ package terra
 import (
 	"math"
 
+	"github.com/LukasSelin/terra/internal/atmos"
 	"github.com/LukasSelin/terra/internal/phase"
 )
 
@@ -69,7 +70,7 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
 		}
 		a.Lat[y], a.Mean[y], a.Dx[y] = lat, mean, dx
-		a.PET[y] = PetTable(lat)
+		a.PET[y] = atmos.PetTable(lat)
 	}
 	return a
 }
@@ -84,11 +85,11 @@ func defaultAir(g *Grid) *Air {
 // whenever the ground has moved far enough to matter, because the ground the
 // air crosses is part of what it does: see weatherStale.
 //
-// The wind is worked out first, for each phase of the year - see wind.go -
+// The wind is worked out first, for each phase of the year - see package atmos -
 // and the water is carried along it as a budget on the air cells: taken up
 // off the sea and the land, rained out as the column nears saturation and
-// where the air gathers, and wrung out by the ground (vapour.go and
-// orographic.go). Then each tile's rain is the column's over it and what its
+// where the air gathers, and wrung out by the ground (atmos/vapour.go and
+// atmos/orographic.go). Then each tile's rain is the column's over it and what its
 // own ground wrings out, and the year's rain is the four phases' taken
 // together: a monsoon coast is wet for the summer's onshore wind whatever the
 // winter's offshore one does.
@@ -153,16 +154,20 @@ func (g *Grid) airedGround(into []float32) []float32 {
 func (g *Grid) windsFor() *Winds {
 	defer phase.Start("windsFor")()
 	above, wet := g.airGround()
-	return WindsFor(&g.Map, g.air, above, wet)
+	return atmos.WindsFor(&g.Map, g.air, above, wet)
 }
 
 // airGround is the ground of g as the air reads it, tile by tile: how far each
 // tile stands over the water the air takes its fill from, and one where the
 // tile is under that water.
-func (g *Grid) airGround() (above, wet []float64) {
+//
+// The slices are locals and not named results: a named result is assigned
+// after it is declared, so the closure below would share it on the heap
+// rather than copy it, which is two allocations a reading.
+func (g *Grid) airGround() ([]float64, []float64) {
 	base := math.Max(0, g.base)
-	above = make([]float64, len(g.Tiles))
-	wet = make([]float64, len(g.Tiles))
+	above := make([]float64, len(g.Tiles))
+	wet := make([]float64, len(g.Tiles))
 	g.EachRow(func(y int) {
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
@@ -218,7 +223,7 @@ func (g *Grid) rainOn() {
 		}
 	}
 
-	carried, lift, given := RainCells(&g.Map, a, w, ground)
+	carried, lift, given := atmos.RainCells(&g.Map, a, w, ground)
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
 	// out of the air there.
@@ -229,13 +234,13 @@ func (g *Grid) rainOn() {
 			fx := (float64(x)+0.5)/float64(e.Cell) - 0.5
 			cell := e.CellOfTile(i)
 			var p float64
-			var each [AirPhases]float64
-			for k := range AirPhases {
+			var each [atmos.Phases]float64
+			for k := range atmos.Phases {
 				air := e.Sample32(carried[k], fx, fy)
 				if r := lift[k][i]; r > 0 {
 					air += float64(r) * given[k][cell] * secondsPerYear * a.Wetness
 				}
-				p += air / AirPhases
+				p += air / atmos.Phases
 				each[k] = air
 			}
 			// The warmer half of the year is its summer phase and half of each
@@ -251,9 +256,9 @@ func (g *Grid) rainOn() {
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
 				t := a.Mean[y] - Lapse*g.laidHeight(i)
-				pe := PetAt(a.PET[y], t)
-				g.dayRange[i] = float32(Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
-				g.runoff[i] = p - Fu(p, pe*float64(g.dayRange[i]))
+				pe := atmos.PetAt(a.PET[y], t)
+				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
+				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
 			}
 		}
 	})
@@ -287,7 +292,7 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}
@@ -299,7 +304,7 @@ func (g *Grid) pet(i int) float64 {
 // near or far from, whose year is a temperate latitude's.
 func (g *Grid) rangeCont(i int) float64 {
 	if !g.Wrap {
-		return ContValley
+		return atmos.ContValley
 	}
 	return g.contAt(i)
 }

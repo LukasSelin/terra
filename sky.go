@@ -4,11 +4,47 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // The air over the land, as the land reads it: the climate of the wind on a
 // tile of the grid, and the day's weather at a place on the land. What the air
-// is, and how it is worked out, is the atmosphere's; see wind.go.
+// is, and how it is worked out, is package atmos's.
+
+// The air's names as the land has always given them.
+type (
+	// Air is what the weather of a map is, row by row. See atmos.Air.
+	Air = atmos.Air
+	// Winds is the climate of the wind over a map. See atmos.Winds.
+	Winds = atmos.Winds
+	// Weather is the day's weather. See atmos.Weather.
+	Weather = atmos.Weather
+	// System is a low, a high or a storm in the day's weather. See
+	// atmos.System.
+	System = atmos.System
+	// SystemKind is which of those a system is.
+	SystemKind = atmos.SystemKind
+)
+
+// The kinds of weather system.
+const (
+	Low   = atmos.Low
+	High  = atmos.High
+	Storm = atmos.Storm
+)
+
+// The shape of the year and of the air: see atmos.MeanTemp, atmos.Temperate,
+// atmos.Lapse and atmos.Permafrost.
+const (
+	MeanTemp   = atmos.MeanTemp
+	Swing      = atmos.Swing
+	Temperate  = atmos.Temperate
+	Lapse      = atmos.Lapse
+	Permafrost = atmos.Permafrost
+)
+
+// The air is spread over as many goroutines as the land's passes are.
+func init() { atmos.SetWorkers(WorkersFor) }
 
 // WindOn is the wind near the ground on tile i on a day of the year, in
 // metres a second toward the east and toward the north: the climate of the
@@ -77,7 +113,7 @@ func (w *Land) AdvanceWeather() {
 		g.weather()
 	}
 	if !w.Weather.Over(g.winds) {
-		w.Weather = NewWeather(w.seed, g.winds, w.Tick, w.Weather)
+		w.Weather = atmos.NewWeather(w.seed, g.winds, w.Tick, w.Weather)
 	}
 	w.Weather.Advance(w.Tick)
 }

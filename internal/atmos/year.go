@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import "math"
 
@@ -87,7 +87,7 @@ func seasonTemp(solar, phase, cont float64) float64 {
 
 // ContMiddling is the continentality at which a place keeps exactly the
 // temperate swing: the ground a latitude's weather is the weather of when
-// nothing is known about the ground. Climate.TempAt's year is read at it.
+// nothing is known about the ground. terra.Climate.TempAt's year is read at it.
 var ContMiddling = middlingOf(ebm())
 
 // ContValley is the same for a valley, which has no ground round it to be

@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Rain falls in belts: most under the equator, least in the horse latitudes
@@ -127,17 +129,17 @@ func TestRunoffIsWhatTheRainLeaves(t *testing.T) {
 		}
 	}
 	for _, c := range []struct{ p, pet float64 }{{1000, 10}, {1000, 800}, {1000, 5000}, {10, 1000}} {
-		e := Fu(c.p, c.pet)
+		e := atmos.Fu(c.p, c.pet)
 		if e < 0 || e > c.p || e > c.pet {
 			t.Errorf("fu(%v, %v) = %v", c.p, c.pet, e)
 		}
 	}
 	// Where the air could take hardly anything it takes nearly all of it, and
 	// where it could take everything it takes nearly all the rain.
-	if e := Fu(1000, 10); e < 9 {
+	if e := atmos.Fu(1000, 10); e < 9 {
 		t.Errorf("with 10 mm the air could take, it took %v of 1000", e)
 	}
-	if e := Fu(10, 10000); e < 9.9 {
+	if e := atmos.Fu(10, 10000); e < 9.9 {
 		t.Errorf("with 10 mm of rain and a desert's air, it took back %v", e)
 	}
 }
@@ -177,7 +179,7 @@ func TestTheWaterTheAirTakesUpFallsAgain(t *testing.T) {
 	for _, g := range []*Grid{oceanGlobe(256, 128), twoOceans(), continent(25)} {
 		g.weather()
 		e := g.winds.Env
-		for k := range AirPhases {
+		for k := range atmos.Phases {
 			b := g.winds.Budget[k]
 			var evap, rain float64
 			for cy := 0; cy < e.H; cy++ {

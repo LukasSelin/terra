@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -9,7 +9,7 @@ import (
 // The air's arithmetic that the rain is read off: the record of a map's
 // weather row by row, how much water the air could take back up, and the
 // air's half of the rain, worked out on the air cells. The grid's half - the
-// rain and the runoff on each tile - is weather.go's.
+// rain and the runoff on each tile - is weather.go's, in the root package.
 
 // Air is what the weather of a map is, row by row: the parts of the climate
 // that do not change from one day to the next and that the water is read off.
@@ -163,13 +163,13 @@ const (
 
 // annualRain is the rain, mm a year, a budget last gave cell i, or nothing
 // where it has not been worked out.
-func annualRain(b [AirPhases]vapourOut, i int) float64 {
+func annualRain(b [Phases]vapourOut, i int) float64 {
 	if len(b[1].Rain) <= i {
 		return 0
 	}
 	var r float64
-	for k := range AirPhases {
-		r += (b[k].Rain[i] + b[k].Oro[i]) * secondsPerYear / AirPhases
+	for k := range Phases {
+		r += (b[k].Rain[i] + b[k].Oro[i]) * secondsPerYear / Phases
 	}
 	return r
 }
@@ -188,15 +188,15 @@ func cellCont(e *Env, i int) float64 {
 // would rain out of saturated air in each phase, lift, tile by tile; and how
 // much of that each cell's column gave, given. ground is the height of each
 // tile over the water the air takes its fill from.
-func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [AirPhases][]float32, given [AirPhases][]float64) {
+func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [Phases][]float32, given [Phases][]float64) {
 	e := w.Env
 	n := e.W * e.H
 
 	// What each phase's budget is worked out over: the warmth of the air and
 	// the sea, how fast the air near the ground gathers, and how much of its
 	// rain air held down by the cold water under it keeps.
-	var temp, sst [AirPhases][]float64
-	for k := range AirPhases - 1 {
+	var temp, sst [Phases][]float64
+	for k := range Phases - 1 {
 		temp[k] = e.AirTemp(phaseSin[k])
 		sst[k] = make([]float64, n)
 		for cy := 0; cy < e.H; cy++ {
@@ -216,7 +216,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 	temp[3], sst[3] = temp[1], sst[1]
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
-	for k := range AirPhases - 1 {
+	for k := range Phases - 1 {
 		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground)
 	}
 	lift[3] = lift[1]
@@ -227,8 +227,8 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 		}
 		return c
 	}
-	var liftCells [AirPhases][]float64
-	for k := range AirPhases - 1 {
+	var liftCells [Phases][]float64
+	for k := range Phases - 1 {
 		liftCells[k] = liftCell(k)
 	}
 	liftCells[3] = liftCells[1]
@@ -244,7 +244,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 	// shared out over the phases: as Hargreaves shares it, by the sun at the
 	// top of the air and the warmth over freezing.
 	pet := make([]float64, n)
-	var share [AirPhases][]float64
+	var share [Phases][]float64
 	for k := range share {
 		share[k] = make([]float64, n)
 	}
@@ -259,8 +259,8 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 				pet[i] *= Diurnal(cellCont(e, i), 1)
 			}
 			var total float64
-			var each [AirPhases]float64
-			for k := range AirPhases {
+			var each [Phases]float64
+			for k := range Phases {
 				if t := temp[k][i] - Lapse*e.Height[i]; t > 0 {
 					// The autumn's sun is the spring's.
 					day := springDay + float64(dayOf[min(k, 2)])*365.25/Year
@@ -268,9 +268,9 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 				}
 				total += each[k]
 			}
-			for k := range AirPhases {
+			for k := range Phases {
 				if total > 0 {
-					share[k][i] = AirPhases * each[k] / total
+					share[k][i] = Phases * each[k] / total
 				}
 			}
 		}
@@ -286,30 +286,30 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 	rounds := recycleRounds
 	if last := budget[1].Rain; len(last) == n {
 		for i := range annual {
-			for k := range AirPhases {
-				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / AirPhases
+			for k := range Phases {
+				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
 			}
 		}
 		rounds = 1
 	} else {
-		budget = [AirPhases]vapourOut{}
+		budget = [Phases]vapourOut{}
 		for i := range annual {
 			annual[i] = firstRain
 		}
 	}
 	workers := 1
 	if n >= spreadTiles {
-		workers = WorkersFor(AirPhases)
+		workers = workersFor(Phases)
 	}
-	var landEvap [AirPhases][]float64
+	var landEvap [Phases][]float64
 	for range rounds {
-		for k := range AirPhases {
+		for k := range Phases {
 			landEvap[k] = make([]float64, n)
 			for i := range annual {
 				landEvap[k][i] = Fu(annual[i], pet[i]) * share[k][i] / secondsPerYear
 			}
 		}
-		InParallel(AirPhases-1, workers, func(k, _ int) {
+		inParallel(Phases-1, workers, func(k, _ int) {
 			// The ground wrings out of air as near saturation as the column
 			// last stood.
 			oro := make([]float64, n)
@@ -324,8 +324,8 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 		budget[3] = budget[1]
 		for i := range annual {
 			annual[i] = 0
-			for k := range AirPhases {
-				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / AirPhases
+			for k := range Phases {
+				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
 			}
 		}
 	}
@@ -333,7 +333,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 
 	// How much of what the ground would wring out of each cell's air its
 	// column gave: all of it, unless the air ran dry.
-	for k := range AirPhases - 1 {
+	for k := range Phases - 1 {
 		given[k] = make([]float64, n)
 		for i := range given[k] {
 			if want := liftCells[k][i]; want > 0 {

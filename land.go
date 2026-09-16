@@ -46,7 +46,7 @@ type Land struct {
 	Climate Climate // the weather over the whole map this tick
 	// Weather is the day's weather - the systems moving through and the wind
 	// they make - once AdvanceWeather has been asked for it, and nil before.
-	// A copy of a land shares it. See synoptic.go.
+	// A copy of a land shares it. See package atmos.
 	Weather *Weather
 
 	// Terms are the terms this land was made on.

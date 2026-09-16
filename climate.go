@@ -6,6 +6,7 @@ import (
 
 	"github.com/LukasSelin/terra/clock"
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // The climate. A settlement that is founded in one weather and lives in it
@@ -99,7 +100,7 @@ func (c Climate) TempAt(y int) float64 {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	season := SwingAt(lat, ContMiddling) * SeasonAt(c.tick, LagAt(ContMiddling))
+	season := atmos.SwingAt(lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagAt(atmos.ContMiddling))
 	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
@@ -108,7 +109,7 @@ func (c Climate) MeanAt(y int) float64 {
 	if !c.globe {
 		return MeanTemp
 	}
-	return ZonalMean(c.latitude(y))
+	return atmos.ZonalMean(c.latitude(y))
 }
 
 // GrowthAt is Growth on row y, and ChillAt is Chill there.
@@ -149,7 +150,7 @@ func (c *Climate) Advance(tick int, rng *rand.Rand) {
 // Frost is a threshold of growth and of nothing else. It was the line the
 // ground froze at too, which put the permafrost under ground with a mean of
 // four degrees - the latitude of Oslo - and the tundra with it. The frozen
-// ground has its own line now; see Permafrost and the tree line in year.go.
+// ground has its own line now; see Permafrost and the tree line in package atmos.
 const (
 	Frost  = 4.0
 	Thrive = 14.0
@@ -238,7 +239,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 	}
 	i := p.Y*g.W + p.X
 	cont := g.contAt(i)
-	t := c.MeanAt(p.Y) + SwingAt(c.latitude(p.Y), cont)*SeasonAt(c.tick, LagAt(cont)) + c.Drift - Lapse*h
+	t := c.MeanAt(p.Y) + atmos.SwingAt(c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagAt(cont)) + c.Drift - Lapse*h
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -263,7 +264,7 @@ func (w *Land) yearAt(i int) (mean, swing float64) {
 	if g.Wrap {
 		mean += g.CoastWarmth(i)
 	}
-	return mean, SwingAt(c.latitude(y), g.contAt(i))
+	return mean, atmos.SwingAt(c.latitude(y), g.contAt(i))
 }
 
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt
@@ -278,7 +279,7 @@ func (w *Land) GrowthAt(p geom.Pos) float64 {
 	}
 	i := w.Grid.Index(p)
 	mean, swing := w.yearAt(i)
-	return ClimateGrowth(temp, mean, swing, w.Grid.Rain(i))
+	return atmos.ClimateGrowth(temp, mean, swing, w.Grid.Rain(i))
 }
 
 // ChillAt is Chill at p.
