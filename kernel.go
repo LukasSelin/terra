@@ -99,3 +99,21 @@ func lerpScalar(dst, a, b []float64, t float64) {
 		dst[i] = float64(a[i] + float64(float64(b[i]-a[i])*t))
 	}
 }
+
+// clampScalar holds every entry of v to [lo, hi]: what is under lo is lo,
+// what is over hi is hi. It is a comparison and a choice, twice, on both
+// paths - not a minimum and a maximum, whose answer on a NaN or on a nought
+// of either sign is the instruction's rather than the number's. So a NaN
+// stays a NaN, and a negative nought held to [0, 1] stays a negative nought,
+// which is not less than nought.
+func clampScalar(v []float64, lo, hi float64) {
+	for i, x := range v {
+		if x < lo {
+			x = lo
+		}
+		if x > hi {
+			x = hi
+		}
+		v[i] = x
+	}
+}

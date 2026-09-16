@@ -194,3 +194,20 @@ func lerp(dst, a, b []float64, t float64) {
 	archsimd.ClearAVXUpperBits()
 	lerpScalar(dst[n:], a[n:], b[n:], t)
 }
+
+func clamp(v []float64, lo, hi float64) {
+	if !vector {
+		clampScalar(v, lo, hi)
+		return
+	}
+	n := whole(len(v))
+	lov, hiv := archsimd.BroadcastFloat64x4(lo), archsimd.BroadcastFloat64x4(hi)
+	for j := 0; j < n; j += lanes {
+		x := archsimd.LoadFloat64x4(v[j : j+lanes])
+		x = lov.IfElse(x.Less(lov), x)
+		x = hiv.IfElse(x.Greater(hiv), x)
+		x.Store(v[j : j+lanes])
+	}
+	archsimd.ClearAVXUpperBits()
+	clampScalar(v[n:], lo, hi)
+}

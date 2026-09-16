@@ -154,6 +154,12 @@ func BenchmarkKernel(b *testing.B) {
 			lerp(y, y, x, 0.25)
 		}
 	})
+	b.Run("clamp", func(b *testing.B) {
+		y := slices.Clone(x)
+		for b.Loop() {
+			clamp(y, -0.5, 0.5)
+		}
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -223,6 +229,24 @@ func FuzzLerp(f *testing.F) {
 			lerp(got, got, b, tt)
 			lerpScalar(want, want, b, tt)
 			sameBits(t, "lerp in place", n, got, want)
+		}
+	})
+}
+
+func FuzzClamp(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 6))
+		for _, n := range lengths(rng) {
+			lo, hi := draw(rng), draw(rng)
+			if rng.IntN(2) == 0 {
+				lo, hi = 0, 1 // the bounds a share is held to, often
+			}
+			want := run(rng, n)
+			got := slices.Clone(want)
+			clamp(got, lo, hi)
+			clampScalar(want, lo, hi)
+			sameBits(t, "clamp", n, got, want)
 		}
 	})
 }
