@@ -33,6 +33,10 @@ type Land struct {
 	// the package comment. A game's own draws come through here too, so
 	// that the land and the game share one stream and one history.
 	RNG *rand.Rand
+	// source is the stream RNG draws from, kept so that where the stream has
+	// got to can be written down with a history and taken up again. See
+	// historyfile.go.
+	source *rand.PCG
 
 	Grid    *Grid
 	Climate Climate // the weather over the whole map this tick
@@ -84,17 +88,31 @@ func NewLand(seed uint64, t Terms) *Land {
 	if err := t.Check(); err != nil {
 		panic(err)
 	}
+	l := unmade(seed, t)
+	l.Generate(t)
+	l.handOver()
+	return l
+}
+
+// unmade is a land on its terms and its seed, with its chance at the start of
+// the stream and no ground yet.
+func unmade(seed uint64, t Terms) *Land {
+	src := rand.NewPCG(seed, seed*0x9E3779B97F4A7C15+1)
 	l := &Land{
 		seed:    seed,
-		RNG:     rand.New(rand.NewPCG(seed, seed*0x9E3779B97F4A7C15+1)),
+		RNG:     rand.New(src),
+		source:  src,
 		Climate: NewClimateOn(t),
 		Terms:   t,
 	}
 	l.moon = epochOf(seed)
-	l.Generate(t)
+	return l
+}
+
+// handOver is what a land does once its ground is made, before anybody has it.
+func (l *Land) handOver() {
 	l.Grid.tide = l.Tide()
 	l.Growing = make([]float64, len(l.Grid.Chunks))
-	return l
 }
 
 // DefaultWidth and DefaultHeight size the map when none is given. They fit a

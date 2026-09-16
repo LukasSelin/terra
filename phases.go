@@ -47,6 +47,8 @@ var phaseNames = []string{
 	"rainOn", "orographic", "airEnv.vapour", "airEnv.currents", "pool",
 	"flow", "wear", "waterStep", "fluvial.solve", "creep", "landslide",
 	"shape", "cutValleys", "silt", "tides", "readFeatures",
+	"stage.ground", "stage.sea", "stage.shape", "stage.cut", "stage.coast",
+	"stage.cover",
 }
 
 // A Phase is one row of the table: a pass, how often it ran and how long it
