@@ -1,8 +1,9 @@
-package terra
+package atmos
 
 import (
 	"math"
 
+	"github.com/LukasSelin/terra/geom"
 	"github.com/LukasSelin/terra/internal/kernel"
 	"github.com/LukasSelin/terra/internal/phase"
 )
@@ -77,11 +78,11 @@ func moistLapse(temp float64) float64 {
 		(airHeat + latentHeat*latentHeat*rs*0.622/(dryGas*t*t))
 }
 
-// orographicPatch is the size in tiles of the patches g's ground is read in:
-// a power of two, patchReach across or more, and no more than patchMost.
-func (g *Grid) orographicPatch() int {
-	a := g.air
-	span := a.dy // km a tile, down the rows
+// orographicPatch is the size in tiles of the patches the ground under the air
+// a is read in: a power of two, patchReach across or more, and no more than
+// patchMost.
+func orographicPatch(a *Air) int {
+	span := a.Dy // km a tile, down the rows
 	p := patchLeast
 	for p < patchMost && float64(p)*span < patchReach {
 		p *= 2
@@ -91,17 +92,16 @@ func (g *Grid) orographicPatch() int {
 
 // orographic is what the ground's lift would rain out of saturated air, in
 // kg/m²/s on each tile, under the wind u, v of one phase over air at sea level
-// of temp degrees, both on the air cells. ground is the height of each tile
-// over the water the air takes its fill from.
-func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
+// of temp degrees, both on the air cells, over a map m under the air a. ground
+// is the height of each tile over the water the air takes its fill from.
+func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64) []float32 {
 	defer phase.Start("orographic")()
-	a := g.air
-	if !g.Wrap {
-		return g.orographicWhole(e, u, v, temp, ground)
+	if !m.Wrap {
+		return orographicWhole(m, a, e, u, v, temp, ground)
 	}
-	size := g.orographicPatch()
+	size := orographicPatch(a)
 	step := size / 2
-	out := make([]float32, len(g.Tiles))
+	out := make([]float32, m.W*m.H)
 	// The taper: sin² over a patch, which with the patches half a patch apart
 	// adds to one everywhere.
 	taper := make([]float64, size)
@@ -112,16 +112,16 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 	// The patches' corners, each half a patch from the last, from half a patch
 	// before the map; a globe's go round and end where they began.
 	var xs, ys []int
-	if g.Wrap {
-		for x := 0; x < g.W; x += step {
+	if m.Wrap {
+		for x := 0; x < m.W; x += step {
 			xs = append(xs, x-step)
 		}
 	} else {
-		for x := -step; x < g.W; x += step {
+		for x := -step; x < m.W; x += step {
 			xs = append(xs, x)
 		}
 	}
-	for y := -step; y < g.H; y += step {
+	for y := -step; y < m.H; y += step {
 		ys = append(ys, y)
 	}
 	type patch struct{ x0, y0 int }
@@ -135,21 +135,21 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 	// afterwards, so the rain does not depend on how the patches were dealt.
 	sums := make([][]float32, len(patches))
 	workers := 1
-	if len(g.Tiles) >= spreadTiles {
-		workers = WorkersFor(len(patches))
+	if m.W*m.H >= spreadTiles {
+		workers = workersFor(len(patches))
 	}
 	bufs := make([][]complex128, workers)
 	cols := make([][]complex128, workers)
-	InParallel(len(patches), workers, func(pi, worker int) {
+	inParallel(len(patches), workers, func(pi, worker int) {
 		pt := patches[pi]
 		at := func(x, y int) int {
-			y = min(max(y, 0), g.H-1)
-			if g.Wrap {
-				x = ((x % g.W) + g.W) % g.W
+			y = min(max(y, 0), m.H-1)
+			if m.Wrap {
+				x = ((x % m.W) + m.W) % m.W
 			} else {
-				x = min(max(x, 0), g.W-1)
+				x = min(max(x, 0), m.W-1)
 			}
-			return y*g.W + x
+			return y*m.W + x
 		}
 		top, bottom := 0.0, math.Inf(1)
 		for dy := 0; dy < size; dy++ {
@@ -163,8 +163,8 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 			return
 		}
 		// The air over the middle of the patch.
-		mx, my := pt.x0+step, min(max(pt.y0+step, 0), g.H-1)
-		fx, fy := e.cellAt(g, at(mx, my))
+		mx, my := pt.x0+step, min(max(pt.y0+step, 0), m.H-1)
+		fx, fy := e.CellAt(at(mx, my))
 		// The patch is laid in the middle of a field twice its size, so that
 		// what the waves and the drifting cloud carry past its edges is not
 		// carried round onto its other side.
@@ -180,7 +180,7 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 				buf[(dy+pad)*box+dx+pad] = complex(ground[at(pt.x0+dx, pt.y0+dy)]*taper[dx]*taper[dy], 0)
 			}
 		}
-		if !liftField(buf, col, box, box, e.sample32(u, fx, fy), e.sample32(v, fx, fy), e.sample(temp, fx, fy), a.dx[my]*km, a.dy*km) {
+		if !liftField(buf, col, box, box, e.Sample32(u, fx, fy), e.Sample32(v, fx, fy), e.Sample(temp, fx, fy), a.Dx[my]*km, a.Dy*km) {
 			return
 		}
 		sum := make([]float32, box*box)
@@ -189,7 +189,7 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 		}
 		sums[pi] = sum
 	})
-	acc := make([]float64, len(g.Tiles))
+	acc := make([]float64, m.W*m.H)
 	for pi, sum := range sums {
 		if sum == nil {
 			continue
@@ -198,17 +198,17 @@ func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []f
 		box, pad := 2*size, size/2
 		for dy := 0; dy < box; dy++ {
 			y := pt.y0 - pad + dy
-			if y < 0 || y >= g.H {
+			if y < 0 || y >= m.H {
 				continue
 			}
 			for dx := 0; dx < box; dx++ {
 				x := pt.x0 - pad + dx
-				if g.Wrap {
-					x = ((x % g.W) + g.W) % g.W
-				} else if x < 0 || x >= g.W {
+				if m.Wrap {
+					x = ((x % m.W) + m.W) % m.W
+				} else if x < 0 || x >= m.W {
 					continue
 				}
-				acc[y*g.W+x] += float64(sum[dy*box+dx])
+				acc[y*m.W+x] += float64(sum[dy*box+dx])
 			}
 		}
 	}
@@ -276,10 +276,10 @@ func liftField(buf, col []complex128, bw, bh int, uu, vv, temp, dxm, dym float64
 // orographicWhole is orographic on a map that is not a globe: a valley is a
 // few score kilometres, under one wind, and is taken whole, in a field with
 // room round it into which its edges fall away to nothing.
-func (g *Grid) orographicWhole(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
-	out := make([]float32, len(g.Tiles))
+func orographicWhole(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64) []float32 {
+	out := make([]float32, m.W*m.H)
 	padX, padY := patchLeast, patchLeast
-	bw, bh := nextPowerOfTwo(g.W+2*padX), nextPowerOfTwo(g.H+2*padY)
+	bw, bh := nextPowerOfTwo(m.W+2*padX), nextPowerOfTwo(m.H+2*padY)
 	fall := func(d, pad int) float64 {
 		if d <= 0 {
 			return 1
@@ -294,22 +294,22 @@ func (g *Grid) orographicWhole(e *airEnv, u, v []float32, temp, ground []float64
 	top, bottom := 0.0, math.Inf(1)
 	for by := 0; by < bh; by++ {
 		y := by - padY
-		cy := min(max(y, 0), g.H-1)
-		wy := fall(max(-y, y-(g.H-1)), padY)
+		cy := min(max(y, 0), m.H-1)
+		wy := fall(max(-y, y-(m.H-1)), padY)
 		for bx := 0; bx < bw; bx++ {
 			x := bx - padX
-			cx := min(max(x, 0), g.W-1)
-			h := ground[cy*g.W+cx]
-			if x >= 0 && x < g.W && y >= 0 && y < g.H {
+			cx := min(max(x, 0), m.W-1)
+			h := ground[cy*m.W+cx]
+			if x >= 0 && x < m.W && y >= 0 && y < m.H {
 				top, bottom = math.Max(top, h), math.Min(bottom, h)
 			}
-			buf[by*bw+bx] = complex(h*wy*fall(max(-x, x-(g.W-1)), padX), 0)
+			buf[by*bw+bx] = complex(h*wy*fall(max(-x, x-(m.W-1)), padX), 0)
 		}
 	}
 	if top-bottom < reliefLeast {
 		return out
 	}
-	n := e.w * e.h
+	n := e.W * e.H
 	var uu, vv, t float64
 	for i := range n {
 		uu += float64(u[i]) / float64(n)
@@ -317,12 +317,12 @@ func (g *Grid) orographicWhole(e *airEnv, u, v []float32, temp, ground []float64
 		t += temp[i] / float64(n)
 	}
 	col := make([]complex128, max(bw, bh))
-	if !liftField(buf, col[:bh], bw, bh, uu, vv, t, g.air.dx[g.H/2]*km, g.air.dy*km) {
+	if !liftField(buf, col[:bh], bw, bh, uu, vv, t, a.Dx[m.H/2]*km, a.Dy*km) {
 		return out
 	}
-	for y := 0; y < g.H; y++ {
-		for x := 0; x < g.W; x++ {
-			out[y*g.W+x] = float32(math.Max(0, real(buf[(y+padY)*bw+x+padX])))
+	for y := 0; y < m.H; y++ {
+		for x := 0; x < m.W; x++ {
+			out[y*m.W+x] = float32(math.Max(0, real(buf[(y+padY)*bw+x+padX])))
 		}
 	}
 	return out

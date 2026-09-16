@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // cliffs cuts back the ground standing over the sea behind every cell of the
@@ -48,7 +49,7 @@ func (g *Grid) cliffs(s *surf, years float64, supply []float64) {
 			if !first {
 				// Behind a platform, the waves that reach the cliff are the
 				// broken ones the high water over the platform can carry.
-				force := seaDensity * gravity * breakerIndex * tide(j)
+				force := atmos.SeaDensity * gravity * breakerIndex * tide(j)
 				for b := range attack {
 					attack[b] = 0
 					if x := force / (cliffThreshold * strength(b)); x > 1 {

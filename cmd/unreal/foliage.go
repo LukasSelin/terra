@@ -54,7 +54,7 @@ type tree struct {
 	Tile    int
 }
 
-// hash is splitmix64 of x, the mixing tide.go draws the moon with, so that
+// hash is splitmix64 of x, the mixing clock/moon.go draws the moon with, so that
 // a tree's place and turn are the seed's and the tile's and nothing else's.
 func hash(x uint64) uint64 {
 	x += 0x9E3779B97F4A7C15

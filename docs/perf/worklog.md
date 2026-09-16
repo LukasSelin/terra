@@ -6,6 +6,79 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The air leaves the root package for internal/atmos
+
+**What this is.** The sixth move of splitting the root package, on
+`claude/atmos`, stacked on `claude/clock-moon`, in three commits each held
+to the digest. `wind.go`, `vapour.go`, `orographic.go`, `ocean.go`,
+`synoptic.go`, `ebm.go`, `year.go`, and the air's arithmetic out of
+`weather.go` (now `atmos/air.go`), are `internal/atmos`: the climate of the
+wind, the water in the air, the currents, the energy balance, the shape of
+the year and the day's weather. The root keeps the grid's side - the
+weather pass, the rain and runoff on each tile, and in `sky.go` the grid's
+and the land's readers of the wind and the day - with the old public names
+as aliases.
+
+1. The air stopped reading the grid. The environment is built from the
+   map's size, the air and the ground as the air reads it, handed over as
+   two slices the grid fills; the orographic pass takes the map and the
+   air; the rain pass's air-cell half is `RainCells`; the day's weather is
+   made and advanced by methods of its own.
+2. What the root reads was exported with `gopls rename`: some ninety
+   fields, methods and functions, `airEnv` becoming `Env`.
+3. The files moved. The tests that ask only the air went with them
+   (`ebm_test.go`, and the year's, the storm's, the hypsometric and the
+   day's range tests); the tests that make a grid or a land stayed. The
+   goroutine loop is `internal/par`, and the land hands the air its
+   `WorkersFor` at init.
+
+**Found on the way.** Moving the ground loops out of the environment into
+`Grid.airGround` added two allocations to every reading of the air: its
+slices were named results, and a named result shared with a goroutine's
+closure is put on the heap. Found by diffing `-memprofilerate 1` profiles of
+`TestWorldCreationBudget` against the parent branch; as locals, the counts
+are the parent's (valley 1329-1331, ancient 10412-10415, globe 34095-34104
+against 1330-1331, 10413-10414 and 34088-34092).
+
+**Checked.** `TERRA_DIGEST=check` passes on the scalar build and under
+`GOEXPERIMENT=simd`, with `TestMakingAWorldDoesNotDependOnTheGoroutines`, the
+heap budget and, under `TERRA_PHASES=1`, the pinned pass counts. The 34
+weather, wind, current, storm and year tests in the root pass without
+`-short`, and `internal/atmos`'s own. `go test -short ./...` fails only
+`TestAHistoryLeavesItsBedsInLayers`, as main does. The yardsticks were not
+run: no world moved.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small.txt`
+passes: valley -5.8 %, ancient -4.6 %, globe256 -5.5 % a tile, within the
+spread the moves before it read.
+
+---
+
+## 2026-09-16 - The moon and the tide go to clock
+
+**What this is.** The fifth move of splitting the root package, on
+`claude/clock-moon`, stacked on `claude/internal-phase-sysmem`. The moon
+and the tide at an open coast were a function of the tick and the founding
+moon and nothing else, so they are the calendar's: `clock/moon.go` holds
+`Moon`, `Tide`, `Epoch`, `EpochOf`, `MoonOn`, `TideOn` and the tide's
+strengths, with the two tests that ask only the moon. `tide.go` keeps the
+day's sea as the land reads it - `Land.Moon`, `Land.Tide`, `Grid.Tide`,
+`Grid.SetTide` - and the old names as aliases. The seed hash the moon was
+drawn with is also the bedrock's, so the root keeps it and `clock` has a
+copy of its own.
+
+**Checked.** `TERRA_DIGEST=check` passes, with
+`TestMakingAWorldDoesNotDependOnTheGoroutines` and the heap budget. The moon
+tests pass in `clock` and the land's two tide tests in the root.
+`go test -short ./...` fails only `TestAHistoryLeavesItsBedsInLayers`, as
+main does.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small.txt`
+passes: valley -3.8 %, ancient no significant change, globe256 -2.7 % a
+tile. Nothing here runs while a world is made.
+
+---
+
 ## 2026-09-16 - A clone reads as its original
 
 **What this is.** A fix to `Grid.Clone`, on `claude/clone-day-range`. Clone

@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // woodsShare is how much of a map's dry land will hold a wood. It is the
@@ -109,7 +110,7 @@ func (g *Grid) WoodsAt(p geom.Pos) float64 {
 		if g.Treeless(p) || g.Barren(p) {
 			return 0
 		}
-		if len(g.warm) == len(g.Tiles) && biotemperature(g.meanOn(i, g.Height[i]), float64(g.swing[i])) < holdridgePolar {
+		if len(g.warm) == len(g.Tiles) && atmos.Biotemperature(g.meanOn(i, g.Height[i]), float64(g.swing[i])) < atmos.HoldridgePolar {
 			return 0
 		}
 		return clamp01(climateLine * g.waterRatio(i))

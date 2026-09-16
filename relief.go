@@ -482,10 +482,10 @@ const tropic = 23.44
 // it: one in the north outside the tropics, minus one in the south, and
 // between the two inside them.
 func (g *Grid) equatorward(y int) float64 {
-	if !g.Wrap || g.air == nil || y < 0 || y >= len(g.air.lat) {
+	if !g.Wrap || g.air == nil || y < 0 || y >= len(g.air.Lat) {
 		return 1
 	}
-	return math.Max(-1, math.Min(1, g.air.lat[y]/tropic))
+	return math.Max(-1, math.Min(1, g.air.Lat[y]/tropic))
 }
 
 // raise builds the height field. The land is made of two things, because a

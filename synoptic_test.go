@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // weatherOver is the day's weather over a grid made by hand, with no systems
 // in it yet.
 func weatherOver(g *Grid) *Weather {
 	g.weather()
-	return &Weather{rng: rand.New(rand.NewPCG(1, 2)), winds: g.winds, env: g.winds.airEnv}
+	return atmos.StillWeather(rand.New(rand.NewPCG(1, 2)), g.winds)
 }
 
 // A low in the middle latitudes is carried east by the westerlies aloft, some
@@ -21,7 +22,7 @@ func TestStormsMoveEastInTheWesterlies(t *testing.T) {
 	wx := weatherOver(oceanGlobe(256, 128))
 	wx.Systems = []System{{Kind: Low, Lat: 45, Lon: 0, Depth: 20, Radius: 800, Life: 100}}
 	for day := range 3 {
-		wx.step(Year/2 + day)
+		wx.Step(Year/2 + day)
 	}
 	s := wx.Systems[0]
 	km := s.Lon * 111.32 * math.Cos(45*math.Pi/180)
@@ -44,7 +45,7 @@ func TestHurricanesDieOverLand(t *testing.T) {
 	// The continent is the second quarter of the way round, from -90 to 0.
 	wx.Systems = []System{storm(-45), storm(90)}
 	for day := range 3 {
-		wx.step(Year/4 + day)
+		wx.Step(Year/4 + day)
 	}
 	var land, sea bool
 	for _, s := range wx.Systems {
@@ -149,7 +150,7 @@ func TestTheWeatherChangesFromDayToDay(t *testing.T) {
 	if lowest < 870 || highest > 1084 {
 		t.Errorf("pressure ran from %.0f to %.0f hPa", lowest, highest)
 	}
-	if most > windMost || most < 10 {
+	if most > atmos.WindMost || most < 10 {
 		t.Errorf("the strongest wind in sixty days was %.0f m/s", most)
 	}
 	if changed < 20 {
@@ -165,32 +166,15 @@ func TestTheWeatherDoesNotDependOnTheGoroutines(t *testing.T) {
 		defer func() { Workers = was }()
 		wx := weatherOver(continent(35))
 		for day := range 12 {
-			wx.step(day)
-			wx.solve(day)
+			wx.Step(day)
+			wx.Solve(day)
 		}
-		return append(append(append([]float32(nil), wx.u...), wx.v...), wx.p...)
+		return append(append(append([]float32(nil), wx.U...), wx.V...), wx.P...)
 	}
 	one, many := run(1), run(8)
 	for i := range one {
 		if one[i] != many[i] {
 			t.Fatalf("one goroutine and eight made different weather at %d: %v and %v", i, one[i], many[i])
 		}
-	}
-}
-
-// The most a tropical cyclone can blow over a sea at twenty-eight degrees is
-// some seventy to ninety metres a second, and it grows with the sea (Emanuel,
-// 1986; the observed maximum intensities are near it); over a sea too cool to
-// feed one the most is little.
-func TestTheWarmerSeaMakesTheDeeperStorm(t *testing.T) {
-	v := stormWindOf(potentialDepth(28))
-	if v < 60 || v > 95 {
-		t.Errorf("a sea at 28 C makes a storm of %.0f m/s at most", v)
-	}
-	if !(potentialDepth(30) > potentialDepth(28) && potentialDepth(28) > potentialDepth(24)) {
-		t.Error("the potential intensity does not grow with the sea")
-	}
-	if got := stormWindOf(stormDepthOf(40)); math.Abs(got-40) > 1e-9 {
-		t.Errorf("a 40 m/s storm's depth reads back as %.3f m/s", got)
 	}
 }

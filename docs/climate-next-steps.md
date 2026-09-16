@@ -64,7 +64,7 @@ extent, some 25 million km² between the hemispheres (NSIDC), is about 5% of
 the surface. Options, in order of preference:
 
 - read the freeze off the ocean model's own water temperature
-  (`ocean.go`'s `temp`), which already carries the currents;
+  (`internal/atmos/ocean.go`'s `temp`), which already carries the currents;
 - read it off the coldest month rather than the annual mean, as the tree
   line is read off the warmest;
 - as a stopgap, move the threshold to the air mean at the observed

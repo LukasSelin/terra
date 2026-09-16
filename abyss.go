@@ -191,8 +191,8 @@ var sinksPastCCD = func() float64 {
 // seaWarmth is the year's mean over tile i's row, which is what the sea over
 // it is read at: see quietFloor.
 func (g *Grid) seaWarmth(i int) float64 {
-	if g.air != nil && i/g.W < len(g.air.mean) {
-		return g.air.mean[i/g.W]
+	if g.air != nil && i/g.W < len(g.air.Mean) {
+		return g.air.Mean[i/g.W]
 	}
 	return MeanTemp
 }

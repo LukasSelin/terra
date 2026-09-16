@@ -93,8 +93,8 @@ const weatherMost = 4.0
 func (g *Grid) meanTempOf(i int) float64 {
 	y := i / g.W
 	mean := MeanTemp
-	if g.air != nil && y < len(g.air.mean) {
-		mean = g.air.mean[y]
+	if g.air != nil && y < len(g.air.Mean) {
+		mean = g.air.Mean[y]
 	}
 	t := mean - Lapse*g.Height[i]
 	if g.Wrap {

@@ -304,8 +304,8 @@ func TestTheSunnySideFacesTheEquator(t *testing.T) {
 		return g.Sunlight(geom.Pos{X: 10, Y: y})
 	}
 	north, south := 10, 50
-	if !(g.air.lat[north] > tropic && g.air.lat[south] < -tropic) {
-		t.Fatalf("rows %d and %d are at %.0f and %.0f", north, south, g.air.lat[north], g.air.lat[south])
+	if !(g.air.Lat[north] > tropic && g.air.Lat[south] < -tropic) {
+		t.Fatalf("rows %d and %d are at %.0f and %.0f", north, south, g.air.Lat[north], g.air.Lat[south])
 	}
 	if !(face(north, true) > face(north, false)) {
 		t.Error("in the north a south-facing slope is not the sunnier")

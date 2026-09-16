@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // twoOceans is an ocean globe with two continents running from seventy degrees
@@ -25,7 +27,7 @@ func twoOceans() *Grid {
 func band(g *Grid, lo, hi float64, x0, x1 int, read func(i int) float64) float64 {
 	var s, n float64
 	for y := 0; y < g.H; y++ {
-		if l := g.air.lat[y]; l < lo || l >= hi {
+		if l := g.air.Lat[y]; l < lo || l >= hi {
 			continue
 		}
 		for x := x0; x < x1; x++ {
@@ -81,7 +83,7 @@ func TestTheColdCoastIsADesert(t *testing.T) {
 	still := twoOceans()
 	still.weather()
 	// The same ground and wind with the sea left the one warmth.
-	still.winds.warm, still.winds.coast = nil, nil
+	still.winds.Warm, still.winds.Coast = nil, nil
 	still.rainOn()
 	for _, lat := range []float64{22, -22} {
 		lo, hi := lat-8, lat+8
@@ -127,7 +129,7 @@ func TestTheSubpolarWestCoastIsMild(t *testing.T) {
 func TestAValleyHasNoCurrents(t *testing.T) {
 	g := ridged(300)
 	g.weather()
-	if g.winds.warm != nil || g.winds.coast != nil {
+	if g.winds.Warm != nil || g.winds.Coast != nil {
 		t.Fatal("a valley has currents")
 	}
 	for i := range g.Tiles {
@@ -146,8 +148,8 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 		g := twoOceans()
 		g.weather()
 		var s float64
-		for i, w := range g.winds.warm {
-			s += w*float64(i%89) + g.winds.coast[i]
+		for i, w := range g.winds.Warm {
+			s += w*float64(i%89) + g.winds.Coast[i]
 		}
 		for i, r := range g.rain {
 			s += r * float64(i%97)
@@ -171,26 +173,26 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	day := func(lon float64, currents bool) (age, sea, warm float64) {
 		wx := weatherOver(twoOceans())
 		if !currents {
-			wx.env.warm, wx.env.coast = nil, nil
+			wx.Env.Warm, wx.Env.Coast = nil, nil
 		}
 		wx.Systems = []System{{Kind: Storm, Lat: 18, Lon: lon, Depth: 50, Radius: 200, Life: 100}}
-		wx.step(Year / 4)
+		wx.Step(Year / 4)
 		s := wx.Systems[0]
-		fx, fy, _ := wx.env.cellOf(s.Lat, s.Lon)
-		return s.Age, wx.env.sample(wx.env.sea, fx, fy), wx.env.seaTemp(fx, fy, yearSin(Year/4))
+		fx, fy, _ := wx.Env.CellOf(s.Lat, s.Lon)
+		return s.Age, wx.Env.Sample(wx.Env.Sea, fx, fy), wx.Env.SeaTemp(fx, fy, atmos.YearSin(Year/4))
 	}
 	// The first ocean runs from -123.75 degrees to 0.
 	cold, coldSea, coldWarm := day(-1, true)
 	still, _, stillWarm := day(-1, false)
 	warm, warmSea, warmWarm := day(-117.5, true)
 	t.Logf("off the eastern shore the sea is %.1f degrees and a storm ages %.0f days in a day; with no currents %.1f and %.0f; off the western shore %.1f and %.0f (a storm needs %.1f)",
-		coldWarm, cold, stillWarm, still, warmWarm, warm, stormSea)
+		coldWarm, cold, stillWarm, still, warmWarm, warm, atmos.StormSea)
 	if coldSea < 0.9 || warmSea < 0.9 {
 		t.Fatalf("the storms came down on sea %.2f and %.2f, not open water", coldSea, warmSea)
 	}
-	if coldWarm >= stormSea || warmWarm < stormSea || stillWarm < stormSea {
+	if coldWarm >= atmos.StormSea || warmWarm < atmos.StormSea || stillWarm < atmos.StormSea {
 		t.Errorf("the sea is %.1f off the eastern shore, %.1f off the western and %.1f with no currents, against the %.1f a storm needs",
-			coldWarm, warmWarm, stillWarm, stormSea)
+			coldWarm, warmWarm, stillWarm, atmos.StormSea)
 	}
 	if cold <= still || cold <= warm {
 		t.Errorf("a storm over the cold current aged %.0f days, over the same water with no currents %.0f, over the warm western water %.0f", cold, still, warm)

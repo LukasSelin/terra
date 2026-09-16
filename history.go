@@ -3354,8 +3354,8 @@ func (g *Grid) keepBook(book []record, epoch int) {
 // could only meet by making salt where no salt is made.
 func (g *Grid) quietFloor(i int) (Bedrock, float64) {
 	warm := MeanTemp
-	if g.air != nil && i/g.W < len(g.air.mean) {
-		warm = g.air.mean[i/g.W]
+	if g.air != nil && i/g.W < len(g.air.Mean) {
+		warm = g.air.Mean[i/g.W]
 	}
 	lime := limeBed * clamp01((warm-limeCold)/(limeWarm-limeCold))
 	mud := quietMud * epochYears

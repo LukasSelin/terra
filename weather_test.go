@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Rain falls in belts: most under the equator, least in the horse latitudes
@@ -13,7 +15,7 @@ func TestRainFallsInBelts(t *testing.T) {
 	band := func(lo, hi float64) float64 {
 		var sum, n float64
 		for i := range g.Tiles {
-			lat := math.Abs(g.air.lat[i/g.W])
+			lat := math.Abs(g.air.Lat[i/g.W])
 			if g.underSea(i) || lat < lo || lat >= hi {
 				continue
 			}
@@ -70,8 +72,8 @@ func TestAMountainCastsARainShadow(t *testing.T) {
 	// The same valley under the polar easterlies.
 	g = ridged(300)
 	g.air = defaultAir(g)
-	for y := range g.air.lat {
-		g.air.lat[y] = 75
+	for y := range g.air.Lat {
+		g.air.Lat[y] = 75
 	}
 	g.weather()
 	if east, west := meanRain(g, 62, 75), meanRain(g, 45, 58); east < 1.3*west {
@@ -127,17 +129,17 @@ func TestRunoffIsWhatTheRainLeaves(t *testing.T) {
 		}
 	}
 	for _, c := range []struct{ p, pet float64 }{{1000, 10}, {1000, 800}, {1000, 5000}, {10, 1000}} {
-		e := fu(c.p, c.pet)
+		e := atmos.Fu(c.p, c.pet)
 		if e < 0 || e > c.p || e > c.pet {
 			t.Errorf("fu(%v, %v) = %v", c.p, c.pet, e)
 		}
 	}
 	// Where the air could take hardly anything it takes nearly all of it, and
 	// where it could take everything it takes nearly all the rain.
-	if e := fu(1000, 10); e < 9 {
+	if e := atmos.Fu(1000, 10); e < 9 {
 		t.Errorf("with 10 mm the air could take, it took %v of 1000", e)
 	}
-	if e := fu(10, 10000); e < 9.9 {
+	if e := atmos.Fu(10, 10000); e < 9.9 {
 		t.Errorf("with 10 mm of rain and a desert's air, it took back %v", e)
 	}
 }
@@ -163,7 +165,7 @@ func TestWetnessScalesTheRain(t *testing.T) {
 func TestAValleyHasOneLatitude(t *testing.T) {
 	g := NewLand(1, DefaultTerms()).Grid
 	for y := 1; y < g.H; y++ {
-		if g.air.lat[y] != g.air.lat[0] || g.air.mean[y] != g.air.mean[0] || g.air.dx[y] != g.air.dx[0] {
+		if g.air.Lat[y] != g.air.Lat[0] || g.air.Mean[y] != g.air.Mean[0] || g.air.Dx[y] != g.air.Dx[0] {
 			t.Fatalf("row %d of a valley has different air from row 0", y)
 		}
 	}
@@ -176,16 +178,16 @@ func TestAValleyHasOneLatitude(t *testing.T) {
 func TestTheWaterTheAirTakesUpFallsAgain(t *testing.T) {
 	for _, g := range []*Grid{oceanGlobe(256, 128), twoOceans(), continent(25)} {
 		g.weather()
-		e := g.winds.airEnv
-		for k := range phases {
-			b := g.winds.budget[k]
+		e := g.winds.Env
+		for k := range atmos.Phases {
+			b := g.winds.Budget[k]
 			var evap, rain float64
-			for cy := 0; cy < e.h; cy++ {
-				area := e.dx[cy] * e.dy
-				for cx := 0; cx < e.w; cx++ {
-					i := cy*e.w + cx
-					evap += area * b.evap[i]
-					rain += area * (b.rain[i] + b.oro[i])
+			for cy := 0; cy < e.H; cy++ {
+				area := e.Dx[cy] * e.Dy
+				for cx := 0; cx < e.W; cx++ {
+					i := cy*e.W + cx
+					evap += area * b.Evap[i]
+					rain += area * (b.Rain[i] + b.Oro[i])
 				}
 			}
 			if math.Abs(rain/evap-1) > 0.01 {
@@ -194,8 +196,8 @@ func TestTheWaterTheAirTakesUpFallsAgain(t *testing.T) {
 			// And a planet's worth: some two and a half to three and a half mm
 			// a day (Trenberth and others, 2007: 2.7).
 			var area float64
-			for cy := 0; cy < e.h; cy++ {
-				area += e.dx[cy] * e.dy * float64(e.w)
+			for cy := 0; cy < e.H; cy++ {
+				area += e.Dx[cy] * e.Dy * float64(e.W)
 			}
 			if mm := evap / area * 86400; mm < 2 || mm > 4 {
 				t.Errorf("phase %d: the planet evaporates %.2f mm a day", k, mm)
@@ -218,15 +220,5 @@ func TestTheShadowReachesPastTheFootOfTheRange(t *testing.T) {
 		if r := meanRain(g, x, x+3); r >= plain {
 			t.Errorf("column %d, %d past the crest, has %.0f mm against the plain's %.0f", x, x-60, r, plain)
 		}
-	}
-}
-
-// A dry continent's day swings further than a humid coast's, and the air over
-// it takes up more for it: Hargreaves's evaporation goes as the root of the
-// range, six degrees on a humid coast and sixteen in a dry interior.
-func TestADryInteriorsDaySwingsWider(t *testing.T) {
-	coast, desert := diurnal(0, 0.5), diurnal(1, 10)
-	if math.Abs(coast-math.Sqrt(0.6)) > 1e-9 || math.Abs(desert-math.Sqrt(1.6)) > 1e-9 {
-		t.Errorf("a humid coast evaporates %.3f of the table and a dry interior %.3f", coast, desert)
 	}
 }

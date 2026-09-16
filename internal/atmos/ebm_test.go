@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -11,15 +11,15 @@ import (
 // falls all the way to the pole, and is the same in both hemispheres.
 func TestTheSunGivesEachLatitudeItsWarmth(t *testing.T) {
 	for _, c := range []struct{ lat, want float64 }{{0, 26.5}, {15, 25.5}, {30, 20.5}, {45, 11}, {60, 1}} {
-		if got := zonalMean(c.lat); math.Abs(got-c.want) > 2 {
+		if got := ZonalMean(c.lat); math.Abs(got-c.want) > 2 {
 			t.Errorf("%v degrees: the balance's mean is %.1f C, the real world's %.1f", c.lat, got, c.want)
 		}
-		if n, s := zonalMean(c.lat), zonalMean(-c.lat); math.Abs(n-s) > 1.5 {
+		if n, s := ZonalMean(c.lat), ZonalMean(-c.lat); math.Abs(n-s) > 1.5 {
 			t.Errorf("%v degrees: %.1f C in the north and %.1f in the south", c.lat, n, s)
 		}
 	}
 	for lat := 0.0; lat < 89; lat++ {
-		if zonalMean(lat+1) > zonalMean(lat)+1e-9 {
+		if ZonalMean(lat+1) > ZonalMean(lat)+1e-9 {
 			t.Fatalf("the mean rises from %.0f to %.0f degrees", lat, lat+1)
 		}
 	}

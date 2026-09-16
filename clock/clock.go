@@ -22,6 +22,10 @@
 // run of twenty thousand days turn a settlement over three or four times,
 // which is the only way to see whether what one generation believed
 // outlived it. See entity.Lifespan.
+//
+// The moon is kept here too, and the tide it raises: a function of the day
+// and of where the moon stood on the founding day, and nothing else. See
+// moon.go.
 package clock
 
 import "fmt"

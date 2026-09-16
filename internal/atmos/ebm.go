@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -359,4 +359,13 @@ func (c *ebmClimate) at(field *[ebmBands]float64, lat float64) float64 {
 		return field[ebmBands-1]
 	}
 	return field[k] + (field[k+1]-field[k])*(f-float64(k))
+}
+
+// ZonalMean is the year's mean at sea level at a latitude on a globe: the energy
+// balance's zonal mean there. It was MeanTemp and thirty degrees times how
+// far the cosine of the latitude stood from its value at Temperate, which put
+// the equator at nineteen degrees and the poles at minus eleven.
+func ZonalMean(lat float64) float64 {
+	e := ebm()
+	return e.at(&e.mean, lat)
 }

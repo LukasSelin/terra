@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Grid is the world map, row-major. With Wrap the east edge is joined to the
@@ -156,7 +157,7 @@ type Grid struct {
 	// half, which is what tells a monsoon from a Mediterranean winter rain.
 	rainWarm []float32
 	// winds is the climate of the wind the rain was last read from. It is
-	// never changed once made, so copies of the map share it. See wind.go.
+	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
 	// aired is the ground the weather was last read over: see weatherStale.
 	// A copy of the map starts without it, and reads its weather afresh.
@@ -530,7 +531,7 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // season, whichever is the stricter. See treeMean.
 func (g *Grid) Treeless(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < treeLineMean(float64(g.swing[i]))
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < atmos.TreeLineMean(float64(g.swing[i]))
 }
 
 // Barren reports whether the ground here is under ice: a summer too cold to
@@ -541,8 +542,8 @@ func (g *Grid) Barren(p geom.Pos) bool {
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
-	summer := g.meanOn(i, g.Height[i]) + summerPeak*math.Abs(float64(g.swing[i]))
-	return summer < iceSummer(g.Rain(i))
+	summer := g.meanOn(i, g.Height[i]) + atmos.SummerPeak*math.Abs(float64(g.swing[i]))
+	return summer < atmos.IceSummer(g.Rain(i))
 }
 
 // Freezing reports whether the water at p never thaws: high enough, or far
@@ -583,7 +584,7 @@ func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
 		return 0, 0, 0
 	}
 	mean = g.meanOn(i, g.Height[i])
-	d := monthPeak * math.Abs(float64(g.swing[i]))
+	d := atmos.MonthPeak * math.Abs(float64(g.swing[i]))
 	return mean, mean - d, mean + d
 }
 
@@ -600,11 +601,11 @@ func (g *Grid) RainWarm(i int) float64 {
 // it, and a middling amount where the air has not been read.
 func (g *Grid) contAt(i int) float64 {
 	if g.winds == nil {
-		return contMiddling
+		return atmos.ContMiddling
 	}
-	e := g.winds.airEnv
-	fx, fy := e.cellAt(g, i)
-	return e.sample(e.cont, fx, fy)
+	e := g.winds.Env
+	fx, fy := e.CellAt(i)
+	return e.Sample(e.Cont, fx, fy)
 }
 
 // freeze turns the water that never thaws to ice, and gives back to the water

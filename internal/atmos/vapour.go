@@ -1,4 +1,4 @@
-package terra
+package atmos
 
 import (
 	"math"
@@ -179,7 +179,7 @@ type vapourIn struct {
 // column and where the air gathered - and what of the ground's lift it could
 // give.
 type vapourOut struct {
-	w, evap, rain, oro []float64
+	w, Evap, Rain, Oro []float64
 	// sat is the water each column would hold saturated, kg/m².
 	sat []float64
 }
@@ -196,10 +196,10 @@ type vapourCell struct {
 }
 
 // vapour settles one phase's budget.
-func (e *airEnv) vapour(in vapourIn) vapourOut {
+func (e *Env) vapour(in vapourIn) vapourOut {
 	defer phase.Start("airEnv.vapour")()
-	n := e.w * e.h
-	dy := e.dy
+	n := e.W * e.H
+	dy := e.Dy
 	f := e.vapourFluxes(in.u, in.v)
 	east, north, gather := f.east, f.north, f.gather
 	westOf, southOf := f.westOf, f.southOf
@@ -214,10 +214,10 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 	seaB := make([]float64, n)  // and what each kg/m² of W takes off it, a second
 	satW := make([]float64, n)  // the saturated column
 	rainK := make([]float64, n) // what of the column's rain the air keeps
-	for cy := 0; cy < e.h; cy++ {
-		area := e.dx[cy] * dy
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		area := e.Dx[cy] * dy
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			// The column is read against the air at sea level: what the
 			// ground's height does to the air climbing it is the ground's lift
 			// to wring out (orographic.go), and not the column's to rain again.
@@ -226,16 +226,16 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 			speed := math.Max(gustLeast, math.Hypot(float64(in.u[i]), float64(in.v[i])))
 			// The bulk formula, with the humidity at the ground the column's
 			// water over its scale height.
-			bulk := airDensity * exchangeCoeff * speed * e.sea[i]
+			bulk := airDensity * exchangeCoeff * speed * e.Sea[i]
 			seaA[i] = bulk * saturation(in.sst[i])
 			seaB[i] = bulk / (airDensity * vapourHeight)
-			cells[i].give = seaA[i] + (1-e.sea[i])*in.landEvap[i]
+			cells[i].give = seaA[i] + (1-e.Sea[i])*in.landEvap[i]
 			out := math.Max(0, east[i]) + math.Max(0, -westOf(cx, cy)) + math.Max(0, north[i]) + math.Max(0, -southOf(cx, cy))
 			cells[i].lose = out/area + seaB[i] + gather[i]
-			if !e.wrap {
+			if !e.Wrap {
 				// Air coming in over the edge brings the sea's water with it.
 				bnd := boundaryHumidity * ws
-				if cx == e.w-1 {
+				if cx == e.W-1 {
 					cells[i].give += math.Max(0, -east[i]) / area * bnd
 				}
 				if cx == 0 {
@@ -244,7 +244,7 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 				if cy == 0 {
 					cells[i].give += math.Max(0, -north[i]) / area * bnd
 				}
-				if cy == e.h-1 {
+				if cy == e.H-1 {
 					cells[i].give += math.Max(0, southOf(cx, cy)) / area * bnd
 				}
 			}
@@ -266,38 +266,38 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 	// Where each cell's water comes from: up to four cells upwind, and the
 	// part a second of each one's water that crosses into it.
 	const none = -1
-	for cy := 0; cy < e.h; cy++ {
-		area := e.dx[cy] * dy
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		area := e.Dx[cy] * dy
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			c := &cells[i]
 			c.from = [4]int32{none, none, none, none}
-			if f := westOf(cx, cy); f > 0 && (cx > 0 || e.wrap) {
+			if f := westOf(cx, cy); f > 0 && (cx > 0 || e.Wrap) {
 				c.from[0], c.share[0] = int32(e.at(cx-1, cy)), f/area
 			}
-			if f := east[i]; f < 0 && (cx+1 < e.w || e.wrap) {
+			if f := east[i]; f < 0 && (cx+1 < e.W || e.Wrap) {
 				c.from[1], c.share[1] = int32(e.at(cx+1, cy)), -f/area
 			}
-			if f := southOf(cx, cy); f > 0 && cy+1 < e.h {
-				c.from[2], c.share[2] = int32(i+e.w), f/area
+			if f := southOf(cx, cy); f > 0 && cy+1 < e.H {
+				c.from[2], c.share[2] = int32(i+e.W), f/area
 			}
 			if f := north[i]; f < 0 && cy > 0 {
-				c.from[3], c.share[3] = int32(i-e.w), -f/area
+				c.from[3], c.share[3] = int32(i-e.W), -f/area
 			}
-			if e.wrap {
+			if e.Wrap {
 				// The eddies' share, both ways across every face.
-				across := eddyVapour / (e.dx[cy] * e.dx[cy])
+				across := eddyVapour / (e.Dx[cy] * e.Dx[cy])
 				c.from[0], c.share[0] = int32(e.at(cx-1, cy)), c.share[0]+across
 				c.from[1], c.share[1] = int32(e.at(cx+1, cy)), c.share[1]+across
 				c.lose += 2 * across
-				if cy+1 < e.h {
-					d := eddyVapour * 0.5 * (e.dx[cy] + e.dx[cy+1]) / dy / area
-					c.from[2], c.share[2] = int32(i+e.w), c.share[2]+d
+				if cy+1 < e.H {
+					d := eddyVapour * 0.5 * (e.Dx[cy] + e.Dx[cy+1]) / dy / area
+					c.from[2], c.share[2] = int32(i+e.W), c.share[2]+d
 					c.lose += d
 				}
 				if cy > 0 {
-					d := eddyVapour * 0.5 * (e.dx[cy] + e.dx[cy-1]) / dy / area
-					c.from[3], c.share[3] = int32(i-e.w), c.share[3]+d
+					d := eddyVapour * 0.5 * (e.Dx[cy] + e.Dx[cy-1]) / dy / area
+					c.from[3], c.share[3] = int32(i-e.W), c.share[3]+d
 					c.lose += d
 				}
 			}
@@ -317,8 +317,8 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 	taken := make([]float64, n)
 	type order struct{ x0, x1, dx, y0, y1, dy int }
 	orders := [4]order{
-		{0, e.w, 1, 0, e.h, 1}, {e.w - 1, -1, -1, 0, e.h, 1},
-		{0, e.w, 1, e.h - 1, -1, -1}, {e.w - 1, -1, -1, e.h - 1, -1, -1},
+		{0, e.W, 1, 0, e.H, 1}, {e.W - 1, -1, -1, 0, e.H, 1},
+		{0, e.W, 1, e.H - 1, -1, -1}, {e.W - 1, -1, -1, e.H - 1, -1, -1},
 	}
 	// Each visit to a cell takes one step of Newton's method on its own
 	// equation, lose·w + keep·P(w) = what it is given, with its neighbours
@@ -329,7 +329,7 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 		for _, o := range orders {
 			for cy := o.y0; cy != o.y1; cy += o.dy {
 				for cx := o.x0; cx != o.x1; cx += o.dx {
-					i := cy*e.w + cx
+					i := cy*e.W + cx
 					c := &cells[i]
 					sum := c.give
 					for j, from := range c.from {
@@ -368,7 +368,7 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 				}
 			}
 		}
-		if e.wrap && e.h > 2 {
+		if e.Wrap && e.H > 2 {
 			e.zonalCorrection(w, cells, in.oro, satW)
 		}
 		if most < vapourSettled*float64(n) {
@@ -376,10 +376,10 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 		}
 	}
 
-	out := vapourOut{w: w, evap: make([]float64, n), rain: make([]float64, n), oro: taken, sat: satW}
+	out := vapourOut{w: w, Evap: make([]float64, n), Rain: make([]float64, n), Oro: taken, sat: satW}
 	for i := range w {
-		out.evap[i] = seaA[i] - seaB[i]*w[i] + (1-e.sea[i])*in.landEvap[i]
-		out.rain[i] = rainK[i]*columnRain(w[i], satW[i]) + gather[i]*w[i]
+		out.Evap[i] = seaA[i] - seaB[i]*w[i] + (1-e.Sea[i])*in.landEvap[i]
+		out.Rain[i] = rainK[i]*columnRain(w[i], satW[i]) + gather[i]*w[i]
 	}
 	return out
 }
@@ -389,13 +389,13 @@ func (e *airEnv) vapour(in vapourIn) vapourOut {
 // mixing of the water between the latitudes, which a sweep moves a cell at a
 // time, and one tridiagonal solve down the rows moves it all at once. It is a
 // coarse grid of one cell a row under the sweeps.
-func (e *airEnv) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float64) {
+func (e *Env) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float64) {
 	const none = -1
-	h := e.h
+	h := e.H
 	diag, up, down, res := make([]float64, h), make([]float64, h), make([]float64, h), make([]float64, h)
 	for cy := 0; cy < h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			c := &cells[i]
 			sum := c.give
 			for j, from := range c.from {
@@ -448,8 +448,8 @@ func (e *airEnv) zonalCorrection(w []float64, cells []vapourCell, oro, satW []fl
 		if d != d || math.IsInf(d, 0) {
 			continue
 		}
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			w[i] = math.Max(0, w[i]+d)
 		}
 	}
@@ -464,56 +464,56 @@ func (e *airEnv) zonalCorrection(w []float64, cells []vapourCell, oro, satW []fl
 // cell, read against layerDepth: over high ground less air goes. Of that flux
 // the water near the ground goes with all of it, and the water above with the
 // part that does not gather (see the remark at the top).
-func (e *airEnv) vapourFluxes(u, v []float32) vapourFlux {
-	n := e.w * e.h
-	dy := e.dy
+func (e *Env) vapourFluxes(u, v []float32) vapourFlux {
+	n := e.W * e.H
+	dy := e.Dy
 	east, north := make([]float64, n), make([]float64, n)
 	carry := func(i int, s []float32) float64 { return float64(s[i]) * e.depth[i] / layerDepth }
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			switch {
-			case cx+1 < e.w:
+			case cx+1 < e.W:
 				east[i] = 0.5 * (carry(i, u) + carry(i+1, u)) * dy
-			case e.wrap:
-				east[i] = 0.5 * (carry(i, u) + carry(cy*e.w, u)) * dy
+			case e.Wrap:
+				east[i] = 0.5 * (carry(i, u) + carry(cy*e.W, u)) * dy
 			}
 			if cy > 0 {
-				north[i] = 0.5 * (carry(i, v) + carry(i-e.w, v)) * 0.5 * (e.dx[cy] + e.dx[cy-1])
+				north[i] = 0.5 * (carry(i, v) + carry(i-e.W, v)) * 0.5 * (e.Dx[cy] + e.Dx[cy-1])
 			}
 		}
 	}
 	// The edges of a map that is not a globe are open: the air crosses each
 	// as it crosses the face inside it, so that the edge neither gathers nor
 	// spreads it.
-	f := vapourFlux{east: east, north: north, wrap: e.wrap, w: e.w, h: e.h}
-	if !e.wrap {
-		f.west, f.south = make([]float64, e.h), make([]float64, e.w)
-		for cy := 0; cy < e.h; cy++ {
-			row := cy * e.w
-			if e.w > 1 {
-				east[row+e.w-1] = east[row+e.w-2]
+	f := vapourFlux{east: east, north: north, wrap: e.Wrap, w: e.W, h: e.H}
+	if !e.Wrap {
+		f.west, f.south = make([]float64, e.H), make([]float64, e.W)
+		for cy := 0; cy < e.H; cy++ {
+			row := cy * e.W
+			if e.W > 1 {
+				east[row+e.W-1] = east[row+e.W-2]
 				f.west[cy] = east[row]
 			} else {
 				east[row] = carry(row, u) * dy
 				f.west[cy] = east[row]
 			}
 		}
-		for cx := 0; cx < e.w; cx++ {
-			if e.h > 1 {
-				north[cx] = north[e.w+cx]
-				f.south[cx] = north[(e.h-1)*e.w+cx]
+		for cx := 0; cx < e.W; cx++ {
+			if e.H > 1 {
+				north[cx] = north[e.W+cx]
+				f.south[cx] = north[(e.H-1)*e.W+cx]
 			} else {
-				north[cx] = carry(cx, v) * e.dx[0]
+				north[cx] = carry(cx, v) * e.Dx[0]
 				f.south[cx] = north[cx]
 			}
 		}
 	}
 	// What leaves each cell through its faces, net, in m²/s.
 	div := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			div[i] = east[i] - f.westOf(cx, cy) + north[i] - f.southOf(cx, cy)
 		}
 	}
@@ -522,19 +522,19 @@ func (e *airEnv) vapourFluxes(u, v []float32) vapourFlux {
 	// the air squeezed round a hill, or hurried off the edge of a valley -
 	// which goes round rather than up, the whole column with it.
 	rate := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		area := e.dx[cy] * dy
-		for cx := 0; cx < e.w; cx++ {
-			rate[cy*e.w+cx] = div[cy*e.w+cx] / area
+	for cy := 0; cy < e.H; cy++ {
+		area := e.Dx[cy] * dy
+		for cx := 0; cx < e.W; cx++ {
+			rate[cy*e.W+cx] = div[cy*e.W+cx] / area
 		}
 	}
 	rate = e.blur(rate, synopticReach)
 	gather := make([]float64, n)
 	remove := make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		area := e.dx[cy] * dy
-		for cx := 0; cx < e.w; cx++ {
-			i := cy*e.w + cx
+	for cy := 0; cy < e.H; cy++ {
+		area := e.Dx[cy] * dy
+		for cx := 0; cx < e.W; cx++ {
+			i := cy*e.W + cx
 			broad := rate[i] * area
 			remove[i] = div[i] - convLayer*broad
 			gather[i] = convLayer * math.Max(0, -rate[i])
@@ -591,9 +591,9 @@ func (f vapourFlux) southOf(cx, cy int) float64 {
 // On a globe whose rows are a power of two cells round, each row is taken to
 // its Fourier modes and each mode solved down the column exactly; a valley's
 // few cells are relaxed.
-func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
-	n := e.w * e.h
-	dy := e.dy
+func (e *Env) gatheringFlux(div []float64) (gx, gy []float64) {
+	n := e.W * e.H
+	dy := e.Dy
 	var mean float64
 	for _, d := range div {
 		mean += d
@@ -601,72 +601,72 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 	mean /= float64(n)
 	// The conductance across the face on the east of each row's cells, and
 	// across the face on the north of each row: none across a pole.
-	cx := make([]float64, e.h)
-	cn := make([]float64, e.h+1)
-	for cy := 0; cy < e.h; cy++ {
-		cx[cy] = dy / e.dx[cy]
+	cx := make([]float64, e.H)
+	cn := make([]float64, e.H+1)
+	for cy := 0; cy < e.H; cy++ {
+		cx[cy] = dy / e.Dx[cy]
 		if cy > 0 {
-			cn[cy] = 0.5 * (e.dx[cy] + e.dx[cy-1]) / dy
+			cn[cy] = 0.5 * (e.Dx[cy] + e.Dx[cy-1]) / dy
 		}
 	}
 	chi := make([]float64, n)
-	if e.wrap && kernel.PowerOfTwo(e.w) && e.h > 1 {
+	if e.Wrap && kernel.PowerOfTwo(e.W) && e.H > 1 {
 		rows := make([]complex128, n)
 		for i, d := range div {
 			rows[i] = complex(d-mean, 0)
 		}
-		for cy := 0; cy < e.h; cy++ {
-			kernel.FFT(rows[cy*e.w:(cy+1)*e.w], false)
+		for cy := 0; cy < e.H; cy++ {
+			kernel.FFT(rows[cy*e.W:(cy+1)*e.W], false)
 		}
-		lo, mid, hi, rhs := make([]complex128, e.h), make([]complex128, e.h), make([]complex128, e.h), make([]complex128, e.h)
-		for m := 0; m < e.w; m++ {
-			eig := 2*math.Cos(2*math.Pi*float64(m)/float64(e.w)) - 2
-			for cy := 0; cy < e.h; cy++ {
+		lo, mid, hi, rhs := make([]complex128, e.H), make([]complex128, e.H), make([]complex128, e.H), make([]complex128, e.H)
+		for m := 0; m < e.W; m++ {
+			eig := 2*math.Cos(2*math.Pi*float64(m)/float64(e.W)) - 2
+			for cy := 0; cy < e.H; cy++ {
 				lo[cy], hi[cy] = complex(cn[cy], 0), complex(cn[cy+1], 0)
 				mid[cy] = complex(-cn[cy]-cn[cy+1]+cx[cy]*eig, 0)
-				rhs[cy] = rows[cy*e.w+m]
+				rhs[cy] = rows[cy*e.W+m]
 			}
 			if m == 0 {
 				// A constant can be added to χ: hold its first row at nothing.
 				mid[0], hi[0], rhs[0] = 1, 0, 0
 				lo[1] = 0
 			}
-			for cy := 1; cy < e.h; cy++ {
+			for cy := 1; cy < e.H; cy++ {
 				f := lo[cy] / mid[cy-1]
 				mid[cy] -= f * hi[cy-1]
 				rhs[cy] -= f * rhs[cy-1]
 			}
-			rhs[e.h-1] /= mid[e.h-1]
-			for cy := e.h - 2; cy >= 0; cy-- {
+			rhs[e.H-1] /= mid[e.H-1]
+			for cy := e.H - 2; cy >= 0; cy-- {
 				rhs[cy] = (rhs[cy] - hi[cy]*rhs[cy+1]) / mid[cy]
 			}
-			for cy := 0; cy < e.h; cy++ {
-				rows[cy*e.w+m] = rhs[cy]
+			for cy := 0; cy < e.H; cy++ {
+				rows[cy*e.W+m] = rhs[cy]
 			}
 		}
-		for cy := 0; cy < e.h; cy++ {
-			kernel.FFT(rows[cy*e.w:(cy+1)*e.w], true)
+		for cy := 0; cy < e.H; cy++ {
+			kernel.FFT(rows[cy*e.W:(cy+1)*e.W], true)
 		}
 		for i := range chi {
 			chi[i] = real(rows[i])
 		}
-	} else if !e.wrap && e.uniformRows() {
-		e.cosinePotential(chi, div, mean)
+	} else if !e.Wrap && e.uniformRows() {
+		e.CosinePotential(chi, div, mean)
 	} else {
 		e.relaxPotential(chi, div, mean, cx, cn)
 	}
 	gx, gy = make([]float64, n), make([]float64, n)
-	for cy := 0; cy < e.h; cy++ {
-		for c := 0; c < e.w; c++ {
-			i := cy*e.w + c
+	for cy := 0; cy < e.H; cy++ {
+		for c := 0; c < e.W; c++ {
+			i := cy*e.W + c
 			switch {
-			case c+1 < e.w:
+			case c+1 < e.W:
 				gx[i] = cx[cy] * (chi[i+1] - chi[i])
-			case e.wrap:
-				gx[i] = cx[cy] * (chi[cy*e.w] - chi[i])
+			case e.Wrap:
+				gx[i] = cx[cy] * (chi[cy*e.W] - chi[i])
 			}
 			if cy > 0 {
-				gy[i] = cn[cy] * (chi[i-e.w] - chi[i])
+				gy[i] = cn[cy] * (chi[i-e.W] - chi[i])
 			}
 		}
 	}
@@ -674,23 +674,23 @@ func (e *airEnv) gatheringFlux(div []float64) (gx, gy []float64) {
 }
 
 // uniformRows reports whether every row of cells is as wide as every other.
-func (e *airEnv) uniformRows() bool {
-	for _, d := range e.dx {
-		if d != e.dx[0] {
+func (e *Env) uniformRows() bool {
+	for _, d := range e.Dx {
+		if d != e.Dx[0] {
 			return false
 		}
 	}
 	return true
 }
 
-// cosinePotential solves for χ on a lattice that is not a globe and whose
+// CosinePotential solves for χ on a lattice that is not a globe and whose
 // rows are all one width: no flux crosses its edges, and the cosines that
 // are flat at the edges are what the Laplacian there is made of, so each is
 // solved for on its own (the discrete cosine transform of type II).
-func (e *airEnv) cosinePotential(chi, div []float64, mean float64) {
-	w, h := e.w, e.h
-	cx := e.dy / e.dx[0]
-	cn := e.dx[0] / e.dy
+func (e *Env) CosinePotential(chi, div []float64, mean float64) {
+	w, h := e.W, e.H
+	cx := e.Dy / e.Dx[0]
+	cn := e.Dx[0] / e.Dy
 	table := func(n int) []float64 {
 		t := make([]float64, n*n)
 		for p := 0; p < n; p++ {
@@ -754,28 +754,28 @@ func (e *airEnv) cosinePotential(chi, div []float64, mean float64) {
 
 // relaxPotential solves for χ by over-relaxation, on a lattice the transform
 // does not fit.
-func (e *airEnv) relaxPotential(chi, div []float64, mean float64, cx, cn []float64) {
+func (e *Env) relaxPotential(chi, div []float64, mean float64, cx, cn []float64) {
 	const rounds, over = 2000, 1.9
 	for range rounds {
 		most := 0.0
-		for cy := 0; cy < e.h; cy++ {
-			for c := 0; c < e.w; c++ {
-				i := cy*e.w + c
+		for cy := 0; cy < e.H; cy++ {
+			for c := 0; c < e.W; c++ {
+				i := cy*e.W + c
 				var sum, diag float64
-				if c > 0 || e.wrap {
+				if c > 0 || e.Wrap {
 					sum += cx[cy] * chi[e.at(c-1, cy)]
 					diag += cx[cy]
 				}
-				if c+1 < e.w || e.wrap {
+				if c+1 < e.W || e.Wrap {
 					sum += cx[cy] * chi[e.at(c+1, cy)]
 					diag += cx[cy]
 				}
 				if cy > 0 {
-					sum += cn[cy] * chi[i-e.w]
+					sum += cn[cy] * chi[i-e.W]
 					diag += cn[cy]
 				}
-				if cy+1 < e.h {
-					sum += cn[cy+1] * chi[i+e.w]
+				if cy+1 < e.H {
+					sum += cn[cy+1] * chi[i+e.W]
 					diag += cn[cy+1]
 				}
 				if diag == 0 {

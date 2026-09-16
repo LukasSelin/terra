@@ -6,6 +6,7 @@ import (
 
 	"github.com/LukasSelin/terra/clock"
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // The climate. A settlement that is founded in one weather and lives in it
@@ -28,14 +29,6 @@ import (
 const (
 	Year   = clock.Year
 	Season = clock.Season
-)
-
-// The shape of the year. MeanTemp is the annual mean in degrees, Swing half
-// the distance from midwinter to midsummer. Tick zero is early spring:
-// people arrive with the growing season ahead of them, not behind them.
-const (
-	MeanTemp = 10.0
-	Swing    = 12.0
 )
 
 // The two wanderings, each an AR(1) process. Drift is the slow one, a run of
@@ -89,24 +82,10 @@ func NewClimateOn(cfg Terms) Climate {
 	return c
 }
 
-// The globe's weather. Temperate is the latitude the default map's weather
-// is the weather of. A globe's year is the energy balance's, by latitude: see
-// ebm.go.
-const Temperate = 45.0
-
 // latitude is the latitude of row y in degrees, from ninety at the top
 // row to minus ninety at the bottom.
 func (c Climate) latitude(y int) float64 {
 	return 90 - 180*(float64(y)+0.5)/float64(c.rows)
-}
-
-// zonalMean is the year's mean at sea level at a latitude on a globe: the energy
-// balance's zonal mean there. It was MeanTemp and thirty degrees times how
-// far the cosine of the latitude stood from its value at Temperate, which put
-// the equator at nineteen degrees and the poles at minus eleven.
-func zonalMean(lat float64) float64 {
-	e := ebm()
-	return e.at(&e.mean, lat)
 }
 
 // TempAt is this tick's temperature on row y. On a valley it is Temp
@@ -121,7 +100,7 @@ func (c Climate) TempAt(y int) float64 {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	season := swingAt(lat, contMiddling) * seasonAt(c.tick, lagAt(contMiddling))
+	season := atmos.SwingAt(lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagAt(atmos.ContMiddling))
 	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
@@ -130,7 +109,7 @@ func (c Climate) MeanAt(y int) float64 {
 	if !c.globe {
 		return MeanTemp
 	}
-	return zonalMean(c.latitude(y))
+	return atmos.ZonalMean(c.latitude(y))
 }
 
 // GrowthAt is Growth on row y, and ChillAt is Chill there.
@@ -171,7 +150,7 @@ func (c *Climate) Advance(tick int, rng *rand.Rand) {
 // Frost is a threshold of growth and of nothing else. It was the line the
 // ground froze at too, which put the permafrost under ground with a mean of
 // four degrees - the latitude of Oslo - and the tundra with it. The frozen
-// ground has its own line now; see Permafrost and the tree line in year.go.
+// ground has its own line now; see Permafrost and the tree line in package atmos.
 const (
 	Frost  = 4.0
 	Thrive = 14.0
@@ -229,26 +208,6 @@ func ramp(x, lo, hi float64) float64 {
 // past it for the date.
 func SeasonOf(tick int) clock.Quarter { return clock.SeasonOf(tick) }
 
-// The lapse rate: how much colder the air is for standing higher up.
-//
-// The weather is one temperature for a latitude, and it was one temperature
-// for a latitude at every height, which made the top of a mountain exactly as
-// warm as the valley it stands over. Height was the one thing the ground
-// carried that the weather never read - see Tile.Height, off which the
-// rivers, the soil and the going underfoot are all already read - so the high
-// country was hard to live on for its slope alone, and a wood grew on a peak
-// as readily as on the valley floor.
-//
-// Lapse is the real figure, six and a half degrees a kilometre, and it is
-// deliberately not tuned. What it is worth depends on what a map has standing
-// on it, and that follows from the map's own size: on the default valley the
-// skyline is Relief plus Upland, some three hundred metres, so the highest
-// ground on it is two degrees colder than the river and no more - which is
-// why nothing measured on the valley moves much, and why the want of this was
-// never felt there. On a globe the same rule over mountains ten times as high
-// is the difference between a tree line and no tree line.
-const Lapse = 0.0065
-
 // TempAt is the temperature on the ground at p: the weather of its latitude,
 // less what the height of the ground takes off it. It is the reading anything
 // standing on a tile or living on it should ask; Climate.TempAt is the
@@ -280,7 +239,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 	}
 	i := p.Y*g.W + p.X
 	cont := g.contAt(i)
-	t := c.MeanAt(p.Y) + swingAt(c.latitude(p.Y), cont)*seasonAt(c.tick, lagAt(cont)) + c.Drift - Lapse*h
+	t := c.MeanAt(p.Y) + atmos.SwingAt(c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagAt(cont)) + c.Drift - Lapse*h
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -305,7 +264,7 @@ func (w *Land) yearAt(i int) (mean, swing float64) {
 	if g.Wrap {
 		mean += g.CoastWarmth(i)
 	}
-	return mean, swingAt(c.latitude(y), g.contAt(i))
+	return mean, atmos.SwingAt(c.latitude(y), g.contAt(i))
 }
 
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt
@@ -320,7 +279,7 @@ func (w *Land) GrowthAt(p geom.Pos) float64 {
 	}
 	i := w.Grid.Index(p)
 	mean, swing := w.yearAt(i)
-	return climateGrowth(temp, mean, swing, w.Grid.Rain(i))
+	return atmos.ClimateGrowth(temp, mean, swing, w.Grid.Rain(i))
 }
 
 // ChillAt is Chill at p.

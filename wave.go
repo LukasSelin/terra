@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Waves: the wind's work on a coast.
@@ -136,8 +137,8 @@ func closure(h, period float64) float64 {
 const cercK = 0.39
 
 // cercScale is everything in the CERC formula that is not the wave.
-var cercScale = cercK * seaDensity * math.Sqrt(gravity/breakerIndex) /
-	(16 * (grainDensity - seaDensity) * (1 - sandPorosity))
+var cercScale = cercK * atmos.SeaDensity * math.Sqrt(gravity/breakerIndex) /
+	(16 * (grainDensity - atmos.SeaDensity) * (1 - sandPorosity))
 
 // surf is the wave climate along a coast as its ground now lies. Its cells are
 // the tiles of open sea that touch ground, in tile order - the surf zone at the
@@ -172,8 +173,8 @@ func (g *Grid) phaseWind(i, k int) (east, north float64) {
 	if w == nil {
 		return 0, 0
 	}
-	fx, fy := w.cellAt(g, i)
-	return w.sample32(w.u[k], fx, fy), w.sample32(w.v[k], fx, fy)
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.U[k], fx, fy), w.Sample32(w.V[k], fx, fy)
 }
 
 // seaCell reports whether tile i is open sea the wind raises waves on: sea, and
@@ -236,7 +237,7 @@ func (g *Grid) surfOf(wind func(i, k int) (east, north float64)) *surf {
 		}
 		along := [2]float64{-out[1], out[0]}
 		var storm, stormT float64
-		for k := range phases {
+		for k := range atmos.Phases {
 			east, north := wind(i, k)
 			u := math.Hypot(east, north)
 			if u < 1e-3 {
@@ -267,12 +268,12 @@ func (g *Grid) surfOf(wind func(i, k int) (east, north float64)) *surf {
 				c0 := gravity * t / (2 * math.Pi)
 				cb := math.Sqrt(gravity * hb / breakerIndex)
 				ab := math.Asin(math.Max(-1, math.Min(1, math.Sin(a0)*cb/c0)))
-				w := 1.0 / float64(phases*windSpeeds)
+				w := 1.0 / float64(atmos.Phases*windSpeeds)
 				s.breaker[c] += hb * w
 				q := cercScale * math.Pow(hb, 2.5) * math.Sin(2*ab) * w
 				s.drift[c][0] += q * along[0]
 				s.drift[c][1] += q * along[1]
-				force := seaDensity * gravity * hb
+				force := atmos.SeaDensity * gravity * hb
 				for b := range s.attack[c] {
 					if x := force / (cliffThreshold * strength(b)); x > 1 {
 						s.attack[c][b] += math.Log(x) * w

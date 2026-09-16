@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Why: the world answering for itself.
@@ -11,7 +12,7 @@ import (
 // Why(p, aspect) is a chain of causes for one thing about one tile - its
 // height, its rock, its rain, its cover - read off what the passes wrote
 // down: the book a history kept (ledger.go), the beds under the tile
-// (strata.go), the air's budget (vapour.go) and the readings the woods were
+// (strata.go), the air's budget (atmos/vapour.go) and the readings the woods were
 // scored on (woods.go). Every cause carries the number the pass computed
 // and the unit it computed it in. Nothing here runs a model or guesses: an
 // explanation is a reading of recorded quantities, so it is as true as the
@@ -259,8 +260,8 @@ func (g *Grid) whyRock(i int) []Cause {
 var buriedNames = [...]string{"nothing", "a river's fill", "mud off a shore", "lime of a quiet sea", "lava"}
 
 // phaseNamesOfYear names the four phases of the year the wind and the rain
-// are worked out in, by the sun: see wind.go.
-var phaseNamesOfYear = [phases]string{"the northern midwinter quarter", "the spring quarter", "the northern midsummer quarter", "the autumn quarter"}
+// are worked out in, by the sun: see package atmos.
+var phaseNamesOfYear = [atmos.Phases]string{"the northern midwinter quarter", "the spring quarter", "the northern midsummer quarter", "the autumn quarter"}
 
 func (g *Grid) whyRain(i int) []Cause {
 	if len(g.rain) != len(g.Tiles) {
@@ -275,29 +276,29 @@ func (g *Grid) whyRain(i int) []Cause {
 	chain = append(chain, Cause{Kind: LatitudeRain, Quantity: row / float64(g.W), Unit: "mm"})
 
 	w := g.winds
-	if w == nil || w.airEnv == nil {
+	if w == nil || w.Env == nil {
 		return chain
 	}
-	e := w.airEnv
-	c := e.cellOfTile(g, i)
-	if len(w.budget[1].rain) <= c {
+	e := w.Env
+	c := e.CellOfTile(i)
+	if len(w.Budget[1].Rain) <= c {
 		return chain
 	}
 	// The phase that carries most of the cell's water.
 	k, most := 0, -1.0
-	for ph := range phases {
-		if len(w.budget[ph].rain) <= c || len(w.budget[ph].oro) <= c {
+	for ph := range atmos.Phases {
+		if len(w.Budget[ph].Rain) <= c || len(w.Budget[ph].Oro) <= c {
 			continue
 		}
-		if r := w.budget[ph].rain[c] + w.budget[ph].oro[c]; r > most {
+		if r := w.Budget[ph].Rain[c] + w.Budget[ph].Oro[c]; r > most {
 			k, most = ph, r
 		}
 	}
 	if most < 0 {
 		return chain
 	}
-	chain = append(chain, Cause{Kind: Orographic, Quantity: w.budget[k].oro[c] * secondsPerYear, Unit: "mm", Note: phaseNamesOfYear[k]})
-	if d, ok := g.upwindSea(e, w.u[k], w.v[k], c); ok {
+	chain = append(chain, Cause{Kind: Orographic, Quantity: w.Budget[k].Oro[c] * secondsPerYear, Unit: "mm", Note: phaseNamesOfYear[k]})
+	if d, ok := g.upwindSea(e, w.U[k], w.V[k], c); ok {
 		chain = append(chain, Cause{Kind: UpwindSea, Quantity: d, Unit: "km", Note: phaseNamesOfYear[k]})
 	}
 	return chain
@@ -307,11 +308,11 @@ func (g *Grid) whyRain(i int) []Cause {
 // the wind u, v: the cells walked back against the wind until one is more
 // than half sea, or the air's rows run out. A cell already more than half
 // sea is nothing away; a wind of nothing has no upwind.
-func (g *Grid) upwindSea(e *airEnv, u, v []float32, c int) (float64, bool) {
-	if len(e.sea) <= c || len(u) <= c || len(v) <= c {
+func (g *Grid) upwindSea(e *atmos.Env, u, v []float32, c int) (float64, bool) {
+	if len(e.Sea) <= c || len(u) <= c || len(v) <= c {
 		return 0, false
 	}
-	if e.sea[c] > 0.5 {
+	if e.Sea[c] > 0.5 {
 		return 0, true
 	}
 	uu, vv := float64(u[c]), float64(v[c])
@@ -322,25 +323,25 @@ func (g *Grid) upwindSea(e *airEnv, u, v []float32, c int) (float64, bool) {
 	// Against the wind, a cell at a time: north is up the rows, so v goes
 	// against cy.
 	dx, dy := -uu/speed, vv/speed
-	fx, fy := float64(c%e.w)+0.5, float64(c/e.w)+0.5
+	fx, fy := float64(c%e.W)+0.5, float64(c/e.W)+0.5
 	km := 0.0
-	for steps := 0; steps < 2*(e.w+e.h); steps++ {
+	for steps := 0; steps < 2*(e.W+e.H); steps++ {
 		cy := int(fy)
-		if cy < 0 || cy >= e.h {
+		if cy < 0 || cy >= e.H {
 			return km, false
 		}
-		km += math.Hypot(dx*e.dx[cy], dy*e.dy) / 1000
+		km += math.Hypot(dx*e.Dx[cy], dy*e.Dy) / 1000
 		fx, fy = fx+dx, fy+dy
 		cx, cy := int(math.Floor(fx)), int(math.Floor(fy))
-		if cy < 0 || cy >= e.h {
+		if cy < 0 || cy >= e.H {
 			return km, false
 		}
-		if e.wrap {
-			cx = ((cx % e.w) + e.w) % e.w
-		} else if cx < 0 || cx >= e.w {
+		if e.Wrap {
+			cx = ((cx % e.W) + e.W) % e.W
+		} else if cx < 0 || cx >= e.W {
 			return km, false
 		}
-		if e.sea[cy*e.w+cx] > 0.5 {
+		if e.Sea[cy*e.W+cx] > 0.5 {
 			return km, true
 		}
 	}

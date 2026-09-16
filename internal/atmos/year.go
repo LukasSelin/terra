@@ -1,6 +1,39 @@
-package terra
+package atmos
 
 import "math"
+
+// The shape of the year. MeanTemp is the annual mean in degrees, Swing half
+// the distance from midwinter to midsummer. Tick zero is early spring:
+// people arrive with the growing season ahead of them, not behind them.
+const (
+	MeanTemp = 10.0
+	Swing    = 12.0
+)
+
+// The globe's weather. Temperate is the latitude the default map's weather
+// is the weather of. A globe's year is the energy balance's, by latitude: see
+// ebm.go.
+const Temperate = 45.0
+
+// The lapse rate: how much colder the air is for standing higher up.
+//
+// The weather is one temperature for a latitude, and it was one temperature
+// for a latitude at every height, which made the top of a mountain exactly as
+// warm as the valley it stands over. Height was the one thing the ground
+// carried that the weather never read - see Tile.Height, off which the
+// rivers, the soil and the going underfoot are all already read - so the high
+// country was hard to live on for its slope alone, and a wood grew on a peak
+// as readily as on the valley floor.
+//
+// Lapse is the real figure, six and a half degrees a kilometre, and it is
+// deliberately not tuned. What it is worth depends on what a map has standing
+// on it, and that follows from the map's own size: on the default valley the
+// skyline is Relief plus Upland, some three hundred metres, so the highest
+// ground on it is two degrees colder than the river and no more - which is
+// why nothing measured on the valley moves much, and why the want of this was
+// never felt there. On a globe the same rule over mountains ten times as high
+// is the difference between a tree line and no tree line.
+const Lapse = 0.0065
 
 // The shape of the year at a place. The weather of a latitude is a mean with a
 // swing round it, and the swing is not the same everywhere: it is nothing at
@@ -25,7 +58,7 @@ func solarSwing(lat float64) float64 {
 	return math.Sin(math.Abs(lat)*math.Pi/180) / math.Sin(Temperate*math.Pi/180) * math.Copysign(1, lat)
 }
 
-// swingAt is half the distance from the coldest day of the year to the warmest
+// SwingAt is half the distance from the coldest day of the year to the warmest
 // at latitude lat, on ground cont of whose country round about is land. It is
 // the energy balance's year (see ebm.go): the swing of the balance's sea at
 // that latitude where the country is all water, its land's where it is all
@@ -38,7 +71,7 @@ func solarSwing(lat float64) float64 {
 // its sea, holding fifty metres of water, give nineteen degrees and under three
 // at forty-five against the old nineteen and four, and are what they are for a
 // reason.
-func swingAt(lat, cont float64) float64 {
+func SwingAt(lat, cont float64) float64 {
 	e := ebm()
 	sea, land := e.at(&e.swingS, lat), e.at(&e.swingL, lat)
 	return math.Copysign(sea+(land-sea)*clamp01(cont), lat)
@@ -52,18 +85,18 @@ func seasonTemp(solar, phase, cont float64) float64 {
 	return solar * Swing * phase * (swingSea + (swingLand-swingSea)*cont)
 }
 
-// contMiddling is the continentality at which a place keeps exactly the
+// ContMiddling is the continentality at which a place keeps exactly the
 // temperate swing: the ground a latitude's weather is the weather of when
-// nothing is known about the ground. Climate.TempAt's year is read at it.
-var contMiddling = middlingOf(ebm())
+// nothing is known about the ground. terra.Climate.TempAt's year is read at it.
+var ContMiddling = middlingOf(ebm())
 
-// contValley is the same for a valley, which has no ground round it to be
+// ContValley is the same for a valley, which has no ground round it to be
 // continental or not and reads its day's range at it: see rangeCont. It is
 // the balance's at the land and the sea's old exchange, valleyExchange,
 // because a valley's rivers and lakes were tuned on the day's range that
 // gave, and the stronger exchange a globe's winters want is a fact about
 // continents a valley does not have.
-var contValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}))
+var ContValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}))
 
 // valleyExchange is landSeaExchange as it stood when the valley was tuned.
 const valleyExchange = 3.0
@@ -93,31 +126,31 @@ var (
 	tauSea    = math.Tan(yearOmega*lagSea) / yearOmega
 )
 
-// lagAt is how many days of the calendar the warmest day falls after the
+// LagAt is how many days of the calendar the warmest day falls after the
 // sun's highest on ground cont of whose country round about is land.
-func lagAt(cont float64) float64 {
+func LagAt(cont float64) float64 {
 	cont = clamp01(cont)
 	tau := tauSea + (tauLand-tauSea)*cont
 	return math.Atan(yearOmega*tau) / yearOmega * Year / 365.25
 }
 
-// seasonAt is how far into its swing the year is on day tick at ground whose
+// SeasonAt is how far into its swing the year is on day tick at ground whose
 // seasons lag by lag days: -1 at the depth of the northern winter and 1 at the
 // height of its summer. The sun is highest in the north a quarter of the way
 // into the calendar, where yearSin is one.
-func seasonAt(tick int, lag float64) float64 {
+func SeasonAt(tick int, lag float64) float64 {
 	return math.Sin(2 * math.Pi * (float64(tick) - lag) / Year)
 }
 
-// monthPeak is what the warmest month of a sinusoidal year stands over its
+// MonthPeak is what the warmest month of a sinusoidal year stands over its
 // mean, as a share of the swing: the mean of a sine over the twelfth of a
 // period round its crest, sin(π/12)/(π/12). Köppen's and every other
 // classification's thresholds are thresholds on monthly means.
-var monthPeak = math.Sin(math.Pi/12) / (math.Pi / 12)
+var MonthPeak = math.Sin(math.Pi/12) / (math.Pi / 12)
 
-// summerPeak is the same for the warmest quarter, which is what a glacier's
+// SummerPeak is the same for the warmest quarter, which is what a glacier's
 // melt answers to: sin(π/4)/(π/4).
-var summerPeak = math.Sin(math.Pi/4) / (math.Pi / 4)
+var SummerPeak = math.Sin(math.Pi/4) / (math.Pi / 4)
 
 // aboveMean is the year's mean of max(0, x + a sin θ): the degrees a day over
 // a base, averaged over a year that swings a either side of x above it. It is
@@ -199,7 +232,7 @@ func seasonMean(mean, swing float64) (float64, bool) {
 // the warmer.
 func treeMean(swing float64) float64 {
 	swing = math.Abs(swing)
-	month := treeMonth - monthPeak*swing
+	month := treeMonth - MonthPeak*swing
 	// The season's mean rises with the year's, so the line is found by halving.
 	lo, hi := -60.0, treeSeason
 	for range 40 {
@@ -225,8 +258,8 @@ var treeMeans = func() []float64 {
 	return out
 }()
 
-// treeLineMean reads treeMeans at swing.
-func treeLineMean(swing float64) float64 {
+// TreeLineMean reads treeMeans at swing.
+func TreeLineMean(swing float64) float64 {
 	f := math.Min(math.Abs(swing)*10, float64(len(treeMeans)-2))
 	k := int(f)
 	return treeMeans[k] + (treeMeans[k+1]-treeMeans[k])*(f-float64(k))
@@ -238,7 +271,7 @@ func treeLineMean(swing float64) float64 {
 // the year's precipitation in mm against the mean of the summer's three
 // months. Ground whose summer is colder than that for the snow it gets keeps
 // its snow, and grows nothing under it.
-func iceSummer(rain float64) float64 {
+func IceSummer(rain float64) float64 {
 	d := 296*296 - 4*9*(645-math.Max(0, rain))
 	return (-296 + math.Sqrt(math.Max(0, d))) / 18
 }
@@ -248,9 +281,9 @@ func iceSummer(rain float64) float64 {
 // plants do nothing more for being colder than frozen or hotter than hot
 // (Holdridge, 1967). Under three degrees is his polar belt, which is tundra
 // and ice.
-const holdridgePolar = 3.0
+const HoldridgePolar = 3.0
 
-func biotemperature(mean, swing float64) float64 {
+func Biotemperature(mean, swing float64) float64 {
 	return aboveMean(mean, swing) - aboveMean(mean-30, swing)
 }
 
@@ -273,12 +306,12 @@ const growBase = 5.0
 // climate grows, over a year, what it always grew.
 var nppRef = miamiNPP(MeanTemp, 1000)
 
-// climateGrowth is how much green things grow on a day of temp degrees at a
+// ClimateGrowth is how much green things grow on a day of temp degrees at a
 // place whose year has the given mean, swing and rain: the day's share of the
 // year's growing degree-days, times what the Miami model lets that year grow
 // against the temperate one. Averaged over a year it is the place's NPP over
 // the temperate NPP, so the valley's year still averages about one.
-func climateGrowth(temp, mean, swing, rain float64) float64 {
+func ClimateGrowth(temp, mean, swing, rain float64) float64 {
 	gdd := aboveMean(mean-growBase, swing)
 	if gdd <= 0 {
 		return 0

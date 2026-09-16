@@ -160,3 +160,12 @@ func (g *Grid) shoreUp(s *surf, rise float64) {
 		}
 	}
 }
+
+// mod is x modulo m, always in [0, m).
+func mod(x, m float64) float64 {
+	r := math.Mod(x, m)
+	if r < 0 {
+		r += m
+	}
+	return r
+}
