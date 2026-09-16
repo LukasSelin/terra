@@ -1,6 +1,10 @@
 package terra
 
-import "math/rand/v2"
+import (
+	"math/rand/v2"
+
+	"github.com/LukasSelin/terra/clock"
+)
 
 // Land is the world itself: the ground, the weather over it, what grows on
 // it, and the way across it. It is everything a map is before anybody stands
@@ -50,7 +54,7 @@ type Land struct {
 	// seed is what the world was made from, kept for the streams of chance
 	// that are drawn apart from the main one; see island.go.
 	seed uint64
-	// moon is where the moon stood on the founding day. See tide.go.
+	// moon is where the moon stood on the founding day. See clock.EpochOf.
 	moon Epoch
 
 	// Forest0 is how much forest the world was made with, so that how much
@@ -105,7 +109,7 @@ func unmade(seed uint64, t Terms) *Land {
 		Climate: NewClimateOn(t),
 		Terms:   t,
 	}
-	l.moon = epochOf(seed)
+	l.moon = clock.EpochOf(seed)
 	return l
 }
 

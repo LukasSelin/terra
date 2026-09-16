@@ -6,6 +6,31 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The moon and the tide go to clock
+
+**What this is.** The fifth move of splitting the root package, on
+`claude/clock-moon`, stacked on `claude/internal-phase-sysmem`. The moon
+and the tide at an open coast were a function of the tick and the founding
+moon and nothing else, so they are the calendar's: `clock/moon.go` holds
+`Moon`, `Tide`, `Epoch`, `EpochOf`, `MoonOn`, `TideOn` and the tide's
+strengths, with the two tests that ask only the moon. `tide.go` keeps the
+day's sea as the land reads it - `Land.Moon`, `Land.Tide`, `Grid.Tide`,
+`Grid.SetTide` - and the old names as aliases. The seed hash the moon was
+drawn with is also the bedrock's, so the root keeps it and `clock` has a
+copy of its own.
+
+**Checked.** `TERRA_DIGEST=check` passes, with
+`TestMakingAWorldDoesNotDependOnTheGoroutines` and the heap budget. The moon
+tests pass in `clock` and the land's two tide tests in the root.
+`go test -short ./...` fails only `TestAHistoryLeavesItsBedsInLayers`, as
+main does.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small.txt`
+passes: valley -3.8 %, ancient no significant change, globe256 -2.7 % a
+tile. Nothing here runs while a world is made.
+
+---
+
 ## 2026-09-16 - The pass clock and the memory probe leave the root package
 
 **What this is.** The fourth move of splitting the root package, on
