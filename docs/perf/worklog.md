@@ -6,6 +6,39 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: a half-size history, eight globes
+
+**What this is.** Whether the globe on a half-size history (512x256, belts
+7.3 history tiles wide) is the globe on the map, over globes 1-8 made both
+ways, on `claude/history-km` at f8c1438. A throwaway test; no code changed.
+The difference is taken seed by seed (each seed's two worlds share their
+first draws, not their bits) with its standard error over the eight.
+
+| measure | map | half-size history | difference | se | t |
+|---|---:|---:|---:|---:|---:|
+| schist (share of land) | 0.062 ±0.003 | 0.087 ±0.013 | **+0.024** | 0.005 | 5.3 |
+| basalt | 0.019 | 0.026 | **+0.006** | 0.001 | 4.8 |
+| collision ground (book) | 0.053 ±0.016 | 0.087 ±0.028 | **+0.034** | 0.012 | 2.8 |
+| granite | 0.337 | 0.358 | +0.021 | 0.025 | 0.8 |
+| limestone | 0.282 | 0.270 | -0.012 | 0.015 | -0.8 |
+| shale | 0.233 | 0.203 | -0.030 | 0.022 | -1.3 |
+| land | 0.397 | 0.423 | +0.026 | 0.026 | 1.0 |
+| ocean crust | 0.536 | 0.532 | -0.003 | 0.030 | -0.1 |
+| rain, mm | 766 | 810 | +44 | 31 | 1.4 |
+| forest | 0.217 | 0.229 | +0.012 | 0.008 | 1.5 |
+| seconds | 55.9 | 27.9 | -28.0 | 1.9 | |
+
+Schist, basalt and the collisions' ground are larger on a half-size history,
+and not by chance: the collisions' by 64%. Seed 1, the one the step before
+read, had them 7% apart and was the least of the eight (0.050 against
+0.047); seeds 5 to 8 had them two to three times the map's. The rest -
+granite, the sedimentary rock, land, the ocean floor, rain and forest -
+hold within the spread. A half-size history halves the globe's time, and
+does not yet make the same belts: the spread of a belt is not only a matter
+of a belt a handful of tiles wide.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: the collision belts spread on a coarse history
 
 **What this is.** The first use of main's `cmd/zarr -stages` and `zarrdiff
