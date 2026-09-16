@@ -6,6 +6,54 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: the boundary is read alike; the first move changes it
+
+**What this is.** Whether a half-size history reads the same boundary
+between plates as closing or parting as the map does, globes 1-16, read
+through `epochWatch` at the first plates (nothing moved) and after the first
+epoch; a throwaway test, on `claude/history-km`. Map tiles of boundary per
+map tile of area; the difference and t are seed by seed.
+
+**At the first plates, nothing moved**, edge by edge by the crust either side
+and the sign of `closing`, and tile by tile as `tectonics` reads it
+(`meetingAt`'s hardest neighbour, `liftOf`'s kind):
+
+| | map | half | | t |
+|---|---:|---:|---:|---:|
+| continent-continent closing | 0.00192 | 0.00209 | +9% | 0.8 |
+| continent-continent parting | 0.00182 | 0.00222 | +22% | 1.9 |
+| continent-ocean closing / parting | 0.00498 / 0.00499 | 0.00499 / 0.00503 | 0% / +1% | 0.0 / 0.2 |
+| ocean-ocean closing / parting | 0.00302 / 0.00321 | 0.00281 / 0.00268 | -7% / -16% | -0.8 / -1.9 |
+| tiles read as collision / arc / trench / rift and islands | 0.00188 / 0.00246 / 0.00247 / 0.01275 | 0.00201 / 0.00246 / 0.00246 / 0.01241 | +7% / 0 / 0 / -3% | 0.5 / 0 / 0 / -1.0 |
+
+`closing`, `meetingAt` and `liftOf` read the same boundary the same way on
+both grids: the drift, the spin and the offsets are scale-free, and nothing
+there differs beyond chance.
+
+**After the first epoch:**
+
+| | map | half | | t |
+|---|---:|---:|---:|---:|
+| continent-ocean closing | 0.00304 | 0.00378 | +24% | 3.5 |
+| continent-ocean parting | 0.00130 | 0.00213 | **+64%** | **7.0** |
+| ocean-ocean closing | 0.00514 | 0.00419 | -19% | -5.3 |
+| ocean-ocean parting | 0.00746 | 0.00608 | -19% | -5.3 |
+| continent-continent closing / parting | 0.00072 / 0.00047 | 0.00084 / 0.00049 | +16% / +4% | 0.8 / 0.2 |
+| seams found: collision / arc / trench / rift and islands | 0.00115 / 0.00209 / 0.00177 / 0.01401 | 0.00145 / 0.00238 / 0.00206 / 0.01299 | +27% / +14% / +16% / -7% | 1.7 / 2.6 / 3.1 / -3.2 |
+
+The boundary is about as long after the move on both grids (0.0181 and
+0.0175), but what lies along it is not: on the coarser grid a continent
+still meets ocean where on the map fresh floor has opened between them and
+the plates meet ocean against ocean. The move is where they part: a plate
+goes a whole tile of the grid at a time once what it has travelled comes to
+one (`move`, `cr.acc`), so on a grid twice as coarse a slow parting has not
+yet opened a tile of floor that on the map has opened one, and the floor a
+parting makes comes a tile of the grid at a time. Next: the fresh floor made
+each epoch on both grids, and the lag between what a plate has travelled and
+where its tiles are.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: where the half-size history's collisions part, epoch by epoch
 
 **What this is.** When the collisions' extra ground on a half-size history
