@@ -303,7 +303,7 @@ func hypsometricModes(gs []*Grid) (continent, ocean float64) {
 	count := make([]float64, int((hi-lo)/bin))
 	for _, g := range gs {
 		for i := range g.Tiles {
-			e := g.Tiles[i].Height - g.sea
+			e := g.Height[i] - g.sea
 			k := int(math.Floor((e - lo) / bin))
 			if k >= 0 && k < len(count) {
 				count[k] += math.Cos(latitudeOf(g, i/g.W) * math.Pi / 180)
@@ -382,8 +382,7 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 		last := 0
 		for _, g := range gs {
 			for i := range g.Tiles {
-				t := &g.Tiles[i]
-				if g.sea-t.Height < shelfBreak || g.strata == nil {
+				if g.sea-g.Height[i] < shelfBreak || g.strata == nil {
 					continue
 				}
 				c := &g.strata[i]
@@ -392,7 +391,7 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 					continue
 				}
 				e := int(c.formed[foot])
-				sum[e] += g.sea - t.Height
+				sum[e] += g.sea - g.Height[i]
 				n[e]++
 				last = max(last, e)
 			}
@@ -487,7 +486,7 @@ func flint(gs []*Grid) (theta, r2 float64) {
 				if int(d)%g.W != i%g.W && int(d)/g.W != i/g.W {
 					run *= math.Sqrt2
 				}
-				s := (g.Tiles[i].Height - g.Tiles[d].Height) / run
+				s := (g.Height[i] - g.Height[d]) / run
 				if s <= 0 {
 					continue
 				}
@@ -568,7 +567,7 @@ func chiLinearity(gs []*Grid) float64 {
 						}
 						c += math.Pow(1/tr.area[i], chiRef) * run * TileSpan
 					}
-					chi, z = append(chi, c), append(z, g.Tiles[i].Height)
+					chi, z = append(chi, c), append(z, g.Height[i])
 				}
 				if len(chi) < 10 {
 					continue
@@ -667,7 +666,7 @@ func meanders(gs []*Grid) meanderReading {
 				xs, ys, hs, qs := make([]float64, len(stem)), make([]float64, len(stem)), make([]float64, len(stem)), make([]float64, len(stem))
 				x, y := float64(stem[0]%g.W), float64(stem[0]/g.W)
 				for k, i := range stem {
-					xs[k], ys[k], hs[k], qs[k] = x, y, g.Tiles[i].Height, g.Tiles[i].Flow
+					xs[k], ys[k], hs[k], qs[k] = x, y, g.Height[i], g.Tiles[i].Flow
 					if k+1 < len(stem) {
 						d := g.Delta(g.PosOf(i), g.PosOf(stem[k+1]))
 						x, y = x+float64(d.X), y+float64(d.Y)
@@ -730,7 +729,7 @@ func zonalTemp(gs []*Grid, lo, hi float64) float64 {
 			}
 			w := math.Cos(latitudeOf(g, y) * math.Pi / 180)
 			for i := y * g.W; i < (y+1)*g.W; i++ {
-				t := c.MeanAt(y) - Lapse*math.Max(0, g.Tiles[i].Height-g.sea) + g.CoastWarmth(i)
+				t := c.MeanAt(y) - Lapse*math.Max(0, g.Height[i]-g.sea) + g.CoastWarmth(i)
 				sum, n = sum+w*t, n+w
 			}
 		}

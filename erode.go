@@ -281,7 +281,7 @@ func (g *Grid) wear(years float64) {
 			// floor at the foot of the map did was make ground out of nothing,
 			// first by lifting a sea bed that lay under it and then by refusing
 			// to let the creep ease one down a hand's breadth further.
-			t.Height += change[i]
+			g.Height[i] += change[i]
 			// What is left of the soil, what arrived on it, and what the rock
 			// made under it over the age. What arrives is worked into what was
 			// there; what the rock makes is the rock's own mixture.
@@ -528,7 +528,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	nb, k, diag, z := cs.nb, cs.k, cs.diag, cs.z
 	clear(k)
 	for i := range g.Tiles {
-		z[i], diag[i] = g.Tiles[i].Height, 1
+		z[i], diag[i] = g.Height[i], 1
 	}
 	for i := range g.Tiles {
 		a := &g.Tiles[i]
@@ -549,10 +549,10 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 				continue
 			}
 			top := a
-			if b.Height > a.Height {
+			if g.Height[j] > g.Height[i] {
 				top = b
 			}
-			fall := math.Min(math.Abs(a.Height-b.Height)/pr.run, creepSteepest*Critical) / Critical
+			fall := math.Min(math.Abs(g.Height[i]-g.Height[j])/pr.run, creepSteepest*Critical) / Critical
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
@@ -753,7 +753,7 @@ func (g *Grid) waterStep(years float64) fluvial {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
-			c.h[i] = t.Height
+			c.h[i] = g.Height[i]
 			c.soil[i] = float64(t.Soil)
 			// What the water takes off a tile is its soil, or its rock where it
 			// has none, which is the soil the rock would make.
@@ -778,7 +778,7 @@ func (g *Grid) waterStep(years float64) fluvial {
 			// flood clears what it stands, and what settles is what a flood
 			// lets fall: see floodFlow, criticalFall and settleShare.
 			q := t.Flow * floodFlow
-			fall := (t.Height - g.Tiles[recv[i]].Height) / run[i]
+			fall := (g.Height[i] - g.Height[recv[i]]) / run[i]
 			w := flowWidth(t, q, fall, run[i])
 			if g.deep > 0 {
 				// A tile of a history is a piece of a planet, a hundred

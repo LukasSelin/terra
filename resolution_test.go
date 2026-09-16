@@ -70,7 +70,7 @@ func concavity(gs []*Grid) float64 {
 			if int(d)%g.W != i%g.W && int(d)/g.W != i/g.W {
 				run *= math.Sqrt2
 			}
-			s := (g.Tiles[i].Height - g.Tiles[d].Height) / run
+			s := (g.Height[i] - g.Height[d]) / run
 			if s <= 0 {
 				continue
 			}

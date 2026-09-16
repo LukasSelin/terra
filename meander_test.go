@@ -110,12 +110,12 @@ func TestARiverCutsSoftRockFasterThanHard(t *testing.T) {
 		}
 		was := make([]float64, len(g.Tiles))
 		for i := range g.Tiles {
-			was[i] = g.Tiles[i].Height
+			was[i] = g.Height[i]
 		}
 		g.meander(20)
 		moved := 0.0
 		for i := range g.Tiles {
-			moved += math.Abs(g.Tiles[i].Height - was[i])
+			moved += math.Abs(g.Height[i] - was[i])
 		}
 		return moved
 	}
@@ -150,12 +150,12 @@ func TestAMeanderLeavesHeldGroundAlone(t *testing.T) {
 	}
 	was := make([]float64, len(held))
 	for k, i := range held {
-		was[k] = g.Tiles[i].Height
+		was[k] = g.Height[i]
 	}
 	g.meander(40)
 	for k, i := range held {
-		if g.Tiles[i].Height != was[k] {
-			t.Fatalf("held tile %d went from %v to %v", i, was[k], g.Tiles[i].Height)
+		if g.Height[i] != was[k] {
+			t.Fatalf("held tile %d went from %v to %v", i, was[k], g.Height[i])
 		}
 	}
 }

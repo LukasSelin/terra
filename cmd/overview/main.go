@@ -205,15 +205,15 @@ func measure(land *terra.Land) summary {
 		terr[t.Terrain]++
 		if !t.Wet() {
 			rock[t.Bedrock]++
-			heights = append(heights, t.Height)
-			s.HeightMin = math.Min(s.HeightMin, t.Height)
+			heights = append(heights, g.Height[i])
+			s.HeightMin = math.Min(s.HeightMin, g.Height[i])
 			s.LandRain += g.Rain(i)
 			s.LandRunoff += g.Runoff(i)
 			dry++
 		}
 		plates[t.Plate] = true
-		s.FloorMin = math.Min(s.FloorMin, t.Height)
-		s.HeightMax = math.Max(s.HeightMax, t.Height)
+		s.FloorMin = math.Min(s.FloorMin, g.Height[i])
+		s.HeightMax = math.Max(s.HeightMax, g.Height[i])
 		s.FlowMax = math.Max(s.FlowMax, t.Flow)
 		s.AgeMax = max(s.AgeMax, int(t.Formed))
 		temp := land.TempAt(p)
@@ -247,7 +247,7 @@ func measure(land *terra.Land) summary {
 	s.Flats = shareOf("tidal flats", terr[terra.Flat], n, "")
 	under := 0
 	for i := range g.Tiles {
-		if level := g.SeaLevel(); level >= 0 && g.Tiles[i].Height <= level {
+		if level := g.SeaLevel(); level >= 0 && g.Height[i] <= level {
 			under++
 		}
 	}
@@ -271,14 +271,14 @@ func measure(land *terra.Land) summary {
 			continue
 		}
 		p := g.PosOf(i)
-		var low *terra.Tile
+		low := -1
 		for _, d := range terra.Dirs {
 			q := g.Norm(geom.Pos{X: p.X + d.X, Y: p.Y + d.Y})
-			if g.In(q) && (low == nil || g.At(q).Height < low.Height) {
-				low = g.At(q)
+			if j := g.Index(q); g.In(q) && (low < 0 || g.Height[j] < g.Height[low]) {
+				low = j
 			}
 		}
-		if low != nil && low.Hard() <= t.Hard()-softer && t.Height-low.Height >= waterfallDrop {
+		if low >= 0 && g.Tiles[low].Hard() <= t.Hard()-softer && g.Height[i]-g.Height[low] >= waterfallDrop {
 			s.Waterfalls++
 		}
 	}
@@ -379,8 +379,8 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 
 	shade := func(p geom.Pos) float64 {
 		// light from the north-west, off the height difference across the tile
-		a := g.Height(g.Norm(geom.Pos{X: p.X - 1, Y: p.Y - 1}))
-		b := g.Height(g.Norm(geom.Pos{X: p.X + 1, Y: p.Y + 1}))
+		a := g.HeightAt(g.Norm(geom.Pos{X: p.X - 1, Y: p.Y - 1}))
+		b := g.HeightAt(g.Norm(geom.Pos{X: p.X + 1, Y: p.Y + 1}))
 		return clamp(1+(a-b)/(span*0.15), 0.75, 1.2)
 	}
 
@@ -443,9 +443,9 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			about: fmt.Sprintf("Metres, the dry ground from %.0f to %.0f, hillshaded. Water in blue, to %.0f.", s.HeightMin, s.HeightMax, s.FloorMin),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				if t.Wet() {
-					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (t.Height-s.FloorMin)/math.Max(s.HeightMax-s.FloorMin, 1))
+					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (g.Height[i]-s.FloorMin)/math.Max(s.HeightMax-s.FloorMin, 1))
 				}
-				return scaleRGB(ramp(elevation, (t.Height-s.HeightMin)/span), shade(p))
+				return scaleRGB(ramp(elevation, (g.Height[i]-s.HeightMin)/span), shade(p))
 			},
 		},
 		{

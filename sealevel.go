@@ -127,7 +127,7 @@ func (g *Grid) shoreUp(s *surf, rise float64) {
 		}
 		a := deanCoeff * math.Pow(math.Max(g.medianGrain(j), deanFinest), deanPower)
 		across := math.Pow(s.closure[c]/a, 1.5)
-		cut := math.Min(rise*across/span, t.Height-g.sea)
+		cut := math.Min(rise*across/span, g.Height[j]-g.sea)
 		if cut <= 0 {
 			continue
 		}
@@ -157,7 +157,7 @@ func (g *Grid) shoreUp(s *surf, rise float64) {
 			mix(tile, float64(tile.Soil), laid)
 			d := carrying(laid)
 			tile.Soil += float32(d)
-			tile.Height += d
+			g.Height[i] += d
 		}
 	}
 }

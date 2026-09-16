@@ -46,13 +46,11 @@ type Tile struct {
 	Exposed float32
 	Owner   Holder
 
-	// Height is metres above the lowest ground on the map, and Flow is the
-	// water running through this tile in cubic metres a second. Between them
-	// they are the land itself: the rivers, the fertility and the going
-	// underfoot are all read off these two rather than drawn on top of them.
-	// See relief.go.
-	Height float64
-	Flow   float64
+	// Flow is the water running through this tile in cubic metres a second.
+	// With the height, which is kept beside the map as Grid.Height, it is
+	// the land itself: the rivers, the fertility and the going underfoot are
+	// all read off these two rather than drawn on top of them. See relief.go.
+	Flow float64
 	// Drain is how far this tile stands above the water it drains into, in
 	// metres. It is what makes a valley floor a water meadow and a hillside
 	// dry, and it is the ground truth the soil is read from.
@@ -143,6 +141,13 @@ type Grid struct {
 	W, H  int
 	Wrap  bool
 	Tiles []Tile
+	// Height is metres above the lowest ground on the map, one entry per
+	// tile and indexed as Tiles is. It is beside the map rather than in the
+	// tile because it is what every pass that moves the ground reads and
+	// writes over every tile, and a run of heights is what a kernel takes
+	// (kernel.go); the tile keeps what is read one tile at a time. HeightAt
+	// reads it by position, off the map included.
+	Height []float64
 	// Layers is the ground that changes by the day, one slice per reading
 	// and indexed as Tiles is; see layers.go.
 	Layers
@@ -352,7 +357,7 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
@@ -375,7 +380,7 @@ func (g *Grid) At(p geom.Pos) *Tile {
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
@@ -558,7 +563,7 @@ func (t *Tile) Roofed() bool { return markRoofs[t.Mark] }
 // frozen ground: see Freezing.
 func (g *Grid) Frozen(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < Permafrost
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < Permafrost
 }
 
 // Treeless reports whether the summer here is too short or too cool for a
@@ -566,7 +571,7 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // season, whichever is the stricter. See treeMean.
 func (g *Grid) Treeless(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < treeLineMean(float64(g.swing[i]))
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < treeLineMean(float64(g.swing[i]))
 }
 
 // Barren reports whether the ground here is under ice: a summer too cold to
@@ -577,7 +582,7 @@ func (g *Grid) Barren(p geom.Pos) bool {
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
-	summer := g.meanOn(i, g.Tiles[i].Height) + summerPeak*math.Abs(float64(g.swing[i]))
+	summer := g.meanOn(i, g.Height[i]) + summerPeak*math.Abs(float64(g.swing[i]))
 	return summer < iceSummer(g.Rain(i))
 }
 
@@ -618,7 +623,7 @@ func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
 	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) {
 		return 0, 0, 0
 	}
-	mean = g.meanOn(i, g.Tiles[i].Height)
+	mean = g.meanOn(i, g.Height[i])
 	d := monthPeak * math.Abs(float64(g.swing[i]))
 	return mean, mean - d, mean + d
 }

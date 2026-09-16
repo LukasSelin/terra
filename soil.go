@@ -96,7 +96,7 @@ func (g *Grid) meanTempOf(i int) float64 {
 	if g.air != nil && y < len(g.air.mean) {
 		mean = g.air.mean[y]
 	}
-	t := mean - Lapse*g.Tiles[i].Height
+	t := mean - Lapse*g.Height[i]
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -184,7 +184,7 @@ func (g *Grid) soilDepthOf(i int) (depth, pace float64) {
 		if off.X != 0 && off.Y != 0 {
 			near = 0.5
 		}
-		round += near * (g.At(q).Height - t.Height)
+		round += near * (g.Height[g.Index(q)] - g.Height[i])
 	}
 	water := Erodibility * math.Sqrt(t.Flow) * hold(t) * g.Slope(p)
 	// Creep at a metre of soil per metre of soil, and in from the hollow.

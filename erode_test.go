@@ -9,7 +9,7 @@ import (
 func heights(g *Grid) []float64 {
 	out := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		out[i] = g.Tiles[i].Height
+		out[i] = g.Height[i]
 	}
 	return out
 }
@@ -30,7 +30,7 @@ func TestWeatherMovesSoilDownhill(t *testing.T) {
 
 	var lostUp, gainedDown float64
 	for i := range g.Tiles {
-		d := g.Tiles[i].Height - before[i]
+		d := g.Height[i] - before[i]
 		switch {
 		case before[i] >= high:
 			lostUp += d
@@ -76,7 +76,7 @@ func TestWoodsHoldAHillsideTogether(t *testing.T) {
 			if g.Tiles[i].Wet() || g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 				continue // the river came to it, and took it as a bank
 			}
-			if d := before[i] - g.Tiles[i].Height; d > 0 {
+			if d := before[i] - g.Height[i]; d > 0 {
 				total += d
 			}
 		}

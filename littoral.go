@@ -34,7 +34,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 	span := g.span()
 	littoral := func(c int) bool {
 		i := s.cells[c]
-		return g.sea-g.Tiles[i].Height <= s.closure[c]
+		return g.sea-g.Height[i] <= s.closure[c]
 	}
 	// carries is whether the waves drive sand along the shore at cell c at all:
 	// a cell in the lee of the land has none coming in, and sand driven into
@@ -106,7 +106,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 		t := &g.Tiles[i]
 		mix(t, float64(t.Soil), [Grains]float64{Sand: d})
 		t.Soil += float32(d)
-		t.Height += d
+		g.Height[i] += d
 	}
 	// seen marks the cells a search for a ring has walked through, with the
 	// number of the search, so that no cell is walked from twice.
@@ -157,7 +157,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 			continue
 		}
 		t := &g.Tiles[i]
-		room := math.Max(0, g.berm(s, c)-t.Height)
+		room := math.Max(0, g.berm(s, c)-g.Height[i])
 		r := recv[c]
 		if r < 0 {
 			d := math.Min(carried, room)
@@ -167,8 +167,8 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 				// Into the open water ahead, a tile at a time.
 				j, from := int(-2-r), g.PosOf(i)
 				step := g.Delta(from, g.PosOf(j))
-				for carried > 0 && g.seaCell(j) && (s.slot[j] < 0 || !carries(int(s.slot[j]))) && g.sea-g.Tiles[j].Height <= s.closure[c] {
-					d := math.Min(carried, math.Max(0, g.berm(s, c)-g.Tiles[j].Height))
+				for carried > 0 && g.seaCell(j) && (s.slot[j] < 0 || !carries(int(s.slot[j]))) && g.sea-g.Height[j] <= s.closure[c] {
+					d := math.Min(carried, math.Max(0, g.berm(s, c)-g.Height[j]))
 					lay(j, d)
 					carried -= d
 					q := g.Norm(geom.Pos{X: g.PosOf(j).X + step.X, Y: g.PosOf(j).Y + step.Y})
@@ -199,7 +199,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 					rest = 0
 				}
 				t.Soil = float32(rest)
-				t.Height -= e
+				g.Height[i] -= e
 				carried += e
 			}
 		}

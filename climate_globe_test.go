@@ -174,7 +174,7 @@ func TestTheUplandMaskIsFinerThanTheMap(t *testing.T) {
 	for y := 0; y < g.H; y++ {
 		var sum, sq float64
 		for x := 0; x < g.W; x++ {
-			h := g.At(geom.Pos{X: x, Y: y}).Height
+			h := g.Height[g.Index(geom.Pos{X: x, Y: y})]
 			sum, sq = sum+h, sq+h*h
 		}
 		n := float64(g.W)
@@ -344,7 +344,7 @@ func TestOnlyTheSeaDrainsAGlobe(t *testing.T) {
 	g := NewLand(1, Terms{Width: 256, Height: 128, Wrap: true}).Grid
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for i := range g.Tiles {
-		lo, hi = math.Min(lo, g.Tiles[i].Height), math.Max(hi, g.Tiles[i].Height)
+		lo, hi = math.Min(lo, g.Height[i]), math.Max(hi, g.Height[i])
 	}
 	if hi-lo < Relief || g.Forest() == 0 {
 		t.Errorf("a globe with no sea came out %.0f to %.0f metres with %d forest", lo, hi, g.Forest())

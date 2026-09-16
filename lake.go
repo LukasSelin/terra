@@ -253,7 +253,7 @@ func (g *Grid) pool() {
 	} else {
 		s.order = make([]heightNode, n)
 		for i := range s.order {
-			s.order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
+			s.order[i] = heightNode{h: g.Height[i], idx: int32(i)}
 		}
 		sortHeights(s.order)
 		s.moved = -1
@@ -290,7 +290,7 @@ func (g *Grid) pool() {
 			found := false
 			for k := range sides {
 				if sides[k].root == r {
-					if g.Tiles[j].Height < g.Tiles[sides[k].low].Height {
+					if g.Height[j] < g.Height[sides[k].low] {
 						sides[k].low = j
 					}
 					found = true
@@ -319,7 +319,7 @@ func (g *Grid) pool() {
 				}
 				t.b[x].parent, t.b[x].spill, t.b[x].saddle = 0, nd.h, across
 				t.uf[x] = 0
-				if low < 0 || (s.low >= 0 && g.Tiles[s.low].Height < g.Tiles[low].Height) {
+				if low < 0 || (s.low >= 0 && g.Height[s.low] < g.Height[low]) {
 					low = s.low
 				}
 				cur = 0
@@ -330,7 +330,7 @@ func (g *Grid) pool() {
 				t.b[cur].parent, t.b[cur].spill, t.b[cur].saddle = p, nd.h, s.low
 				t.b[s.root].parent, t.b[s.root].spill, t.b[s.root].saddle = p, nd.h, low
 				t.uf[cur], t.uf[s.root] = p, p
-				if g.Tiles[s.low].Height < g.Tiles[low].Height {
+				if g.Height[s.low] < g.Height[low] {
 					low = s.low
 				}
 				cur = p
@@ -392,7 +392,7 @@ func (g *Grid) pool() {
 			}
 		}
 		for _, j := range t.tiles[b.first:b.end] {
-			if g.Tiles[j].Height >= b.spill {
+			if g.Height[j] >= b.spill {
 				break
 			}
 			b.capacity += loss[j]
@@ -519,7 +519,7 @@ func sortHeights(order []heightNode) {
 func (g *Grid) reorder(order []heightNode) int {
 	n := len(order)
 	for k := range order {
-		order[k].h = g.Tiles[order[k].idx].Height
+		order[k].h = g.Height[order[k].idx]
 	}
 	moved, shifted := 0, 0
 	for k := 1; k < n; k++ {
@@ -626,7 +626,7 @@ func (t *basins) levelOf(x int32, g *Grid) float64 {
 	}
 	own := t.tiles[b.first:b.end]
 	for _, j := range own {
-		h := g.Tiles[j].Height
+		h := g.Height[j]
 		if h >= b.spill {
 			return b.spill
 		}
@@ -637,7 +637,7 @@ func (t *basins) levelOf(x int32, g *Grid) float64 {
 		left -= l
 	}
 	if len(own) > 0 {
-		return math.Min(b.spill, g.Tiles[own[len(own)-1]].Height)
+		return math.Min(b.spill, g.Height[own[len(own)-1]])
 	}
 	return floor
 }
@@ -662,7 +662,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 		m := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		for _, j := range t.tiles[t.b[m].first:t.b[m].end] {
-			h := g.Tiles[j].Height
+			h := g.Height[j]
 			if h >= top {
 				break
 			}

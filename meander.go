@@ -174,7 +174,7 @@ func (g *Grid) meander(by float64) {
 		// the bank's own rock that pays, not the channel's, which is what
 		// turns a river aside rather than letting it saw through.
 		took := by * bankCut * math.Sqrt(share) * g.rockAt(p, outer)
-		bank, ok := g.bankAt(p, outer)
+		bank, ok := g.bankAt(p, outer) // the index of the bank tile
 		if !ok {
 			continue
 		}
@@ -183,7 +183,7 @@ func (g *Grid) meander(by float64) {
 		// Taken whole whatever stood there, the outside of a bend on a flood
 		// plain a metre above the water was dug metres below it, and the
 		// point bar opposite stood metres above the plain.
-		took = math.Min(took, math.Max(0, bank.Height-g.Tiles[i].Height))
+		took = math.Min(took, math.Max(0, g.Height[bank]-g.Height[i]))
 		if took <= 0 || !g.shift(p, outer, -took, change) {
 			continue
 		}
@@ -208,7 +208,7 @@ func (g *Grid) meander(by float64) {
 		// bed at every bend every age, and on the valleys as they were when
 		// this was found, forty ages of it took the concavity of their rivers
 		// from 0.51 to 0.16, steep where they should have been gentle.
-		for gr, part := range parts(bank) {
+		for gr, part := range parts(&g.Tiles[bank]) {
 			g.bankLoad[i][gr] += took * (1 - pointBar) * part
 		}
 	}
@@ -216,7 +216,7 @@ func (g *Grid) meander(by float64) {
 	// No floor under it. What a floor at nothing did was raise a bank the river
 	// had cut below sea level back up to it, out of nothing: see wear.
 	for i := range g.Tiles {
-		g.Tiles[i].Height += change[i]
+		g.Height[i] += change[i]
 	}
 }
 
@@ -241,15 +241,15 @@ func (g *Grid) shift(p, off geom.Pos, by float64, change []float64) bool {
 }
 
 // bankAt is the tile one step off p, if there is one.
-func (g *Grid) bankAt(p, off geom.Pos) (*Tile, bool) {
+func (g *Grid) bankAt(p, off geom.Pos) (int, bool) {
 	q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
 	if g.Wrap {
 		q = g.Norm(q)
 	}
 	if !g.In(q) {
-		return nil, false
+		return -1, false
 	}
-	return g.At(q), true
+	return g.Index(q), true
 }
 
 // rockAt is how readily the rock one step off p wears - see rockErodibility -

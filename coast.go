@@ -148,7 +148,7 @@ func (g *Grid) takeGround(i int, d float64) [Grains]float64 {
 		out[Silt] += rock * clamp01(1-sand-clay)
 		out[Clay] += rock * clay
 	}
-	t.Height -= d
+	g.Height[i] -= d
 	t.Soil = float32(math.Max(0, float64(t.Soil)-soil))
 	return out
 }
@@ -180,10 +180,10 @@ func (g *Grid) winnow(s *surf, years float64) {
 			continue
 		}
 		if g.underSea(i) {
-			if g.sea-t.Height > s.closure[c] {
+			if g.sea-g.Height[i] > s.closure[c] {
 				continue
 			}
-		} else if t.Height > g.berm(s, c) {
+		} else if g.Height[i] > g.berm(s, c) {
 			continue
 		}
 		soil := float64(t.Soil)
@@ -200,7 +200,7 @@ func (g *Grid) winnow(s *surf, years float64) {
 			t.Clay = (soil*t.Clay - clay) / rest
 		}
 		t.Soil = float32(math.Max(0, rest))
-		t.Height -= gone
+		g.Height[i] -= gone
 		g.exported[Silt] += silt
 		g.exported[Clay] += clay
 	}

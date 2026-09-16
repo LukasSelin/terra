@@ -40,7 +40,7 @@ func bowl(wetness float64) *Grid {
 			if y == 12 && x >= 17 {
 				h = math.Min(h, 9.5-0.5*float64(x-18))
 			}
-			g.At(geom.Pos{X: x, Y: y}).Height = h
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = h
 		}
 	}
 	return g
@@ -60,12 +60,12 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 	g := bowl(1)
 	was := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		was[i] = g.Tiles[i].Height
+		was[i] = g.Height[i]
 	}
 	settle(g)
 	for i := range g.Tiles {
-		if g.Tiles[i].Height != was[i] {
-			t.Fatalf("working the water out moved the ground at %v from %v to %v", g.PosOf(i), was[i], g.Tiles[i].Height)
+		if g.Height[i] != was[i] {
+			t.Fatalf("working the water out moved the ground at %v from %v to %v", g.PosOf(i), was[i], g.Height[i])
 		}
 	}
 	centre := geom.Pos{X: 12, Y: 12}
@@ -80,7 +80,7 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 		p := g.PosOf(i)
 		inside := math.Hypot(float64(p.X-12), float64(p.Y-12)) < 6
 		under := g.lakeOf[i] >= 0
-		if inside && g.Tiles[i].Height < 9.5 && !under {
+		if inside && g.Height[i] < 9.5 && !under {
 			t.Errorf("%v lies below the water and is not in the lake", p)
 		}
 		if under && g.Tiles[i].Terrain != Water {
@@ -217,7 +217,7 @@ func steps(wetness float64) *Grid {
 			if y < 3 || y > 7 {
 				h = 30
 			}
-			g.At(geom.Pos{X: x, Y: y}).Height = h
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = h
 		}
 	}
 	return g

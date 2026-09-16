@@ -92,7 +92,7 @@ func (g *Grid) shape() (area []float64) {
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for i := range g.Tiles {
 		if !root[i] {
-			h := g.Tiles[i].Height
+			h := g.Height[i]
 			lo, hi = math.Min(lo, h), math.Max(hi, h)
 		}
 	}
@@ -105,7 +105,7 @@ func (g *Grid) shape() (area []float64) {
 	uplift := make([]float64, n)
 	h := make([]float64, n)
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 		if !root[i] {
 			h[i] += shapeRough * roughAt(i, h[i])
 		}
@@ -187,7 +187,7 @@ func (g *Grid) shape() (area []float64) {
 	for i := range g.Tiles {
 		if !root[i] {
 			top = math.Max(top, h[i]-base[i])
-			most = math.Max(most, g.Tiles[i].Height-base[i])
+			most = math.Max(most, g.Height[i]-base[i])
 		}
 	}
 	if !(top > 0 && most > 0) {
@@ -198,7 +198,7 @@ func (g *Grid) shape() (area []float64) {
 			continue
 		}
 		x := clamp01((h[i] - base[i]) / top)
-		g.Tiles[i].Height = base[i] + shapeTop*most*(1-math.Pow(1-x, shapeLift))
+		g.Height[i] = base[i] + shapeTop*most*(1-math.Pow(1-x, shapeLift))
 	}
 	g.restrata(was, g.heights(), nil)
 	return area
@@ -272,7 +272,7 @@ func (g *Grid) closedBasins(root []bool) {
 	}
 	h := make([]float64, n)
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 	}
 	filled := slices.Clone(h)
 	g.fillFrom(filled, slices.Clone(root))
@@ -555,7 +555,7 @@ func (w *Land) texture(g *Grid, area []float64) {
 		}
 	})
 	for i := range g.Tiles {
-		g.Tiles[i].Height -= cut[i]
+		g.Height[i] -= cut[i]
 	}
 }
 

@@ -13,7 +13,7 @@ func TestTheSeaHoldsTheWaterPoured(t *testing.T) {
 	g := NewGrid(60, 40)
 	r := rand.New(rand.NewPCG(1, 2))
 	for i := range g.Tiles {
-		g.Tiles[i].Height = 100 * r.Float64() * r.Float64()
+		g.Height[i] = 100 * r.Float64() * r.Float64()
 	}
 	for _, water := range []float64{0.5, 5, 20, 200} {
 		g.sea = g.level(water)
@@ -34,7 +34,7 @@ func TestHighContinentsDrownLess(t *testing.T) {
 			if x >= 25 && x < 50 || x >= 75 {
 				h = continent + float64(x%25)/5 // two continents
 			}
-			g.Tiles[i].Height = h
+			g.Height[i] = h
 		}
 		g.sea = g.level(6)
 		under := 0
@@ -99,7 +99,7 @@ func TestPouringFloodsAsFloodingDoes(t *testing.T) {
 		g := NewGrid(50, 30)
 		r := rand.New(rand.NewPCG(3, 4))
 		for i := range g.Tiles {
-			g.Tiles[i].Height = 50 * r.Float64()
+			g.Height[i] = 50 * r.Float64()
 		}
 		return g
 	}

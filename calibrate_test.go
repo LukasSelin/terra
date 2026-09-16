@@ -47,7 +47,7 @@ func TestCalibrate(t *testing.T) {
 		}
 		var up, down float64
 		for i := range g.Tiles {
-			d := g.Tiles[i].Height - before[i]
+			d := g.Height[i] - before[i]
 			switch {
 			case before[i] >= high:
 				up += d
@@ -75,7 +75,7 @@ func TestCalibrate(t *testing.T) {
 			}
 			var total float64
 			for _, i := range slopes {
-				if d := before[i] - g.Tiles[i].Height; d > 0 {
+				if d := before[i] - g.Height[i]; d > 0 {
 					total += d
 				}
 			}

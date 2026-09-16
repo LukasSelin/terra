@@ -65,7 +65,7 @@ func TestSteepGroundHoldsNoWood(t *testing.T) {
 		// A flat plain with one gully cut across it, damp everywhere: only
 		// the slope tells the tiles apart.
 		if x := i % 20; x >= 17 {
-			g.Tiles[i].Height = float64(x-16) * 20
+			g.Height[i] = float64(x-16) * 20
 		}
 	}
 	g.readWoods()

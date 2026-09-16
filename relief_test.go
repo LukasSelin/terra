@@ -141,7 +141,7 @@ func TestSlopeAndAspectReadTheRamp(t *testing.T) {
 	g := NewGrid(10, 5)
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
-			g.At(geom.Pos{X: x, Y: y}).Height = float64(10 - x) // falls eastward
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = float64(10 - x) // falls eastward
 		}
 	}
 	p := geom.Pos{X: 4, Y: 2}
@@ -154,13 +154,13 @@ func TestSlopeAndAspectReadTheRamp(t *testing.T) {
 	// A slope facing south catches the sun; one facing north stands in shade.
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
-			g.At(geom.Pos{X: x, Y: y}).Height = float64(y) * 8 // falls northward
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = float64(y) * 8 // falls northward
 		}
 	}
 	shaded := g.Sunlight(geom.Pos{X: 5, Y: 2})
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
-			g.At(geom.Pos{X: x, Y: y}).Height = float64(g.H-y) * 8 // falls southward
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = float64(g.H-y) * 8 // falls southward
 		}
 	}
 	if sunny := g.Sunlight(geom.Pos{X: 5, Y: 2}); sunny <= shaded {
@@ -215,7 +215,7 @@ func TestClimbingCostsMoreThanContouring(t *testing.T) {
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
 			// A ridge across the middle, north to south.
-			g.At(geom.Pos{X: x, Y: y}).Height = math.Max(0, 40-4*math.Abs(float64(x-10)))
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = math.Max(0, 40-4*math.Abs(float64(x-10)))
 		}
 	}
 	level := g.StepCost(geom.Pos{X: 1, Y: 5}, geom.Pos{X: 1, Y: 6})
@@ -238,8 +238,8 @@ func TestClimbingCostsMoreThanContouring(t *testing.T) {
 func TestTheSameSeedRaisesTheSameGround(t *testing.T) {
 	a, b := NewLandSized(11, 40, 30), NewLandSized(11, 40, 30)
 	for i := range a.Grid.Tiles {
-		if a.Grid.Tiles[i].Height != b.Grid.Tiles[i].Height {
-			t.Fatalf("tile %d came out at %v and %v", i, a.Grid.Tiles[i].Height, b.Grid.Tiles[i].Height)
+		if a.Grid.Height[i] != b.Grid.Height[i] {
+			t.Fatalf("tile %d came out at %v and %v", i, a.Grid.Height[i], b.Grid.Height[i])
 		}
 		if a.Grid.Tiles[i].Terrain != b.Grid.Tiles[i].Terrain {
 			t.Fatalf("tile %d is %v one time and %v the next", i, a.Grid.Tiles[i].Terrain, b.Grid.Tiles[i].Terrain)

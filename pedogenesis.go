@@ -472,7 +472,7 @@ func (g *Grid) laySoilState(i int, h, pace, made float64) {
 // epoch's book is kept: see restartBuried.
 func (g *Grid) deepExposure(i int, lowered, years float64) {
 	t := &g.Tiles[i]
-	if t.Wet() || t.Height <= g.base {
+	if t.Wet() || g.Height[i] <= g.base {
 		t.Exposed = 0
 		return
 	}
@@ -503,7 +503,7 @@ func (g *Grid) restartBuried(epoch int) {
 			continue
 		}
 		age := math.Min(float64(t.Exposed), epochYears/2)
-		if !t.Wet() && t.Height > g.base && t.Drain < FloodDepth/2 {
+		if !t.Wet() && g.Height[i] > g.base && t.Drain < FloodDepth/2 {
 			age = math.Min(age, regolithDepth/fillRate) // the fill: see keepBook
 		}
 		t.Exposed = float32(age)

@@ -381,20 +381,21 @@ func med3(v []float64, lo, hi int) float64 {
 	return b
 }
 
-// Height is the height of a tile in metres. Off the map it is the sea the
-// water eventually reaches, which is what makes every hollow drain somewhere.
-func (g *Grid) Height(p geom.Pos) float64 {
+// HeightAt is the height of the tile at p in metres. Off the map it is the sea
+// the water eventually reaches, which is what makes every hollow drain
+// somewhere. On the map it is Height[Index(p)].
+func (g *Grid) HeightAt(p geom.Pos) float64 {
 	if !g.In(p) {
 		return -1
 	}
-	return g.At(p).Height
+	return g.Height[g.Index(p)]
 }
 
 // Slope is how steeply the ground falls away from a tile: the greatest drop
 // to any neighbour, as a rise over a run. A tenth is a gentle hill, a half is
 // ground you would not plough.
 func (g *Grid) Slope(p geom.Pos) float64 {
-	h := g.Height(p)
+	h := g.HeightAt(p)
 	steepest := 0.0
 	for _, off := range Dirs {
 		q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
@@ -405,7 +406,7 @@ func (g *Grid) Slope(p geom.Pos) float64 {
 		if off.X != 0 && off.Y != 0 {
 			run *= math.Sqrt2
 		}
-		if d := (h - g.Height(q)) / run; d > steepest {
+		if d := (h - g.HeightAt(q)) / run; d > steepest {
 			steepest = d
 		}
 	}
@@ -431,7 +432,7 @@ func (g *Grid) Slope(p geom.Pos) float64 {
 // functions above. This is the one reading of the same eight neighbours that
 // did not.
 func (g *Grid) Aspect(p geom.Pos) geom.Pos {
-	h := g.Height(p)
+	h := g.HeightAt(p)
 	best, steepest := geom.Pos{}, 0.0
 	for _, off := range Dirs {
 		q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
@@ -442,7 +443,7 @@ func (g *Grid) Aspect(p geom.Pos) geom.Pos {
 		if off.X != 0 && off.Y != 0 {
 			run = math.Sqrt2
 		}
-		if d := (h - g.Height(q)) / run; d > steepest {
+		if d := (h - g.HeightAt(q)) / run; d > steepest {
 			best, steepest = off, d
 		}
 	}
@@ -507,7 +508,7 @@ func (w *Land) raise(g *Grid) {
 	h := w.relief(g)
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			g.Tiles[i].Height = h[i]
+			g.Height[i] = h[i]
 		}
 	})
 }
@@ -897,7 +898,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 			// It counts for part of a tile against the share: see cornerWeight.
 			if a.X != 0 && a.Y != 0 {
 				side := geom.Pos{X: p.X + a.X, Y: p.Y}
-				if other := (geom.Pos{X: p.X, Y: p.Y + a.Y}); g.Height(other) < g.Height(side) {
+				if other := (geom.Pos{X: p.X, Y: p.Y + a.Y}); g.HeightAt(other) < g.HeightAt(side) {
 					side = other
 				}
 				wet[g.Index(side)] = true
@@ -958,7 +959,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		for _, off := range Dirs {
 			c := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-			if g.In(c) && !g.pans[g.Index(c)] && g.Height(c) <= g.Height(p)+bankRise {
+			if g.In(c) && !g.pans[g.Index(c)] && g.HeightAt(c) <= g.HeightAt(p)+bankRise {
 				wet[g.Index(c)] = true
 			}
 		}
@@ -1023,7 +1024,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 func (g *Grid) height() {
 	lowest := math.Inf(1)
 	for i := range g.Tiles {
-		lowest = math.Min(lowest, g.Tiles[i].Height)
+		lowest = math.Min(lowest, g.Height[i])
 	}
 	for _, i := range g.route {
 		t := &g.Tiles[i]
@@ -1033,10 +1034,10 @@ func (g *Grid) height() {
 		}
 		d := g.down[i]
 		if d < 0 {
-			t.Drain = t.Height - lowest // the water leaves the map here
+			t.Drain = g.Height[i] - lowest // the water leaves the map here
 			continue
 		}
-		t.Drain = math.Max(0, t.Height-g.Surface(int(d))+g.Tiles[d].Drain)
+		t.Drain = math.Max(0, g.Height[i]-g.Surface(int(d))+g.Tiles[d].Drain)
 	}
 }
 
@@ -1057,7 +1058,7 @@ type heightNode struct {
 // underSea reports whether the tile at i lies at or below sea level. A map
 // with no sea has a sea level below all its ground.
 func (g *Grid) underSea(i int) bool {
-	return g.sea >= 0 && g.Tiles[i].Height <= g.sea
+	return g.sea >= 0 && g.Height[i] <= g.sea
 }
 
 // seaNear is, for each tile, how much of the country within reach of it lies
@@ -1147,7 +1148,7 @@ func (g *Grid) relevel(share float64) {
 	}
 	heights := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		heights[i] = g.Tiles[i].Height
+		heights[i] = g.Height[i]
 	}
 	g.sea = quantile(heights, share)
 	g.base = g.sea
@@ -1162,7 +1163,7 @@ func (g *Grid) flood(share float64, rng interface{ Float64() float64 }) {
 	}
 	heights := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		heights[i] = g.Tiles[i].Height
+		heights[i] = g.Height[i]
 	}
 	g.seaAt(quantile(heights, share), rng)
 }

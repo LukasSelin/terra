@@ -139,7 +139,7 @@ func scarp(g *terra.Grid, p geom.Pos, slope, steepAt float64) bool {
 		if !g.In(q) {
 			continue
 		}
-		if b := g.At(q); !b.Wet() && b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+		if b := g.At(q); !b.Wet() && g.Height[g.Index(q)] < g.Height[g.Index(p)] && b.Hard() <= t.Hard()-softer {
 			return true
 		}
 	}
@@ -158,7 +158,7 @@ func hogback(g *terra.Grid, p geom.Pos) bool {
 			if !g.In(q) {
 				break
 			}
-			if b := g.At(q); b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+			if b := g.At(q); g.Height[g.Index(q)] < g.Height[g.Index(p)] && b.Hard() <= t.Hard()-softer {
 				sides++
 			}
 		}
@@ -220,7 +220,7 @@ func classify(land *terra.Land) classes {
 	height := make([]float64, n)
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		height[i] = t.Height
+		height[i] = g.Height[i]
 		if t.Wet() {
 			wet[i] = 1
 		}
