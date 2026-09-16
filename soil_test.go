@@ -214,7 +214,7 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 		}
 	}
 	try("valley", g)
-	globe := NewLand(3, smallGlobe()).Grid
+	globe := madeLand(3, smallGlobe()).Grid
 	for i := range globe.Tiles {
 		globe.Height[i] *= 3 // the ranges stood up three times as steep
 	}

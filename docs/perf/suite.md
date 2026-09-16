@@ -88,3 +88,10 @@ go test -json -timeout 60m . > suite.json
 
 and sort the `pass`/`fail`/`skip` events without a `/` in their `Test` by
 `Elapsed`.
+
+## Kept histories
+
+Since 2026-09-16 a world a test only needs, and not the making of, comes
+through `madeLand` (`histories_test.go`), which keeps its history in
+`.cache/histories` keyed by the package's source. A second run with no
+change outside the tests took 187 s against 375 s. See the work log.

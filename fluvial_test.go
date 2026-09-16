@@ -249,7 +249,7 @@ func TestAFlatKeepsWhatItHasRoomFor(t *testing.T) {
 // what went to the sea, and the same seed weathers the same way.
 func TestATidalCoastConservesTheGround(t *testing.T) {
 	run := func() ([]float64, float64, float64) {
-		w := NewLand(2, smallGlobe())
+		w := madeLand(2, smallGlobe())
 		g := w.Grid
 		before := 0.0
 		for i := range g.Tiles {

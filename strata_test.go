@@ -203,7 +203,7 @@ func TestARiverStepsDownOverAHardBed(t *testing.T) {
 // than one bed, and on a good share of them the weather has cut through to
 // a bed that is not the one on top.
 func TestAHistoryLeavesItsBedsInLayers(t *testing.T) {
-	g := NewLand(1, AncientTerms()).Grid
+	g := madeLand(1, AncientTerms()).Grid
 	beds, layered := 0, 0
 	kinds := map[Bedrock]bool{}
 	for i := range g.Tiles {
@@ -259,7 +259,7 @@ func TestADrawnMapIsCutIntoItsPile(t *testing.T) {
 
 // The weather goes on baring new beds after the map is made.
 func TestTheWeatherBaresTheBedsBeneath(t *testing.T) {
-	w := NewLand(2, AncientTerms())
+	w := madeLand(2, AncientTerms())
 	before := make([]Bedrock, len(w.Grid.Tiles))
 	for i := range w.Grid.Tiles {
 		before[i] = w.Grid.Tiles[i].Bedrock

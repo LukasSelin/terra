@@ -122,7 +122,7 @@ func TestCalibrate(t *testing.T) {
 		var wet []float64
 		for seed := uint64(1); seed <= 12; seed++ {
 			drawn := shapeOf(NewLand(seed, DefaultTerms()).Grid)
-			made := shapeOf(NewLand(seed, historyConfig(16)).Grid)
+			made := shapeOf(madeLand(seed, historyConfig(16)).Grid)
 			steep = append(steep, made.slope90/drawn.slope90)
 			wet = append(wet, float64(made.wet)/math.Max(1, float64(drawn.wet)))
 		}
@@ -133,7 +133,7 @@ func TestCalibrate(t *testing.T) {
 	}
 
 	fmt.Println("\nrain by latitude on land, GlobeTerms seed 1 (mm a year: rain / runoff):")
-	if g := NewLand(1, GlobeTerms()).Grid; g.air != nil && len(g.rain) == len(g.Tiles) {
+	if g := madeLand(1, GlobeTerms()).Grid; g.air != nil && len(g.rain) == len(g.Tiles) {
 		for _, band := range [][2]float64{{0, 10}, {10, 20}, {20, 30}, {30, 40}, {40, 55}, {55, 65}, {65, 80}, {80, 90}} {
 			var p, r, n float64
 			for i := range g.Tiles {
@@ -155,7 +155,7 @@ func TestCalibrate(t *testing.T) {
 		seeds uint64
 	}{{"small", smallGlobe(), 8}, {"globe", GlobeTerms(), 3}} {
 		for seed := uint64(1); seed <= c.seeds; seed++ {
-			g := NewLand(seed, c.terms).Grid
+			g := madeLand(seed, c.terms).Grid
 			under := 0
 			for i := range g.Tiles {
 				if g.underSea(i) {
@@ -173,7 +173,7 @@ func TestCalibrate(t *testing.T) {
 		terms Terms
 		seed  uint64
 	}{{"small 1", smallGlobe(), 1}, {"small 2", smallGlobe(), 2}, {"small 3", smallGlobe(), 3}, {"globe 1", GlobeTerms(), 1}} {
-		g := NewLand(c.seed, c.terms).Grid
+		g := madeLand(c.seed, c.terms).Grid
 		var ranges []float64
 		flats := 0
 		for i := range g.Tiles {

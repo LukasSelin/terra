@@ -39,7 +39,14 @@ and says so in its commit.
 - `go test -short -timeout 60m .` is the tier to run while working: under
   two minutes, nothing that makes a globe.
 - Tests that need a world share one through `yardWorld` in
-  `yardstick_test.go` rather than making their own.
+  `yardstick_test.go` rather than making their own; a test that needs its
+  own copy calls `madeLand`, not `NewLand`, unless the making is what it
+  tests.
+- Histories are kept between runs in `.cache/histories`
+  (`histories_test.go`), keyed by the package's source: a run with no
+  change outside the tests reads them. `TERRA_HISTORIES=trust` reads them
+  across a change too, for work on the stages after the history only;
+  `TERRA_HISTORIES=off` makes every world afresh.
 - `docs/perf/suite.md` lists the slowest tests.
 
 ## Worktrees

@@ -6,6 +6,61 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The suite's histories kept between runs
+
+**What this is.** The yardsticks' share of the history file, on
+`claude/app-performance-structural-956966` after the stages merged to main
+(b4a0d3a). Test code only: no non-test file of the package changed, so the
+digest, the budget and every world are main's.
+
+**What changed.** `madeLand(seed, terms)` in `histories_test.go` is NewLand
+for a test that needs a world and not the making of one: it reads the
+history kept in `.cache/histories/<code>/` and runs the stages after it,
+or makes the world and keeps its history there. `<code>` is a hash of every
+non-test Go file of the module outside `cmd`, go.mod, the Go version and
+the build settings, so a history is never read by code that could have
+made a different one, and directories for any other code are removed on
+the first use of a run. `TERRA_HISTORIES=trust` keys by seed and terms
+alone, for work on the stages after the history; `TERRA_HISTORIES=off`
+keeps nothing. `yardLand` (every shared world), the tidal coast, the
+slides on a small globe, the day-to-day weather, the rock and strata tests
+on made valleys, and the calibration table's untimed readings go through
+it. The tests of the making itself keep NewLand: the goroutine
+independence, the digest, the budget, the timed globe, the why chains over
+goroutines, the same seed running the same history.
+`TestAKeptHistoryIsTheWorld` holds a made, a read and a remade-over-a-spoilt-file
+world to NewLand's digest.
+
+**What it measured.** The whole suite (`go test -json -timeout 60m .`),
+one test binary per side, quiet machine, 24 threads:
+
+| run | wall | failures |
+|---|---:|---|
+| main before (b4a0d3a's tests) | 386 s | none |
+| branch, nothing kept | 375 s | none |
+| branch, histories kept | **187 s** | none |
+
+The slowest tests, seconds, in the same three runs:
+
+| test | before | nothing kept | kept |
+|---|---:|---:|---:|
+| `TestTheIceEdgeIsNotALineOfLatitude` (three globes) | 96.9 | 97.8 | 20.6 |
+| `TestTheRealWorld` | 69.0 | 69.9 | 15.9 |
+| `TestAGlobeHasASeaItsRiversReach` (times the making) | 48.5 | 47.3 | 46.9 |
+| `TestRealNumbers` | 32.8 | 33.0 | 8.4 |
+| `TestSaltLakesStandInDryCountry` | 32.3 | 28.4 | 6.3 |
+| `TestMakingAWorldDoesNotDependOnTheGoroutines` | 28.6 | 29.8 | 28.2 |
+| `TestTheUplandMaskIsFinerThanTheMap` | 12.2 | 12.2 | 12.1 |
+
+The kept histories are 1.1 GB on disk, in the worktree. What is left of
+the kept run is the making the suite has to do: the timed globe, the
+goroutine-independence test's five small globes made four ways, and the
+upland mask's drawn globe. A run after any change to a non-test file makes
+everything again, so the kept run is the suite's time while a test is
+being tuned, or with `trust` while a later stage is being worked on.
+
+---
+
 ## 2026-09-16 - Generate in stages, and a history kept in a file
 
 **What this is.** The first step of phase 3 of the scaling plan ("stages as

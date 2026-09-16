@@ -67,9 +67,9 @@ func yardLand(name string, seed uint64, terms Terms) *Land {
 	if w, ok := yardWorlds.Load(key); ok {
 		return w.(*Land)
 	}
-	w := NewLand(seed, terms)
-	yardWorlds.Store(key, w)
-	return w
+	w := madeLand(seed, terms)
+	actual, _ := yardWorlds.LoadOrStore(key, w)
+	return actual.(*Land)
 }
 
 // keepLand offers a world a test made anyway - because it was timing the
