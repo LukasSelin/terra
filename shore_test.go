@@ -194,9 +194,8 @@ func estuary() *Grid {
 // was surf the littoral drift carried sand across; with the deep floor laid at
 // its age's depth - see abyss.go - that sand stayed on the shelves, the fourth
 // had none, and the third was read instead. With the plates carried the part
-// of a tile a whole step leaves over (see move), the third has none and the
-// fourth eleven: of small globes 1-8, the first has 4, the fourth 11 and the
-// eighth 9, and the rest none.
+// of a tile a whole step leaves over (see move), the third has one and the
+// fourth two: small globes 1-8 have 1, 1, 1, 2, 0, 0, 0 and 2.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string

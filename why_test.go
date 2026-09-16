@@ -116,11 +116,11 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // chain and a pluton's rock is read: it was tile 1000, raised by an arc forty
 // million years before the present, until the plates were carried the part of
 // a tile a whole step leaves over (see move), and tile 1000 was ground no
-// meeting had raised; tile 119 was raised by an arc twelve million years
-// before, by some 5.4 km of the history's own.
+// meeting had raised; tile 257 was raised by an arc sixty-four million years
+// before, in the first epoch, by some 3.5 km of the history's own.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(119)
+	p := g.PosOf(257)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -138,9 +138,9 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 		}
 	}
 	chain := g.Why(p, OfHeight)
-	if chain[0].Note != "arc" || chain[0].When != 3*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 119 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
-			chain[0].Note, chain[0].When, chain[0].Quantity, 3*epochYears)
+	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
+		t.Errorf("tile 257 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {
 		t.Errorf("the height's first cause is not an arc's belt: %v", belt)

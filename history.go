@@ -1658,9 +1658,9 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 			}
 			for a := 0; a < 2; a++ {
 				switch {
-				case cr.acc[k][a] >= 1:
+				case cr.acc[k][a] > 0.5:
 					step[k][a] = 1
-				case cr.acc[k][a] <= -1:
+				case cr.acc[k][a] < -0.5:
 					step[k][a] = -1
 				}
 				cr.acc[k][a] -= float64(step[k][a])
@@ -1672,31 +1672,27 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 		}
 		cr.shift(g, plates, &step)
 	}
-	// What each plate has travelled short of a whole tile is not held back:
-	// it goes into how far its crust stands off its tiles, and the turn below
-	// reads it there, so a plate stands where its travel has taken it and not
-	// up to a tile behind. Held back, the lag was a tile of the grid whatever
-	// the grid, and a history on a grid twice as coarse opened a tenth less
-	// floor in its first epoch, and more of its partings left a continent
-	// against the ocean than fresh floor between them. See historygrid.go.
+	// A plate steps to the nearest whole tile of its travel, and what is left
+	// over, under half a tile either way, is where its crust stands off the
+	// tiles it is on: the turn below reads the whole plate there. Held back
+	// to the whole tile under its travel instead, a plate lagged most of a
+	// tile of its grid whatever the grid, and a history on a grid twice as
+	// coarse opened a tenth less floor in its first epoch, and more of its
+	// partings left a continent against the ocean than fresh floor between
+	// them. It is the plate's and not each tile's: carried in every tile's own
+	// offset, the offsets that turns had left each tile stopped fitting
+	// together, and the ground came out speckled with lone tiles of the other
+	// crust. See historygrid.go.
 	var shift [plateCap][2]float64
 	for k := range plates {
-		if plates[k].into != uint8(k) || cr.acc[k] == [2]float64{} {
-			continue
-		}
-		shift[k] = cr.acc[k]
-		cr.acc[k] = [2]float64{}
-	}
-	for i := range cr.plate {
-		if sh := shift[cr.plate[i]]; sh != [2]float64{} {
-			cr.off[i][0] += float32(sh[0])
-			cr.off[i][1] += float32(sh[1])
+		if plates[k].into == uint8(k) {
+			shift[k] = cr.acc[k]
 		}
 	}
 	// And the epoch's turning, all at once. A turn about a plate's middle
 	// and a slide of the whole plate come to the same thing in either order,
-	// so what the slides above did not do is the turns, and what is left of
-	// the slides.
+	// so what the slides above did not do is the turns, and where what is left
+	// of the slides puts the plate.
 	cr.turn(g, plates, &shift)
 
 	copy(cr.tiles, g.Tiles)
@@ -1892,10 +1888,12 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 		}
 		return cos[k]*rx - s*ry, s*rx + cos[k]*ry
 	}
-	// place is where the crust on tile i truly stands, off plate k's middle.
+	// place is where the crust on tile i truly stands, off plate k's middle:
+	// its tile, what earlier turns left it off that, and where the plate's
+	// slide stands short of a whole tile.
 	place := func(k uint8, i int) (float64, float64) {
-		p, o := &plates[k], cr.off[i]
-		return g.across(float64(i%g.W) + float64(o[0]) - p.cx), float64(i/g.W) + float64(o[1]) - p.cy
+		p, o, sh := &plates[k], cr.off[i], shift[k]
+		return g.across(float64(i%g.W) + float64(o[0]) + sh[0] - p.cx), float64(i/g.W) + float64(o[1]) + sh[1] - p.cy
 	}
 
 	for j := range cr.nplate {
@@ -1936,62 +1934,31 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 				j := y*g.W + x
 				// Where this tile was before the turn and what is left of the
 				// slide, and the tile that is.
+				// Where this tile was before the turn, and the tile that was,
+				// the plate's slide short of a whole tile taken off.
 				bx, by := spun(k, g.across(float64(x)-p.cx), float64(y)-p.cy, true)
 				fx, fy := int(math.Round(p.cx+bx-shift[k][0])), int(math.Round(p.cy+by-shift[k][1]))
 				if fy < 0 || fy >= g.H || (!g.Wrap && (fx < 0 || fx >= g.W)) {
 					continue
 				}
 				b := fy*g.W + g.WrapX(fx)
+				if cr.plate[b] != k {
+					continue
+				}
 				best, near := b, math.Inf(1)
 				var dx, dy float64
-				// boxed is whether a candidate must stand within the tile's own
-				// half-open square to be taken: see below.
-				boxed := false
 				try := func(i int) {
 					if cr.plate[i] != k {
 						return
 					}
 					qx, qy := place(k, i)
 					ex, ey := g.across(qx-bx), qy-by
-					if boxed && (ex <= -0.5 || ex > 0.5 || ey <= -0.5 || ey > 0.5) {
-						return
-					}
 					if d := ex*ex + ey*ey; d < near {
 						best, near, dx, dy = i, d, ex, ey
 					}
 				}
-				if shift[k] == [2]float64{} {
-					if cr.plate[b] != k {
-						continue
-					}
-					try(b)
-					g.eachNear(b, try)
-				} else {
-					// The crust stands off its tile by the slide as well as by
-					// what earlier turns left, so the tile under it is looked for
-					// two tiles round where the slide alone puts it, and it is
-					// this plate's ground where some of its crust stands within
-					// the tile's own square - half open, so that crust standing
-					// exactly half a tile off is the ground of one tile and not of
-					// both or neither - the nearest such crust.
-					boxed = true
-					for oy := -2; oy <= 2; oy++ {
-						qy := fy + oy
-						if qy < 0 || qy >= g.H {
-							continue
-						}
-						for ox := -2; ox <= 2; ox++ {
-							qx := fx + ox
-							if !g.Wrap && (qx < 0 || qx >= g.W) {
-								continue
-							}
-							try(qy*g.W + g.WrapX(qx))
-						}
-					}
-					if math.IsInf(near, 1) {
-						continue
-					}
-				}
+				try(b)
+				g.eachNear(b, try)
 				if cur := cr.nplate[j]; cur == k || (cur != noPlate && !sinks(cur, cr.nocean[j], cr.nborn[j], k, cr.ocean[best], cr.born[best])) {
 					continue
 				}
@@ -2000,7 +1967,10 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
+				// Less the slide, which is the plate's and read again next
+				// epoch from where it then stands.
 				rx, ry := spun(k, dx, dy, false)
+				rx, ry = rx-shift[k][0], ry-shift[k][1]
 				cr.noff[j] = [2]float32{
 					float32(math.Max(-0.5, math.Min(0.5, rx))),
 					float32(math.Max(-0.5, math.Min(0.5, ry))),
@@ -2044,7 +2014,6 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 	type pick struct {
 		plate uint8
 		from  int32
-		off   [2]float32
 	}
 	var picks []pick
 	for len(ring) > 0 {
@@ -2053,7 +2022,6 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 			var seen [8]uint8
 			var count [8]int
 			var from [8]int32
-			var off [8][2]float32
 			n := 0
 			g.eachNear(int(j), func(k int) {
 				p := cr.nplate[k]
@@ -2066,7 +2034,7 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 						return
 					}
 				}
-				seen[n], count[n], from[n], off[n] = p, 1, cr.norg[k], cr.noff[k]
+				seen[n], count[n], from[n] = p, 1, cr.norg[k]
 				n++
 			})
 			best := 0
@@ -2081,16 +2049,12 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 					best = m
 				}
 			}
-			picks = append(picks, pick{seen[best], from[best], off[best]})
+			picks = append(picks, pick{seen[best], from[best]})
 		}
 		for r, j := range ring {
 			cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.nocean[j] = picks[r].plate, picks[r].from, true, cr.now, true
 			cr.nbuilt[j], cr.nrise[j] = 0, 0
-			// New floor stands off its tile as the crust of the plate it
-			// joins does, so that a plate's ground stays one lattice: at
-			// nought beside crust that stood off by a slide, the floor stood
-			// closer to the ground ahead of it than a tile, and took it.
-			cr.noff[j] = picks[r].off
+			cr.noff[j] = [2]float32{}
 		}
 		next = next[:0]
 		for _, j := range ring {
