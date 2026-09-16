@@ -1,5 +1,7 @@
 package terra
 
+import "math"
+
 // The kernels: the arithmetic a pass does to a run of numbers at once, each
 // written twice. Here is the statement of what it computes, one number at a
 // time, and kernel_simd_amd64.go is the same arithmetic four lanes at a time
@@ -165,4 +167,55 @@ func stencil5Scalar(dst, up, row, down []float64, c, s float64) {
 		v := float64(up[i] + down[i])
 		dst[i] = float64(float64(c*row[i+1]) + float64(s*float64(h+v)))
 	}
+}
+
+// minmaxSelectScalar is the least and the greatest of v, by comparison and
+// choice: an entry is taken as the least only if it is less than what is
+// held, so a NaN is never taken and, among entries that are equal - a
+// negative nought and a positive - the first seen stays. Which is first is
+// a fact about the order, so the order is fixed and the same on both
+// paths: the entries are dealt round the lanes and each lane keeps its
+// own, the lanes are then read in order, and the tail last, one by one.
+// The least starts at +Inf and the greatest at -Inf, so a run of nothing
+// comes back as (+Inf, -Inf) and a run of NaNs the same.
+func minmaxSelectScalar(v []float64) (lo, hi float64) {
+	var los, his [lanes]float64
+	for l := range los {
+		los[l], his[l] = math.Inf(1), math.Inf(-1)
+	}
+	n := whole(len(v))
+	for i := 0; i < n; i += lanes {
+		for l := range los {
+			x := v[i+l]
+			if x < los[l] {
+				los[l] = x
+			}
+			if x > his[l] {
+				his[l] = x
+			}
+		}
+	}
+	return minmaxTail(los, his, v[n:])
+}
+
+// minmaxTail reads the lanes in order and then the tail.
+func minmaxTail(los, his [lanes]float64, tail []float64) (lo, hi float64) {
+	lo, hi = math.Inf(1), math.Inf(-1)
+	for l := range los {
+		if los[l] < lo {
+			lo = los[l]
+		}
+		if his[l] > hi {
+			hi = his[l]
+		}
+	}
+	for _, x := range tail {
+		if x < lo {
+			lo = x
+		}
+		if x > hi {
+			hi = x
+		}
+	}
+	return lo, hi
 }

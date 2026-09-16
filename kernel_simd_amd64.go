@@ -3,6 +3,7 @@
 package terra
 
 import (
+	"math"
 	"unsafe"
 
 	"simd/archsimd"
@@ -242,4 +243,22 @@ func stencil5(dst, up, row, down []float64, c, s float64) {
 	}
 	archsimd.ClearAVXUpperBits()
 	stencil5Scalar(dst[n:], up[n:], row[n:], down[n:], c, s)
+}
+
+func minmaxSelect(v []float64) (lo, hi float64) {
+	if !vector {
+		return minmaxSelectScalar(v)
+	}
+	n := whole(len(v))
+	lov, hiv := archsimd.BroadcastFloat64x4(math.Inf(1)), archsimd.BroadcastFloat64x4(math.Inf(-1))
+	for j := 0; j < n; j += lanes {
+		x := archsimd.LoadFloat64x4(v[j : j+lanes])
+		lov = x.IfElse(x.Less(lov), lov)
+		hiv = x.IfElse(x.Greater(hiv), hiv)
+	}
+	var los, his [lanes]float64
+	lov.StoreArray(&los)
+	hiv.StoreArray(&his)
+	archsimd.ClearAVXUpperBits()
+	return minmaxTail(los, his, v[n:])
 }

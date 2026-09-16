@@ -173,6 +173,13 @@ func BenchmarkKernel(b *testing.B) {
 			stencil5(y, x[:n-2], x, x[2:], 0.5, 0.125)
 		}
 	})
+	b.Run("minmaxSelect", func(b *testing.B) {
+		var lo, hi float64
+		for b.Loop() {
+			lo, hi = minmaxSelect(x)
+		}
+		_, _ = lo, hi
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -287,6 +294,27 @@ func FuzzStencil5(f *testing.F) {
 			stencil5(got, up, row, down, c, s)
 			stencil5Scalar(want, up, row, down, c, s)
 			sameBits(t, "stencil5", n, got, want)
+		}
+	})
+}
+
+func FuzzMinmaxSelect(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 9))
+		for _, n := range lengths(rng) {
+			v := run(rng, n)
+			if rng.IntN(2) == 0 {
+				// Mostly noughts of both signs, so that ties are the rule.
+				for i := range v {
+					if rng.IntN(4) > 0 {
+						v[i] = math.Copysign(0, float64(rng.IntN(2)*2-1))
+					}
+				}
+			}
+			lo, hi := minmaxSelect(v)
+			wlo, whi := minmaxSelectScalar(v)
+			sameBits(t, "minmaxSelect", n, []float64{lo, hi}, []float64{wlo, whi})
 		}
 	})
 }

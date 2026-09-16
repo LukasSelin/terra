@@ -23,3 +23,4 @@ func sumTree(v []float64) float64         { return sumTreeScalar(v) }
 func stencil5(dst, up, row, down []float64, c, s float64) {
 	stencil5Scalar(dst, up, row, down, c, s)
 }
+func minmaxSelect(v []float64) (lo, hi float64) { return minmaxSelectScalar(v) }
