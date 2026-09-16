@@ -63,7 +63,7 @@ func TestCalibrate(t *testing.T) {
 			g := w.Grid
 			var slopes []int
 			for i := range g.Tiles {
-				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 {
+				if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth/2 {
 					tl.Terrain = cover
 					slopes = append(slopes, i)
 				}
@@ -97,7 +97,7 @@ func TestCalibrate(t *testing.T) {
 				continue
 			}
 			switch {
-			case tl.Drain < FloodDepth/2:
+			case g.Drain[i] < FloodDepth/2:
 				floor, fN = floor+tl.Sand, fN+1
 			case g.Slope(g.PosOf(i)) > 0.1:
 				hill, hN = hill+tl.Sand, hN+1

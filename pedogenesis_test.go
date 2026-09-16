@@ -39,9 +39,9 @@ func readFertility(g *Grid) fertilityReading {
 			r.inland, ni = r.inland+f, ni+1
 		}
 		switch {
-		case t.Drain < 2:
+		case g.Drain[i] < 2:
 			r.floor, nf = r.floor+f, nf+1
-		case t.Drain > 20:
+		case g.Drain[i] > 20:
 			r.hill, nh = r.hill+f, nh+1
 		}
 	}
@@ -152,8 +152,8 @@ func soilStateReadings() {
 // The state fits in the padding the tile already had: a map pays nothing a
 // tile for its soil's age and chemistry. See memory.go.
 func TestTheSoilStateCostsATileNothing(t *testing.T) {
-	if got := unsafe.Sizeof(Tile{}); got != 56 {
-		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 56 since the height and the flow went beside the map", got)
+	if got := unsafe.Sizeof(Tile{}); got != 48 {
+		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 48 since the height, the flow and the drain went beside the map", got)
 	}
 }
 
@@ -163,7 +163,7 @@ func one(rain, runoff float64) *Grid {
 	g := NewGrid(1, 1)
 	g.rain, g.runoff = []float64{rain}, []float64{runoff}
 	t := &g.Tiles[0]
-	t.Terrain, t.Bedrock, t.Soil, t.Drain = Grass, Basalt, 1, 50
+	t.Terrain, t.Bedrock, t.Soil, g.Drain[0] = Grass, Basalt, 1, 50
 	return g
 }
 
@@ -296,7 +296,7 @@ func TestTheSoilIsOldWhereTheGroundIsStill(t *testing.T) {
 			}
 			age := float64(tl.Exposed)
 			switch round := roundOver(g, i); {
-			case tl.Drain < 2:
+			case g.Drain[i] < 2:
 				floor, nf = floor+age, nf+1
 			case round < -2:
 				crest, nc = crest+age, nc+1

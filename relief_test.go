@@ -177,9 +177,9 @@ func TestGroundStandsAboveItsRiver(t *testing.T) {
 	for i := range g.Tiles {
 		switch t := &g.Tiles[i]; {
 		case t.Terrain == Water:
-		case t.Drain < 2:
+		case g.Drain[i] < 2:
 			floor++
-		case t.Drain > 20:
+		case g.Drain[i] > 20:
 			hill++
 		}
 	}
@@ -194,10 +194,10 @@ func TestGroundStandsAboveItsRiver(t *testing.T) {
 		if t.Terrain == Water {
 			continue
 		}
-		if t.Drain < 2 {
+		if g.Drain[i] < 2 {
 			lowFert += g.Fertility[i]
 			lowN++
-		} else if t.Drain > 20 {
+		} else if g.Drain[i] > 20 {
 			highFert += g.Fertility[i]
 			highN++
 		}

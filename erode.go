@@ -349,7 +349,7 @@ func (g *Grid) overbank(i int, laid [Grains]float64, change []float64, gained []
 			if (dx == 0 && dy == 0) || !g.In(q) {
 				continue
 			}
-			if b := g.At(q); b.Wet() || b.Drain >= FloodDepth || b.Mark != None {
+			if b := g.At(q); b.Wet() || g.Drain[g.Index(q)] >= FloodDepth || b.Mark != None {
 				continue
 			}
 			wt := math.Exp(-math.Hypot(float64(dx), float64(dy)) * g.span() / overbankDecay)
@@ -390,7 +390,7 @@ func (g *Grid) floodWidth(i int) float64 {
 			if (dx == 0 && dy == 0) || !g.In(q) {
 				continue
 			}
-			if b := g.At(q); !b.Wet() && b.Drain < FloodDepth && b.Mark == None {
+			if b := g.At(q); !b.Wet() && g.Drain[g.Index(q)] < FloodDepth && b.Mark == None {
 				n++
 			}
 		}

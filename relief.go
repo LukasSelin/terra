@@ -231,7 +231,7 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	depth := -math.Expm1(-float64(t.Soil) / rootReach)
 	// Water: the valley floor has the river's; a shoulder has what the rain
 	// leaves in it.
-	damp := clamp01(1 - t.Drain/FloodDepth)
+	damp := clamp01(1 - g.Drain[i]/FloodDepth)
 	wet := damp + (1-damp)*shoulderWater*g.wetOf(i)
 	lie := wet * (0.75 + 0.5*g.Sunlight(p))
 	// Organisms and time again: the carbon the soil holds, and what the rain,
@@ -1029,15 +1029,15 @@ func (g *Grid) height() {
 	for _, i := range g.route {
 		t := &g.Tiles[i]
 		if t.Wet() || g.pans[i] {
-			t.Drain = 0
+			g.Drain[i] = 0
 			continue
 		}
 		d := g.down[i]
 		if d < 0 {
-			t.Drain = g.Height[i] - lowest // the water leaves the map here
+			g.Drain[i] = g.Height[i] - lowest // the water leaves the map here
 			continue
 		}
-		t.Drain = math.Max(0, g.Height[i]-g.Surface(int(d))+g.Tiles[d].Drain)
+		g.Drain[i] = math.Max(0, g.Height[i]-g.Surface(int(d))+g.Drain[d])
 	}
 }
 

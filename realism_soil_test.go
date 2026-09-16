@@ -156,9 +156,9 @@ func soilDepths(gs []*Grid) soilDepthReading {
 					continue
 				}
 				switch s := g.Slope(g.PosOf(i)); {
-				case s > 0.1 && t.Drain > FloodDepth:
+				case s > 0.1 && g.Drain[i] > FloodDepth:
 					hs, hn = hs+float64(t.Soil), hn+1
-				case s < 0.05 && t.Drain <= FloodDepth:
+				case s < 0.05 && g.Drain[i] <= FloodDepth:
 					fs, fn = fs+float64(t.Soil), fn+1
 				}
 			}

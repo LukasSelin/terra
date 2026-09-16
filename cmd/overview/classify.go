@@ -326,7 +326,7 @@ func classify(land *terra.Land) classes {
 				continue
 			}
 			p := g.PosOf(i)
-			byRiver := flood[i] && t.Drain < terra.FloodDepth/2
+			byRiver := flood[i] && g.Drain[i] < terra.FloodDepth/2
 			c.Koppen[i] = koppen(g, p)
 			c.Biome[i] = biome(c.Koppen[i], byRiver)
 

@@ -3103,7 +3103,7 @@ func (g *Grid) keepBook(book []record, epoch int) {
 		}
 		// Ground below the water it drains into is ground being filled in,
 		// and rock made of what is falling on it now dates from now.
-		if t.Drain < FloodDepth/2 {
+		if g.Drain[i] < FloodDepth/2 {
 			book[i].laid[Sand] += t.Sand * fill
 			book[i].laid[Silt] += t.Silt() * fill
 			book[i].laid[Clay] += t.Clay * fill

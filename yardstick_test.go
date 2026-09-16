@@ -765,7 +765,7 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			g := w.Grid
 			var slopes []int
 			for i := range g.Tiles {
-				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
+				if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 					tl.Terrain = cover
 					slopes = append(slopes, i)
 				}

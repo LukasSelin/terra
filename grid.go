@@ -49,10 +49,8 @@ type Tile struct {
 	// The height and the flow, which between them are the land itself - the
 	// rivers, the fertility and the going underfoot are all read off them -
 	// are kept beside the map as Grid.Height and Grid.Flow. See relief.go.
-	// Drain is how far this tile stands above the water it drains into, in
-	// metres. It is what makes a valley floor a water meadow and a hillside
-	// dry, and it is the ground truth the soil is read from.
-	Drain float64
+	// Drain, how far the tile stands above the water it drains into, is beside
+	// the map too, as Grid.Drain.
 
 	// Bedrock is the rock under this tile, and Sand and Clay the shares of
 	// the soil over it that are one and the other, the rest being silt. The
@@ -149,6 +147,10 @@ type Grid struct {
 	// Flow is the water running through each tile in cubic metres a second,
 	// indexed as Tiles is and beside the map for the same reason.
 	Flow []float64
+	// Drain is how far each tile stands above the water it drains into, in
+	// metres. It is what makes a valley floor a water meadow and a hillside
+	// dry, and it is the ground truth the soil is read from.
+	Drain []float64
 	// Layers is the ground that changes by the day, one slice per reading
 	// and indexed as Tiles is; see layers.go.
 	Layers
@@ -358,7 +360,7 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
@@ -409,9 +411,13 @@ func (v TileView) Height() float64 { return v.g.Height[v.i] }
 // Grid.Flow at this tile.
 func (v TileView) Flow() float64 { return v.g.Flow[v.i] }
 
+// Drain is how far this tile stands above the water it drains into, in
+// metres: Grid.Drain at this tile.
+func (v TileView) Drain() float64 { return v.g.Drain[v.i] }
+
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)

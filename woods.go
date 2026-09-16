@@ -114,8 +114,7 @@ func (g *Grid) WoodsAt(p geom.Pos) float64 {
 		}
 		return clamp01(climateLine * g.waterRatio(i))
 	}
-	t := g.At(p)
-	damp := clamp01(1 - t.Drain/(2*FloodDepth))
+	damp := clamp01(1 - g.Drain[g.Index(p)]/(2*FloodDepth))
 	steep := clamp01(g.Slope(p) / max(1e-12, g.steepAt))
 	return damp * (1 - 0.6*steep)
 }

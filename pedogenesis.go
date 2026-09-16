@@ -288,7 +288,7 @@ func (g *Grid) pedoClimateOf(i int) pedoClimate {
 	}
 	// Ground within a metre or two of the water it drains into is wet through
 	// for much of the year.
-	c.sodden = clamp01(1 - g.Tiles[i].Drain/2)
+	c.sodden = clamp01(1 - g.Drain[i]/2)
 	return c
 }
 
@@ -436,8 +436,8 @@ func (g *Grid) exposure(i int, h, pace, made float64) float64 {
 	}
 	e := math.Max(pace, soilDeepest)
 	age := h/e + math.Min(made, regolithDepth/e)
-	if t.Drain < FloodDepth {
-		age = math.Min(age, riverYoung+riverYears*math.Max(0, t.Drain)/FloodDepth)
+	if g.Drain[i] < FloodDepth {
+		age = math.Min(age, riverYoung+riverYears*math.Max(0, g.Drain[i])/FloodDepth)
 	}
 	return age
 }
@@ -503,7 +503,7 @@ func (g *Grid) restartBuried(epoch int) {
 			continue
 		}
 		age := math.Min(float64(t.Exposed), epochYears/2)
-		if !t.Wet() && g.Height[i] > g.base && t.Drain < FloodDepth/2 {
+		if !t.Wet() && g.Height[i] > g.base && g.Drain[i] < FloodDepth/2 {
 			age = math.Min(age, regolithDepth/fillRate) // the fill: see keepBook
 		}
 		t.Exposed = float32(age)
