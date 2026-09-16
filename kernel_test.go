@@ -142,3 +142,38 @@ func BenchmarkKernel(b *testing.B) {
 		}
 	})
 }
+
+// The butterflies, at every length a map asks for, forward and back; the
+// plan's roots are the same on both paths, so a run of complex numbers is a
+// run of float64s drawn like any other. A NaN is held to be a NaN and not to
+// its bits: the complex product is a sum of two products, and where both are
+// NaN the bits kept are the first operand's, which the compiler is free to
+// choose for a sum. See the vector butterflies.
+func FuzzButterflies(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 3))
+		for n := 1; n <= 4096; n <<= 1 {
+			for _, inverse := range []bool{false, true} {
+				want := make([]complex128, n)
+				for i := range want {
+					want[i] = complex(draw(rng), draw(rng))
+				}
+				got := slices.Clone(want)
+				pl := planFor(n)
+				butterflies(got, pl, inverse)
+				butterfliesScalar(want, pl, inverse, 1, n)
+				for i := range want {
+					if !sameOrNaN(real(got[i]), real(want[i])) || !sameOrNaN(imag(got[i]), imag(want[i])) {
+						t.Fatalf("butterflies, length %d, inverse %v: element %d is %v in lanes, and %v one at a time", n, inverse, i, got[i], want[i])
+					}
+				}
+			}
+		}
+	})
+}
+
+// sameOrNaN is whether a and b are the same bits, or both NaN.
+func sameOrNaN(a, b float64) bool {
+	return math.Float64bits(a) == math.Float64bits(b) || (math.IsNaN(a) && math.IsNaN(b))
+}

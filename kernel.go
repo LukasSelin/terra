@@ -43,3 +43,28 @@ func growScalar(age []float64, ks []int64, k float64) {
 		}
 	}
 }
+
+// butterfliesScalar is every level of the transform's butterflies, from the
+// pairs up, one element at a time: the statement the vector butterflies are
+// held to. Levels whose half is under from are done; the rest are left. See
+// fft.go for the transform and the plan.
+func butterfliesScalar(x []complex128, pl *fftPlan, inverse bool, from, to int) {
+	n := len(x)
+	roots := pl.roots
+	if inverse {
+		roots = pl.back
+	}
+	for size := 2; size <= n; size <<= 1 {
+		half := size / 2
+		if half < from || half >= to {
+			continue
+		}
+		stride := n / size
+		for start := 0; start < n; start += size {
+			for k := 0; k < half; k++ {
+				a, b := x[start+k], x[start+k+half]*roots[k*stride]
+				x[start+k], x[start+k+half] = a+b, a-b
+			}
+		}
+	}
+}

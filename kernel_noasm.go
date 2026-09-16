@@ -8,3 +8,11 @@ package terra
 
 func fade(wear []float64, by float64)           { fadeScalar(wear, by) }
 func grow(age []float64, ks []int64, k float64) { growScalar(age, ks, k) }
+
+type fftWide struct{}
+
+func widen(*fftPlan) *fftWide { return nil }
+
+func butterflies(x []complex128, pl *fftPlan, inverse bool) {
+	butterfliesScalar(x, pl, inverse, 1, len(x))
+}

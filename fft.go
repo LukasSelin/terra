@@ -21,7 +21,7 @@ func fft(x []complex128, inverse bool) {
 			x[i], x[j] = x[j], x[i]
 		}
 	}
-	butterflies(x, pl, inverse)
+	butterflies(x, pl, inverse) // the kernel: see kernel.go
 	if inverse {
 		inv := complex(1/float64(n), 0)
 		for i := range x {
@@ -35,34 +35,9 @@ func fft(x []complex128, inverse bool) {
 type fftPlan struct {
 	swap        []int32
 	roots, back []complex128
-	// wide is the roots again, laid out for the vectors: see
-	// fft_simd_amd64.go. It is nil in a build without them.
+	// wide is the roots again, laid out for the vectors: see widen in
+	// kernel_simd_amd64.go. It is nil in a build without them.
 	wide *fftWide
-}
-
-// butterfliesScalar is every level of the transform's butterflies, from the
-// pairs up, one element at a time: the statement the vector arithmetic in
-// fft_simd_amd64.go is held to. Levels whose half is under from are done;
-// the rest are left.
-func butterfliesScalar(x []complex128, pl *fftPlan, inverse bool, from, to int) {
-	n := len(x)
-	roots := pl.roots
-	if inverse {
-		roots = pl.back
-	}
-	for size := 2; size <= n; size <<= 1 {
-		half := size / 2
-		if half < from || half >= to {
-			continue
-		}
-		stride := n / size
-		for start := 0; start < n; start += size {
-			for k := 0; k < half; k++ {
-				a, b := x[start+k], x[start+k+half]*roots[k*stride]
-				x[start+k], x[start+k+half] = a+b, a-b
-			}
-		}
-	}
 }
 
 var fftPlans sync.Map // length to *fftPlan
