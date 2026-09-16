@@ -72,12 +72,11 @@ budget is written on, and the one to compare when a change means to move
 the peak.
 
 A steady peak needs the world to hold still while the heap is read: a hook
-at each pass boundary (the phase timer in `phases.go`, session 0's file)
-that runs a collection and reads `HeapAlloc` when the budget test asks it
-to. Every pass then contributes one reading taken with nothing allocating,
-and the largest of them is the peak, the same on any machine. When that
-lands, set `peakSlack` in `budget_test.go` and the test holds it like the
-bytes.
+at each pass boundary (the phase timer in `phases.go`) that runs a
+collection and reads `HeapAlloc` when the budget test asks it to. Every
+pass then contributes one reading taken with nothing allocating, and the
+largest of them is the peak, the same on any machine. When that exists,
+set `peakSlack` in `budget_test.go` and the test holds it like the bytes.
 
 When a change is meant to move the heap, rewrite the budget and commit the
 diff with the change:

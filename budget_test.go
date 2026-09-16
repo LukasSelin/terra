@@ -71,9 +71,9 @@ const (
 // whatever the world allocates during a concurrent mark is counted live,
 // and a mark takes longer on a loaded machine. A peak that does not move
 // with load needs the world to hold still while it is read: a hook at each
-// pass boundary that collects and reads the heap. That is session 0's
-// phases.go; when it lands, set peakSlack and check it here like the bytes.
-// See docs/perf/README.md.
+// pass boundary, in phases.go, that collects and reads the heap when this
+// test asks. When that exists, set peakSlack and check it here like the
+// bytes. See docs/perf/README.md.
 const peakSlack = 0 // not checked; see above
 
 // peakEvery is how often the sampler reads the heap while a world is made.
