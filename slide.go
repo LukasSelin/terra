@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // Landslides: ground steeper than soil can stand on does not stand.
@@ -119,7 +120,7 @@ const runoutMost = 4096
 // neighbours of the one that failed, whose fall to it has just grown; the
 // tiles are taken in the order they were queued, so a world repeats.
 func (g *Grid) landslide(keep bool) {
-	defer phase("landslide")()
+	defer phase.Start("landslide")()
 	if !keep {
 		g.cutBack()
 		return

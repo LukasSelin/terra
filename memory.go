@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"runtime/debug"
+
+	"github.com/LukasSelin/terra/internal/sysmem"
 )
 
 // How big a world may be asked for.
@@ -122,7 +124,7 @@ func (t Terms) fits() error {
 	if limit := debug.SetMemoryLimit(-1); limit != math.MaxInt64 && need > uint64(limit) {
 		return fmt.Errorf("%w: %dx%d needs about %s, and the memory limit is %s", ErrTooBig, t.Width, t.Height, size(need), size(uint64(limit)))
 	}
-	if free, ok := freeMemory(); ok && need > free {
+	if free, ok := sysmem.Free(); ok && need > free {
 		return fmt.Errorf("%w: %dx%d needs about %s, and %s is free", ErrTooBig, t.Width, t.Height, size(need), size(free))
 	}
 	return nil
@@ -146,7 +148,7 @@ func (t Terms) Largest() (Terms, error) {
 	if limit := debug.SetMemoryLimit(-1); limit != math.MaxInt64 {
 		budget, ok = uint64(limit), true
 	}
-	if free, known := freeMemory(); known && (!ok || free < budget) {
+	if free, known := sysmem.Free(); known && (!ok || free < budget) {
 		budget, ok = free, true
 	}
 	if !ok {

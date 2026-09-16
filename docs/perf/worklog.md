@@ -6,6 +6,32 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - The pass clock and the memory probe leave the root package
+
+**What this is.** The fourth move of splitting the root package, on
+`claude/internal-phase-sysmem`.
+
+- The per-pass clock is `internal/phase`. A pass starts it with
+  `defer phase.Start("drain")()`. The list of passes whose entries are made
+  ahead stays in `phases.go`, which hands it to `phase.Prepare` at init; the
+  root keeps `Phase`, `Phases`, `ResetPhases` and `PhaseTable` for
+  `cmd/overview` and the benchmarks.
+- `memory_windows.go`, `memory_linux.go` and `memory_other.go` are
+  `internal/sysmem`, whose `Free` is what `memory.go` holds a world against.
+
+**Checked.** `TERRA_DIGEST=check` passes, with
+`TestMakingAWorldDoesNotDependOnTheGoroutines` and the heap budget.
+With `TERRA_PHASES=1`, `TestPassCountsArePinned` and the budget test pass,
+so the clock still counts every pass and its peak readings still come.
+`go vet` passes for Windows, Linux and macOS. `go test -short ./...` fails
+only `TestAHistoryLeavesItsBedsInLayers`, as main does.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small.txt`
+passes: valley -4.6 %, ancient -2.8 %, globe256 -3.5 % a tile, as the moves
+before it read.
+
+---
+
 ## 2026-09-16 - The kernels leave the root package for internal/kernel
 
 **What this is.** The third move of splitting the root package, on

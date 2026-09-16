@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/internal/phase"
+)
 
 // The sea's own weather: where the water goes, and the warmth it takes there.
 //
@@ -138,7 +142,7 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land.
 func (e *airEnv) currents(u, v [phases][]float32) []float64 {
-	defer phase("airEnv.currents")()
+	defer phase.Start("airEnv.currents")()
 	n := e.w * e.h
 	wet := func(i int) bool { return e.sea[i] > 0.5 }
 

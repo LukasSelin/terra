@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The water cutting the ground, and putting it down again.
@@ -506,7 +507,7 @@ func (c *fluvial) supplied(i int32, gr int) float64 {
 // the same bits however many goroutines there are, and the same as one
 // sweep of the whole stack gave. See TestMakingAWorldDoesNotDependOnTheGoroutines.
 func (c *fluvial) solve(iters int) []float64 {
-	defer phase("fluvial.solve")()
+	defer phase.Start("fluvial.solve")()
 	n := len(c.h)
 	s := c.scratch
 	if s == nil {

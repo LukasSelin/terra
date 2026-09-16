@@ -2,6 +2,7 @@ package terra
 
 import (
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 	"math"
 	"sort"
 )
@@ -917,7 +918,7 @@ func (r *record) banded(k int, share, near float64) {
 // woods, the outcrops, the soils, the market - reads the same kind of ground
 // it would have read from the picture.
 func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
-	defer phase("history")()
+	defer phase.Start("history")()
 	// The tiles are pieces of a planet until the history is over. See
 	// epochYears.
 	g.deep = deepSpan(g)
@@ -1640,7 +1641,7 @@ func newCrust(g *Grid) *crust {
 // whichever of the plates beside it holds most of the ground round it - which,
 // where two are pulling apart, is the nearer of them.
 func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int) {
-	defer phase("move")()
+	defer phase.Start("move")()
 	g.piles()
 	scale := driftScale(g)
 	cr.now = uint8(epoch)
@@ -2215,7 +2216,7 @@ func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int
 // to stay its plate's; one whose every neighbour is another scrap waits until
 // those have been handed out, and is handed out the time after.
 func (g *Grid) joinUp(fl *flooding) {
-	defer phase("joinUp")()
+	defer phase.Start("joinUp")()
 	piece := fl.dist // the distances are spent; the space is reused for labels
 	largest := make([]int, plateCap)
 	var sizes []int
@@ -2328,7 +2329,7 @@ func (g *Grid) eachNear(i int, f func(j int)) {
 // oldest, flattest ground on a map and everything worth looking at is at the
 // seams.
 func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain, bow []float64) {
-	defer phase("tectonics")()
+	defer phase.Start("tectonics")()
 	g.piles()
 	n := len(g.Tiles)
 	scale := driftScale(g)
@@ -2653,7 +2654,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 // too small to be plates, which welding has just made more of; then the ones
 // too large, which welding has also just made more of.
 func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []float64) []Plate {
-	defer phase("reshape")()
+	defer phase.Start("reshape")()
 	stride := len(plates)
 	reach := spacing(g, standing(plates))
 	scale := driftScale(g)
@@ -3244,7 +3245,7 @@ func (g *Grid) historyBase() float64 {
 // make-up carries the first - the water sorted what it laid down, so a tile
 // buried in sand reads as sand - and the second is simply counted.
 func (g *Grid) keepBook(book []record, epoch int) {
-	defer phase("keepBook")()
+	defer phase.Start("keepBook")()
 	g.piles()
 	sea := g.base
 	fill := fillRate * epochYears // metres of burial an epoch: see fillRate
@@ -3370,7 +3371,7 @@ func (g *Grid) quietFloor(i int) (Bedrock, float64) {
 // on, and what the fire and the crushing have made of its lower part. Then
 // every tile reads the bed its ground lies in.
 func (g *Grid) settleRock(book []record, ocean []bool) {
-	defer phase("settleRock")()
+	defer phase.Start("settleRock")()
 	g.piles()
 	// Where the line between a coarse fill and a fine one falls on this
 	// world, read off its own fills rather than fixed. See coarseShare. It is

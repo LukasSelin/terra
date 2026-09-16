@@ -1,6 +1,10 @@
 package terra
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/LukasSelin/terra/internal/phase"
+)
 
 // How many times each of the heavy passes runs for a preset is pinned here,
 // so that a branch which adds a drain - a realism change that asks for one
@@ -37,7 +41,7 @@ var pinnedPassCounts = map[string]map[string]int{
 }
 
 func TestPassCountsArePinned(t *testing.T) {
-	if !phasesOn {
+	if !phase.On() {
 		t.Skip("the per-pass clock is off; run with TERRA_PHASES=1 -count=1")
 	}
 	was := Workers

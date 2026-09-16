@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LukasSelin/terra/internal/kernel"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The rain the ground wrings out of the wind.
@@ -93,7 +94,7 @@ func (g *Grid) orographicPatch() int {
 // of temp degrees, both on the air cells. ground is the height of each tile
 // over the water the air takes its fill from.
 func (g *Grid) orographic(e *airEnv, u, v []float32, temp, ground []float64) []float32 {
-	defer phase("orographic")()
+	defer phase.Start("orographic")()
 	a := g.air
 	if !g.Wrap {
 		return g.orographicWhole(e, u, v, temp, ground)

@@ -2,6 +2,7 @@ package terra
 
 import (
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 	"math"
 )
 
@@ -56,7 +57,7 @@ const (
 // cutValleys runs valleyYears of weather over a freshly drawn map, working the
 // channels, the slides, the rock and the drainage out again each round.
 func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
-	defer phase("cutValleys")()
+	defer phase.Start("cutValleys")()
 	for range valleyRounds {
 		g.carve(rng)
 		g.wear(valleyYears / float64(valleyRounds))
@@ -69,7 +70,7 @@ func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
 // Generate is GenerateTerrain on the given terms: every stage, in order, on
 // a new grid. See stages.go.
 func (w *Land) Generate(cfg Terms) {
-	defer phase("Generate")()
+	defer phase.Start("Generate")()
 	w.generateFrom(w.newGround(cfg), cfg, stageGround, len(stages), nil)
 }
 
