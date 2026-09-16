@@ -6,6 +6,50 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: the seam's bands read by the share of a tile
+
+**What this is.** The schist found by the step before, on
+`claude/history-km`. No world moves: `TERRA_DIGEST=check` and the short
+tier pass.
+
+**The leak.** The crushing that makes schist, the fire that makes granite
+and the melt that lays basalt are written into bands beside a seam, a few
+of the map's tiles wide (`axisWidth` 2, and an arc's front out to its
+axis). The distance from the seam is counted in the history grid's tiles,
+and the seam itself is two tiles thick, one on each plate, so a band was
+some 6 map tiles wide on the map, 8 on a half-size grid and 16 on a
+quarter-size one, where `axisWidth` cannot be narrower than a tile.
+
+**The change.** `bandShare`: on a coarser grid a tile takes the share of
+each band that lies across it - its reach from the seam in the map's
+tiles, [away c, (away+1) c], against the band's in [lo, hi+1] - and the
+crush, the fire and the melt are weighted by it; a lava bed and the rock's
+epoch go to a tile at least half in the band. On the map the map's rule
+runs as it was.
+
+**What it measured** (`TERRA_PLANET=1`, small globes 1-8, globes now 1-4,
+not a quiet machine; before the change in brackets, globes then over two
+seeds):
+
+| world, history grid | granite | schist | basalt | limestone | land | ocean crust | rain mm |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small, 256x128 | 0.42 | 0.11 | 0.08 | 0.19 | 0.38 | 0.53 | 648 |
+| small, 128x64 | 0.375 (0.36) | 0.17 (0.19) | 0.10 (0.11) | 0.16 | 0.36 | 0.55 | 702 |
+| small, 64x32 | 0.25 (0.25) | 0.29 (0.32) | 0.11 (0.11) | 0.13 | 0.41 | 0.44 | 679 |
+| globe, 1024x512 | 0.345 | 0.062 | 0.017 | 0.29 | 0.41 | 0.52 | 750±130 |
+| globe, 512x256 | 0.346 (0.34) | 0.085 (0.10) | 0.021 | 0.25 | 0.38 | 0.58 | 805±110 |
+| globe, 256x128 | 0.352 (0.31) | 0.110 (0.14) | 0.023 (0.05) | 0.25 | 0.42 | 0.52 | 804±54 |
+
+The globe's granite and basalt now hold; schist is a third lower but still
+grows with the coarseness, and the small globes barely moved. What is left
+is the threshold: a tile is schist once its crushing passes `madeEnough`,
+six kilometres, and a collision raises tens of kilometres an epoch, so a
+coarse tile a quarter in the band is crushed past it and is schist whole.
+The share is weighted and the rock it makes is still counted by the tile.
+The globe's rain over four seeds is inside the spread at every size.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: the history's tiles counted against the planet
 
 **What this is.** Step 2 of the history grid, on `claude/history-km` from

@@ -2489,13 +2489,22 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// each other for the whole age - had no schist on it at all. It is as
 			// much crushing as the arc's crest takes, since it is fed by the
 			// same floor going down.
-			if s.makes == arc && s.away <= math.Max(0, axisOf(arc, gap, grain[i])-g.inTiles(axisWidth)) {
-				book[i].crush += math.Abs(s.lift*grain[i]) / 3
+			//
+			// Both bands are a few of the map's tiles wide, and on a history
+			// grid coarser than the map a tile is wider than that: there a
+			// tile takes the share of the band that lies across it, or every
+			// band would be as wide as a tile and the rock it makes as common.
+			// See bandShare.
+			axis := axisOf(s.makes, gap, grain[i])
+			if s.makes == arc {
+				if front := g.bandShare(s.away <= math.Max(0, axis-axisWidth), s.away, 0, math.Max(0, axis*g.coarseness()-axisWidth)); front > 0 {
+					book[i].crush += front * math.Abs(s.lift*grain[i]) / 3
+				}
 			}
-			if math.Abs(s.away-axisOf(s.makes, gap, grain[i])) <= g.inTiles(axisWidth) {
+			if share := g.bandShare(math.Abs(s.away-axis) <= axisWidth, s.away, axis*g.coarseness()-axisWidth, axis*g.coarseness()+axisWidth); share > 0 {
 				switch s.makes {
 				case crushed:
-					book[i].crush += math.Abs(by)
+					book[i].crush += share * math.Abs(by)
 				case arc:
 					// An arc cooks what it pushes up and melts what goes
 					// under it, and it is mostly the melting: two parts fire
@@ -2504,16 +2513,18 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// come out as anything but the crushed rock, and the
 					// granite it should leave had nowhere to come from. The
 					// one part of crushing is laid in front of it: see above.
-					book[i].pluton += 2 * math.Abs(by) / 3
+					book[i].pluton += share * 2 * math.Abs(by) / 3
 				case melt:
-					book[i].melt = math.Max(book[i].melt, math.Abs(by))
+					book[i].melt = math.Max(book[i].melt, share*math.Abs(by))
 					// What comes up floods what is there: a bed of lava
 					// over the pile, which is the hard cap a plateau of
 					// basalt stands on long after the rift has gone quiet.
-					col.bury(Basalt, uint8(epoch), 0, g.Height[i], math.Abs(by))
-					g.ledger[i].bury(byLava, epoch)
+					if share >= 0.5 {
+						col.bury(Basalt, uint8(epoch), 0, g.Height[i], share*math.Abs(by))
+						g.ledger[i].bury(byLava, epoch)
+					}
 				}
-				if s.makes != nothing {
+				if s.makes != nothing && share >= 0.5 {
 					t.Formed = uint8(epoch)
 				}
 			}

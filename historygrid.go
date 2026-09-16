@@ -183,4 +183,24 @@ func (g *Grid) passes(n int) int {
 	return int(math.Round(float64(n) / (c * c)))
 }
 
+// bandShare is how much of a tile of g lies in a band beside a seam that is
+// drawn in the map's tiles. On the map it is the map's own rule, onMap, whole
+// or not at all. On a grid c times coarser it is the share of the tile's
+// reach from the seam in the map's tiles, [away·c, (away+1)·c], that lies in
+// [mapLo, mapHi+1]: onMap takes a map tile at distance a, which reaches to
+// a+1, where mapLo <= a <= mapHi. Counted whole instead, a band narrower than
+// a tile is a tile wide, and the rock it makes is as common as the tile is
+// wide: schist doubled with every halving of the history grid.
+func (g *Grid) bandShare(onMap bool, away, mapLo, mapHi float64) float64 {
+	if g.planet <= 0 {
+		if onMap {
+			return 1
+		}
+		return 0
+	}
+	c := g.coarseness()
+	lo, hi := math.Max(away*c, mapLo), math.Min((away+1)*c, mapHi+1)
+	return math.Max(0, hi-lo) / c
+}
+
 func clampInt(v, lo, hi int) int { return min(hi, max(lo, v)) }

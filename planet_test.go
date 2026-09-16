@@ -14,7 +14,7 @@ import (
 // the rain and the forest on its land, and what rock the land stands on.
 type planetReading struct {
 	secs, plates, land, oceanCrust, belts, rain, forest float64
-	rock [BedrockCount]float64
+	rock                                                [BedrockCount]float64
 }
 
 // readPlanet reads l as a planetReading, secs being how long it took.
@@ -65,7 +65,7 @@ func TestAPlanetOnCoarserHistories(t *testing.T) {
 		name  string
 		terms Terms
 		seeds int
-	}{{"small", smallGlobe(), 8}, {"globe", GlobeTerms(), 2}}
+	}{{"small", smallGlobe(), 8}, {"globe", GlobeTerms(), 4}}
 	for _, c := range cases {
 		for _, s := range []int{1, 2, 4} {
 			historyShrink = s
