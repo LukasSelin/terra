@@ -54,6 +54,14 @@ func shrinkFromEnv() int {
 	return 1
 }
 
+// epochWatch, where it is set, is told of each epoch of a history as it
+// ends: the grid, the crust and the plates as the epoch left them, and the
+// epoch - and once before the first, as epoch -1, with the first plates laid
+// and nothing moved. It is for the tests that follow a history epoch by epoch - where a
+// history on a coarser grid starts to part from one on the map - and it only
+// reads. Nothing but a test sets it.
+var epochWatch func(g *Grid, cr *crust, plates []Plate, epoch int)
+
 // historyGround is the grid a history runs on for the map g: g itself, or a
 // grid historyShrink times coarser with an air of its own.
 func (w *Land) historyGround(g *Grid, cfg Terms) *Grid {

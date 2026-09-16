@@ -6,6 +6,52 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: where the half-size history's collisions part, epoch by epoch
+
+**What this is.** When the collisions' extra ground on a half-size history
+appears, over globes 1-8 made both ways, on `claude/history-km`. `epochWatch`
+(historygrid.go), nil but for tests, is told of the first plates (as epoch
+-1) and of each epoch's end; throwaway tests read it. No world moves:
+`TERRA_DIGEST=check` passes. Boundaries are in the map's tiles of boundary
+per map tile of area, so the two sizes read alike; t is the seed-by-seed
+difference over its standard error.
+
+**The first plates** (16 seeds, before anything has moved):
+
+| | map | half-size | difference | t |
+|---|---:|---:|---:|---:|
+| plates | 32 | 32 | 0 | |
+| continent | 0.432 | 0.460 | +6% | 1.1 |
+| boundary, all | 0.0199 | 0.0198 | -1% | -0.5 |
+| continent against continent | 0.0037 | 0.0043 | +16% | 1.5 |
+| continent against ocean | 0.0100 | 0.0100 | 0% | 0.1 |
+| ocean against ocean | 0.0062 | 0.0055 | -12% | -1.4 |
+
+**Each epoch** (8 seeds; the book's ground raised most by a collision,
+cumulative, and the seams of the epoch):
+
+| epoch | book collision, map / half | t | collision seam, map / half | t | rift and island seam, map / half | t | plates standing, map / half |
+|---:|---|---:|---|---:|---|---:|---|
+| 0 | 0.021 / 0.037 | 3.0 | 0.0011 / 0.0017 | 2.7 | 0.0138 / 0.0130 | -1.6 | 29.0 / 28.3 |
+| 2 | 0.030 / 0.050 | 2.8 | 0.0005 / 0.0009 | 1.8 | 0.0141 / 0.0121 | -3.8 | 27.4 / 24.8 |
+| 4 | 0.037 / 0.055 | 1.9 | 0.0005 / 0.0004 | -0.1 | 0.0144 / 0.0121 | -4.7 | 27.6 / 25.3 |
+| 8 | 0.045 / 0.069 | 2.2 | 0.0004 / 0.0005 | 0.5 | 0.0155 / 0.0124 | -4.9 | 28.4 / 25.4 |
+| 12 | 0.050 / 0.079 | 2.6 | 0.0004 / 0.0008 | 2.5 | 0.0161 / 0.0131 | -5.0 | 28.8 / 26.4 |
+| 15 | 0.053 / 0.087 | 2.8 | 0.0005 / 0.0009 | 2.7 | 0.0166 / 0.0136 | -5.7 | 30.1 / 27.5 |
+
+Half of the collisions' extra ground is there at the end of the first
+epoch: the first move turns a continent-against-continent boundary that is
+16% longer (not beyond chance) into collision seams 61% longer, so on the
+coarser grid more of that boundary is read as closing. The seams then run
+alike for eight epochs and part again from the twelfth. The partings - rift
+and island seams - are shorter on the coarser grid from the first epoch to
+the last, by 13-18%, and it keeps some two and a half fewer plates standing
+from the second epoch. What is left to read is the first move: how
+`meetingAt` and `closing` read the same boundary on the coarser grid, and
+the crust kinds `cr.kinds` gives its tiles.
+
+---
+
 ## 2026-09-16 - Phase 3, step 2: a half-size history, eight globes
 
 **What this is.** Whether the globe on a half-size history (512x256, belts

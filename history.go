@@ -945,6 +945,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	touch := make([]float64, plateCap*plateCap)
 	weld := make([]float64, plateCap*plateCap)
 
+	if epochWatch != nil {
+		epochWatch(g, cr, plates, -1) // the first plates, before any has moved
+	}
 	for e := 0; e < epochs; e++ {
 		// How far through the era we are, which is how far the world has
 		// cooled: the plates slow as it goes.
@@ -980,6 +983,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		g.expose()
 		plates = w.reshape(g, plates, fl, touch, weld)
 		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
+		if epochWatch != nil {
+			epochWatch(g, cr, plates, e)
+		}
 	}
 
 	// The ages of the floor and how fast the ground is rising are read while
