@@ -157,7 +157,7 @@ var yardsticks = []yardstick{
 		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46, slow: true,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: discharge goes as area, so the same 0.40-0.46",
 		measure: func() float64 {
-			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
+			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Flow[i] })
 		},
 	},
 	{
@@ -711,7 +711,7 @@ func diffusivity() float64 {
 	mid := g.W / 2
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Terrain, t.Mark, t.Owner, t.Flow = Grass, None, 0, 0
+		t.Terrain, t.Mark, t.Owner, g.Flow[i] = Grass, None, 0, 0
 		t.Sand, t.Clay = 0.3, 0.3
 		x := float64(i%g.W-mid) * TileSpan
 		g.Height[i] = 1000 - curve*x*x/2
@@ -793,7 +793,7 @@ func meanderMigration() float64 {
 	big := func(g *Grid) []int {
 		var out []int
 		for i := range g.Tiles {
-			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && t.Flow >= meanderFlow {
+			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && g.Flow[i] >= meanderFlow {
 				out = append(out, i)
 			}
 		}

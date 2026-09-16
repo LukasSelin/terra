@@ -545,7 +545,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			if a.Mark != None || b.Mark != None || g.abyssal(i) || g.abyssal(j) {
 				continue
 			}
-			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {
+			if (a.Wet() && g.Flow[i] >= wander) || (b.Wet() && g.Flow[j] >= wander) {
 				continue
 			}
 			top := a
@@ -770,14 +770,14 @@ func (g *Grid) waterStep(years float64) fluvial {
 			// How hard the water cuts: stream power, charged to what the soil
 			// is made of for the soil and to the rock for the rock. See
 			// fluvial.go and rockErodibility.
-			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
+			power := years * Erodibility * math.Sqrt(g.Flow[i]) / run[i]
 			c.f[i] = power * t.Wash()
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
 			// What grows on it holds its soil until the water's stress in a
 			// flood clears what it stands, and what settles is what a flood
 			// lets fall: see floodFlow, criticalFall and settleShare.
-			q := t.Flow * floodFlow
+			q := g.Flow[i] * floodFlow
 			fall := (g.Height[i] - g.Height[recv[i]]) / run[i]
 			w := flowWidth(t, q, fall, run[i])
 			if g.deep > 0 {

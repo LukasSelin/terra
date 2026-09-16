@@ -100,7 +100,7 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 			given += g.loss(i) * perMM
 		}
 	}
-	out := g.Tiles[l.Outlet].Flow
+	out := g.Flow[l.Outlet]
 	want := l.Inflow - given
 	if want <= 0 || out < want-1e-9 {
 		t.Fatalf("the outlet carries %.4f m3/s; the lake was given %.4f and its surface took %.4f", out, l.Inflow, given)
@@ -406,7 +406,7 @@ func TestTheSameSeedFillsTheSameLakes(t *testing.T) {
 		}
 	}
 	for i := range a.Tiles {
-		if a.Tiles[i].Flow != b.Tiles[i].Flow || a.down[i] != b.down[i] {
+		if a.Flow[i] != b.Flow[i] || a.down[i] != b.down[i] {
 			t.Fatalf("the water at tile %d went two ways", i)
 		}
 	}

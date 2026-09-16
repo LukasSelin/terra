@@ -138,7 +138,7 @@ func (g *Grid) meander(by float64) {
 		if !g.In(q) {
 			continue
 		}
-		if f := g.Tiles[i].Flow; f > best[g.Index(q)] {
+		if f := g.Flow[i]; f > best[g.Index(q)] {
 			best[g.Index(q)], from[g.Index(q)] = f, d
 		}
 	}
@@ -148,10 +148,10 @@ func (g *Grid) meander(by float64) {
 		g.bankLoad = make([][Grains]float64, len(g.Tiles))
 	}
 	for i := range g.Tiles {
-		if t := &g.Tiles[i]; t.Flow < meanderFlow || t.Mark != None || t.Owner != 0 {
+		if t := &g.Tiles[i]; g.Flow[i] < meanderFlow || t.Mark != None || t.Owner != 0 {
 			continue // a trickle, or a reach somebody holds and has embanked
 		}
-		share := greatShare(g.Tiles[i].Flow)
+		share := greatShare(g.Flow[i])
 		in := from[i]
 		if in == (geom.Pos{}) {
 			continue // nothing above it: a spring has no bend to cut

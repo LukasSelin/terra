@@ -331,7 +331,7 @@ func ribShare(g *Grid) float64 {
 func maxFlow(g *Grid) float64 {
 	most := 0.0
 	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
+		most = math.Max(most, g.Flow[i])
 	}
 	return most
 }

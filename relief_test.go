@@ -55,9 +55,9 @@ func flowOnlyGathers(t *testing.T, g *Grid) {
 		if !ok {
 			continue
 		}
-		if g.At(down).Flow < g.At(p).Flow-1e-9 {
+		if g.Flow[g.Index(down)] < g.Flow[g.Index(p)]-1e-9 {
 			t.Fatalf("water thins going downhill, %v (%.4f) to %v (%.4f)",
-				p, g.At(p).Flow, down, g.At(down).Flow)
+				p, g.Flow[g.Index(p)], down, g.Flow[g.Index(down)])
 		}
 	}
 }
@@ -82,7 +82,7 @@ func TestFlowOnlyGathers(t *testing.T) {
 		switch {
 		case g.lakeOf[i] >= 0:
 		case g.outlet(p.X, p.Y), g.pans[i]:
-			out += g.Tiles[i].Flow
+			out += g.Flow[i]
 		}
 	}
 	perMM := discharge(1, TileSpan)
@@ -117,7 +117,7 @@ func TestRiversRunOffTheMap(t *testing.T) {
 	var start geom.Pos
 	var most float64
 	for i := range g.Tiles {
-		if f := g.Tiles[i].Flow; f > most {
+		if f := g.Flow[i]; f > most {
 			start, most = geom.Pos{X: i % g.W, Y: i / g.W}, f
 		}
 	}

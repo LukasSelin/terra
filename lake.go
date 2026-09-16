@@ -866,10 +866,10 @@ func (g *Grid) flow() {
 	perMM := discharge(1, g.span())
 	water := 0.0
 	for i := range g.Tiles {
-		g.Tiles[i].Flow, g.area[i] = 0, 0
+		g.Flow[i], g.area[i] = 0, 0
 		if !g.underSea(i) {
-			g.Tiles[i].Flow, g.area[i] = g.runoff[i]*perMM, 1
-			water += g.Tiles[i].Flow
+			g.Flow[i], g.area[i] = g.runoff[i]*perMM, 1
+			water += g.Flow[i]
 		}
 	}
 	g.water = water
@@ -895,13 +895,12 @@ func (g *Grid) flow() {
 	var to [8]int32
 	for k := len(g.route) - 1; k >= 0; k-- {
 		i := g.route[k]
-		t := &g.Tiles[i]
 		for _, l := range outs[i] {
-			t.Flow += math.Max(0, pooled[l]-given[l])
+			g.Flow[i] += math.Max(0, pooled[l]-given[l])
 			g.area[i] += pooledArea[l]
 		}
 		if l := g.lakeOf[i]; l >= 0 {
-			pooled[l] += t.Flow
+			pooled[l] += g.Flow[i]
 			pooledArea[l] += g.area[i]
 			continue
 		}
@@ -910,7 +909,7 @@ func (g *Grid) flow() {
 			continue
 		}
 		if g.area[i] >= spreadUntil {
-			g.Tiles[d].Flow += t.Flow
+			g.Flow[d] += g.Flow[i]
 			g.area[d] += g.area[i]
 			continue
 		}
@@ -937,18 +936,18 @@ func (g *Grid) flow() {
 			m++
 		}
 		if sum <= 0 {
-			g.Tiles[d].Flow += t.Flow
+			g.Flow[d] += g.Flow[i]
 			g.area[d] += g.area[i]
 			continue
 		}
 		for q := 0; q < m; q++ {
-			g.Tiles[to[q]].Flow += t.Flow * share[q] / sum
+			g.Flow[to[q]] += g.Flow[i] * share[q] / sum
 			g.area[to[q]] += g.area[i] * share[q] / sum
 		}
 	}
 	for i := range g.Tiles {
 		if l := g.lakeOf[i]; l >= 0 {
-			g.Tiles[i].Flow, g.area[i] = pooled[l], pooledArea[l]
+			g.Flow[i], g.area[i] = pooled[l], pooledArea[l]
 		}
 	}
 	for k := range g.Lakes {

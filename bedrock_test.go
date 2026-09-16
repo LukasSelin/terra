@@ -166,7 +166,7 @@ func TestTheWaterSortsWhatItCarries(t *testing.T) {
 	// read over the plain settles faster than over the bed, and sand is read
 	// over the bed alone.
 	t0 := &g.Tiles[river]
-	q := t0.Flow * floodFlow
+	q := g.Flow[river] * floodFlow
 	w := flowWidth(t0, q, g.Slope(g.PosOf(river)), TileSpan)
 	if !(settleShare(fallSpeed[Silt], TileSpan, w+g.floodWidth(river), q) > settleShare(fallSpeed[Silt], TileSpan, w, q)) {
 		t.Error("silt settles no faster over a flood plain than in its channel")

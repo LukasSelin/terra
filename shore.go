@@ -137,7 +137,7 @@ func (g *Grid) tides() {
 	creek := make([]bool, n)
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Terrain != Water || g.underSea(i) || f[i] <= 0 || t.Flow < settleFlow {
+		if t.Terrain != Water || g.underSea(i) || f[i] <= 0 || g.Flow[i] < settleFlow {
 			continue
 		}
 		for j, steps := i, 0; steps < g.W; steps++ {

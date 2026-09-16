@@ -614,7 +614,7 @@ func meanders(gs []*Grid) meanderReading {
 			// A lake is no reach of a river, but an open one is no end of it
 			// either: the river goes on from where the lake lets it out.
 			river := func(i int) bool {
-				return !g.underSea(i) && g.lakeOf[i] < 0 && g.Tiles[i].Flow >= meanderFlow
+				return !g.underSea(i) && g.lakeOf[i] < 0 && g.Flow[i] >= meanderFlow
 			}
 			next := func(i int) int {
 				j := int(g.down[i])
@@ -650,7 +650,7 @@ func meanders(gs []*Grid) meanderReading {
 					stem = append(stem, i)
 					main := -1
 					for _, j := range inflows[i] {
-						if main < 0 || g.Tiles[j].Flow > g.Tiles[main].Flow {
+						if main < 0 || g.Flow[j] > g.Flow[main] {
 							main = j
 						}
 					}
@@ -666,7 +666,7 @@ func meanders(gs []*Grid) meanderReading {
 				xs, ys, hs, qs := make([]float64, len(stem)), make([]float64, len(stem)), make([]float64, len(stem)), make([]float64, len(stem))
 				x, y := float64(stem[0]%g.W), float64(stem[0]/g.W)
 				for k, i := range stem {
-					xs[k], ys[k], hs[k], qs[k] = x, y, g.Height[i], g.Tiles[i].Flow
+					xs[k], ys[k], hs[k], qs[k] = x, y, g.Height[i], g.Flow[i]
 					if k+1 < len(stem) {
 						d := g.Delta(g.PosOf(i), g.PosOf(stem[k+1]))
 						x, y = x+float64(d.X), y+float64(d.Y)

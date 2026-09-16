@@ -232,7 +232,7 @@ func classify(land *terra.Land) classes {
 	wetNear := boxMean(wet, g.W, g.H, 2, g.Wrap)
 	channel := func(i int) bool {
 		t := &g.Tiles[i]
-		return t.Terrain == terra.Water && t.Flow > riverFlow && wetNear[i] < 0.6
+		return t.Terrain == terra.Water && g.Flow[i] > riverFlow && wetNear[i] < 0.6
 	}
 	sea := seaOf(g, channel)
 
@@ -258,7 +258,7 @@ func classify(land *terra.Land) classes {
 			c.Biome[i] = cSeaIce
 		case channel(i):
 			c.Biome[i] = cRiver
-			floodOut(g, flood, g.PosOf(i), int(math.Sqrt(t.Flow)/floodReach))
+			floodOut(g, flood, g.PosOf(i), int(math.Sqrt(g.Flow[i])/floodReach))
 		case !sea[i]:
 			c.Biome[i] = cLake
 		case c.LandDist[i] > float64(shelf):

@@ -214,7 +214,7 @@ func measure(land *terra.Land) summary {
 		plates[t.Plate] = true
 		s.FloorMin = math.Min(s.FloorMin, g.Height[i])
 		s.HeightMax = math.Max(s.HeightMax, g.Height[i])
-		s.FlowMax = math.Max(s.FlowMax, t.Flow)
+		s.FlowMax = math.Max(s.FlowMax, g.Flow[i])
 		s.AgeMax = max(s.AgeMax, int(t.Formed))
 		temp := land.TempAt(p)
 		s.TempMin = math.Min(s.TempMin, temp)
@@ -222,7 +222,7 @@ func measure(land *terra.Land) summary {
 		if g.Frozen(p) {
 			frozen++
 		}
-		if t.Terrain == terra.Water && t.Flow > riverFlow {
+		if t.Terrain == terra.Water && g.Flow[i] > riverFlow {
 			rivers++
 		}
 	}
@@ -267,7 +267,7 @@ func measure(land *terra.Land) summary {
 	// real fall, which is where a river drops over the edge of the rock.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Terrain != terra.Water || t.Flow <= riverFlow {
+		if t.Terrain != terra.Water || g.Flow[i] <= riverFlow {
 			continue
 		}
 		p := g.PosOf(i)
@@ -398,7 +398,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			about: "What each tile is, shaded by the lie of the land, with the larger rivers picked out.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				c := terrainColor[t.Terrain]
-				if t.Terrain == terra.Water && t.Flow > riverFlow {
+				if t.Terrain == terra.Water && g.Flow[i] > riverFlow {
 					c = color.RGBA{80, 150, 220, 255}
 				}
 				if t.Wet() {
@@ -452,10 +452,10 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			file: "flow", title: "Drainage",
 			about: fmt.Sprintf("Water through each tile on a log scale, up to %.0f m³/s: the rivers the land has had an age to find.", s.FlowMax),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
-				if t.Flow <= 0 {
+				if g.Flow[i] <= 0 {
 					return color.RGBA{10, 14, 24, 255}
 				}
-				v := clamp((math.Log10(t.Flow)-(flowLog-4))/4, 0, 1)
+				v := clamp((math.Log10(g.Flow[i])-(flowLog-4))/4, 0, 1)
 				return ramp(water, v)
 			},
 		},

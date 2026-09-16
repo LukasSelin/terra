@@ -839,7 +839,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	cutting := make([]float64, len(g.Tiles))
 	wide := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		cutting[i], wide[i] = headReading(g.Tiles[i].Flow, g.Slope(g.PosOf(i)))
+		cutting[i], wide[i] = headReading(g.Flow[i], g.Slope(g.PosOf(i)))
 	}
 	cut := channelArea
 	// Whether a river is great enough to spread onto its banks is a question
@@ -945,7 +945,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 	var network []float64
 	for i := range g.Tiles {
 		if wet[i] && !g.underSea(i) && g.lakeOf[i] < 0 {
-			network = append(network, g.Tiles[i].Flow)
+			network = append(network, g.Flow[i])
 		}
 	}
 	big := math.Inf(1)
@@ -953,7 +953,7 @@ func (g *Grid) carve(rng interface{ Float64() float64 }) {
 		big = quantile(network, 1-bankShare)
 	}
 	for i := range g.Tiles {
-		if g.Tiles[i].Flow < big || g.standing(i) {
+		if g.Flow[i] < big || g.standing(i) {
 			continue
 		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}

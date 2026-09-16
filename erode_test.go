@@ -120,7 +120,7 @@ func TestWeatherDoesNotDrownWhatIsBuilt(t *testing.T) {
 		if g.Tiles[i].Terrain == Water {
 			continue
 		}
-		if f := g.Tiles[i].Flow; f > most {
+		if f := g.Flow[i]; f > most {
 			bank, most = p, f
 		}
 	}

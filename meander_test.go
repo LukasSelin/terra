@@ -22,7 +22,7 @@ func bends(g *Grid) (float64, int) {
 		if !g.In(q) {
 			continue
 		}
-		if f := g.Tiles[i].Flow; f > best[g.Index(q)] {
+		if f := g.Flow[i]; f > best[g.Index(q)] {
 			best[g.Index(q)], from[g.Index(q)] = f, d
 		}
 	}
