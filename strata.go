@@ -200,7 +200,7 @@ func (g *Grid) piles() {
 	}
 	g.strata = make([]column, len(g.Tiles))
 	for i := range g.Tiles {
-		g.strata[i] = basement(g.Tiles[i].Bedrock, g.Tiles[i].Formed, g.Tiles[i].Height)
+		g.strata[i] = basement(g.Tiles[i].Bedrock, g.Tiles[i].Formed, g.Height[i])
 	}
 }
 
@@ -241,7 +241,7 @@ func (g *Grid) expose() {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t, c := &g.Tiles[i], &g.strata[i]
-			c.truncate(t.Height)
+			c.truncate(g.Height[i])
 			t.Bedrock, t.Formed = c.rock[0], c.formed[0]
 		}
 	})
@@ -301,17 +301,15 @@ func (g *Grid) denude() {
 			if g.underSea(i) {
 				continue
 			}
-			by := denudeDepth / denudePasses * (1/g.Tiles[i].Hard()/g.strata[i].soft(g.Tiles[i].Height) - 1)
-			t := &g.Tiles[i]
-			t.Height -= by
+			by := denudeDepth / denudePasses * (1/g.Tiles[i].Hard()/g.strata[i].soft(g.Height[i]) - 1)
+			g.Height[i] -= by
 			if g.sea >= 0 && by > 0 {
-				t.Height = math.Max(t.Height, math.Min(g.sea, t.Height+by))
+				g.Height[i] = math.Max(g.Height[i], math.Min(g.sea, g.Height[i]+by))
 			}
 		}
 		for _, i := range stack {
 			if r := recv[i]; r != i {
-				t := &g.Tiles[i]
-				t.Height = math.Max(t.Height, g.Tiles[r].Height+denudeFall*run[i])
+				g.Height[i] = math.Max(g.Height[i], g.Height[r]+denudeFall*run[i])
 			}
 		}
 		g.expose()
@@ -396,7 +394,7 @@ func (g *Grid) restrata(from, to []float64, group []bool) {
 func (g *Grid) heights() []float64 {
 	h := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 	}
 	return h
 }

@@ -46,17 +46,11 @@ type Tile struct {
 	Exposed float32
 	Owner   Holder
 
-	// Height is metres above the lowest ground on the map, and Flow is the
-	// water running through this tile in cubic metres a second. Between them
-	// they are the land itself: the rivers, the fertility and the going
-	// underfoot are all read off these two rather than drawn on top of them.
-	// See relief.go.
-	Height float64
-	Flow   float64
-	// Drain is how far this tile stands above the water it drains into, in
-	// metres. It is what makes a valley floor a water meadow and a hillside
-	// dry, and it is the ground truth the soil is read from.
-	Drain float64
+	// The height and the flow, which between them are the land itself - the
+	// rivers, the fertility and the going underfoot are all read off them -
+	// are kept beside the map as Grid.Height and Grid.Flow. See relief.go.
+	// Drain, how far the tile stands above the water it drains into, is beside
+	// the map too, as Grid.Drain.
 
 	// Bedrock is the rock under this tile, and Sand and Clay the shares of
 	// the soil over it that are one and the other, the rest being silt. The
@@ -70,9 +64,7 @@ type Tile struct {
 	// Soil is how many metres of that soil there are over the rock: made
 	// out of the rock by the weather, taken off by the water, the creep and
 	// the slides before any rock is, and laid down again where they stop.
-	// It is single precision because it is a thickness of a few metres
-	// read to a tenth of a millimetre, and because it sits in the padding
-	// after Bedrock and so costs a tile nothing. See soil.go.
+	// It is kept beside the map as Grid.Soil. See soil.go.
 	Bedrock Bedrock
 	// Fenced is whether this tile lies inside a fence: a strip of a block of
 	// worked ground large enough that somebody hedged it. It is not a
@@ -82,9 +74,6 @@ type Tile struct {
 	// Bedrock, so that the soil's Lime can have the two after it.
 	Fenced bool
 	Lime   uint16
-	Soil   float32
-	Sand   float64
-	Clay   float64
 
 	// Plate is which piece of the crust this tile rides, and Formed the
 	// epoch its rock dates from. Both are written by a world made from its
@@ -143,6 +132,27 @@ type Grid struct {
 	W, H  int
 	Wrap  bool
 	Tiles []Tile
+	// Height is metres above the lowest ground on the map, one entry per
+	// tile and indexed as Tiles is. It is beside the map rather than in the
+	// tile because it is what every pass that moves the ground reads and
+	// writes over every tile, and a run of heights is what a kernel takes
+	// (kernel.go); the tile keeps what is read one tile at a time. HeightAt
+	// reads it by position, off the map included.
+	Height []float64
+	// Flow is the water running through each tile in cubic metres a second,
+	// indexed as Tiles is and beside the map for the same reason.
+	Flow []float64
+	// Drain is how far each tile stands above the water it drains into, in
+	// metres. It is what makes a valley floor a water meadow and a hillside
+	// dry, and it is the ground truth the soil is read from.
+	Drain []float64
+	// Soil is how many metres of soil there are over each tile's rock. It is
+	// single precision because it is a thickness of a few metres read to a
+	// tenth of a millimetre. See soil.go.
+	Soil []float32
+	// Sand and Clay are the shares of each tile's soil that are one and the
+	// other, the rest being silt. See bedrock.go.
+	Sand, Clay []float64
 	// Layers is the ground that changes by the day, one slice per reading
 	// and indexed as Tiles is; see layers.go.
 	Layers
@@ -352,7 +362,7 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
@@ -373,9 +383,56 @@ func (g *Grid) At(p geom.Pos) *Tile {
 	return &g.Tiles[g.Index(p)]
 }
 
+// TileView is one tile read whole, for a reader that asks by tile: what the
+// tile keeps and what the map keeps beside it, as Height is, behind one
+// name. It is what a game reads a tile through - g.Tile(i).Height() - so
+// that which fields sit in the Tile and which sit in a slice on the Grid
+// is the map-maker's business and moves without the game moving. It is
+// read-only: what is beside the map is written on the map, g.Height[i].
+// The tile's own fields and methods come through it as they are.
+type TileView struct {
+	*Tile
+	g *Grid
+	i int
+}
+
+// Tile is the tile at index i, read whole.
+func (g *Grid) Tile(i int) TileView { return TileView{&g.Tiles[i], g, i} }
+
+// TileAt is the tile at p, read whole. The caller must check In first.
+func (g *Grid) TileAt(p geom.Pos) TileView { return g.Tile(g.Index(p)) }
+
+// Index is which tile this is.
+func (v TileView) Index() int { return v.i }
+
+// Height is metres above the lowest ground on the map: Grid.Height at
+// this tile.
+func (v TileView) Height() float64 { return v.g.Height[v.i] }
+
+// Flow is the water running through this tile in cubic metres a second:
+// Grid.Flow at this tile.
+func (v TileView) Flow() float64 { return v.g.Flow[v.i] }
+
+// Drain is how far this tile stands above the water it drains into, in
+// metres: Grid.Drain at this tile.
+func (v TileView) Drain() float64 { return v.g.Drain[v.i] }
+
+// Soil is how many metres of soil there are over this tile's rock:
+// Grid.Soil at this tile.
+func (v TileView) Soil() float32 { return v.g.Soil[v.i] }
+
+// Sand and Clay are the shares of this tile's soil that are one and the
+// other: Grid.Sand and Grid.Clay at this tile. Silt, Loam and Wash are read
+// off the two together; see bedrock.go.
+func (v TileView) Sand() float64 { return v.g.Sand[v.i] }
+func (v TileView) Clay() float64 { return v.g.Clay[v.i] }
+func (v TileView) Silt() float64 { return v.g.siltAt(v.i) }
+func (v TileView) Loam() float64 { return v.g.loamAt(v.i) }
+func (v TileView) Wash() float64 { return v.g.washAt(v.i) }
+
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
@@ -558,7 +615,7 @@ func (t *Tile) Roofed() bool { return markRoofs[t.Mark] }
 // frozen ground: see Freezing.
 func (g *Grid) Frozen(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < Permafrost
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < Permafrost
 }
 
 // Treeless reports whether the summer here is too short or too cool for a
@@ -566,7 +623,7 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // season, whichever is the stricter. See treeMean.
 func (g *Grid) Treeless(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Tiles[i].Height) < treeLineMean(float64(g.swing[i]))
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < treeLineMean(float64(g.swing[i]))
 }
 
 // Barren reports whether the ground here is under ice: a summer too cold to
@@ -577,7 +634,7 @@ func (g *Grid) Barren(p geom.Pos) bool {
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
-	summer := g.meanOn(i, g.Tiles[i].Height) + summerPeak*math.Abs(float64(g.swing[i]))
+	summer := g.meanOn(i, g.Height[i]) + summerPeak*math.Abs(float64(g.swing[i]))
 	return summer < iceSummer(g.Rain(i))
 }
 
@@ -618,7 +675,7 @@ func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
 	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) {
 		return 0, 0, 0
 	}
-	mean = g.meanOn(i, g.Tiles[i].Height)
+	mean = g.meanOn(i, g.Height[i])
 	d := monthPeak * math.Abs(float64(g.swing[i]))
 	return mean, mean - d, mean + d
 }

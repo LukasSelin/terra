@@ -984,9 +984,9 @@ func (w *Land) molten(g *Grid) {
 	g.strata = make([]column, len(g.Tiles))
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Height = moltenRelief * h[i]
+		g.Height[i] = moltenRelief * h[i]
 		t.Bedrock, t.Formed = Basalt, 0
-		g.strata[i] = basement(Basalt, 0, t.Height)
+		g.strata[i] = basement(Basalt, 0, g.Height[i])
 	}
 }
 
@@ -1465,6 +1465,9 @@ type crust struct {
 	mark       []bool
 	ring, next []int32
 	tiles      []Tile
+	height     []float64 // the tiles' heights, soil, sand and clay, beside them as on the Grid
+	soil       []float32
+	sand, clay []float64
 	book       []record
 	strata     []column
 }
@@ -1520,7 +1523,7 @@ func newCrust(g *Grid) *crust {
 		fresh: make([]bool, n), nfresh: make([]bool, n),
 		nborn: make([]uint8, n), mark: make([]bool, n),
 		off: make([][2]float32, n), noff: make([][2]float32, n),
-		tiles: make([]Tile, n), book: make([]record, n), strata: make([]column, n),
+		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), sand: make([]float64, n), clay: make([]float64, n), book: make([]record, n), strata: make([]column, n),
 	}
 }
 
@@ -1587,21 +1590,28 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 	cr.turn(g, plates)
 
 	copy(cr.tiles, g.Tiles)
+	copy(cr.height, g.Height)
+	copy(cr.soil, g.Soil)
+	copy(cr.sand, g.Sand)
+	copy(cr.clay, g.Clay)
 	copy(cr.book, book)
 	copy(cr.strata, g.strata)
 	for j := range g.Tiles {
 		t := cr.tiles[cr.org[j]]
+		// The soil goes with the tile, fresh floor taking its neighbour's.
+		g.Soil[j], g.Sand[j], g.Clay[j] = cr.soil[cr.org[j]], cr.sand[cr.org[j]], cr.clay[cr.org[j]]
 		if cr.fresh[j] {
 			// New floor, with the soil of the tile beside it: basalt, dated
 			// from now, at the level ocean floor rides at. Set higher, as a
 			// ridge fresh from below really stands, every parting seam on a
 			// globe left a line of it above the sea, and the oceans came out
 			// drawn over with the outlines of where plates used to be.
-			t.Height = oceanFreeboard
+			g.Height[j] = oceanFreeboard
 			t.Bedrock, t.Formed = Basalt, uint8(epoch)
 			book[j] = record{melt: 2 * madeEnough}
-			g.strata[j] = basement(Basalt, uint8(epoch), t.Height)
+			g.strata[j] = basement(Basalt, uint8(epoch), g.Height[j])
 		} else {
+			g.Height[j] = cr.height[cr.org[j]]
 			book[j] = cr.book[cr.org[j]]
 			// The pile goes with the ground on top of it.
 			g.strata[j] = cr.strata[cr.org[j]]
@@ -2326,7 +2336,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	var sum, count, want [256]float64
 	for i := range g.Tiles {
 		k := g.Tiles[i].Plate
-		sum[k] += g.Tiles[i].Height
+		sum[k] += g.Height[i]
 		count[k]++
 		if cr.ocean[i] {
 			want[k] += oceanFreeboard
@@ -2360,7 +2370,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	rise := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		k := g.Tiles[i].Plate
-		rise[i] = shift[k] + bowPull*settling*(bow[i]-(g.Tiles[i].Height-mean[k]))
+		rise[i] = shift[k] + bowPull*settling*(bow[i]-(g.Height[i]-mean[k]))
 	}
 	for k := 0; k < marginRamp; k++ {
 		rise = g.spread(rise)
@@ -2369,7 +2379,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		col := &g.strata[i]
-		t.Height += rise[i]
+		g.Height[i] += rise[i]
 		cr.lifted[i] = rise[i]
 		// What floats the ground up floats the beds under it with it.
 		col.lift(rise[i])
@@ -2390,7 +2400,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				continue
 			}
 			by := s.lift * grain[i] * profile(s.makes, s.away, wide, gap*grain[i])
-			t.Height += by
+			g.Height[i] += by
 			cr.lifted[i] += by
 			// And the beds go up with it, by as much as the ground over them.
 			// A belt is raised most at its axis and least at its feet, so the
@@ -2451,14 +2461,14 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// What comes up floods what is there: a bed of lava
 					// over the pile, which is the hard cap a plateau of
 					// basalt stands on long after the rift has gone quiet.
-					col.bury(Basalt, uint8(epoch), 0, t.Height, math.Abs(by))
+					col.bury(Basalt, uint8(epoch), 0, g.Height[i], math.Abs(by))
 				}
 				if s.makes != nothing {
 					t.Formed = uint8(epoch)
 				}
 			}
 		}
-		t.Height = math.Max(0, t.Height)
+		g.Height[i] = math.Max(0, g.Height[i])
 	}
 	w.hotspot(g, book, cr)
 	cr.accrete()
@@ -3041,11 +3051,11 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 				}
 				lift := hotspotLift * smooth(1-d/reach)
 				j := g.Index(q)
-				g.Tiles[j].Height += lift
+				g.Height[j] += lift
 				cr.lifted[j] += lift
 				book[j].melt += lift
 				// The cone is lava laid on whatever was there.
-				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Tiles[j].Height-lift, g.Tiles[j].Height)
+				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Height[j]-lift, g.Height[j])
 				if cr.ocean[j] {
 					cr.built[j] += lift
 				}
@@ -3060,7 +3070,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 func (g *Grid) historyBase() float64 {
 	h := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 	}
 	return quantile(h, historySea)
 }
@@ -3076,7 +3086,7 @@ func (g *Grid) keepBook(book []record, epoch int) {
 	fill := fillRate * epochYears // metres of burial an epoch: see fillRate
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Wet() || t.Height <= sea {
+		if t.Wet() || g.Height[i] <= sea {
 			book[i].submerged++
 			// What a sea bed gets depends on whether anything is being
 			// washed into it. Off a shore there is mud, and mud makes shale;
@@ -3091,28 +3101,28 @@ func (g *Grid) keepBook(book []record, epoch int) {
 				book[i].laid[Clay] += marineMud * 0.7 * fill
 				book[i].laid[Silt] += marineMud * 0.3 * fill
 				t.Formed = uint8(epoch)
-				g.strata[i].bury(Shale, uint8(epoch), 0, t.Height, marineMud*bedPerFill)
+				g.strata[i].bury(Shale, uint8(epoch), 0, g.Height[i], marineMud*bedPerFill)
 			} else {
 				rock, thick := g.quietFloor(i)
-				g.strata[i].bury(rock, uint8(epoch), 0, t.Height, thick)
+				g.strata[i].bury(rock, uint8(epoch), 0, g.Height[i], thick)
 			}
 			continue
 		}
 		// Ground below the water it drains into is ground being filled in,
 		// and rock made of what is falling on it now dates from now.
-		if t.Drain < FloodDepth/2 {
-			book[i].laid[Sand] += t.Sand * fill
-			book[i].laid[Silt] += t.Silt() * fill
-			book[i].laid[Clay] += t.Clay * fill
+		if g.Drain[i] < FloodDepth/2 {
+			book[i].laid[Sand] += g.Sand[i] * fill
+			book[i].laid[Silt] += g.siltAt(i) * fill
+			book[i].laid[Clay] += g.Clay[i] * fill
 			t.Formed = uint8(epoch)
 			// The epoch's fill is a bed, coarse or fine as the water sorted
 			// it. Which of the two it finally counts as is read against the
 			// world's other fills at the end; see settleRock.
 			rock := Shale
-			if t.Sand >= sandyBed {
+			if g.Sand[i] >= sandyBed {
 				rock = Sandstone
 			}
-			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(t.Sand))), t.Height, bedPerFill)
+			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(g.Sand[i]))), g.Height[i], bedPerFill)
 		}
 	}
 }
@@ -3245,13 +3255,13 @@ func (g *Grid) settleRock(book []record, ocean []bool) {
 			// all: as the leftover case - ground nothing ever happened to - it
 			// never came up once in sixteen epochs, because something happens
 			// to everything.
-			below := t.Height - plutonDepth
+			below := g.Height[i] - plutonDepth
 			if b.pluton > fill {
 				below = math.Inf(1)
 			}
 			c.cook(below, Granite, t.Formed)
 		case b.crush > madeEnough:
-			below := t.Height - cookDepth
+			below := g.Height[i] - cookDepth
 			if b.crush > fill {
 				below = math.Inf(1)
 			}
@@ -3301,14 +3311,14 @@ func (w *Land) normalise(g *Grid) {
 		order[i] = int32(i)
 	}
 	sort.Slice(order, func(a, b int) bool {
-		ha, hb := g.Tiles[order[a]].Height, g.Tiles[order[b]].Height
+		ha, hb := g.Height[order[a]], g.Height[order[b]]
 		if ha != hb {
 			return ha < hb
 		}
 		return order[a] < order[b] // ties by position, so a world repeats
 	})
 	for rank, i := range order {
-		g.Tiles[i].Height = spread[rank]
+		g.Height[i] = spread[rank]
 	}
 }
 
@@ -3321,14 +3331,14 @@ func (w *Land) normalise(g *Grid) {
 func (g *Grid) soften() {
 	h := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 	}
 	h = g.spread(h)
 	for i := range g.Tiles {
 		if g.strata != nil {
-			g.strata[i].lift(h[i] - g.Tiles[i].Height)
+			g.strata[i].lift(h[i] - g.Height[i])
 		}
-		g.Tiles[i].Height = h[i]
+		g.Height[i] = h[i]
 	}
 }
 
@@ -3341,7 +3351,7 @@ func (g *Grid) offshore(p geom.Pos, sea float64) bool {
 		if g.Wrap {
 			q = g.Norm(q)
 		}
-		if g.In(q) && !g.At(q).Wet() && g.At(q).Height > sea {
+		if g.In(q) && !g.At(q).Wet() && g.Height[g.Index(q)] > sea {
 			return true
 		}
 	}

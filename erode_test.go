@@ -9,7 +9,7 @@ import (
 func heights(g *Grid) []float64 {
 	out := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		out[i] = g.Tiles[i].Height
+		out[i] = g.Height[i]
 	}
 	return out
 }
@@ -30,7 +30,7 @@ func TestWeatherMovesSoilDownhill(t *testing.T) {
 
 	var lostUp, gainedDown float64
 	for i := range g.Tiles {
-		d := g.Tiles[i].Height - before[i]
+		d := g.Height[i] - before[i]
 		switch {
 		case before[i] >= high:
 			lostUp += d
@@ -61,7 +61,7 @@ func TestWoodsHoldAHillsideTogether(t *testing.T) {
 		g := w.Grid
 		var slopes []int
 		for i := range g.Tiles {
-			if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
+			if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 				tl.Terrain = cover
 				slopes = append(slopes, i)
 			}
@@ -76,7 +76,7 @@ func TestWoodsHoldAHillsideTogether(t *testing.T) {
 			if g.Tiles[i].Wet() || g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 				continue // the river came to it, and took it as a bank
 			}
-			if d := before[i] - g.Tiles[i].Height; d > 0 {
+			if d := before[i] - g.Height[i]; d > 0 {
 				total += d
 			}
 		}
@@ -120,7 +120,7 @@ func TestWeatherDoesNotDrownWhatIsBuilt(t *testing.T) {
 		if g.Tiles[i].Terrain == Water {
 			continue
 		}
-		if f := g.Tiles[i].Flow; f > most {
+		if f := g.Flow[i]; f > most {
 			bank, most = p, f
 		}
 	}
@@ -174,7 +174,7 @@ func TestSoilGoesWithTheGround(t *testing.T) {
 	g := w.Grid
 	var slopes []int
 	for i := range g.Tiles {
-		if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth {
+		if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth {
 			tl.Terrain = Field // bared for the plough
 			slopes = append(slopes, i)
 		}
@@ -231,7 +231,7 @@ func TestTheWaterWearsShaleBeforeGranite(t *testing.T) {
 		g := w.Grid
 		for i := range g.Tiles {
 			g.Tiles[i].Bedrock = rock
-			g.Tiles[i].Soil = 0
+			g.Soil[i] = 0
 		}
 		g.wear(ageYears)
 		return g.exported[Sand] + g.exported[Silt] + g.exported[Clay]

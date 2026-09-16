@@ -37,7 +37,7 @@ func ridged(height float64) *Grid {
 	g := NewGrid(120, 20)
 	for i := range g.Tiles {
 		x := float64(i%g.W) - 60
-		g.Tiles[i].Height = 20 + height*math.Exp(-x*x/(2*8*8))
+		g.Height[i] = 20 + height*math.Exp(-x*x/(2*8*8))
 	}
 	return g
 }
@@ -93,7 +93,7 @@ func TestARangeAtAnAngleCastsItsShadowDownwind(t *testing.T) {
 	}
 	for i := range g.Tiles {
 		d, _ := across(i)
-		g.Tiles[i].Height = 20 + 300*math.Exp(-d*d/(2*8*8))
+		g.Height[i] = 20 + 300*math.Exp(-d*d/(2*8*8))
 	}
 	g.weather()
 	var wet, dry, nw, nd float64

@@ -47,7 +47,7 @@ func TestCalibrate(t *testing.T) {
 		}
 		var up, down float64
 		for i := range g.Tiles {
-			d := g.Tiles[i].Height - before[i]
+			d := g.Height[i] - before[i]
 			switch {
 			case before[i] >= high:
 				up += d
@@ -63,7 +63,7 @@ func TestCalibrate(t *testing.T) {
 			g := w.Grid
 			var slopes []int
 			for i := range g.Tiles {
-				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 {
+				if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth/2 {
 					tl.Terrain = cover
 					slopes = append(slopes, i)
 				}
@@ -75,7 +75,7 @@ func TestCalibrate(t *testing.T) {
 			}
 			var total float64
 			for _, i := range slopes {
-				if d := before[i] - g.Tiles[i].Height; d > 0 {
+				if d := before[i] - g.Height[i]; d > 0 {
 					total += d
 				}
 			}
@@ -97,10 +97,10 @@ func TestCalibrate(t *testing.T) {
 				continue
 			}
 			switch {
-			case tl.Drain < FloodDepth/2:
-				floor, fN = floor+tl.Sand, fN+1
+			case g.Drain[i] < FloodDepth/2:
+				floor, fN = floor+g.Sand[i], fN+1
 			case g.Slope(g.PosOf(i)) > 0.1:
-				hill, hN = hill+tl.Sand, hN+1
+				hill, hN = hill+g.Sand[i], hN+1
 			}
 		}
 		fmt.Printf("  seed 5, 12 ages: sand on the floor %.3f, on the hillsides %.3f (margin %.3f)\n",
@@ -331,7 +331,7 @@ func ribShare(g *Grid) float64 {
 func maxFlow(g *Grid) float64 {
 	most := 0.0
 	for i := range g.Tiles {
-		most = math.Max(most, g.Tiles[i].Flow)
+		most = math.Max(most, g.Flow[i])
 	}
 	return most
 }

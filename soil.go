@@ -96,7 +96,7 @@ func (g *Grid) meanTempOf(i int) float64 {
 	if g.air != nil && y < len(g.air.mean) {
 		mean = g.air.mean[y]
 	}
-	t := mean - Lapse*g.Tiles[i].Height
+	t := mean - Lapse*g.Height[i]
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -184,11 +184,11 @@ func (g *Grid) soilDepthOf(i int) (depth, pace float64) {
 		if off.X != 0 && off.Y != 0 {
 			near = 0.5
 		}
-		round += near * (g.At(q).Height - t.Height)
+		round += near * (g.Height[g.Index(q)] - g.Height[i])
 	}
-	water := Erodibility * math.Sqrt(t.Flow) * hold(t) * g.Slope(p)
+	water := Erodibility * math.Sqrt(g.Flow[i]) * g.hold(i) * g.Slope(p)
 	// Creep at a metre of soil per metre of soil, and in from the hollow.
-	creepy := g.creepShare(1) / 8 * hold(t) / SoilScale
+	creepy := g.creepShare(1) / 8 * g.hold(i) / SoilScale
 	taken := func(h float64) float64 {
 		return water - creepy*math.Min(h, soilActive)*round
 	}
@@ -217,7 +217,7 @@ func (g *Grid) laySoil(made bool) {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			h, pace := g.soilDepthOf(i)
-			g.Tiles[i].Soil = float32(h)
+			g.Soil[i] = float32(h)
 			// The history's age bounds the ground's own reading of it, except
 			// where the history last saw the tile under its sea: the map's sea
 			// is poured again, and when that ground came out of it the history

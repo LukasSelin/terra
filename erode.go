@@ -53,13 +53,13 @@ const (
 	Grains
 )
 
-// parts is what a tile's soil is made of, as the three shares. It is the
+// parts is what tile i's soil is made of, as the three shares. It is the
 // composition a stripping takes away and a deposit arrives with.
-func parts(t *Tile) [Grains]float64 {
-	return [Grains]float64{Sand: t.Sand, Silt: t.Silt(), Clay: t.Clay}
+func (g *Grid) parts(i int) [Grains]float64 {
+	return [Grains]float64{Sand: g.Sand[i], Silt: g.siltAt(i), Clay: g.Clay[i]}
 }
 
-// hold is how much of the soil on a tile the creep moves in an age, by what is
+// hold is how much of the soil on tile i the creep moves in an age, by what is
 // growing or standing on it and by what the soil itself is made of. Roots are
 // what hold a hillside together against its own weight; a roof or a road takes
 // the ground it covers out of the weather altogether; and loose sand goes where
@@ -67,11 +67,12 @@ func parts(t *Tile) [Grains]float64 {
 //
 // The water is charged differently: by the rock, which is rockErodibility, and
 // by what grows, as a stress to clear and not a share - see criticalFall.
-func hold(t *Tile) float64 {
+func (g *Grid) hold(i int) float64 {
+	t := &g.Tiles[i]
 	if t.Mark != None {
 		return 0
 	}
-	return t.Terrain.Hold() * t.Wash()
+	return t.Terrain.Hold() * g.washAt(i)
 }
 
 // Water on the ground: how deep it runs, how wide, and the stress it puts on
@@ -281,7 +282,7 @@ func (g *Grid) wear(years float64) {
 			// floor at the foot of the map did was make ground out of nothing,
 			// first by lifting a sea bed that lay under it and then by refusing
 			// to let the creep ease one down a hand's breadth further.
-			t.Height += change[i]
+			g.Height[i] += change[i]
 			// What is left of the soil, what arrived on it, and what the rock
 			// made under it over the age. What arrives is worked into what was
 			// there; what the rock makes is the rock's own mixture.
@@ -300,18 +301,18 @@ func (g *Grid) wear(years float64) {
 				}
 			}
 			if surface {
-				mix(t, h, gained[i])
+				g.mix(i, h, gained[i])
 			}
 			h += laid
 			if surface {
 				made := soilMade(h, years, SoilMaking*g.weathering(i)) - h
 				if made > 0 {
 					sand, clay := g.TextureAt(g.PosOf(i))
-					blend(t, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
+					g.blend(i, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
 					h += made
 				}
 			}
-			t.Soil = float32(h)
+			g.Soil[i] = float32(h)
 			switch {
 			case g.deep > 0:
 				g.deepExposure(i, -change[i], years)
@@ -349,7 +350,7 @@ func (g *Grid) overbank(i int, laid [Grains]float64, change []float64, gained []
 			if (dx == 0 && dy == 0) || !g.In(q) {
 				continue
 			}
-			if b := g.At(q); b.Wet() || b.Drain >= FloodDepth || b.Mark != None {
+			if b := g.At(q); b.Wet() || g.Drain[g.Index(q)] >= FloodDepth || b.Mark != None {
 				continue
 			}
 			wt := math.Exp(-math.Hypot(float64(dx), float64(dy)) * g.span() / overbankDecay)
@@ -390,7 +391,7 @@ func (g *Grid) floodWidth(i int) float64 {
 			if (dx == 0 && dy == 0) || !g.In(q) {
 				continue
 			}
-			if b := g.At(q); !b.Wet() && b.Drain < FloodDepth && b.Mark == None {
+			if b := g.At(q); !b.Wet() && g.Drain[g.Index(q)] < FloodDepth && b.Mark == None {
 				n++
 			}
 		}
@@ -503,11 +504,11 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	span := g.span()
 	// How deep the soil the creep carries is counted, against SoilScale: see
 	// above for why a history does not count it.
-	depth := func(t *Tile) float64 {
+	depth := func(i int) float64 {
 		if g.deep > 0 {
 			return 1
 		}
-		return math.Min(float64(t.Soil), soilActive) / SoilScale
+		return math.Min(float64(g.Soil[i]), soilActive) / SoilScale
 	}
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
@@ -528,7 +529,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	nb, k, diag, z := cs.nb, cs.k, cs.diag, cs.z
 	clear(k)
 	for i := range g.Tiles {
-		z[i], diag[i] = g.Tiles[i].Height, 1
+		z[i], diag[i] = g.Height[i], 1
 	}
 	for i := range g.Tiles {
 		a := &g.Tiles[i]
@@ -545,18 +546,18 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			if a.Mark != None || b.Mark != None || g.abyssal(i) || g.abyssal(j) {
 				continue
 			}
-			if (a.Wet() && a.Flow >= wander) || (b.Wet() && b.Flow >= wander) {
+			if (a.Wet() && g.Flow[i] >= wander) || (b.Wet() && g.Flow[j] >= wander) {
 				continue
 			}
-			top := a
-			if b.Height > a.Height {
-				top = b
+			over := i
+			if g.Height[j] > g.Height[i] {
+				over = j
 			}
-			fall := math.Min(math.Abs(a.Height-b.Height)/pr.run, creepSteepest*Critical) / Critical
+			fall := math.Min(math.Abs(g.Height[i]-g.Height[j])/pr.run, creepSteepest*Critical) / Critical
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
-			kk := share / 8 * pr.near * hold(top) * depth(top) / (1 - fall*fall)
+			kk := share / 8 * pr.near * g.hold(over) * depth(over) / (1 - fall*fall)
 			if kk <= 0 {
 				continue
 			}
@@ -609,13 +610,13 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		if moved <= 0 {
 			continue
 		}
-		if have := float64(g.Tiles[hi].Soil) - lost[hi]; gives[hi] > have {
+		if have := float64(g.Soil[hi]) - lost[hi]; gives[hi] > have {
 			moved *= math.Max(0, have) / gives[hi]
 		}
 		change[hi] -= moved
 		change[lo] += moved
 		lost[hi] += moved
-		was := parts(&g.Tiles[hi])
+		was := g.parts(int(hi))
 		for gr := range was {
 			gained[lo][gr] += moved * was[gr]
 		}
@@ -694,21 +695,21 @@ func carrying(load [Grains]float64) float64 {
 // rock has made the field.
 //
 // And what arrives is younger than what was there: see buryIn.
-func mix(t *Tile, held float64, laid [Grains]float64) {
-	blend(t, held, laid)
-	buryIn(t, held, carrying(laid))
+func (g *Grid) mix(i int, held float64, laid [Grains]float64) {
+	g.blend(i, held, laid)
+	buryIn(&g.Tiles[i], held, carrying(laid))
 }
 
 // blend is mix for the mixture alone: what the rock makes under a soil is part
 // of that soil's forming and not new ground laid on it.
-func blend(t *Tile, held float64, laid [Grains]float64) {
+func (g *Grid) blend(i int, held float64, laid [Grains]float64) {
 	d := carrying(laid)
 	if d <= 0 {
 		return
 	}
 	held = math.Max(0, held)
-	t.Sand = (t.Sand*held + laid[Sand]) / (held + d)
-	t.Clay = (t.Clay*held + laid[Clay]) / (held + d)
+	g.Sand[i] = (g.Sand[i]*held + laid[Sand]) / (held + d)
+	g.Clay[i] = (g.Clay[i]*held + laid[Clay]) / (held + d)
 }
 
 // waterStep is the water's step over years, set up to be solved: how hard it cuts
@@ -753,12 +754,12 @@ func (g *Grid) waterStep(years float64) fluvial {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
-			c.h[i] = t.Height
-			c.soil[i] = float64(t.Soil)
+			c.h[i] = g.Height[i]
+			c.soil[i] = float64(g.Soil[i])
 			// What the water takes off a tile is its soil, or its rock where it
 			// has none, which is the soil the rock would make.
-			c.parts[i] = parts(t)
-			if t.Soil <= 0 {
+			c.parts[i] = g.parts(i)
+			if g.Soil[i] <= 0 {
 				sand, clay := g.TextureAt(g.PosOf(i))
 				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
 			}
@@ -770,15 +771,15 @@ func (g *Grid) waterStep(years float64) fluvial {
 			// How hard the water cuts: stream power, charged to what the soil
 			// is made of for the soil and to the rock for the rock. See
 			// fluvial.go and rockErodibility.
-			power := years * Erodibility * math.Sqrt(t.Flow) / run[i]
-			c.f[i] = power * t.Wash()
+			power := years * Erodibility * math.Sqrt(g.Flow[i]) / run[i]
+			c.f[i] = power * g.washAt(i)
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
 			// What grows on it holds its soil until the water's stress in a
 			// flood clears what it stands, and what settles is what a flood
 			// lets fall: see floodFlow, criticalFall and settleShare.
-			q := t.Flow * floodFlow
-			fall := (t.Height - g.Tiles[recv[i]].Height) / run[i]
+			q := g.Flow[i] * floodFlow
+			fall := (g.Height[i] - g.Height[recv[i]]) / run[i]
 			w := flowWidth(t, q, fall, run[i])
 			if g.deep > 0 {
 				// A tile of a history is a piece of a planet, a hundred

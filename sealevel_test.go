@@ -40,16 +40,16 @@ func bruunShore(sand float64) (*Grid, *surf) {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Soil, t.Sand, t.Clay = 5, sand, 0.05
+		g.Soil[i], g.Sand[i], g.Clay[i] = 5, sand, 0.05
 		switch {
 		case p.X < 2 || p.Y == 0 || p.Y == 29:
-			t.Height = 13
+			g.Height[i] = 13
 		case p.X < 10:
-			t.Height, t.Terrain = 0, Water
+			g.Height[i], t.Terrain = 0, Water
 		case p.X < 30:
-			t.Height, t.Terrain = 9.5, Water
+			g.Height[i], t.Terrain = 9.5, Water
 		default:
-			t.Height = 13
+			g.Height[i] = 13
 		}
 	}
 	return g, g.surfOf(func(i, k int) (float64, float64) { return 6, 0 })
@@ -88,9 +88,9 @@ func shelfValley() *Land {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Height = sea + 2 + float64(p.X-24) - math.Max(0, 6-1.5*math.Abs(float64(p.Y-32)))
+		g.Height[i] = sea + 2 + float64(p.X-24) - math.Max(0, 6-1.5*math.Abs(float64(p.Y-32)))
 		if p.X < 24 {
-			t.Height = sea - 5 - 55*float64(24-p.X)/24
+			g.Height[i] = sea - 5 - 55*float64(24-p.X)/24
 		}
 		t.Terrain = Grass
 	}
@@ -125,7 +125,7 @@ func TestTheLowSeaLeavesDrownedValleys(t *testing.T) {
 		water := 0.0
 		for y := 29; y <= 35; y++ {
 			for x := 20; x <= 32; x++ {
-				water += math.Max(0, g.sea-g.At(geom.Pos{X: x, Y: y}).Height)
+				water += math.Max(0, g.sea-g.Height[g.Index(geom.Pos{X: x, Y: y})])
 			}
 		}
 		return water, low
@@ -152,7 +152,7 @@ func TestAGlacialMapIsCutThroughTheCycle(t *testing.T) {
 	}
 	same := true
 	for i := range plain.Tiles {
-		if plain.Tiles[i].Height != glacial.Tiles[i].Height {
+		if plain.Height[i] != glacial.Height[i] {
 			same = false
 			break
 		}

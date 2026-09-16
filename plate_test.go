@@ -222,7 +222,7 @@ func TestAWeldedPlateKeepsTheRangeThatMadeIt(t *testing.T) {
 	}
 	hs := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		hs[i] = g.Tiles[i].Height
+		hs[i] = g.Height[i]
 	}
 	high := quantile(hs, 0.75)
 	var inside, total int
@@ -290,7 +290,7 @@ func TestATurnCarriesAPlateRoundWhole(t *testing.T) {
 		t := &g.Tiles[i]
 		t.Plate = 1
 		if math.Hypot(float64(x-mid), float64(y-mid)) <= radius {
-			t.Plate, t.Height = 0, code(x, y)
+			t.Plate, g.Height[i] = 0, code(x, y)
 			disc++
 		}
 	}
@@ -328,7 +328,7 @@ func TestATurnCarriesAPlateRoundWhole(t *testing.T) {
 	// distances from the middle - is off by many.
 	var miss, carried float64
 	for i := range g.Tiles {
-		h := g.Tiles[i].Height
+		h := g.Height[i]
 		if g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0 || h < 1 {
 			continue // not ground the plate started with
 		}
@@ -423,11 +423,11 @@ func TestMountainsAreNotAllOnTheCoast(t *testing.T) {
 				continue
 			}
 			land = append(land, float64(far[i]))
-			dry = append(dry, g.Tiles[i].Height)
+			dry = append(dry, g.Height[i])
 		}
 		cut := quantile(dry, 0.9)
 		for i := range g.Tiles {
-			if !g.underSea(i) && g.Tiles[i].Height >= cut {
+			if !g.underSea(i) && g.Height[i] >= cut {
 				high = append(high, float64(far[i]))
 			}
 		}

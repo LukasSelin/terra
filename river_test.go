@@ -17,7 +17,7 @@ func TestWaterLeavesDownTheSteepestFall(t *testing.T) {
 	g := NewGrid(40, 40)
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
-			g.At(geom.Pos{X: x, Y: y}).Height = float64(40 - x)
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = float64(40 - x)
 		}
 	}
 	if got := g.Aspect(geom.Pos{X: 10, Y: 10}); got != (geom.Pos{X: 1}) {
@@ -26,7 +26,7 @@ func TestWaterLeavesDownTheSteepestFall(t *testing.T) {
 	// A slope that really does fall hardest on the diagonal still reads as one.
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
-			g.At(geom.Pos{X: x, Y: y}).Height = float64(80 - x - y)
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = float64(80 - x - y)
 		}
 	}
 	if got := g.Aspect(geom.Pos{X: 10, Y: 10}); got != (geom.Pos{X: 1, Y: 1}) {
@@ -98,7 +98,7 @@ func TestRiversHeadInTheHighGround(t *testing.T) {
 		g := NewLand(seed, DefaultTerms()).Grid
 		hs := make([]float64, len(g.Tiles))
 		for i := range g.Tiles {
-			hs[i] = g.Tiles[i].Height
+			hs[i] = g.Height[i]
 		}
 		high := quantile(hs, 1-uplandShare)
 		for i := range g.Tiles {
@@ -201,7 +201,7 @@ func TestWornRiversKeepFlintsLaw(t *testing.T) {
 			if i%g.W != d%g.W && i/g.W != d/g.W {
 				run *= math.Sqrt2
 			}
-			s := (g.Tiles[i].Height - g.Tiles[d].Height) / run
+			s := (g.Height[i] - g.Height[d]) / run
 			if s <= 0 || g.area[i] <= 0 {
 				continue
 			}

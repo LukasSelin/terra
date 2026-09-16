@@ -40,7 +40,7 @@ func bowl(wetness float64) *Grid {
 			if y == 12 && x >= 17 {
 				h = math.Min(h, 9.5-0.5*float64(x-18))
 			}
-			g.At(geom.Pos{X: x, Y: y}).Height = h
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = h
 		}
 	}
 	return g
@@ -60,12 +60,12 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 	g := bowl(1)
 	was := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
-		was[i] = g.Tiles[i].Height
+		was[i] = g.Height[i]
 	}
 	settle(g)
 	for i := range g.Tiles {
-		if g.Tiles[i].Height != was[i] {
-			t.Fatalf("working the water out moved the ground at %v from %v to %v", g.PosOf(i), was[i], g.Tiles[i].Height)
+		if g.Height[i] != was[i] {
+			t.Fatalf("working the water out moved the ground at %v from %v to %v", g.PosOf(i), was[i], g.Height[i])
 		}
 	}
 	centre := geom.Pos{X: 12, Y: 12}
@@ -80,7 +80,7 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 		p := g.PosOf(i)
 		inside := math.Hypot(float64(p.X-12), float64(p.Y-12)) < 6
 		under := g.lakeOf[i] >= 0
-		if inside && g.Tiles[i].Height < 9.5 && !under {
+		if inside && g.Height[i] < 9.5 && !under {
 			t.Errorf("%v lies below the water and is not in the lake", p)
 		}
 		if under && g.Tiles[i].Terrain != Water {
@@ -100,7 +100,7 @@ func TestAHollowInWetCountryFillsToItsRim(t *testing.T) {
 			given += g.loss(i) * perMM
 		}
 	}
-	out := g.Tiles[l.Outlet].Flow
+	out := g.Flow[l.Outlet]
 	want := l.Inflow - given
 	if want <= 0 || out < want-1e-9 {
 		t.Fatalf("the outlet carries %.4f m3/s; the lake was given %.4f and its surface took %.4f", out, l.Inflow, given)
@@ -217,7 +217,7 @@ func steps(wetness float64) *Grid {
 			if y < 3 || y > 7 {
 				h = 30
 			}
-			g.At(geom.Pos{X: x, Y: y}).Height = h
+			g.Height[g.Index(geom.Pos{X: x, Y: y})] = h
 		}
 	}
 	return g
@@ -406,7 +406,7 @@ func TestTheSameSeedFillsTheSameLakes(t *testing.T) {
 		}
 	}
 	for i := range a.Tiles {
-		if a.Tiles[i].Flow != b.Tiles[i].Flow || a.down[i] != b.down[i] {
+		if a.Flow[i] != b.Flow[i] || a.down[i] != b.down[i] {
 			t.Fatalf("the water at tile %d went two ways", i)
 		}
 	}

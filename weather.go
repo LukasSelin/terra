@@ -436,7 +436,7 @@ func (e *airEnv) cellOfTile(g *Grid, i int) int {
 // sunk reports whether tile i is under the water the air takes its fill from:
 // the sea, where there is one.
 func (g *Grid) sunk(i int) bool {
-	return g.base >= 0 && g.Tiles[i].Height <= g.base
+	return g.base >= 0 && g.Height[i] <= g.base
 }
 
 // Rain is how much rain falls on tile i in a year, in mm, as the air last

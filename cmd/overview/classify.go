@@ -139,7 +139,7 @@ func scarp(g *terra.Grid, p geom.Pos, slope, steepAt float64) bool {
 		if !g.In(q) {
 			continue
 		}
-		if b := g.At(q); !b.Wet() && b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+		if b := g.At(q); !b.Wet() && g.Height[g.Index(q)] < g.Height[g.Index(p)] && b.Hard() <= t.Hard()-softer {
 			return true
 		}
 	}
@@ -158,7 +158,7 @@ func hogback(g *terra.Grid, p geom.Pos) bool {
 			if !g.In(q) {
 				break
 			}
-			if b := g.At(q); b.Height < t.Height && b.Hard() <= t.Hard()-softer {
+			if b := g.At(q); g.Height[g.Index(q)] < g.Height[g.Index(p)] && b.Hard() <= t.Hard()-softer {
 				sides++
 			}
 		}
@@ -220,7 +220,7 @@ func classify(land *terra.Land) classes {
 	height := make([]float64, n)
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		height[i] = t.Height
+		height[i] = g.Height[i]
 		if t.Wet() {
 			wet[i] = 1
 		}
@@ -232,7 +232,7 @@ func classify(land *terra.Land) classes {
 	wetNear := boxMean(wet, g.W, g.H, 2, g.Wrap)
 	channel := func(i int) bool {
 		t := &g.Tiles[i]
-		return t.Terrain == terra.Water && t.Flow > riverFlow && wetNear[i] < 0.6
+		return t.Terrain == terra.Water && g.Flow[i] > riverFlow && wetNear[i] < 0.6
 	}
 	sea := seaOf(g, channel)
 
@@ -258,7 +258,7 @@ func classify(land *terra.Land) classes {
 			c.Biome[i] = cSeaIce
 		case channel(i):
 			c.Biome[i] = cRiver
-			floodOut(g, flood, g.PosOf(i), int(math.Sqrt(t.Flow)/floodReach))
+			floodOut(g, flood, g.PosOf(i), int(math.Sqrt(g.Flow[i])/floodReach))
 		case !sea[i]:
 			c.Biome[i] = cLake
 		case c.LandDist[i] > float64(shelf):
@@ -326,7 +326,7 @@ func classify(land *terra.Land) classes {
 				continue
 			}
 			p := g.PosOf(i)
-			byRiver := flood[i] && t.Drain < terra.FloodDepth/2
+			byRiver := flood[i] && g.Drain[i] < terra.FloodDepth/2
 			c.Koppen[i] = koppen(g, p)
 			c.Biome[i] = biome(c.Koppen[i], byRiver)
 

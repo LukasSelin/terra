@@ -253,7 +253,7 @@ func (g *Grid) pool() {
 	} else {
 		s.order = make([]heightNode, n)
 		for i := range s.order {
-			s.order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
+			s.order[i] = heightNode{h: g.Height[i], idx: int32(i)}
 		}
 		sortHeights(s.order)
 		s.moved = -1
@@ -290,7 +290,7 @@ func (g *Grid) pool() {
 			found := false
 			for k := range sides {
 				if sides[k].root == r {
-					if g.Tiles[j].Height < g.Tiles[sides[k].low].Height {
+					if g.Height[j] < g.Height[sides[k].low] {
 						sides[k].low = j
 					}
 					found = true
@@ -319,7 +319,7 @@ func (g *Grid) pool() {
 				}
 				t.b[x].parent, t.b[x].spill, t.b[x].saddle = 0, nd.h, across
 				t.uf[x] = 0
-				if low < 0 || (s.low >= 0 && g.Tiles[s.low].Height < g.Tiles[low].Height) {
+				if low < 0 || (s.low >= 0 && g.Height[s.low] < g.Height[low]) {
 					low = s.low
 				}
 				cur = 0
@@ -330,7 +330,7 @@ func (g *Grid) pool() {
 				t.b[cur].parent, t.b[cur].spill, t.b[cur].saddle = p, nd.h, s.low
 				t.b[s.root].parent, t.b[s.root].spill, t.b[s.root].saddle = p, nd.h, low
 				t.uf[cur], t.uf[s.root] = p, p
-				if g.Tiles[s.low].Height < g.Tiles[low].Height {
+				if g.Height[s.low] < g.Height[low] {
 					low = s.low
 				}
 				cur = p
@@ -392,7 +392,7 @@ func (g *Grid) pool() {
 			}
 		}
 		for _, j := range t.tiles[b.first:b.end] {
-			if g.Tiles[j].Height >= b.spill {
+			if g.Height[j] >= b.spill {
 				break
 			}
 			b.capacity += loss[j]
@@ -519,7 +519,7 @@ func sortHeights(order []heightNode) {
 func (g *Grid) reorder(order []heightNode) int {
 	n := len(order)
 	for k := range order {
-		order[k].h = g.Tiles[order[k].idx].Height
+		order[k].h = g.Height[order[k].idx]
 	}
 	moved, shifted := 0, 0
 	for k := 1; k < n; k++ {
@@ -626,7 +626,7 @@ func (t *basins) levelOf(x int32, g *Grid) float64 {
 	}
 	own := t.tiles[b.first:b.end]
 	for _, j := range own {
-		h := g.Tiles[j].Height
+		h := g.Height[j]
 		if h >= b.spill {
 			return b.spill
 		}
@@ -637,7 +637,7 @@ func (t *basins) levelOf(x int32, g *Grid) float64 {
 		left -= l
 	}
 	if len(own) > 0 {
-		return math.Min(b.spill, g.Tiles[own[len(own)-1]].Height)
+		return math.Min(b.spill, g.Height[own[len(own)-1]])
 	}
 	return floor
 }
@@ -662,7 +662,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 		m := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		for _, j := range t.tiles[t.b[m].first:t.b[m].end] {
-			h := g.Tiles[j].Height
+			h := g.Height[j]
 			if h >= top {
 				break
 			}
@@ -866,10 +866,10 @@ func (g *Grid) flow() {
 	perMM := discharge(1, g.span())
 	water := 0.0
 	for i := range g.Tiles {
-		g.Tiles[i].Flow, g.area[i] = 0, 0
+		g.Flow[i], g.area[i] = 0, 0
 		if !g.underSea(i) {
-			g.Tiles[i].Flow, g.area[i] = g.runoff[i]*perMM, 1
-			water += g.Tiles[i].Flow
+			g.Flow[i], g.area[i] = g.runoff[i]*perMM, 1
+			water += g.Flow[i]
 		}
 	}
 	g.water = water
@@ -895,13 +895,12 @@ func (g *Grid) flow() {
 	var to [8]int32
 	for k := len(g.route) - 1; k >= 0; k-- {
 		i := g.route[k]
-		t := &g.Tiles[i]
 		for _, l := range outs[i] {
-			t.Flow += math.Max(0, pooled[l]-given[l])
+			g.Flow[i] += math.Max(0, pooled[l]-given[l])
 			g.area[i] += pooledArea[l]
 		}
 		if l := g.lakeOf[i]; l >= 0 {
-			pooled[l] += t.Flow
+			pooled[l] += g.Flow[i]
 			pooledArea[l] += g.area[i]
 			continue
 		}
@@ -910,7 +909,7 @@ func (g *Grid) flow() {
 			continue
 		}
 		if g.area[i] >= spreadUntil {
-			g.Tiles[d].Flow += t.Flow
+			g.Flow[d] += g.Flow[i]
 			g.area[d] += g.area[i]
 			continue
 		}
@@ -937,18 +936,18 @@ func (g *Grid) flow() {
 			m++
 		}
 		if sum <= 0 {
-			g.Tiles[d].Flow += t.Flow
+			g.Flow[d] += g.Flow[i]
 			g.area[d] += g.area[i]
 			continue
 		}
 		for q := 0; q < m; q++ {
-			g.Tiles[to[q]].Flow += t.Flow * share[q] / sum
+			g.Flow[to[q]] += g.Flow[i] * share[q] / sum
 			g.area[to[q]] += g.area[i] * share[q] / sum
 		}
 	}
 	for i := range g.Tiles {
 		if l := g.lakeOf[i]; l >= 0 {
-			g.Tiles[i].Flow, g.area[i] = pooled[l], pooledArea[l]
+			g.Flow[i], g.area[i] = pooled[l], pooledArea[l]
 		}
 	}
 	for k := range g.Lakes {

@@ -26,7 +26,7 @@ func coast() *Grid {
 		case p.X >= 96 && p.X <= 100 && p.Y >= 10 && p.Y <= 14:
 			h = 2 // a hollow under sea level with no way to the sea
 		}
-		g.Tiles[i].Height = h
+		g.Height[i] = h
 	}
 	g.sea = 10
 	for i := range g.Tiles {
@@ -72,9 +72,9 @@ func TestALongChannelRingsWithTheTide(t *testing.T) {
 	const mouth, head = 20, 114
 	for i := range g.Tiles {
 		p := g.PosOf(i)
-		g.Tiles[i].Height = 400
+		g.Height[i] = 400
 		if p.X < mouth || (p.Y >= 8 && p.Y <= 12 && p.X <= head) {
-			g.Tiles[i].Height, g.Tiles[i].Terrain = 100, Water // two hundred metres deep
+			g.Height[i], g.Tiles[i].Terrain = 100, Water // two hundred metres deep
 		}
 	}
 	f := g.tidalReach()
@@ -99,9 +99,9 @@ func TestAStraightInletDoesNotGatherTheTide(t *testing.T) {
 	g := NewGrid(128, 64)
 	for i := range g.Tiles {
 		p := g.PosOf(i)
-		g.Tiles[i].Height = 20
+		g.Height[i] = 20
 		if p.X < 40 || (p.Y >= 30 && p.Y <= 34) {
-			g.Tiles[i].Height, g.Tiles[i].Terrain = 2, Water
+			g.Height[i], g.Tiles[i].Terrain = 2, Water
 		}
 	}
 	g.sea = 10
@@ -127,7 +127,7 @@ func TestATideStopsAtTheTidalLimit(t *testing.T) {
 				g.Tiles[i].Terrain = Water
 			}
 		}
-		g.Tiles[i].Height = h
+		g.Height[i] = h
 	}
 	g.sea = 10
 	for i := range g.Tiles {
@@ -144,7 +144,7 @@ func TestATideStopsAtTheTidalLimit(t *testing.T) {
 				t.Fatalf("the tide skips up the river from %d to %d", last, x)
 			}
 			last = x
-			if h := g.Tiles[i].Height; h > g.sea+float64(f[i])*TideMax {
+			if h := g.Height[i]; h > g.sea+float64(f[i])*TideMax {
 				t.Fatalf("at %d the tide reaches a bed %.2f m high, above its highest water %.2f", x, h, g.sea+float64(f[i])*TideMax)
 			}
 		}
@@ -164,14 +164,14 @@ func estuary() *Grid {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Soil, t.Sand, t.Clay = 1, 0.1, 0.4
+		g.Soil[i], g.Sand[i], g.Clay[i] = 1, 0.1, 0.4
 		switch {
 		case p.X < 40:
-			t.Height = 2
+			g.Height[i] = 2
 		case p.X < 88:
-			t.Height = 8.75 + 0.05*float64(p.X-40)
+			g.Height[i] = 8.75 + 0.05*float64(p.X-40)
 		default:
-			t.Height = 11.2 + 0.5*float64(p.X-88)
+			g.Height[i] = 11.2 + 0.5*float64(p.X-88)
 		}
 		if g.underSea(i) {
 			t.Terrain = Water
@@ -208,15 +208,15 @@ func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 				continue
 			}
 			flats++
-			if tile.Height > g.sea {
+			if g.Height[i] > g.sea {
 				above++
 			}
 			f := float64(g.tidal[i])
 			if f <= 0 {
 				t.Fatalf("%s: a flat at %v has a tide of %.2f", c.name, g.PosOf(i), f)
 			}
-			if math.Abs(tile.Height-g.sea) > f*flatTide+1e-6 {
-				t.Fatalf("%s: a flat at %v stands %.2f m from the sea, beyond the %.2f m its tide reaches", c.name, g.PosOf(i), tile.Height-g.sea, f*flatTide)
+			if math.Abs(g.Height[i]-g.sea) > f*flatTide+1e-6 {
+				t.Fatalf("%s: a flat at %v stands %.2f m from the sea, beyond the %.2f m its tide reaches", c.name, g.PosOf(i), g.Height[i]-g.sea, f*flatTide)
 			}
 			if s, most := g.Slope(g.PosOf(i)), deanSlope(g.medianGrain(i), shore[i]); s > most {
 				t.Fatalf("%s: a flat at %v lies at %.4f, steeper than the %.4f the sea grades it to", c.name, g.PosOf(i), s, most)
@@ -296,7 +296,7 @@ func strait() *Grid {
 	g.ebb = make([]float32, len(g.Tiles))
 	g.tidal = make([]float32, len(g.Tiles))
 	for i := range g.Tiles {
-		g.Tiles[i].Height = 10
+		g.Height[i] = 10
 		if x := i % g.W; x >= 15 && x < 25 {
 			g.Tiles[i].Terrain = Flat
 			g.ebb[i], g.tidal[i] = 0.5, 1
@@ -434,7 +434,7 @@ func TestMudSettlesOnAFlatAtSlackWater(t *testing.T) {
 		g := NewGrid(40, 5)
 		g.sea = 10
 		for i := range g.Tiles {
-			g.Tiles[i].Height = 10 + slope*TileSpan*float64(i%g.W-20)
+			g.Height[i] = 10 + slope*TileSpan*float64(i%g.W-20)
 		}
 		return g, g.Index(geom.Pos{X: 20, Y: 2})
 	}
@@ -448,7 +448,7 @@ func TestMudSettlesOnAFlatAtSlackWater(t *testing.T) {
 		t.Errorf("a flat the flood runs fast over takes %.3f of the clay, and a quiet one %.3f", s[Clay], q[Clay])
 	}
 	dry, k := ramp(1.0 / 500)
-	dry.Tiles[k].Height = 10 + MeanHigh + 0.01
+	dry.Height[k] = 10 + MeanHigh + 0.01
 	if s := dry.flatShare(k, 1); s != ([Grains]float64{}) {
 		t.Errorf("ground over high water takes %v", s)
 	}

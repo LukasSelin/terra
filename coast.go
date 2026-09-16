@@ -135,9 +135,8 @@ func (g *Grid) facing(s *surf) []int32 {
 // takeGround takes d metres off the top of tile i, its soil first and the rock
 // after, and says what it was made of by grain.
 func (g *Grid) takeGround(i int, d float64) [Grains]float64 {
-	t := &g.Tiles[i]
-	soil := math.Min(float64(t.Soil), d)
-	was := parts(t)
+	soil := math.Min(float64(g.Soil[i]), d)
+	was := g.parts(i)
 	var out [Grains]float64
 	for gr := range out {
 		out[gr] = soil * was[gr]
@@ -148,8 +147,8 @@ func (g *Grid) takeGround(i int, d float64) [Grains]float64 {
 		out[Silt] += rock * clamp01(1-sand-clay)
 		out[Clay] += rock * clay
 	}
-	t.Height -= d
-	t.Soil = float32(math.Max(0, float64(t.Soil)-soil))
+	g.Height[i] -= d
+	g.Soil[i] = float32(math.Max(0, float64(g.Soil[i])-soil))
 	return out
 }
 
@@ -176,31 +175,31 @@ func (g *Grid) winnow(s *surf, years float64) {
 			continue
 		}
 		t := &g.Tiles[i]
-		if t.Mark != None || t.Soil <= 0 {
+		if t.Mark != None || g.Soil[i] <= 0 {
 			continue
 		}
 		if g.underSea(i) {
-			if g.sea-t.Height > s.closure[c] {
+			if g.sea-g.Height[i] > s.closure[c] {
 				continue
 			}
-		} else if t.Height > g.berm(s, c) {
+		} else if g.Height[i] > g.berm(s, c) {
 			continue
 		}
-		soil := float64(t.Soil)
+		soil := float64(g.Soil[i])
 		share := -math.Expm1(-mixingDepth * s.storm[c] * years / yr / soil)
-		silt, clay := share*soil*t.Silt(), share*soil*t.Clay
+		silt, clay := share*soil*g.siltAt(i), share*soil*g.Clay[i]
 		gone := silt + clay
 		if gone <= 0 {
 			continue
 		}
 		rest := soil - gone
-		sand := soil * t.Sand
+		sand := soil * g.Sand[i]
 		if rest > 1e-12 {
-			t.Sand = sand / rest
-			t.Clay = (soil*t.Clay - clay) / rest
+			g.Sand[i] = sand / rest
+			g.Clay[i] = (soil*g.Clay[i] - clay) / rest
 		}
-		t.Soil = float32(math.Max(0, rest))
-		t.Height -= gone
+		g.Soil[i] = float32(math.Max(0, rest))
+		g.Height[i] -= gone
 		g.exported[Silt] += silt
 		g.exported[Clay] += clay
 	}

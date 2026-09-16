@@ -14,7 +14,7 @@ func twoOceans() *Grid {
 	for i := range g.Tiles {
 		x, y := i%g.W, i/g.W
 		if math.Abs(c.latitude(y)) < 70 && (x < 40 || (x >= 128 && x < 168)) {
-			g.Tiles[i].Height = 60
+			g.Height[i] = 60
 		}
 	}
 	return g

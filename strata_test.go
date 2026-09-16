@@ -131,7 +131,7 @@ func TestAHardCapHoldsItsEdge(t *testing.T) {
 		if x >= 20 {
 			h = 100
 		}
-		g.Tiles[i].Height = h
+		g.Height[i] = h
 		c := basement(Shale, 0, h)
 		c.lay(Basalt, 0, 0, 50, 1000)
 		g.strata[i] = c
@@ -141,7 +141,7 @@ func TestAHardCapHoldsItsEdge(t *testing.T) {
 	y := g.H / 2
 	var capFall, footFall []float64
 	for x := 1; x < g.W; x++ {
-		hi, lo := g.Tiles[y*g.W+x].Height, g.Tiles[y*g.W+x-1].Height
+		hi, lo := g.Height[y*g.W+x], g.Height[y*g.W+x-1]
 		fall := (hi - lo) / TileSpan
 		if fall <= 0 {
 			continue
@@ -169,12 +169,12 @@ func TestARiverStepsDownOverAHardBed(t *testing.T) {
 		g.strata = make([]column, len(g.Tiles))
 		for i := range g.Tiles {
 			x := i % g.W
-			g.Tiles[i].Height = 4 * float64(x)
-			c := basement(Shale, 0, g.Tiles[i].Height)
+			g.Height[i] = 4 * float64(x)
+			c := basement(Shale, 0, g.Height[i])
 			c.lay(band, 0, 0, 60, 90)
 			c.lay(Shale, 0, 1, 90, 1000)
 			g.strata[i] = c
-			g.Tiles[i].Bedrock = c.rockAt(g.Tiles[i].Height)
+			g.Tiles[i].Bedrock = c.rockAt(g.Height[i])
 		}
 		g.shape()
 		return g
@@ -185,11 +185,11 @@ func TestARiverStepsDownOverAHardBed(t *testing.T) {
 	var hard, soft []float64
 	for x := 1; x < layered.W; x++ {
 		i := y*layered.W + x
-		if layered.strata[i].rockAt(layered.Tiles[i].Height) != Basalt {
+		if layered.strata[i].rockAt(layered.Height[i]) != Basalt {
 			continue
 		}
-		hard = append(hard, layered.Tiles[i].Height-layered.Tiles[i-1].Height)
-		soft = append(soft, plain.Tiles[i].Height-plain.Tiles[i-1].Height)
+		hard = append(hard, layered.Height[i]-layered.Height[i-1])
+		soft = append(soft, plain.Height[i]-plain.Height[i-1])
 	}
 	if len(hard) == 0 {
 		t.Fatalf("the shaped river never crosses the basalt")
@@ -242,7 +242,7 @@ func TestADrawnMapIsCutIntoItsPile(t *testing.T) {
 		for i := range g.Tiles {
 			c := &g.strata[i]
 			half := 0
-			if g.Tiles[i].Height >= line {
+			if g.Height[i] >= line {
 				half = 1
 			}
 			all[half]++
@@ -292,7 +292,7 @@ func TestHogbacksRunAlongTheStrike(t *testing.T) {
 			x, y := float64(i%side), float64(i/side)
 			dx, dy := (x-side/2)/(side/2), (y-side/2)/(side/2)
 			h := 20 + 200*math.Max(0, 1-(dx*dx+dy*dy)/2)
-			g.Tiles[i].Height = h
+			g.Height[i] = h
 			across := x
 			if !strikeNorth {
 				across = y
@@ -331,9 +331,9 @@ func TestHogbacksRunAlongTheStrike(t *testing.T) {
 				if g.Tiles[i].Bedrock != Basalt {
 					continue
 				}
-				h := g.Tiles[i].Height
-				ew += h - (g.Tiles[i-1].Height+g.Tiles[i+1].Height)/2
-				ns += h - (g.Tiles[i-g.W].Height+g.Tiles[i+g.W].Height)/2
+				h := g.Height[i]
+				ew += h - (g.Height[i-1]+g.Height[i+1])/2
+				ns += h - (g.Height[i-g.W]+g.Height[i+g.W])/2
 				n++
 			}
 		}

@@ -220,7 +220,7 @@ func (w *Land) Rates(regrowth float64) []float64 {
 		// read, at the chunk's mean height: see climateGrowth.
 		t := mid*g.W + min(g.W-1, c.X0+c.W/2)
 		mean, swing := w.yearAt(t)
-		mean += Lapse * (g.Tiles[t].Height - c.Height)
+		mean += Lapse * (g.Height[t] - c.Height)
 		w.rates[i] = regrowth * climateGrowth(temp, mean, swing, g.Rain(t))
 	}
 	return w.rates

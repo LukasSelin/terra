@@ -173,7 +173,7 @@ func (g *Grid) deepReceiversInto(recv []int32, run []float64) ([]int32, []float6
 	h, root := s.fill, s.root
 	clear(root)
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 		if p := g.PosOf(i); g.sunk(i) || g.outlet(p.X, p.Y) {
 			root[i] = true
 		}
@@ -798,11 +798,11 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 			continue
 		}
 		t := &g.Tiles[i]
-		if p := g.PosOf(i); !g.outlet(p.X, p.Y) || t.Height <= base {
+		if p := g.PosOf(i); !g.outlet(p.X, p.Y) || g.Height[i] <= base {
 			continue
 		}
 		c.edge[i] = base
-		c.f[i] = years * Erodibility * math.Sqrt(t.Flow) * rockErodibility(t) / g.span()
+		c.f[i] = years * Erodibility * math.Sqrt(g.Flow[i]) * rockErodibility(t) / g.span()
 	}
 }
 

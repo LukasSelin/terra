@@ -131,7 +131,7 @@ func (g *Grid) landslide(keep bool) {
 	queue := make([]int32, 0, n)
 	seen := make([]int32, n) // which runout last passed each tile, by number
 	for i := range g.Tiles {
-		h[i], soil[i] = g.Tiles[i].Height, float64(g.Tiles[i].Soil)
+		h[i], soil[i] = g.Height[i], float64(g.Soil[i])
 		queue = append(queue, int32(i))
 		queued[i] = true
 	}
@@ -199,7 +199,7 @@ func (g *Grid) landslide(keep bool) {
 		// What comes down: the soil first, then the rock the soil was made
 		// of, as the mixture that rock makes.
 		fromSoil := math.Min(d, soil[i])
-		came := parts(&g.Tiles[i])
+		came := g.parts(int(i))
 		for gr := range came {
 			came[gr] *= fromSoil / d
 		}
@@ -248,7 +248,7 @@ func (g *Grid) landslide(keep bool) {
 				for gr := range laid {
 					laid[gr] *= lay
 				}
-				mix(&g.Tiles[at], soil[at], laid)
+				g.mix(int(at), soil[at], laid)
 				h[at] += lay
 				soil[at] += lay
 				left -= lay
@@ -258,7 +258,7 @@ func (g *Grid) landslide(keep bool) {
 		}
 	}
 	for i := range g.Tiles {
-		g.Tiles[i].Height, g.Tiles[i].Soil = h[i], float32(soil[i])
+		g.Height[i], g.Soil[i] = h[i], float32(soil[i])
 	}
 }
 
@@ -355,7 +355,7 @@ func (g *Grid) cutBack() {
 	done := make([]bool, n)
 	q := slideQueue{at: g.slideScratch[:0]}
 	for i := range g.Tiles {
-		h[i] = g.Tiles[i].Height
+		h[i] = g.Height[i]
 		q.push(h[i], int32(i))
 	}
 	soft := 1 / g.meanHard()
@@ -397,6 +397,6 @@ func (g *Grid) cutBack() {
 	}
 	g.slideScratch = q.at[:0]
 	for i := range g.Tiles {
-		g.Tiles[i].Height = h[i]
+		g.Height[i] = h[i]
 	}
 }

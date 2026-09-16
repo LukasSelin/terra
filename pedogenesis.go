@@ -288,7 +288,7 @@ func (g *Grid) pedoClimateOf(i int) pedoClimate {
 	}
 	// Ground within a metre or two of the water it drains into is wet through
 	// for much of the year.
-	c.sodden = clamp01(1 - g.Tiles[i].Drain/2)
+	c.sodden = clamp01(1 - g.Drain[i]/2)
 	return c
 }
 
@@ -315,11 +315,10 @@ func dryness(wetness, wetter, drier float64) float64 {
 // carbonLevel is what the carbon on tile i comes to and how fast: input over
 // decay, for the soil it has, and the decay.
 func (g *Grid) carbonLevel(i int, c pedoClimate, cv cover) (level, rate float64) {
-	t := &g.Tiles[i]
 	grow := growthOf(c.temp) * ramp(c.temp, -5, 5) * c.wetnessShare()
 	middle := growthOf(MeanTemp) * ramp(MeanTemp, -5, 5) * (1 - math.Exp(-middleRunoff/weatherRunoff))
 	decay := math.Pow(2, (c.temp-MeanTemp)/10) * (1 - 0.6*c.sodden) * cv.decay / carbonYears
-	held := -math.Expm1(-float64(t.Soil)/carbonDepth) / -math.Expm1(-1/carbonDepth)
+	held := -math.Expm1(-float64(g.Soil[i])/carbonDepth) / -math.Expm1(-1/carbonDepth)
 	return carbonMiddle * grow / middle * cv.input * held / (decay * carbonYears), decay
 }
 
@@ -436,8 +435,8 @@ func (g *Grid) exposure(i int, h, pace, made float64) float64 {
 	}
 	e := math.Max(pace, soilDeepest)
 	age := h/e + math.Min(made, regolithDepth/e)
-	if t.Drain < FloodDepth {
-		age = math.Min(age, riverYoung+riverYears*math.Max(0, t.Drain)/FloodDepth)
+	if g.Drain[i] < FloodDepth {
+		age = math.Min(age, riverYoung+riverYears*math.Max(0, g.Drain[i])/FloodDepth)
 	}
 	return age
 }
@@ -472,7 +471,7 @@ func (g *Grid) laySoilState(i int, h, pace, made float64) {
 // epoch's book is kept: see restartBuried.
 func (g *Grid) deepExposure(i int, lowered, years float64) {
 	t := &g.Tiles[i]
-	if t.Wet() || t.Height <= g.base {
+	if t.Wet() || g.Height[i] <= g.base {
 		t.Exposed = 0
 		return
 	}
@@ -503,7 +502,7 @@ func (g *Grid) restartBuried(epoch int) {
 			continue
 		}
 		age := math.Min(float64(t.Exposed), epochYears/2)
-		if !t.Wet() && t.Height > g.base && t.Drain < FloodDepth/2 {
+		if !t.Wet() && g.Height[i] > g.base && g.Drain[i] < FloodDepth/2 {
 			age = math.Min(age, regolithDepth/fillRate) // the fill: see keepBook
 		}
 		t.Exposed = float32(age)

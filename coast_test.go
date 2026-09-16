@@ -18,12 +18,12 @@ func headland() (*Grid, func(i, k int) (float64, float64)) {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
 		g.tidal[i] = 1
-		t.Height, t.Bedrock = 20, Shale
+		g.Height[i], t.Bedrock = 20, Shale
 		if p.Y >= 20 {
 			t.Bedrock = Granite
 		}
 		if p.X < 20 {
-			t.Height, t.Terrain = 8, Water
+			g.Height[i], t.Terrain = 8, Water
 		}
 	}
 	return g, func(i, k int) (float64, float64) { return 8, 0 }
@@ -34,7 +34,7 @@ func heightsIn(g *Grid, x0, x1, y0, y1 int) float64 {
 	sum := 0.0
 	for y := y0; y <= y1; y++ {
 		for x := x0; x <= x1; x++ {
-			sum += g.At(geom.Pos{X: x, Y: y}).Height
+			sum += g.Height[g.Index(geom.Pos{X: x, Y: y})]
 		}
 	}
 	return sum
@@ -86,10 +86,10 @@ func spit() *Grid {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Height = 9
+		g.Height[i] = 9
 		t.Terrain = Water
 		if p.X >= 30 && p.Y < 30 {
-			t.Height, t.Terrain = 14, Grass
+			g.Height[i], t.Terrain = 14, Grass
 		}
 	}
 	return g
@@ -123,7 +123,7 @@ func TestSpitsPointDownDrift(t *testing.T) {
 		var down, up, land int
 		for i := range g.Tiles {
 			p := g.PosOf(i)
-			if g.Tiles[i].Height <= 9 || p.X >= 30 && p.Y < 30 {
+			if g.Height[i] <= 9 || p.X >= 30 && p.Y < 30 {
 				continue
 			}
 			if p.Y > 15 {
@@ -153,10 +153,9 @@ func TestSpitsPointDownDrift(t *testing.T) {
 func TestTheCoastConservesTheGround(t *testing.T) {
 	g, _ := headland()
 	for i := range g.Tiles {
-		t := &g.Tiles[i]
-		t.Soil, t.Sand, t.Clay = 2, 0.5, 0.2
+		g.Soil[i], g.Sand[i], g.Clay[i] = 2, 0.5, 0.2
 		if p := g.PosOf(i); p.X < 20 && p.X > 14 {
-			t.Height = 9.5 // a shallow shelf the sand moves over
+			g.Height[i] = 9.5 // a shallow shelf the sand moves over
 		}
 	}
 	s := g.surfOf(func(i, k int) (float64, float64) { return 7, -4 })

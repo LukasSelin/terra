@@ -163,14 +163,13 @@ func (g *Grid) layAbyss(depth, share []float64) {
 		if share[i] <= 0 {
 			continue
 		}
-		t := &g.Tiles[i]
-		to := t.Height + share[i]*((BasinDepth-depth[i])-t.Height)
-		by := t.Height - to
+		to := g.Height[i] + share[i]*((BasinDepth-depth[i])-g.Height[i])
+		by := g.Height[i] - to
 		if by <= 0 {
 			continue
 		}
-		g.abyss[i] = t.Height
-		t.Height = to
+		g.abyss[i] = g.Height[i]
+		g.Height[i] = to
 		if g.strata != nil {
 			g.strata[i].lift(-by)
 		}
@@ -199,7 +198,7 @@ func (g *Grid) abyssal(i int) bool { return g.abyss != nil && !math.IsNaN(g.abys
 // warmer than its coast, and the rain off it moved on every map.
 func (g *Grid) laidHeight(i int) float64 {
 	if !g.abyssal(i) {
-		return g.Tiles[i].Height
+		return g.Height[i]
 	}
 	return g.abyss[i]
 }
@@ -235,7 +234,7 @@ func (g *Grid) abyssWater() float64 {
 	sum := 0.0
 	for i, was := range g.abyss {
 		if !math.IsNaN(was) {
-			sum += was - g.Tiles[i].Height
+			sum += was - g.Height[i]
 		}
 	}
 	return sum / float64(len(g.Tiles))

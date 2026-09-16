@@ -6,6 +6,243 @@ measurements is in [README.md](README.md).
 
 ---
 
+
+## 2026-09-16 - S2 to the end: the view, and Flow, Drain, Soil, Sand and Clay beside the map
+
+**What this is.** The owner chose the read-only view over moving the game,
+so the rest of S2 followed on `claude/simd-kernels`, one field per commit
+in the plan's order, each with the digest on both builds, the budget
+rewritten, `TestMakingAWorldDoesNotDependOnTheGoroutines`, the full suite,
+and globe256 interleaved n=6 against the commit before it with
+`TERRA_PHASES=1`. Every world is as it was: `TERRA_DIGEST=check` passes
+after every commit.
+
+**The view.** `g.Tile(i)` and `g.TileAt(p)` are a `TileView`: the `*Tile`
+embedded, so its fields and methods come through as they are, and a
+method for each field the map keeps beside it - `Height()`, `Flow()`,
+`Drain()`, `Soil()`, `Sand()`, `Clay()` - plus `Silt()`, `Loam()` and
+`Wash()`, which were methods on the tile reading its sand and clay. It is
+read-only and a reading, not a copy; what is beside the map is written on
+the map. A game reads `g.Tile(i).Height()` whatever holds the height.
+
+**The texture helpers.** `Silt`, `Loam` and `Wash` read two fields that
+moved, so they are `siltAt`, `loamAt` and `washAt` on the Grid by index,
+the view's `Silt`, `Loam` and `Wash` for a reader by tile, and `siltOf`,
+`loamOf` and `washOf` as the pure statements the tests hold (`silt` was
+taken: it is the pass). `parts`, `hold`, `blend` and `mix` take an index
+too, and the creep's depth reads by index.
+
+**The crust.** When the plates move, the tile went with the ground and
+took its soil, sand and clay with it. Height had a copy on the crust
+already; Soil moved the digest on every world with a history until the
+crust kept a copy of it too, and Sand and Clay went in the same way. Flow
+and Drain did not need it: the drain reads them afresh before anything
+does.
+
+**globe256, each field against the commit before it** (interleaved,
+n=6, `TERRA_PHASES=1`; only passes that moved with p < 0.05):
+
+| field | world | passes that moved |
+|---|---|---|
+| Flow | 4.020 s -> 4.050 s, ~ (p=0.065) | `waterStep` +6.6%, `wear` +3.9% |
+| Drain | 4.077 s -> 4.040 s, ~ (p=0.180) | `move` -11.8%, `airEnv.currents` -1.7%, `reshape` +7.0% |
+| Soil | 4.012 s -> 4.051 s, ~ (p=0.065) | `keepBook` +12.1%, `flow` +4.2%, `waterStep` +2.2%, `wear` +1.9% |
+| Sand | 4.043 s -> 4.031 s, ~ (p=0.240) | `waterStep` -7.5%, `fluvial.solve` -13.1%, `keepBook` -5.8%, `wear` -3.4%, `flow` -3.1%, `move` +2.3% |
+| Clay | 4.023 s -> 4.036 s, ~ (p=0.589) | `joinUp` +11.1%, `basins` +6.1%, `move` -1.5%, `orographic` +1.2%, `waterStep` +1.1% |
+
+No field moved the world as a whole. The passes go both ways: a pass that
+reads one moved field inside a loop that still walks the tile for another
+touches two lines where it touched one (`waterStep` after Flow), and one
+that reads the moved fields in a run of their own gets them in order
+(`waterStep` after Sand, `move` after Drain, whose tile shrank by a third
+before it was copied round the crust). Bytes per world did not move
+beyond a tenth of a percent at any step.
+
+**The budget** (workers 4), from Height's rewrite to Clay's:
+
+| world | bytes after Height | bytes after Clay | | allocs after Height | allocs after Clay |
+|---|---|---|---|---|---|
+| valley | 10 328 112 | 10 348 688 | +0.20% | 1299 | 1304 |
+| ancient | 58 196 144 | 58 195 848 | -0.00% | 10214 | 10230 |
+| globe128 | 437 518 152 | 437 453 760 | -0.01% | 33605 | 33617 |
+
+The tile is 32 bytes, from 72 when the day started: the six fields took
+44 and left 28, which pads to 32, so a tile costs four bytes more than
+its fields and the drawn valley, which has no crust copy to lose, is the
+one that shows it. The worlds with a history give the crust's copy of the
+tiles back what the slices cost.
+
+**The suite** (`go test -timeout 60m .`), the commit after each field,
+in a second checkout: Flow ok (386 s), Drain ok (386 s), Soil ok (386 s),
+Sand ok (384 s), Clay ok (381 s). Main at 3124515 is ok with no failures.
+
+**`scripts/perf.sh check`** at the branch's end, quiet machine, against
+the 07:18 baseline:
+
+
+
+**What lreat has to do.** Its reads of `Tiles[i].Height`, `At(p).Height`
+and `t.Height` (and `.Flow`, `.Drain`, `.Sand`, `.Clay`) become
+`g.Tile(i).Height()`, `g.TileAt(p).Height()` and so on; its test writes
+(`Tiles[i].Height = 0`) become `g.Height[i] = 0`. About twenty-five sites.
+
+---
+
+## 2026-09-16 - The kernel layer, and Height off the Tile (track S)
+
+**What this is.** The SIMD track of the scaling plan, on
+`claude/simd-kernels` from main at 3124515, in two halves. S1 is a kernel
+layer: `kernel.go` is the statement of each kernel one number at a time,
+`kernel_simd_amd64.go` the same four lanes at a time under
+`GOEXPERIMENT=simd` on a processor with AVX2, `kernel_noasm.go` every other
+build, and `kernel_test.go` one fuzz test per kernel holding every lane to
+the statement over runs of every length to 4096 with negative noughts,
+NaNs, infinities and numbers of very different size in them. The day's
+`fade` and `grow` and the transform's butterflies moved into it from
+`pass_simd_amd64.go` and `fft_simd_amd64.go`, which are gone, and six
+kernels are new: `axpy`, `lerp`, `clamp`, `sumTree`, `stencil5`,
+`minmaxSelect`. S2 moved `Height` off the `Tile` and onto the `Grid` as a
+slice beside the map. Everything here leaves every world as it was:
+`TERRA_DIGEST=check` passes on both builds after every commit.
+
+**What the fuzzing found in the kernels that were there.** Two things,
+neither of which a world made today can hit.
+
+- The vector `grow` was wrong when no kind ages. Compared against no kind
+  at all it compared the lanes against nought, which is a kind - open
+  grass with nothing on it - and aged every such tile.
+  `TestGrowIsRipenAndReplenishTileByTile` failed under `GOEXPERIMENT=simd`
+  on main for it; nothing that makes a world calls `Grow`, so the digest
+  never saw it. It takes the scalar path now.
+- The vector butterflies keep a different NaN from the scalar ones where
+  both sides of the complex product's sum are NaN. The processor keeps the
+  first operand's bits, and the compiler is free to put either side of a
+  sum first, so the bits are not a fact about the statement: a lane is
+  held to be a NaN where the statement has one, and to every bit
+  everywhere else. Laying the product out in the compiler's order (one
+  permute more) was tried and does not hold either, for the same reason.
+  No field a map transforms holds a NaN.
+
+**The kernels, scalar against vector** (`PERF_BENCH='Kernel|FFT'
+scripts/perf.sh simd`, n=6 each, interleaved; the full table is
+[baseline/2026-09-16-simd-kernels.txt](baseline/2026-09-16-simd-kernels.txt)):
+
+| kernel, 1024 entries | scalar | simd | |
+|---|---|---|---|
+| FFT/64 | 1136 ns | 839 ns | -26% |
+| FFT/256 | 5.59 µs | 3.53 µs | -37% |
+| FFT/1024 | 26.2 µs | 15.5 µs | -41% |
+| fade | 331 ns | 139 ns | -58% |
+| grow | 771 ns | 490 ns | -36% |
+| axpy | 519 ns | 200 ns | -61% |
+| lerp | 522 ns | 272 ns | -48% |
+| clamp | 983 ns | 199 ns | -80% |
+| sumTree | 691 ns | 187 ns | -73% |
+| stencil5 | 978 ns | 502 ns | -49% |
+| minmaxSelect | 1208 ns | 259 ns | -79% |
+
+All p=0.002. The transform reads a little less than on 2026-09-15 (-41% at
+1024 against -49%) because the scalar side was measured on a quieter
+machine this time; the lanes are the same code.
+
+**What calls what.** `fade` and `grow` are the day's pass as before, the
+butterflies are the transform's, and `axpy` sums the upland mask's
+octaves a row at a time in `relief.go`, which is the one place in the
+package that had that exact loop. The other five have no caller yet.
+`sumTree` adds in the vector's order, which is not a loop's order, so it
+is for sums that are new or mean to move the world. `clamp` keeps a
+negative nought where `clamp01` turns it positive, and every `clamp01` is
+one number inside a larger expression. `stencil5` reads old values into
+new, and the package's stencils today are sweeps: `creep` is implicit and
+`relaxPotential` over-relaxes in place, which the plan leaves to the
+owner. `minmaxSelect` fixes the order among equals, and the scans in the
+package walk every third tile of one plate or filter as they go. No
+`float32` kernel was written: no caller has a loop of that shape
+(`ocean.go` clamps a float64 difference into a float32 store).
+
+**`scripts/perf.sh simd`** builds the test binary with and without
+`GOEXPERIMENT=simd`, runs the benchmarks on each turn and turn about
+`PERF_COUNT` times, and prints benchstat with the scalar build as the old
+column; it never fails. Documented in [README.md](README.md). The worlds
+on this machine, n=6, at 12697a6:
+
+
+
+**Height off the Tile.** `g.Height[i]` is what was `g.Tiles[i].Height`:
+allocated in `NewGrid`, copied in `Clone`, 344 sites in 55 files updated
+including `cmd/overview`. The crust keeps a copy of the heights beside
+its copy of the tiles while the plates move; `bankAt` gives the meander
+the bank's index; `Grid.Height(p)` the method is `Grid.HeightAt(p)` so
+the field can carry the name. `TestMakingAWorldDoesNotDependOnTheGoroutines`
+passes. Two binaries, before (ddb8bc8) and after (12697a6), globe256
+interleaved n=6, `TERRA_PHASES=1` for the passes:
+
+| | before | after | |
+|---|---|---|---|
+| globe256 | 4.043 s ± 1% | 4.047 s ± 1% | ~ (p=0.937) |
+| `pool` | 185.3 ms ± 2% | 176.2 ms ± 3% | -4.9% (p=0.002) |
+| `flow` | 215.8 ms ± 2% | 208.6 ms ± 3% | -3.4% (p=0.011) |
+| `joinUp` | 48.5 ms ± 6% | 41.0 ms ± 17% | -15% (p=0.015) |
+| `silt` | 172.7 ms ± 3% | 169.5 ms ± 4% | -1.9% (p=0.041) |
+| `move` | 235.4 ms ± 2% | 241.1 ms ± 1% | +2.4% (p=0.002) |
+| `waterStep` | 278.5 ms ± 2% | 283.8 ms ± 2% | +1.9% (p=0.002) |
+| `windsFor` | 577.8 ms ± 1% | 589.5 ms ± 2% | +2.0% (p=0.015) |
+| B/op | 1.517 GiB | 1.517 GiB | ~ |
+
+The pool's sort reads eight-byte strides now rather than sixty-four, and
+is measurably faster, as the plan expected; the passes that got slower
+read the height inside loops that still walk the tile for its other
+fields, so they touch two lines where they touched one. The world as a
+whole is unchanged in time and in bytes. Budget rewritten (workers 4):
+
+| world | bytes before | bytes after | allocs before | allocs after |
+|---|---|---|---|---|
+| valley | 10 333 272 | 10 328 112 | 1302 | 1299 |
+| ancient | 58 201 832 | 58 196 144 | 10222 | 10214 |
+| globe128 | 437 509 648 | 437 518 152 | 33585 | 33605 |
+
+A tile lost eight bytes and the map gained a slice of them; the bytes
+move by a few thousandths of a percent.
+
+**Where it stops, and the lreat question.** `Height` is a public field,
+and the lreat game reads it through its replace directive - `Tiles[i].Height`
+and `At(p).Height` in its tests, `t.Height` in `ui/ascii` - so lreat does
+not build against this branch until it moves with it. The plan's order
+was Height, Flow, Drain, Soil, Sand, Clay, and lreat's game code also reads
+`Flow`, `Drain`, `Sand` and `Clay` off the tile, so each further field
+deepens the break. The brief says to stop after Height if the owner has
+not decided, and this stops there. Two ways on:
+
+1. A read-only view: a `Grid.Tile(i)` that gathers a tile's slices and
+   fields into a value with a `Height()` on it, so a game reads
+   `g.Tile(i).Height()` whatever moves. Writes in lreat's tests
+   (`Tiles[i].Height = 0`) would still have to become `g.Height[i] = 0`.
+2. Move the game: lreat's sites are few (about ten for Height, another
+   fifteen for the other four), and a sed like the one used here does
+   most of it.
+
+The first keeps terra's public surface stable across the rest of S2; the
+second is less code and is what this branch did to `cmd/overview`.
+
+**`scripts/perf.sh check`** on the branch at 12697a6, quiet machine,
+against the 07:18 baseline: ok.
+
+| world | baseline | branch | |
+|---|---|---|---|
+| valley | 82.50 ms ± 3% | 79.34 ms ± 3% | -3.8% (p=0.004) |
+| ancient | 344.9 ms ± 1% | 339.9 ms ± 2% | -1.5% (p=0.015) |
+| globe256 | 4.117 s ± 2% | 4.019 s ± 0% | -2.4% (p=0.002) |
+
+The bytes read -18 to -31% against that baseline; that is the hydrology
+merge (bf5997c) between the baseline and this branch's base, not this
+branch, whose bytes are the budget's above.
+
+**The suite** (`go test -timeout 60m .`), branch at 12697a6 against main
+at 3124515 in a second checkout, run at the same time:
+
+
+
+---
 ## 2026-09-16 - The weather gate through the yardsticks (session A)
 
 **What this is.** The gate from `claude/world-creation-profiling-e734ef`

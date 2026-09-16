@@ -147,7 +147,7 @@ func (g *Grid) room() float64 {
 	}
 	sum := 0.0
 	for i := range g.Tiles {
-		sum += math.Max(0, g.sea-g.Tiles[i].Height)
+		sum += math.Max(0, g.sea-g.Height[i])
 	}
 	return sum / float64(len(g.Tiles))
 }
@@ -196,7 +196,7 @@ func (w *Land) basins(g *Grid, ocean []bool) {
 			}
 			return 1
 		}
-		ha, hb := g.Tiles[a].Height, g.Tiles[b].Height
+		ha, hb := g.Height[a], g.Height[b]
 		switch {
 		case ha < hb:
 			return -1
@@ -207,7 +207,7 @@ func (w *Land) basins(g *Grid, ocean []bool) {
 	})
 	if floor == 0 || floor == n {
 		for rank, i := range order {
-			g.Tiles[i].Height = spread[rank]
+			g.Height[i] = spread[rank]
 		}
 		return
 	}
@@ -218,7 +218,7 @@ func (w *Land) basins(g *Grid, ocean []bool) {
 	// coast and left the flats on one seed of four.
 	for rank := 0; rank < floor; rank++ {
 		i := order[rank]
-		g.Tiles[i].Height = BasinDepth * float64(rank) / math.Max(1, float64(floor-1))
+		g.Height[i] = BasinDepth * float64(rank) / math.Max(1, float64(floor-1))
 	}
 	// The continents, onto the drawn map's heights: the lowest of them onto the
 	// lowest the drawn map has, and so on up, over the whole of its spread.
@@ -226,7 +226,7 @@ func (w *Land) basins(g *Grid, ocean []bool) {
 	for k := 0; k < land; k++ {
 		i := order[floor+k]
 		at := int(float64(k) * float64(n-1) / math.Max(1, float64(land-1)))
-		g.Tiles[i].Height = BasinDepth + spread[at]
+		g.Height[i] = BasinDepth + spread[at]
 	}
 }
 

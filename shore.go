@@ -94,9 +94,8 @@ func deanSlope(d, y float64) float64 {
 // three sizes' logarithms, weighed by how much of each there is in its soil, or
 // in the soil its rock makes where it has none.
 func (g *Grid) medianGrain(i int) float64 {
-	t := &g.Tiles[i]
-	share := parts(t)
-	if t.Soil <= 0 {
+	share := g.parts(i)
+	if g.Soil[i] <= 0 {
 		sand, clay := g.TextureAt(g.PosOf(i))
 		share = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
 	}
@@ -137,7 +136,7 @@ func (g *Grid) tides() {
 	creek := make([]bool, n)
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Terrain != Water || g.underSea(i) || f[i] <= 0 || t.Flow < settleFlow {
+		if t.Terrain != Water || g.underSea(i) || f[i] <= 0 || g.Flow[i] < settleFlow {
 			continue
 		}
 		for j, steps := i, 0; steps < g.W; steps++ {
@@ -151,7 +150,7 @@ func (g *Grid) tides() {
 			if !g.underSea(j) {
 				continue
 			}
-			if g.Tiles[j].Height <= g.sea-float64(f[j])*flatTide || creek[j] {
+			if g.Height[j] <= g.sea-float64(f[j])*flatTide || creek[j] {
 				break
 			}
 			creek[j] = true
@@ -167,7 +166,7 @@ func (g *Grid) tides() {
 		t := &g.Tiles[i]
 		g.ebb[i] = 0
 		reach := float64(f[i]) * flatTide
-		band := f[i] > 0 && t.Height > g.sea-reach && t.Height <= g.sea+reach &&
+		band := f[i] > 0 && g.Height[i] > g.sea-reach && g.Height[i] <= g.sea+reach &&
 			g.Slope(g.PosOf(i)) <= deanSlope(g.medianGrain(i), shore[i])
 		if c := near[i]; band && c >= 0 && s.breaker[c] > 0 {
 			band = 2*reach/s.breaker[c] >= tideDominated
@@ -188,7 +187,7 @@ func (g *Grid) tides() {
 				g.Wood[i], g.Wild[i], g.Age[i], g.Fish[i] = 0, 0, 0, 0
 				g.Fertility[i], g.Rich[i] = 0, 0
 			}
-			g.ebb[i] = float32((g.sea - t.Height) / float64(f[i]))
+			g.ebb[i] = float32((g.sea - g.Height[i]) / float64(f[i]))
 		case t.Terrain == Flat && !band:
 			if under {
 				t.Terrain = Water // with no fish yet; they come back as water's do
@@ -336,7 +335,7 @@ func (g *Grid) tidalReach() []float32 {
 		total += size
 	}
 	depth := func(i int) float64 {
-		return math.Max(0, g.sea-g.Tiles[i].Height) + MeanHigh
+		return math.Max(0, g.sea-g.Height[i]) + MeanHigh
 	}
 
 	// The tree of channels off the open water.
@@ -369,7 +368,7 @@ func (g *Grid) tidalReach() []float32 {
 				continue
 			}
 			t := &g.Tiles[j]
-			if t.Terrain == Ice || (t.Wet() && g.Freezing(q)) || t.Height > g.sea+TideMax {
+			if t.Terrain == Ice || (t.Wet() && g.Freezing(q)) || g.Height[j] > g.sea+TideMax {
 				continue
 			}
 			reached[j], from[j] = true, i
@@ -417,7 +416,7 @@ func (g *Grid) tidalReach() []float32 {
 		}
 		tide[i] = share[i] * tide[p]
 		got := cmplx.Abs(tide[i])
-		if g.Tiles[i].Height > g.sea+got*TideMax {
+		if g.Height[i] > g.sea+got*TideMax {
 			continue
 		}
 		f[i] = float32(got)
@@ -585,7 +584,7 @@ var depositStress = [Grains]float64{Sand: sandStress, Silt: kroneStress, Clay: k
 func (g *Grid) flatShare(i int, f float64) [Grains]float64 {
 	var out [Grains]float64
 	a := f * MeanHigh
-	z := g.Tiles[i].Height - g.sea
+	z := g.Height[i] - g.sea
 	if a <= 0 || z >= a {
 		return out
 	}
@@ -649,7 +648,7 @@ func (g *Grid) tideWork(c *fluvial, recv []int32) {
 			if int(recv[i]) == i {
 				// What a root keeps it keeps whole, and silt is the middle of it.
 				c.keep[i] = share[Silt]
-				c.room[i] = math.Max(0, high-t.Height)
+				c.room[i] = math.Max(0, high-g.Height[i])
 				continue
 			}
 			for gr := range share {
@@ -696,10 +695,9 @@ func (g *Grid) silt(level func()) {
 		c.account(next, change, gained, func(int32, [Grains]float64) {})
 		for b := range c.shoal {
 			for _, i := range c.shoal[b] {
-				t := &g.Tiles[i]
-				t.Height += change[i]
-				mix(t, float64(t.Soil), gained[i])
-				t.Soil += float32(carrying(gained[i]))
+				g.Height[i] += change[i]
+				g.mix(int(i), float64(g.Soil[i]), gained[i])
+				g.Soil[i] += float32(carrying(gained[i]))
 			}
 		}
 		level()
@@ -754,9 +752,9 @@ func (g *Grid) bays(c *fluvial, recv []int32) {
 			t := &g.Tiles[i]
 			f := float64(g.tidal[i])
 			spring := 2 * f * (TideM2 + TideS2)
-			if t.Mark == None && g.sea-t.Height <= spring && !g.Frozen(g.PosOf(i)) {
+			if t.Mark == None && g.sea-g.Height[i] <= spring && !g.Frozen(g.PosOf(i)) {
 				c.trap[i] = g.flatShare(i, f)
-				c.room[i] = math.Max(0, g.sea+f*MeanHigh-t.Height)
+				c.room[i] = math.Max(0, g.sea+f*MeanHigh-g.Height[i])
 				if carrying(c.trap[i]) > 0 && c.room[i] > 0 {
 					shoal = append(shoal, int32(i))
 				}

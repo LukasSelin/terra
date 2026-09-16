@@ -39,9 +39,9 @@ func readFertility(g *Grid) fertilityReading {
 			r.inland, ni = r.inland+f, ni+1
 		}
 		switch {
-		case t.Drain < 2:
+		case g.Drain[i] < 2:
 			r.floor, nf = r.floor+f, nf+1
-		case t.Drain > 20:
+		case g.Drain[i] > 20:
 			r.hill, nh = r.hill+f, nh+1
 		}
 	}
@@ -109,7 +109,7 @@ func soilStateReadings() {
 		carbon := map[Terrain][2]float64{}
 		for i := range g.Tiles {
 			t := &g.Tiles[i]
-			if !forms(t) || t.Soil <= 0 {
+			if !forms(t) || g.Soil[i] <= 0 {
 				continue
 			}
 			ages = append(ages, float64(t.Exposed))
@@ -152,8 +152,8 @@ func soilStateReadings() {
 // The state fits in the padding the tile already had: a map pays nothing a
 // tile for its soil's age and chemistry. See memory.go.
 func TestTheSoilStateCostsATileNothing(t *testing.T) {
-	if got := unsafe.Sizeof(Tile{}); got != 72 {
-		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age", got)
+	if got := unsafe.Sizeof(Tile{}); got != 32 {
+		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 32 since the height, the flow, the drain and the soil with its sand and clay went beside the map", got)
 	}
 }
 
@@ -163,7 +163,7 @@ func one(rain, runoff float64) *Grid {
 	g := NewGrid(1, 1)
 	g.rain, g.runoff = []float64{rain}, []float64{runoff}
 	t := &g.Tiles[0]
-	t.Terrain, t.Bedrock, t.Soil, t.Drain = Grass, Basalt, 1, 50
+	t.Terrain, t.Bedrock, g.Soil[0], g.Drain[0] = Grass, Basalt, 1, 50
 	return g
 }
 
@@ -258,7 +258,7 @@ func TestNewGroundIsYoungGround(t *testing.T) {
 	g.ripenSoil(0, 100e3)
 	t0 := g.Tiles[0]
 	tl := &g.Tiles[0]
-	mix(tl, 1, [Grains]float64{Silt: 1})
+	g.mix(0, 1, [Grains]float64{Silt: 1})
 	if got := float64(tl.Exposed); math.Abs(got-50e3) > 1 {
 		t.Errorf("a metre laid on a metre of soil 100 kyr old leaves it %.0f years old", got)
 	}
@@ -291,12 +291,12 @@ func TestTheSoilIsOldWhereTheGroundIsStill(t *testing.T) {
 				}
 				continue
 			}
-			if tl.Mark != None || tl.Soil <= 0 {
+			if tl.Mark != None || g.Soil[i] <= 0 {
 				continue
 			}
 			age := float64(tl.Exposed)
 			switch round := roundOver(g, i); {
-			case tl.Drain < 2:
+			case g.Drain[i] < 2:
 				floor, nf = floor+age, nf+1
 			case round < -2:
 				crest, nc = crest+age, nc+1

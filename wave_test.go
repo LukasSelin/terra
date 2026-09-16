@@ -38,9 +38,9 @@ func pond(w, h, x0, x1, y0, y1 int, wrap bool) *Grid {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Height = 12
+		g.Height[i] = 12
 		if p.X >= x0 && p.X <= x1 && p.Y >= y0 && p.Y <= y1 {
-			t.Height, t.Terrain = 5, Water
+			g.Height[i], t.Terrain = 5, Water
 		}
 	}
 	return g
@@ -84,7 +84,7 @@ func TestTheFetchIsTheOpenWaterThatWay(t *testing.T) {
 	if got := float64(rf[dir(1, 0)][round.Index(geom.Pos{X: 7, Y: 10})]); got != openFetch {
 		t.Errorf("east round a globe that is sea all the way: %.1f m", got)
 	}
-	round.Tiles[round.Index(geom.Pos{X: 3, Y: 10})].Height = 12
+	round.Height[round.Index(geom.Pos{X: 3, Y: 10})] = 12
 	if got := float64(round.fetches()[dir(1, 0)][round.Index(geom.Pos{X: 5, Y: 10})]); got != 37*TileSpan {
 		t.Errorf("east round a globe to an island just west: %.1f m, want %.1f", got, 37*TileSpan)
 	}
@@ -100,12 +100,12 @@ func exposure() (*Grid, func(i, k int) (float64, float64)) {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Height, t.Soil, t.Sand, t.Clay = 10.2, 1, 0.4, 0.2
+		g.Height[i], g.Soil[i], g.Sand[i], g.Clay[i] = 10.2, 1, 0.4, 0.2
 		switch {
 		case p.X < 30 && !(p.X == 20 && p.Y >= 16):
-			t.Height, t.Terrain = 9, Water
+			g.Height[i], t.Terrain = 9, Water
 		case p.X > 30:
-			t.Height = 14
+			g.Height[i] = 14
 		}
 	}
 	return g, func(i, k int) (float64, float64) { return 8, 0 }
@@ -119,17 +119,17 @@ func TestAnExposedBeachIsSandier(t *testing.T) {
 	s := g.surfOf(wind)
 	before := 0.0
 	for i := range g.Tiles {
-		before += g.Tiles[i].Height
+		before += g.Height[i]
 	}
 	g.winnow(s, 5*yr)
 	after := 0.0
 	for i := range g.Tiles {
-		after += g.Tiles[i].Height
+		after += g.Height[i]
 	}
 	sand := func(y0, y1 int) float64 {
 		sum := 0.0
 		for y := y0; y <= y1; y++ {
-			sum += g.At(geom.Pos{X: 30, Y: y}).Sand
+			sum += g.Sand[g.Index(geom.Pos{X: 30, Y: y})]
 		}
 		return sum / float64(y1-y0+1)
 	}
@@ -137,7 +137,7 @@ func TestAnExposedBeachIsSandier(t *testing.T) {
 	if !(open > sheltered+0.1) || !(sheltered > 0.4) {
 		t.Errorf("the open beach is %.2f sand and the sheltered one %.2f, from 0.40", open, sheltered)
 	}
-	if deep := g.At(geom.Pos{X: 45, Y: 10}).Sand; deep != 0.4 {
+	if deep := g.Sand[g.Index(geom.Pos{X: 45, Y: 10})]; deep != 0.4 {
 		t.Errorf("ground well above the beach was sorted to %.2f sand", deep)
 	}
 	gone := g.exported[Sand] + g.exported[Silt] + g.exported[Clay]

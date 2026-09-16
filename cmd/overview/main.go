@@ -205,16 +205,16 @@ func measure(land *terra.Land) summary {
 		terr[t.Terrain]++
 		if !t.Wet() {
 			rock[t.Bedrock]++
-			heights = append(heights, t.Height)
-			s.HeightMin = math.Min(s.HeightMin, t.Height)
+			heights = append(heights, g.Height[i])
+			s.HeightMin = math.Min(s.HeightMin, g.Height[i])
 			s.LandRain += g.Rain(i)
 			s.LandRunoff += g.Runoff(i)
 			dry++
 		}
 		plates[t.Plate] = true
-		s.FloorMin = math.Min(s.FloorMin, t.Height)
-		s.HeightMax = math.Max(s.HeightMax, t.Height)
-		s.FlowMax = math.Max(s.FlowMax, t.Flow)
+		s.FloorMin = math.Min(s.FloorMin, g.Height[i])
+		s.HeightMax = math.Max(s.HeightMax, g.Height[i])
+		s.FlowMax = math.Max(s.FlowMax, g.Flow[i])
 		s.AgeMax = max(s.AgeMax, int(t.Formed))
 		temp := land.TempAt(p)
 		s.TempMin = math.Min(s.TempMin, temp)
@@ -222,7 +222,7 @@ func measure(land *terra.Land) summary {
 		if g.Frozen(p) {
 			frozen++
 		}
-		if t.Terrain == terra.Water && t.Flow > riverFlow {
+		if t.Terrain == terra.Water && g.Flow[i] > riverFlow {
 			rivers++
 		}
 	}
@@ -247,7 +247,7 @@ func measure(land *terra.Land) summary {
 	s.Flats = shareOf("tidal flats", terr[terra.Flat], n, "")
 	under := 0
 	for i := range g.Tiles {
-		if level := g.SeaLevel(); level >= 0 && g.Tiles[i].Height <= level {
+		if level := g.SeaLevel(); level >= 0 && g.Height[i] <= level {
 			under++
 		}
 	}
@@ -267,18 +267,18 @@ func measure(land *terra.Land) summary {
 	// real fall, which is where a river drops over the edge of the rock.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		if t.Terrain != terra.Water || t.Flow <= riverFlow {
+		if t.Terrain != terra.Water || g.Flow[i] <= riverFlow {
 			continue
 		}
 		p := g.PosOf(i)
-		var low *terra.Tile
+		low := -1
 		for _, d := range terra.Dirs {
 			q := g.Norm(geom.Pos{X: p.X + d.X, Y: p.Y + d.Y})
-			if g.In(q) && (low == nil || g.At(q).Height < low.Height) {
-				low = g.At(q)
+			if j := g.Index(q); g.In(q) && (low < 0 || g.Height[j] < g.Height[low]) {
+				low = j
 			}
 		}
-		if low != nil && low.Hard() <= t.Hard()-softer && t.Height-low.Height >= waterfallDrop {
+		if low >= 0 && g.Tiles[low].Hard() <= t.Hard()-softer && g.Height[i]-g.Height[low] >= waterfallDrop {
 			s.Waterfalls++
 		}
 	}
@@ -379,8 +379,8 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 
 	shade := func(p geom.Pos) float64 {
 		// light from the north-west, off the height difference across the tile
-		a := g.Height(g.Norm(geom.Pos{X: p.X - 1, Y: p.Y - 1}))
-		b := g.Height(g.Norm(geom.Pos{X: p.X + 1, Y: p.Y + 1}))
+		a := g.HeightAt(g.Norm(geom.Pos{X: p.X - 1, Y: p.Y - 1}))
+		b := g.HeightAt(g.Norm(geom.Pos{X: p.X + 1, Y: p.Y + 1}))
 		return clamp(1+(a-b)/(span*0.15), 0.75, 1.2)
 	}
 
@@ -398,7 +398,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			about: "What each tile is, shaded by the lie of the land, with the larger rivers picked out.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				c := terrainColor[t.Terrain]
-				if t.Terrain == terra.Water && t.Flow > riverFlow {
+				if t.Terrain == terra.Water && g.Flow[i] > riverFlow {
 					c = color.RGBA{80, 150, 220, 255}
 				}
 				if t.Wet() {
@@ -443,19 +443,19 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			about: fmt.Sprintf("Metres, the dry ground from %.0f to %.0f, hillshaded. Water in blue, to %.0f.", s.HeightMin, s.HeightMax, s.FloorMin),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				if t.Wet() {
-					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (t.Height-s.FloorMin)/math.Max(s.HeightMax-s.FloorMin, 1))
+					return lerpRGB(color.RGBA{20, 40, 90, 255}, color.RGBA{70, 130, 200, 255}, (g.Height[i]-s.FloorMin)/math.Max(s.HeightMax-s.FloorMin, 1))
 				}
-				return scaleRGB(ramp(elevation, (t.Height-s.HeightMin)/span), shade(p))
+				return scaleRGB(ramp(elevation, (g.Height[i]-s.HeightMin)/span), shade(p))
 			},
 		},
 		{
 			file: "flow", title: "Drainage",
 			about: fmt.Sprintf("Water through each tile on a log scale, up to %.0f m³/s: the rivers the land has had an age to find.", s.FlowMax),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
-				if t.Flow <= 0 {
+				if g.Flow[i] <= 0 {
 					return color.RGBA{10, 14, 24, 255}
 				}
-				v := clamp((math.Log10(t.Flow)-(flowLog-4))/4, 0, 1)
+				v := clamp((math.Log10(g.Flow[i])-(flowLog-4))/4, 0, 1)
 				return ramp(water, v)
 			},
 		},
@@ -565,7 +565,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				if t.Wet() {
 					return color.RGBA{20, 20, 20, 255}
 				}
-				return color.RGBA{byte(255 * clamp(t.Sand, 0, 1)), byte(255 * clamp(t.Silt(), 0, 1)), byte(255 * clamp(t.Clay, 0, 1)), 255}
+				return color.RGBA{byte(255 * clamp(g.Sand[i], 0, 1)), byte(255 * clamp(g.Tile(i).Silt(), 0, 1)), byte(255 * clamp(g.Clay[i], 0, 1)), 255}
 			},
 		},
 		{

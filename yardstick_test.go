@@ -157,7 +157,7 @@ var yardsticks = []yardstick{
 		name: "discharge exceedance exponent, small globe", unit: "", scale: "water", lo: 0.40, hi: 0.46, slow: true,
 		source: "Rodriguez-Iturbe et al. 1992; Rigon et al. 1996: discharge goes as area, so the same 0.40-0.46",
 		measure: func() float64 {
-			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Tiles[i].Flow })
+			return basinExceedance(smallGlobes(exceedanceGlobes), func(g *Grid, i int) float64 { return g.Flow[i] })
 		},
 	},
 	{
@@ -297,7 +297,7 @@ func landSlopes(gs []*Grid) []float64 {
 			if g.underSea(i) || g.Tiles[i].Wet() {
 				continue
 			}
-			p, h, steepest := g.PosOf(i), g.Tiles[i].Height, 0.0
+			p, h, steepest := g.PosOf(i), g.Height[i], 0.0
 			for _, off := range Dirs {
 				q := p
 				q.X, q.Y = p.X+off.X, p.Y+off.Y
@@ -308,7 +308,7 @@ func landSlopes(gs []*Grid) []float64 {
 				if off.X != 0 && off.Y != 0 {
 					run *= math.Sqrt2
 				}
-				steepest = math.Max(steepest, (h-math.Max(g.Height(q), g.sea))/run)
+				steepest = math.Max(steepest, (h-math.Max(g.HeightAt(q), g.sea))/run)
 			}
 			v = append(v, steepest)
 		}
@@ -326,7 +326,7 @@ func meanHypsometry(gs []*Grid) float64 {
 			if g.underSea(i) {
 				continue
 			}
-			h := g.Tiles[i].Height
+			h := g.Height[i]
 			lo, hi, mean, n = math.Min(lo, h), math.Max(hi, h), mean+h, n+1
 		}
 		sum += (mean/n - lo) / (hi - lo)
@@ -503,7 +503,7 @@ func treeOf(g *Grid) drainTree {
 		}
 	}
 	slices.SortFunc(tr.order, func(a, b int32) int {
-		if ha, hb := g.Tiles[a].Height, g.Tiles[b].Height; ha != hb {
+		if ha, hb := g.Height[a], g.Height[b]; ha != hb {
 			return cmp.Compare(hb, ha)
 		}
 		return cmp.Compare(a, b)
@@ -657,7 +657,7 @@ func valleyWavelength(gs []*Grid) float64 {
 				}
 				start := i - n + 1
 				for k := 0; k < n; k++ {
-					window[k] = g.Tiles[start+k].Height
+					window[k] = g.Height[start+k]
 				}
 				level(window)
 				for k := 1; k < n/2; k++ {
@@ -711,15 +711,15 @@ func diffusivity() float64 {
 	mid := g.W / 2
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Terrain, t.Mark, t.Owner, t.Flow = Grass, None, 0, 0
-		t.Sand, t.Clay = 0.3, 0.3
+		t.Terrain, t.Mark, t.Owner, g.Flow[i] = Grass, None, 0, 0
+		g.Sand[i], g.Clay[i] = 0.3, 0.3
 		x := float64(i%g.W-mid) * TileSpan
-		t.Height = 1000 - curve*x*x/2
+		g.Height[i] = 1000 - curve*x*x/2
 	}
 	i := g.H/2*g.W + mid
-	before := g.Tiles[i].Height
+	before := g.Height[i]
 	g.wear(ageYears)
-	return (before - g.Tiles[i].Height) / curve / ageYears
+	return (before - g.Height[i]) / curve / ageYears
 }
 
 // naturalLowering is how fast a valley nobody has touched comes down, over
@@ -765,7 +765,7 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			g := w.Grid
 			var slopes []int
 			for i := range g.Tiles {
-				if tl := &g.Tiles[i]; tl.Terrain != Water && tl.Drain > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
+				if tl := &g.Tiles[i]; tl.Terrain != Water && g.Drain[i] > FloodDepth/2 && !g.HasNeighbor(g.PosOf(i), (*Tile).Wet) {
 					tl.Terrain = cover
 					slopes = append(slopes, i)
 				}
@@ -775,7 +775,7 @@ func ploughedAndWooded() (ploughed, wooded float64) {
 			g.wear(ageYears)
 			lost := 0.0
 			for _, i := range slopes {
-				lost += before[i] - g.Tiles[i].Height
+				lost += before[i] - g.Height[i]
 			}
 			return lost / float64(len(slopes)) / ageYears * 1000
 		}
@@ -793,7 +793,7 @@ func meanderMigration() float64 {
 	big := func(g *Grid) []int {
 		var out []int
 		for i := range g.Tiles {
-			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && t.Flow >= meanderFlow {
+			if t := &g.Tiles[i]; t.Wet() && !g.underSea(i) && g.Flow[i] >= meanderFlow {
 				out = append(out, i)
 			}
 		}

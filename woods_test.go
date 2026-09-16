@@ -35,7 +35,7 @@ func TestWoodsStopWhereTheGroundDries(t *testing.T) {
 	g := NewGrid(20, 20)
 	for i := range g.Tiles {
 		// Dry in proportion to the distance from the water along the left.
-		g.Tiles[i].Drain = 2 * FloodDepth * float64(i%20) / 19
+		g.Drain[i] = 2 * FloodDepth * float64(i%20) / 19
 	}
 	g.readWoods()
 	if !g.HoldsWood(geom.Pos{X: 0, Y: 10}) {
@@ -65,7 +65,7 @@ func TestSteepGroundHoldsNoWood(t *testing.T) {
 		// A flat plain with one gully cut across it, damp everywhere: only
 		// the slope tells the tiles apart.
 		if x := i % 20; x >= 17 {
-			g.Tiles[i].Height = float64(x-16) * 20
+			g.Height[i] = float64(x-16) * 20
 		}
 	}
 	g.readWoods()

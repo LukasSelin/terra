@@ -109,13 +109,12 @@ func (g *Grid) WoodsAt(p geom.Pos) float64 {
 		if g.Treeless(p) || g.Barren(p) {
 			return 0
 		}
-		if len(g.warm) == len(g.Tiles) && biotemperature(g.meanOn(i, g.Tiles[i].Height), float64(g.swing[i])) < holdridgePolar {
+		if len(g.warm) == len(g.Tiles) && biotemperature(g.meanOn(i, g.Height[i]), float64(g.swing[i])) < holdridgePolar {
 			return 0
 		}
 		return clamp01(climateLine * g.waterRatio(i))
 	}
-	t := g.At(p)
-	damp := clamp01(1 - t.Drain/(2*FloodDepth))
+	damp := clamp01(1 - g.Drain[g.Index(p)]/(2*FloodDepth))
 	steep := clamp01(g.Slope(p) / max(1e-12, g.steepAt))
 	return damp * (1 - 0.6*steep)
 }

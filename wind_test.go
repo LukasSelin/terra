@@ -73,7 +73,7 @@ func TestTheWindCrossesTheIsobarsMoreOverLandThanSea(t *testing.T) {
 	sea.weather()
 	land := oceanGlobe(256, 128)
 	for i := range land.Tiles {
-		land.Tiles[i].Height = 50 + 40*float64((i*7919)%13)
+		land.Height[i] = 50 + 40*float64((i*7919)%13)
 	}
 	land.weather()
 	us, vs := zonalWind(sea, 40, 50, Year/2)
@@ -96,7 +96,7 @@ func continent(lat float64) *Grid {
 	for i := range g.Tiles {
 		x, y := i%g.W, i/g.W
 		if l := c.latitude(y); math.Abs(l-lat) < 20 && x >= 64 && x < 128 {
-			g.Tiles[i].Height = 60
+			g.Height[i] = 60
 		}
 	}
 	return g
@@ -187,7 +187,7 @@ func TestAHighRangeTurnsTheWindAside(t *testing.T) {
 		g := NewGrid(120, 60)
 		for i := range g.Tiles {
 			x := float64(i%g.W) - 60
-			g.Tiles[i].Height = 20 + height*math.Exp(-x*x/(2*6*6))
+			g.Height[i] = 20 + height*math.Exp(-x*x/(2*6*6))
 		}
 		g.weather()
 		// The share of the wind blowing east on the windward face.

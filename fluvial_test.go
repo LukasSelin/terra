@@ -175,17 +175,17 @@ func TestWearingAMapConservesTheGround(t *testing.T) {
 	w := NewLandSized(6, 40, 30)
 	g := w.Grid
 	for i := range g.Tiles {
-		g.Tiles[i].Height += 20 // well clear of the floor at nothing
+		g.Height[i] += 20 // well clear of the floor at nothing
 	}
 	g.drain()
 	before := 0.0
 	for i := range g.Tiles {
-		before += g.Tiles[i].Height
+		before += g.Height[i]
 	}
 	g.wear(5 * ageYears)
 	after := 0.0
 	for i := range g.Tiles {
-		after += g.Tiles[i].Height
+		after += g.Height[i]
 	}
 	gone := g.exported[Sand] + g.exported[Silt] + g.exported[Clay]
 	if gone <= 0 {
@@ -253,12 +253,12 @@ func TestATidalCoastConservesTheGround(t *testing.T) {
 		g := w.Grid
 		before := 0.0
 		for i := range g.Tiles {
-			before += g.Tiles[i].Height
+			before += g.Height[i]
 		}
 		g.wear(3 * ageYears)
 		after := 0.0
 		for i := range g.Tiles {
-			after += g.Tiles[i].Height
+			after += g.Height[i]
 		}
 		gone := g.exported[Sand] + g.exported[Silt] + g.exported[Clay]
 		return heights(g), before - after, gone

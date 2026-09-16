@@ -22,7 +22,7 @@ func roundOver(g *Grid, i int) float64 {
 		if off.X != 0 && off.Y != 0 {
 			near = 0.5
 		}
-		round += near * (g.At(q).Height - g.Tiles[i].Height)
+		round += near * (g.Height[g.Index(q)] - g.Height[i])
 	}
 	return round
 }
@@ -42,7 +42,7 @@ func TestSoilIsThinOnCrestsAndDeepInHollows(t *testing.T) {
 			if tl.Wet() || tl.Terrain.Tidal() || tl.Mark != None {
 				continue
 			}
-			h := float64(tl.Soil)
+			h := float64(g.Soil[i])
 			switch round := roundOver(g, i); {
 			case round < -2:
 				crest, nc = crest+h, nc+1
@@ -88,7 +88,7 @@ func ridge(soil float32) *Grid {
 	g.Wrap = true
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Terrain, t.Soil, t.Sand, t.Clay = Grass, soil, 0.3, 0.3
+		t.Terrain, g.Soil[i], g.Sand[i], g.Clay[i] = Grass, soil, 0.3, 0.3
 	}
 	return g
 }
@@ -116,12 +116,12 @@ func TestACrestIsAsRoundAsItsLoweringOverItsDiffusivity(t *testing.T) {
 				if y := i / g.W; y == 0 || y == g.H-1 {
 					continue // the feet, which the rivers at them hold where they are
 				}
-				g.Tiles[i].Height += change[i] + lift*years
+				g.Height[i] += change[i] + lift*years
 			}
 		}
 		top := g.H / 2 * g.W
-		above, below := g.Tiles[top-g.W].Height, g.Tiles[top+g.W].Height
-		return (above - 2*g.Tiles[top].Height + below) / (TileSpan * TileSpan)
+		above, below := g.Height[top-g.W], g.Height[top+g.W]
+		return (above - 2*g.Height[top] + below) / (TileSpan * TileSpan)
 	}
 	// D at SoilScale of soil: see Diffusivity.
 	d := Diffusivity * Grass.Hold()
@@ -140,7 +140,7 @@ func TestTheCreepMovesOnlySoilItHas(t *testing.T) {
 	g := ridge(0.01)
 	for i := range g.Tiles {
 		y := float64(i/g.W) - 10
-		g.Tiles[i].Height = 400 - 0.4*TileSpan*math.Abs(y) // a sharp crest with steep flanks
+		g.Height[i] = 400 - 0.4*TileSpan*math.Abs(y) // a sharp crest with steep flanks
 	}
 	n := len(g.Tiles)
 	change := make([]float64, n)
@@ -151,8 +151,8 @@ func TestTheCreepMovesOnlySoilItHas(t *testing.T) {
 	for i := range change {
 		sum += change[i]
 		moved += math.Abs(change[i])
-		if lost[i] > float64(g.Tiles[i].Soil)*(1+1e-9) {
-			t.Errorf("tile %d gave %.4f m of soil and had %.4f", i, lost[i], g.Tiles[i].Soil)
+		if lost[i] > float64(g.Soil[i])*(1+1e-9) {
+			t.Errorf("tile %d gave %.4f m of soil and had %.4f", i, lost[i], g.Soil[i])
 		}
 	}
 	if moved == 0 {
@@ -172,15 +172,15 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 		t.Helper()
 		before, scale, soil := 0.0, 0.0, 0.0
 		for i := range g.Tiles {
-			before += g.Tiles[i].Height
-			scale += math.Abs(g.Tiles[i].Height)
-			soil += float64(g.Tiles[i].Soil)
+			before += g.Height[i]
+			scale += math.Abs(g.Height[i])
+			soil += float64(g.Soil[i])
 		}
 		g.landslide(true)
 		after, soilAfter := 0.0, 0.0
 		for i := range g.Tiles {
-			after += g.Tiles[i].Height
-			soilAfter += float64(g.Tiles[i].Soil)
+			after += g.Height[i]
+			soilAfter += float64(g.Soil[i])
 		}
 		if math.Abs(after-before) > 1e-12*scale {
 			t.Errorf("%s: the ground came to %.9g before the slides and %.9g after", name, before, after)
@@ -200,7 +200,7 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 				if off.X != 0 && off.Y != 0 {
 					run *= math.Sqrt2
 				}
-				if fall := (g.Tiles[i].Height - g.At(q).Height) / run; fall > standMost*Critical+slideLeast/run+1e-9 {
+				if fall := (g.Height[i] - g.Height[g.Index(q)]) / run; fall > standMost*Critical+slideLeast/run+1e-9 {
 					t.Fatalf("%s: tile %v stands %.3f over %v after the slides", name, p, fall, q)
 				}
 			}
@@ -210,13 +210,13 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 	g := w.Grid
 	for i := range g.Tiles {
 		if p := g.PosOf(i); p.X%9 == 4 && p.Y%5 == 2 {
-			g.Tiles[i].Height += 300 // a pillar no ground stands as
+			g.Height[i] += 300 // a pillar no ground stands as
 		}
 	}
 	try("valley", g)
 	globe := NewLand(3, smallGlobe()).Grid
 	for i := range globe.Tiles {
-		globe.Tiles[i].Height *= 3 // the ranges stood up three times as steep
+		globe.Height[i] *= 3 // the ranges stood up three times as steep
 	}
 	try("small globe", globe)
 }
@@ -296,9 +296,9 @@ func TestTheSunnySideFacesTheEquator(t *testing.T) {
 	face := func(y int, southward bool) float64 {
 		for i := range g.Tiles {
 			ty := float64(i / g.W)
-			g.Tiles[i].Height = 1000 + 8*ty
+			g.Height[i] = 1000 + 8*ty
 			if southward {
-				g.Tiles[i].Height = 1000 - 8*ty
+				g.Height[i] = 1000 - 8*ty
 			}
 		}
 		return g.Sunlight(geom.Pos{X: 10, Y: y})
