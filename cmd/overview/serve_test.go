@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -117,5 +118,76 @@ func TestGenerateWantsAPost(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("GET /generate answered %s, want 405", res.Status)
+	}
+}
+
+// A tile on a run's map answers for itself, and gives the same answer from a
+// world made again as from the one kept.
+func TestATileSaysWhyItIsSo(t *testing.T) {
+	dir := t.TempDir()
+	h := newServer(dir, options{Preset: "valley"})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	form := url.Values{"preset": {"valley"}, "seed": {"3"}, "w": {"32"}, "h": {"24"}, "day": {"1"}}
+	res, err := client.PostForm(srv.URL+"/generate", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	page := res.Header.Get("Location")
+
+	ask := func(query string) (int, string) {
+		t.Helper()
+		res, err := client.Get(srv.URL + page + "tile?" + query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(body)
+	}
+
+	status, kept := ask("x=5&y=7")
+	if status != http.StatusOK {
+		t.Fatalf("tile answered %d: %s", status, kept)
+	}
+	var place whyPlace
+	if err := json.Unmarshal([]byte(kept), &place); err != nil {
+		t.Fatal(err)
+	}
+	if place.Pos.X != 5 || place.Pos.Y != 7 || place.Terrain == "" || len(place.Aspects) != 4 {
+		t.Errorf("tile answered %+v, want tile (5, 7) with its terrain and four aspects", place)
+	}
+	if len(place.Aspects[0].Sentences) == 0 {
+		t.Errorf("the tile gave no reason for its height: %+v", place)
+	}
+
+	// Let the world go, and ask again.
+	h.keptMu.Lock()
+	h.kept = nil
+	h.keptMu.Unlock()
+	if status, again := ask("x=5&y=7"); status != http.StatusOK || again != kept {
+		t.Errorf("the world made again answered %d:\n%s\nwant\n%s", status, again, kept)
+	}
+
+	for _, c := range []struct {
+		path string
+		want int
+	}{
+		{page + "tile?x=32&y=0", http.StatusBadRequest},
+		{page + "tile?x=a&y=0", http.StatusBadRequest},
+		{"/runs/nothing/tile?x=0&y=0", http.StatusNotFound},
+		{"/runs/.hidden/tile?x=0&y=0", http.StatusNotFound},
+	} {
+		res, err := client.Get(srv.URL + c.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != c.want {
+			t.Errorf("GET %s answered %s, want %d", c.path, res.Status, c.want)
+		}
 	}
 }
