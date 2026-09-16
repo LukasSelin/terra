@@ -225,7 +225,13 @@ func weatherDrawing(land *terra.Land, shade func(geom.Pos) float64) drawing {
 			c := ramp(pressure, (pres[i]-970)/70)
 			// An isobar where the pressure crosses a multiple of four
 			// between this tile and the next one along or down.
-			q := g.Norm(geom.Pos{X: p.X + 1, Y: p.Y})
+			// The next tile along, which on a valley stops at the edge.
+			q := geom.Pos{X: p.X + 1, Y: p.Y}
+			if g.Wrap {
+				q = g.Norm(q)
+			} else {
+				q.X = min(q.X, g.W-1)
+			}
 			r := geom.Pos{X: p.X, Y: min(p.Y+1, g.H-1)}
 			band := func(v float64) int { return int(math.Floor(v / 4)) }
 			if band(pres[i]) != band(pres[g.Index(q)]) || band(pres[i]) != band(pres[g.Index(r)]) {

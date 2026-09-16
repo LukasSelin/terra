@@ -151,8 +151,12 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	// And the world's account of eight of its tiles. See why.go.
+	if err := writeWhy(filepath.Join(*out, "why.html"), land, *seed, *preset); err != nil {
+		fail(err)
+	}
 	abs, _ := filepath.Abs(page)
-	fmt.Printf("\nwrote %d maps and %s\n", len(layers), abs)
+	fmt.Printf("\nwrote %d maps, why.html and %s\n", len(layers), abs)
 }
 
 func fail(err error) {
