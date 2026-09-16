@@ -67,6 +67,13 @@ var ErrHistoryFile = errors.New("not a history this build can read")
 // once its ground stage is over, before the rest of the world is made. See
 // LandFromHistory.
 func MakeLandKeepingHistory(seed uint64, t Terms, out io.Writer) (*Land, error) {
+	return MakeLandWatching(seed, t, out, nil)
+}
+
+// MakeLandWatching is MakeLand, keeping the world's history in out where out
+// is not nil, as MakeLandKeepingHistory does, and telling watch of each stage
+// as it ends where watch is not nil. The world is the same world either way.
+func MakeLandWatching(seed uint64, t Terms, out io.Writer, watch StageWatch) (*Land, error) {
 	if err := t.Check(); err != nil {
 		return nil, err
 	}
@@ -76,11 +83,13 @@ func MakeLandKeepingHistory(seed uint64, t Terms, out io.Writer) (*Land, error) 
 	defer phase("Generate")()
 	l := unmade(seed, t)
 	g := l.newGround(t)
-	l.generateFrom(g, t, stageGround, stageSea)
-	if err := l.writeHistory(out, g, stageSea); err != nil {
-		return nil, err
+	l.generateFrom(g, t, stageGround, stageSea, watch)
+	if out != nil {
+		if err := l.writeHistory(out, g, stageSea); err != nil {
+			return nil, err
+		}
 	}
-	l.generateFrom(g, t, stageSea, len(stages))
+	l.generateFrom(g, t, stageSea, len(stages), watch)
 	l.handOver()
 	return l, nil
 }
@@ -89,6 +98,13 @@ func MakeLandKeepingHistory(seed uint64, t Terms, out io.Writer) (*Land, error) 
 // after the history, run on it. It is the land MakeLandKeepingHistory made
 // when it wrote the file.
 func LandFromHistory(in io.Reader) (*Land, error) {
+	return LandFromHistoryWatching(in, nil)
+}
+
+// LandFromHistoryWatching is LandFromHistory, telling watch, where it is not
+// nil, of the stage the history stopped after, with the grid as the file
+// kept it, and then of each stage run on it as it ends. See StageWatch.
+func LandFromHistoryWatching(in io.Reader, watch StageWatch) (*Land, error) {
 	r := bufio.NewReaderSize(in, 1<<20)
 	h, err := readHistoryHeader(r)
 	if err != nil {
@@ -113,7 +129,10 @@ func LandFromHistory(in io.Reader) (*Land, error) {
 		return nil, fmt.Errorf("%w: a %dx%d grid under %dx%d terms", ErrHistoryFile, g.W, g.H, h.terms.Width, h.terms.Height)
 	}
 	defer phase("Generate")()
-	l.generateFrom(g, h.terms, h.next, len(stages))
+	if watch != nil {
+		watch(Stages()[h.next-1], l, g)
+	}
+	l.generateFrom(g, h.terms, h.next, len(stages), watch)
 	l.handOver()
 	return l, nil
 }

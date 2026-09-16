@@ -11,6 +11,90 @@ It is a module of its own, so run it from here:
     go run . -preset ancient -out ancient.zarr    made from its history
     go run . -preset globe -out globe.zarr
 
+## Terms
+
+`-preset` gives the terms to start from, and `-terms file.json` a whole
+`terra.Terms` as JSON instead (as the store's `terms` attribute holds
+them). The flags override either: `-w`, `-h`, `-epochs`, `-sea`, `-water`,
+`-wrap`, `-wetness`, `-woods` and `-growth` (`shape`, `tuned` or
+`climate`), `-glacial` and `-max`.
+
+    go run . -preset globe -wetness 1.5 -woods tuned -out wet.zarr
+    go run . -terms wet.json -glacial -out wet-glacial.zarr
+
+## The experiment loop
+
+A tuning idea is tried by writing the world before and after it, and
+asking where they differ. Three things make that fast.
+
+**Keep the history once.** The history (the ground stage) is two thirds
+of making a globe. `-keep-history file` writes it as the world is made;
+`-from-history file` makes the world again from it, on the seed and terms
+the file carries, in the time the stages after it take. A flag that would
+change the seed or the terms is refused with `-from-history`.
+
+    go run . -preset globe -keep-history globe.history -out base.zarr
+
+A kept history is only valid for changes **after the ground stage**
+(`stages.go`: ground -> sea -> shape -> cut -> coast -> cover). The file
+is the grid as the code that wrote it left it: a change to the history
+itself, the plates, or anything the ground stage runs, is not in it, and a
+world made from it is the old history with the new later stages. The file
+also refuses to load once the Grid's layout changes (a field added or
+retyped). A change to the terms is a new history too: keep one per terms.
+
+**Export base and tweak from it, and diff.**
+
+    go run . -from-history globe.history -out base.zarr     # before the change
+    # ... change the shaping, cutting, coast or cover ...
+    go run . -from-history globe.history -out tweak.zarr
+    go run ./zarrdiff base.zarr tweak.zarr
+
+**Bisect by stage.** `-stages dir` writes a store at the end of every
+stage, `dir/1-ground.zarr` to `dir/6-cover.zarr` (and `-out` only when it
+is given). Each has a root attribute `stage`, and leaves out the groups
+the grid has nothing for yet: `climate/` until the coast stage, `features/`
+until the end of the cover, and `strata/` and `book/` where the map has
+none. `6-cover.zarr` is the store `-out` writes, byte for byte. From a
+history, `1-ground.zarr` is the grid as the file kept it.
+
+    go run . -from-history globe.history -stages base      # before
+    go run . -from-history globe.history -stages tweak     # after
+    go run . -stages-diff base tweak
+
+`-stages-diff a b` compares the two directories stage by stage, file by
+file (a store is written the same every time from the same grid), leaving
+out the root `zarr.json` so that a change of terms is not a difference
+until it reaches the grid. It prints each stage as the same or the arrays
+that differ, then the first stage that differs and the `zarrdiff` command
+that says by how much. It exits 0 when every stage is the same, 1 when one
+differs and 2 on an error. Both directories must be written with the same
+`-chunk`, `-shard` and `-gzip`.
+
+```
+1-ground the same
+2-sea    the same
+3-shape  differs: ground/flow
+4-cut    differs: ground/clay, ground/drain, ground/flow, ground/height, ...
+...
+first differs at 3-shape; to see how:
+  go run ./zarrdiff base/3-shape.zarr tweak/3-shape.zarr
+```
+
+(A valley at `-wetness 2` against 1: the wetter air first shows in the
+flow the shape stage drains.)
+
+What it buys, on a globe (`-preset globe`, 1024 by 512; Ryzen 9 3900X, 24
+threads, other sessions on the machine):
+
+| run | making | writing |
+|---|---|---|
+| `-preset globe -out` | 76 s | 1.4 s |
+| `-from-history globe.history -out` | 16-17 s | 1.1-1.8 s |
+| `-from-history globe.history -stages` | 22.5 s, the six stores included (0.6-0.9 s each) | |
+
+The history file is 198 MiB.
+
 ## Layout
 
 Every array of the map is H by W, dimensions `y` (the row) and `x` (the
@@ -20,7 +104,7 @@ group=...)` finds them whichever group it opens.
 
 | group | arrays |
 |---|---|
-| `/` | attributes only: `seed`, `terms` (JSON text), `width`, `height`, `wrap` (0 or 1), `sea_level`, `chunk_side`, `tile_span` |
+| `/` | attributes only: `stage` (`cover` for a finished world), `seed`, `terms` (JSON text), `width`, `height`, `wrap` (0 or 1), `sea_level`, `chunk_side`, `tile_span` |
 | `ground/` | `height`, `flow`, `drain`, `soil`, `sand`, `clay` |
 | `tile/` | `terrain`, `bedrock`, `mark`, `owner`, `fenced`, `plate`, `formed`, `leached`, `exposed`, `lime`, `salt`, `carbon` |
 | `layers/` | `traffic`, `age`, `fish`, `wood`, `wild`, `fertility`, `rich`, `sward`, `kinds` |

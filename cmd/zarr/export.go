@@ -22,7 +22,7 @@ import (
 // own - y and x in metres from the centre of tile (0, 0), bed from 0 - so
 // that xarray finds them whichever group it opens.
 //
-//	/                 seed, terms, width, height, wrap, sea_level, chunk_side,
+//	/                 stage, seed, terms, width, height, wrap, sea_level, chunk_side,
 //	                  tile_span, and the store's consolidated metadata
 //	ground/           height, flow, drain, soil, sand, clay
 //	tile/             terrain, bedrock, mark, owner, fenced, plate, formed,
@@ -74,10 +74,18 @@ type exporter struct {
 // what is written does not depend on the order they finish in. The root's
 // metadata is written again last, with every node's in it.
 func export(ctx context.Context, land *terra.Land, store zarr.Store, o options) (int, error) {
+	return exportStage(ctx, land, land.Grid, "cover", store, o)
+}
+
+// exportStage is export of g, the grid land has as the stage named ends (see
+// terra.StageWatch), which may be part-way through its making. A group the
+// grid has nothing for yet is left out: the climate before the coast stage,
+// the features before the cover's end, and the strata and the book where
+// the map has none.
+func exportStage(ctx context.Context, land *terra.Land, g *terra.Grid, stage string, store zarr.Store, o options) (int, error) {
 	if err := o.check(); err != nil {
 		return 0, err
 	}
-	g := land.Grid
 	// terms is a JSON string, and wrap a number, because xarray will not
 	// write an attribute that is a map or a bool to netCDF.
 	terms, err := json.Marshal(land.Terms)
@@ -86,6 +94,7 @@ func export(ctx context.Context, land *terra.Land, store zarr.Store, o options) 
 	}
 	root, err := zarr.CreateGroup(ctx, store, "", map[string]any{
 		"generator":  "terra cmd/zarr",
+		"stage":      stage,
 		"seed":       land.Seed(),
 		"terms":      string(terms),
 		"width":      g.W,
@@ -118,7 +127,9 @@ func export(ctx context.Context, land *terra.Land, store zarr.Store, o options) 
 	e.ground(map2("ground", map[string]any{"about": "the land itself: its height, its water and its soil"}))
 	e.tiles(map2("tile", map[string]any{"about": "what each tile is, and what time has made of its soil"}))
 	e.layers(map2("layers", map[string]any{"about": "the ground that changes by the day, as it stood when the world was made"}))
-	e.climate(map2("climate", map[string]any{"about": "the year on each tile"}))
+	if hasYear(g) {
+		e.climate(map2("climate", map[string]any{"about": "the year on each tile"}))
+	}
 	if beds := g.AppendBeds(nil, 0); len(beds) > 0 {
 		e.strata(map2("strata", map[string]any{"about": "the pile of beds under each tile, from the top down", "beds_max": terra.BedsMax}))
 	}
@@ -136,6 +147,17 @@ func export(ctx context.Context, land *terra.Land, store zarr.Store, o options) 
 		return 0, err
 	}
 	return len(e.jobs), consolidate(ctx, store, e.nodes)
+}
+
+// hasYear reports whether g's climate is written down: YearAt is nothing on
+// every tile until the coast stage writes it.
+func hasYear(g *terra.Grid) bool {
+	for i := range g.Tiles {
+		if m, c, w := g.YearAt(i); m != 0 || c != 0 || w != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func boolInt(b bool) int {
