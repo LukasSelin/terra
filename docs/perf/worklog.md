@@ -60,6 +60,60 @@ once, and expects exit 0 and 1.
 
 ---
 
+## 2026-09-16 - Phase 3, step 1: the history on a grid of its own
+
+**What this is.** The first step of the history grid (phase 3 of
+[scaling-plan.md](scaling-plan.md)), on `claude/history-grid` from main at
+3973917. No world moves: `TERRA_DIGEST=check` passes, the budget and pinned
+pass counts hold, the goroutine-independence test and the short tier pass.
+
+**What changed.** `history` ends where the history's own work ends - the
+floor's depth and the rock's rise read off the crust, the plates kept, the
+rock settled, the heights softened - and returns a `deepStage` (the ocean
+crust, the floor depths and shares, the uplift). The rest of what it did,
+which is the map's and not the planet's, is `settleHistory` on the map: the
+rescaling by rank (`basins`, `normalise`, `restrata`), the slides, the deep
+floor, `expose` and the drain. Between the two, `historyGround` gives the
+grid the history runs on and `handDown` (`historygrid.go`) lays a finished
+history onto the map when that grid is not the map: heights, uplift, floor
+depth and share read between the history's tiles (bilinear, wrapping east
+to west on a globe); the tile, its soil, its line of the book and its pile
+of beds from the nearest history tile, the beds moved with the ground; the
+ocean crust by nearest; the water, weather and lakes read afresh on the map.
+The history grid is the map (`historyShrink` is 1) everywhere but in tests.
+
+Found on the way, which step 2 is: `deepSpan`, the kilometres a history
+tile is, is not a fact about the planet. It follows from the plate count and
+spacing, which follow from the grid's width, and about fifteen constants
+of the history are counted in tiles (the plate count, the molten era's
+cells, the floods' grain, the bow and grain of the ranges, `seamLeast`,
+`marginRamp`, the fold's wave). A history on a coarser grid is so far a
+history of another planet, laid onto this map.
+
+**Tests.** `TestAHistoryHandedDownOntoItsOwnSizeIsItself`: handed down onto
+a map of its own size by the reading between tiles, a history is itself to
+the bit (ancient, globe128). `TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner`:
+from half the size, no height outside the history's range, every tile the
+nearest history tile's, beds where they stood against the ground, every
+plate on the map. `TestAWorldOnACoarserHistoryIsAWorld`: ancient on a
+half-size history is independent of the goroutines and resumes from its
+history file to the bit.
+
+**What it measured**, for scale only, since these worlds are not today's
+(the full globe, one run each, quiet machine):
+
+| history grid | globe wall | land share | plates | forest tiles |
+|---|---:|---:|---:|---:|
+| 1024x512 (the map) | 49.7 s | 0.394 | 48 | 45 797 |
+| 512x256 | 26.7 s | 0.329 | 46 | 41 797 |
+| 256x128 | 15.7 s | 0.375 | 27 | 41 792 |
+
+The quarter-size history has 27 plates to the map's 48 because the plate
+count is read off the grid's width: the size-dependence step 2 takes out
+before any of these is judged by the yardsticks.
+
+---
+
 ## 2026-09-16 - The suite's histories kept between runs
 
 **What this is.** The yardsticks' share of the history file, on
