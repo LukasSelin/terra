@@ -439,6 +439,103 @@ anything, because a chunk at a metre is millions of cells of float32
 arithmetic and nothing else. Larger areas come from phases 3 and 4; finer
 detail from level 2; a large world at a metre needs both.
 
+### Track P: the causal record (why is this desert here?)
+
+Added 2026-09-16. The owner wants every feature to carry its causal chain
+and the world to answer for itself: *the Arken Mountains formed 18.4
+million years ago from the collision of the Northern and Western plates;
+they block the westerlies, and the country in their lee gets 240 mm a
+year.*
+
+**The principle.** The world is already causal: plates meet, the crust
+crumples, the ground rises, the air climbs it and rains, the lee dries,
+the woods thin. Every pass computes an effect from causes it reads. A
+causal record is those passes writing down, beside the effect, which
+cause and how much, at the level where the cause acts. It is never a
+second model and never a narrative heuristic: an explanation is a reading
+of recorded quantities, so it is as true as the simulation and no truer.
+That is what keeps it honest, and it is what keeps it cheap.
+
+**What exists already.** A history keeps a `record` per tile - melt,
+pluton, crush, what was laid, epochs under the sea - and throws it away at
+`settleRock`, leaving the tile its `Plate` and `Formed`. The strata keep
+every bed with its epoch. The vapour budget keeps, per air cell and phase,
+the water in the air, the evaporation, the rain and the orographic term.
+Lakes know whether they are closed and salt. `cmd/overview` classifies
+landforms and Köppen climates. The facts are mostly there; they are not
+kept, not joined into things, and not askable.
+
+**Three layers.**
+
+1. *Facts, the ledger.* A few bytes per element at the level the cause
+   acts, written by the pass that computes the effect:
+   - the history (level 0): per tile, the meeting that raised it most -
+     the two plates, its kind (collision, arc, rift, hotspot), the epoch,
+     the metres - and the epoch and kind of its last burial. The `record`
+     is kept as part of the history stage's output instead of dropped.
+   - the air cells: per phase, beside the budget already kept, the upwind
+     cell the water came from and the relief that wrung it out (the
+     orographic patch's ridge cell). Cells are a small fraction of the
+     tiles, so this costs almost nothing.
+   - the map (level 1): nothing new per tile. The woods, the soil and the
+     terrain are functions with known inputs, and an explanation reads
+     the inputs: rain, warmth, drain, soil.
+   - game time: an append-only list of events per feature - a lake gone
+     to salt, a coast moved, a range worn - written by `Erode` and the
+     sea-level cycle. Later.
+2. *Features, the registry.* Things with an id, an extent and a few
+   numbers, made once at the end of `Generate` and again after each
+   `Erode`: uplift belts (the tiles raised by one meeting, which is what
+   "the Arken Mountains" is), basins and rivers (the route trees by
+   outlet), lakes, dry regions and other climate components, forests,
+   coasts, plates. Ids are deterministic (ordered by lowest tile). terra
+   does not name them - a name is a culture's - but it exposes a naming
+   hook, and `cmd/overview` carries a default namer from the seed.
+3. *Questions.* `Why(p, aspect)` walks the features at a tile and the
+   ledger behind them and returns a chain: `[]Cause{Feature, Kind,
+   Quantity, Unit, When}`. Structured first, so a game renders it its own
+   way, so tests assert the chain rather than prose, and so the game can
+   append its own causes (why the settlement is here) to the world's. The
+   sentence is a renderer over the chain, in `cmd/overview` and in the
+   game.
+
+**Attribution has to be a rule, or it is a story.** "Rain shadow" is
+claimed only by a defined reading of the recorded budget: a cell whose
+orographic term is negative in the phase that carries most of its year's
+water, or whose upwind cell's water was taken by a ridge within the
+patch's reach, is in that ridge's shadow, by the share the ledger says.
+And the counterfactual can be computed rather than asserted: `weather()`
+costs about a second on the globe, so `WhatIf(feature)` flattens a belt
+to the ground around it, reruns the weather on a copy, and reports the
+rain the lee would have had. That is the one place the record does run
+the model again, and it runs it on request, never during creation.
+
+**The cost.** Roughly ten bytes per history tile and per air cell, held
+by the heap budget; one union-find over the map per registry build,
+about half a second on the globe; nothing per epoch beyond writes the
+passes already make. The chain walk is microseconds.
+
+**Where it lands in the architecture.** Each stage's output (phase 3)
+carries its facts, so the ledger is the stages remembering what they
+did. The registry is built from level 1 and hands the metre level and
+the Unreal export their feature polygons and chains, so a game can show
+them. The determinism contract covers the chain: the same seed gives the
+same answer.
+
+**Milestones.**
+
+- **P1** (one week, after the overnight merges; touches `keepBook` and
+  `settleRock`, which the abyss branch also touches, so rebase on it).
+  Keep the book with the meeting and the burial. Registry for belts,
+  basins, lakes, plates and climate components. `Why(p, aspect)` for
+  height, rock, rain and cover. A "why" page in `cmd/overview` for a
+  handful of tiles per preset. Tests: a fixed chain on a fixed seed; the
+  budget diff.
+- **P2**: the air-cell ledger, the shadow rule, and `WhatIf` by rerunning
+  the weather.
+- **P3**: events over game time, and the naming hook.
+- **Export**: features and chains as JSON beside the Unreal manifest.
+
 ## 5. Guards, so it does not drift back
 
 The heap budget and `scripts/perf.sh check` exist. They catch bytes and
