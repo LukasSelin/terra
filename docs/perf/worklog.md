@@ -157,6 +157,27 @@ The full suite was not run again on this base: the branch's only code
 against main is the two-line read proven a no-op, so its list is main's
 at 3cf543d by construction, and that is the morning's `perf.sh check`.
 
+**The morning, on a quiet machine** (2026-09-16 07:18, nothing else
+running, all 24 threads). `scripts/perf.sh check` on the branch at main
+639d7d5 passed: valley -17.6%, ancient -20.4%, globe256 -23.6% against
+[baseline/2026-09-16-0039-small.txt](baseline/2026-09-16-0039-small.txt),
+bytes and allocs within 0.5%. Both sides carry the gate, so that gap is the
+night's load in the old baseline, not the branch, and the check said to take
+a new one: [baseline/2026-09-16-0718-small.txt](baseline/2026-09-16-0718-small.txt)
+(CIs ±1-3%) and, for the globe,
+[baseline/2026-09-16-0718-globe.txt](baseline/2026-09-16-0718-globe.txt).
+Against the last quiet pre-gate baseline, 2026-09-15-2230, which also
+predates the sweep precompute and the SIMD butterflies:
+
+| world | 2230 (pre-gate) | 0718 (quiet) | |
+|---|---|---|---|
+| valley | 135.0 ms ± 6% | 82.5 ms ± 3% | -38.9% (p=0.002) |
+| ancient | 419.6 ms ± 4% | 344.9 ms ± 1% | -17.8% (p=0.002) |
+| globe256 | 7.34 s ± 5% | 4.12 s ± 2% | -43.9% (p=0.002) |
+| globe (count 3) | 81.4 / 81.5 / 91.7 s, 19.9 GiB | 54.7 / 55.0 / 56.1 s, 16.9 GiB | about -33% |
+
+These are the numbers a check of B and C should be read against.
+
 ---
 
 ## 2026-09-16 - The guards: a scaling benchmark, the peak in the budget, pinned pass counts, a CLAUDE.md, and a suite in two tiers
