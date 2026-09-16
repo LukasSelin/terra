@@ -327,3 +327,32 @@ func TestTheSoilIsOldWhereTheGroundIsStill(t *testing.T) {
 	}
 	check("twenty ages on", w.Grid, false)
 }
+
+// The key sorts a soil by what time and the climate have made of it: bare
+// ground is no soil, a surface a century old has only its parent material, a
+// thin one of a few thousand years a subsoil, the same under a metre of soil
+// the dark topsoil of a prairie, and one the rain has stripped of its bases
+// over a long age is an Ultisol.
+func TestTheKeySortsASoilByWhatTimeMadeOfIt(t *testing.T) {
+	bare := one(900, 400)
+	bare.Soil[0] = 0
+	if got := bare.SoilOrderOf(0); got != NoSoil {
+		t.Errorf("bare ground is %v", got)
+	}
+	for _, c := range []struct {
+		rain, runoff, soil, years float64
+		want                      SoilOrder
+	}{
+		{900, 400, 1, 100, Entisol},
+		{900, 400, 0.2, 3e3, Inceptisol},
+		{900, 400, 1, 3e3, Mollisol},
+		{2500, 1800, 1, 1e6, Ultisol},
+	} {
+		g := one(c.rain, c.runoff)
+		g.Soil[0] = float32(c.soil)
+		g.ripenSoil(0, c.years)
+		if got := g.SoilOrderOf(0); got != c.want {
+			t.Errorf("%.0f mm of rain, %.0f through, %.1f m, %.0f years: %v, want %v", c.rain, c.runoff, c.soil, c.years, got, c.want)
+		}
+	}
+}

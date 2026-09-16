@@ -12,9 +12,8 @@ import (
 // so that the two can be worked on at once: they join realYardsticks when the
 // package is loaded and are held the same way. They read what a tile carries
 // today - how deep its soil is, its sand and clay, and its organic carbon - on
-// the worlds the other yardsticks have already made. What a tile does not
-// carry yet - a soil order - stays
-// here as a known gap of workstream I, the soil's formation, until it does.
+// the worlds the other yardsticks have already made - and the order of soil
+// those make it, as SoilOrderOf keys it.
 func init() {
 	realYardsticks = append(realYardsticks, soilYardsticks...)
 }
@@ -80,63 +79,52 @@ var soilYardsticks = []realYardstick{
 	// read against the earth's top metre directly. What open grass comes to
 	// under the map's middling climate is set at the earth's grassland figure
 	// (carbonMiddle), so the mean over the land says as much about the spread
-	// of climates and covers as about that one number.
+	// of climates and covers as about that one number. The biomes are read
+	// where there is soil, as Jobbágy and Jackson's pits were dug; the mean
+	// over the land counts bare ground at nothing.
 	{yardstick: yardstick{
 		name: "soil organic carbon, forest over desert (PET/P > 5), globe", unit: "x", scale: "water", lo: 1.5, hi: 3.2, slow: true,
 		source:  "Jobbágy & Jackson 2000 Table 3: top-metre SOC 9.3-18.6 kg C/m2 under forests (boreal to tropical evergreen) against 6.2 in deserts",
 		measure: func() float64 { return carbonByBiome(globes()).forestOverDesert },
-	},
-		gap: "known gap: I - carbonLevel grows only with the runoff through the ground, and a desert's is near nothing, so its soils hold 0.03 kg C/m2 against 6.2 and a wood's 3.75 is 136x that",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "soil organic carbon, tundra (-15 to -3 C) over desert (PET/P > 5), globe", unit: "x", scale: "water", lo: 1.5, hi: 3.2, slow: true,
 		source:  "Jobbágy & Jackson 2000 Table 3: top-metre SOC 14.2 kg C/m2 in tundra against 6.2 in deserts; cold wet soils keep what grows",
 		measure: func() float64 { return carbonByBiome(globes()).tundraOverDesert },
-	},
-		gap: "known gap: I - nothing grows into carbonLevel below -5 C and no permafrost freezes the carbon in, so the tundra's soils hold 0.00 kg C/m2 against 14.2: 0.007x",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "mean soil organic carbon, top metre, land, globe", unit: "kg C/m2", scale: "water", lo: 9, hi: 13, slow: true,
 		source:  "Jobbágy & Jackson 2000: 1502 Pg C in the top metre over the ice-free land, ~11 kg C/m2",
 		measure: func() float64 { return carbonByBiome(globes()).land },
-	},
-		gap: "known gap: I - a third of the land holds no carbon (outcrops, ground with no soil, which carbonLevel scales it by, and the tundra), the deserts next to none, and the woods 3.75: 1.93 kg C/m2",
-	},
+	}},
 
 	// 12. The soil orders. The earth's ice-free land by the order of soil on
-	// it. A tile now carries some of the state an order is read from - its
-	// exposure age, leaching, carbonate, salt and carbon (pedogenesis.go) -
-	// but nothing classifies it, and some of what the keys ask for - a clay B
-	// horizon, iron and aluminium oxides, permafrost in the soil - is not
-	// carried at all (see S3 of the tectonics and soil scope).
+	// it, as SoilOrderOf keys a tile from what it carries - its exposure age,
+	// leaching, weatherable minerals, carbonate, salt and carbon, and the
+	// climate over it. What the keys ask of a pit, a clay B horizon or the
+	// iron and aluminium oxides, is read off what makes them, not carried.
 	{yardstick: yardstick{
 		name: "land share of Aridisols", unit: "", scale: "ground", lo: 0.09, hi: 0.15, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Aridisols ~12% of ice-free land",
-		measure: func() float64 { return math.NaN() },
-	},
-		gap: "known gap: I - no soil orders: a tile carries carbonate and salt, but nothing classifies a soil as aridic from them",
-	},
+		measure: func() float64 { return soilOrderShare(globes(), Aridisol) },
+	}},
 	{yardstick: yardstick{
 		name: "land share of Gelisols", unit: "", scale: "ground", lo: 0.06, hi: 0.11, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Gelisols ~8.6% of ice-free land",
-		measure: func() float64 { return math.NaN() },
-	},
-		gap: "known gap: I - no soil orders: permafrost is in the climate but no soil carries it, is churned by it or is classified by it",
-	},
+		measure: func() float64 { return soilOrderShare(globes(), Gelisol) },
+	}},
 	{yardstick: yardstick{
 		name: "land share of Oxisols", unit: "", scale: "ground", lo: 0.05, hi: 0.10, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Oxisols ~7.5% of ice-free land",
-		measure: func() float64 { return math.NaN() },
+		measure: func() float64 { return soilOrderShare(globes(), Oxisol) },
 	},
-		gap: "known gap: I - no soil orders: a tile carries its exposure age and leaching, but no iron and aluminium oxides, and nothing classifies an old leached tropical soil as oxic",
+		gap: "known gap: I - the hot humid land is young: its surfaces are a median of fourteen thousand years old, and few have weathered out three quarters of their minerals (SoilOrderOf): 0.024",
 	},
 	{yardstick: yardstick{
 		name: "land share of Mollisols", unit: "", scale: "ground", lo: 0.05, hi: 0.09, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Mollisols ~6.9% of ice-free land",
-		measure: func() float64 { return math.NaN() },
-	},
-		gap: "known gap: I - no soil orders: grass keeps its carbon deeper and loses its bases slower than a wood does, but nothing classifies a dark base-rich mollic epipedon from that",
-	},
+		measure: func() float64 { return soilOrderShare(globes(), Mollisol) },
+	}},
 }
 
 type soilDepthReading struct{ hillslope, floor float64 }
@@ -254,6 +242,11 @@ func carbonByBiome(gs []*Grid) carbonReading {
 				c := float64(t.Carbon)
 				w := math.Cos(latitudeOf(g, i/g.W) * math.Pi / 180)
 				ls, ln = ls+w*c, ln+w
+				// The biomes are Jobbágy and Jackson's means over soil pits,
+				// and nobody digs one in bare ground.
+				if !forms(t) || g.Soil[i] <= 0 {
+					continue
+				}
 				temp := g.meanTempOf(i)
 				switch {
 				case t.Terrain == Forest:
@@ -281,4 +274,33 @@ func carbonByBiome(gs []*Grid) carbonReading {
 		}
 		return r
 	})
+}
+
+// soilOrderShare is the share of the worlds' dry land, by area, whose soil is
+// of order o. Ground with no soil counts, as the rock and the shifting sand do
+// on the USDA's map.
+func soilOrderShare(gs []*Grid, o SoilOrder) float64 {
+	shares := remember(fmt.Sprintf("soilorders/%p/%d", gs[0], len(gs)), func() [SoilOrderCount]float64 {
+		var s [SoilOrderCount]float64
+		var land float64
+		for _, g := range gs {
+			if g.air == nil {
+				continue
+			}
+			for i := range g.Tiles {
+				t := &g.Tiles[i]
+				if g.underSea(i) || t.Wet() || t.Terrain.Tidal() {
+					continue
+				}
+				w := math.Cos(latitudeOf(g, i/g.W) * math.Pi / 180)
+				s[g.SoilOrderOf(i)] += w
+				land += w
+			}
+		}
+		for k := range s {
+			s[k] /= land
+		}
+		return s
+	})
+	return shares[o]
 }

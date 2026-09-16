@@ -86,10 +86,11 @@ the vector arithmetic to the tile-by-tile statement of it.
 go run ./cmd/overview -preset globe -seed 3
 ```
 
-makes a world and writes `overview/index.html`: its terrain, biomes, landforms, height,
-drainage, rain, runoff, wind - as a colour wheel, and as streamlines for the year and
-for each solstice - the day's weather, tides, bedrock, plates, rock age, soil, temperature
-and woods, one map each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
+makes a world and writes `overview/index.html`: its terrain, biomes, Köppen–Geiger
+types, landforms, height, drainage, rain, runoff, wind - as a colour wheel, and as
+streamlines for the year and for each solstice - the day's weather, tides, bedrock,
+plates, rock age, soil, soil texture, depth, chemistry and carbon, the age of the
+surface, temperature and woods, one map each, beside the numbers. `-preset` is `valley`, `ancient` or `globe`, and
 `-w`, `-h`, `-epochs`, `-sea`, `-wrap`, `-scale`, `-day` and `-out` override it.
 `-max` makes the world as big as the free memory allows, in the shape the
 preset or `-w` and `-h` give it.
