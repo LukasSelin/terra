@@ -815,6 +815,28 @@ type seam struct {
 	// across, an arc put its mountains on the sea floor it was consuming.
 	side uint8
 	stay bool
+	// with is the plate on the other side of the meeting: what the book
+	// writes down beside side as the pair that raised the ground. See ledger.
+	with uint8
+}
+
+// raisedBy is what kind of meeting this seam is, for the book: made tells a
+// collision from an arc, and the sign of the lift tells a rift, where the
+// plates part and the ground drops, from islands coming up between two
+// floors that are closing.
+func (s *seam) raisedBy() MeetingKind {
+	switch s.makes {
+	case crushed:
+		return Collision
+	case arc:
+		return Arc
+	case melt:
+		if s.lift < 0 {
+			return Rift
+		}
+		return Islands
+	}
+	return NoMeeting
 }
 
 // made is what a meeting makes of the rock at its axis, as against what it
@@ -887,6 +909,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 	grain := w.grain(g)
 	bow := w.bow(g)
 	book := make([]record, len(g.Tiles))
+	// And the part of it that is kept when the history is over. See ledger.
+	g.openBook(epochs)
 	// What the plates have done to each other, kept across the epochs because
 	// welding is something that happens over an age and not in one.
 	touch := make([]float64, plateCap*plateCap)
@@ -937,6 +961,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) {
 		uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
+	g.keepPlates(plates)
 	g.settleRock(book, cr.ocean)
 	for k := 0; k < smoothing; k++ {
 		g.soften()
@@ -2284,7 +2309,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		// An arc and a trench are the two halves of one plate going under
 		// another, and each belongs to its own side of it.
 		under := worst > 0 && cr.ocean[i] != cr.ocean[j]
-		g.seam[i] = seam{lift: lift, makes: makes, found: true, side: t.Plate, stay: under}
+		g.seam[i] = seam{lift: lift, makes: makes, found: true, side: t.Plate, stay: under, with: worstAt}
 		g.seamQueue = append(g.seamQueue, int32(i))
 	}
 
@@ -2314,7 +2339,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				continue
 			}
 			g.seam[j] = seam{lift: here.lift, away: step, makes: here.makes,
-				found: true, side: here.side, stay: here.stay}
+				found: true, side: here.side, stay: here.stay, with: here.with}
 			g.seamQueue = append(g.seamQueue, int32(j))
 		}
 	}
@@ -2402,6 +2427,9 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			by := s.lift * grain[i] * profile(s.makes, s.away, wide, gap*grain[i])
 			g.Height[i] += by
 			cr.lifted[i] += by
+			// And the book, where this is the most any meeting has done to
+			// the tile. See ledger.
+			g.ledger[i].meet(s.side, s.with, s.raisedBy(), epoch, by)
 			// And the beds go up with it, by as much as the ground over them.
 			// A belt is raised most at its axis and least at its feet, so the
 			// beds on its flanks are left tipped away from it: the hogbacks
@@ -2462,6 +2490,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// over the pile, which is the hard cap a plateau of
 					// basalt stands on long after the rift has gone quiet.
 					col.bury(Basalt, uint8(epoch), 0, g.Height[i], math.Abs(by))
+					g.ledger[i].bury(byLava, epoch)
 				}
 				if s.makes != nothing {
 					t.Formed = uint8(epoch)
@@ -2470,7 +2499,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		}
 		g.Height[i] = math.Max(0, g.Height[i])
 	}
-	w.hotspot(g, book, cr)
+	w.hotspot(g, book, cr, epoch)
 	cr.accrete()
 	// What the epoch raised, folded into how fast the ground has lately been
 	// rising. See upliftMemory.
@@ -3017,7 +3046,7 @@ func liftOf(mineOcean, otherOcean bool, closing float64) (float64, made) {
 // and it is what puts a volcano where nothing is colliding. Where they are is
 // drawn once for a world and does not move, so the same places go on erupting
 // age after age under whatever crust is passing over them.
-func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
+func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 	g.piles()
 	if g.hot == nil {
 		// Two of them on a valley, and as many again for every valley's width
@@ -3056,6 +3085,9 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust) {
 				book[j].melt += lift
 				// The cone is lava laid on whatever was there.
 				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Height[j]-lift, g.Height[j])
+				// The book: a hotspot is one plate's, with no other.
+				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, Hotspot, epoch, lift)
+				g.ledger[j].bury(byLava, epoch)
 				if cr.ocean[j] {
 					cr.built[j] += lift
 				}
@@ -3102,9 +3134,15 @@ func (g *Grid) keepBook(book []record, epoch int) {
 				book[i].laid[Silt] += marineMud * 0.3 * fill
 				t.Formed = uint8(epoch)
 				g.strata[i].bury(Shale, uint8(epoch), 0, g.Height[i], marineMud*bedPerFill)
+				g.ledger[i].bury(byMud, epoch)
 			} else {
 				rock, thick := g.quietFloor(i)
 				g.strata[i].bury(rock, uint8(epoch), 0, g.Height[i], thick)
+				if rock == Limestone {
+					g.ledger[i].bury(byLime, epoch)
+				} else {
+					g.ledger[i].bury(byMud, epoch)
+				}
 			}
 			continue
 		}
@@ -3123,6 +3161,7 @@ func (g *Grid) keepBook(book []record, epoch int) {
 				rock = Sandstone
 			}
 			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(g.Sand[i]))), g.Height[i], bedPerFill)
+			g.ledger[i].bury(byFill, epoch)
 		}
 	}
 }

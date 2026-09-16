@@ -311,4 +311,7 @@ func (w *Land) Generate(cfg Terms) {
 	w.Forest0 = g.Forest()
 
 	w.Grid = g
+	// The things the tiles make up, joined once the ground and the water
+	// are where they are going to be. See features.go.
+	g.readFeatures()
 }

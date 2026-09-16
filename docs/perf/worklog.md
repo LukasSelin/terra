@@ -7,6 +7,129 @@ measurements is in [README.md](README.md).
 ---
 
 
+## 2026-09-16 - P1: the causal record. The book kept, features, and Why
+
+**What this is.** Track P of the plan (`docs/perf/scaling-plan.md`), the
+first milestone, on `claude/causal-record`: a history keeps a book of what
+it did to each tile instead of dropping it at `settleRock`; a registry
+joins the tiles into features; `Why(p, aspect)` reads the book and the
+registry back as a chain of causes; `cmd/overview` renders eight of them as
+sentences on a `why.html`. The principle held throughout: an explanation is
+a reading of recorded quantities, never a heuristic invented afterwards.
+The items land one commit each and this entry is extended as they do.
+Every world is as it was: `TERRA_DIGEST=check` passes after every commit.
+
+**The book (item 1).** `ledger.go`: twelve bytes a tile - the meeting that
+did most to its height (the two plates, its kind, its epoch, the metres, as
+`float32`) and the wear since (tens of metres, `uint16`), and the epoch and
+kind of its last burial - written by `tectonics`, `hotspot`, `keepBook` and
+`wear` where they compute the lift, the burial and the wear. The seam
+carries the plate on its far side now (`seam.with`), which the book needs
+and nothing else reads. The metres are the history's own and are not
+rescaled with the heights: a seam raises tens of kilometres in an epoch of
+four million years and the weather and the settling take most of it back,
+while the ground stands a few kilometres high and is handed to the map by
+rank; carrying an increment larger than any height through the rescaling
+of standing heights made a 45 km lift into 4.5 km on a 258 m map, so the
+book says whose metres it gives instead. The final weld map of the plates
+(`plateRoot`, a byte a plate) is kept so a plate number the book wrote
+down in an early epoch can be followed to the plate that stands.
+
+Budget, `TERRA_PERF_UPDATE=1` before and after item 1 (bytes are checked to
+1%, allocations to 3%):
+
+| world | bytes before | bytes after | per history tile | allocs before | allocs after |
+|---|---|---|---|---|---|
+| valley (no history) | 10 348 688 | 10 354 136 | - (run noise) | 1 304 | 1 312 |
+| ancient | 58 195 848 | 58 232 048 | +12.6 | 10 230 | 10 226 |
+| globe128 | 437 453 760 | 437 547 440 | +11.4 | 33 617 | 33 606 |
+
+Twelve bytes a tile is the struct's size, and the rest of the difference is
+the run-to-run noise the budget's slack covers. Nothing per epoch beyond the
+writes; the `record` is not grown, since anything added to it costs its
+bytes too.
+
+**The features (item 2).** `features.go`: a registry built on one goroutine
+in tile order at the end of `Generate` and of `Erode` - uplift belts (the
+tiles whose strongest meeting was one pair of plates in one epoch, joined
+where they touch), drainage basins (the route trees by where the water
+ends, each with its trunk from the outlet up by the most water at every
+fork), lakes, plates and climate regions (connected dry land of one Köppen
+group). The Köppen reading moved from `cmd/overview` into the package as
+`Grid.Koppen` and `KoppenOf`, computing what it computed there, with a
+letters-only form so the registry allocates nothing a tile. Ids are the
+order of the lowest tile, kind by kind. `SetNamer` hands the naming out;
+`cmd/overview` names from the seed.
+
+Two things the counts say. Belts fragment along a range by epoch, since a
+tile's strongest epoch varies along a seam: on ancient 241 belts over 1 930
+tiles, 91 of them one tile; on globe256 1 827 over 19 459. Basins are every
+route tree, and most of a coast's are a tile or two: globe256 has 1 465, of
+which 200 hold ten tiles or more. Both are the record as it is; a floor on
+size is a reader's choice and is left to the reader.
+
+Budget after item 2. The registry's churn is the labels (three ids a tile),
+the ends and the tributary table the basins are read with, and the feature
+list growing by doubling; the first alloc-per-feature version was found by
+`testing.AllocsPerRun` and put right (the feature is appended and filled in
+place, not built through a pointer that escapes):
+
+| world | bytes before | bytes after | per tile | allocs before | allocs after |
+|---|---|---|---|---|---|
+| valley | 10 354 136 | 10 473 792 | +41.5 | 1 312 | 1 333 |
+| ancient | 58 232 048 | 58 455 880 | +77.7 | 10 226 | 10 265 |
+| globe128 | 437 547 440 | 438 381 216 | +101.8 | 33 606 | 33 662 |
+
+Feature counts, seed 1, with the belt keyed by the kind of meeting as well
+as the pair and the epoch (one pair can be closing at one end of its seam
+and parting at the other, and an arc and a rift are not one meeting; found
+by TestABeltIsRaisedByOneMeeting): ancient 316 (278 belts, 26 basins, 2
+lakes, 9 plates, 1 climate region); globe128 1 204; globe256 3 669 (2 075
+belts, 1 465 basins, 3 lakes, 16 plates, 110 climate regions).
+
+**Why (item 3).** `why.go`: `Why(p, aspect)` for `OfHeight`, `OfRock`,
+`OfRain` and `OfCover` (`Rock` was taken by the terrain), a `[]Cause` of
+`{Feature, Kind, Quantity, Unit, When, Note}`, `When` in years before the
+present from the epoch and `epochYears`. Height: the meeting, its belt, its
+two plates, the wear since, and where the tile stands on the map. Rock: the
+bed at the surface with its thickness and epoch, what that rock is in this
+world, and the book's last burial. Rain: the tile's year against its row's
+mean, the orographic term of the phase carrying most of the cell's water as
+the budget kept it, and the sea's distance upwind in that phase's wind over
+the air's cells. Cover: `WoodsAt` and the readings it was made from, with
+their numbers. No rain shadow is claimed; that is P2's rule. A chain is
+microseconds and allocates only itself.
+
+**The page (item 4).** `cmd/overview/why.go` writes `why.html` beside the
+maps: eight tiles chosen from the world - the highest, the driest land, the
+largest lake's shore, the largest river's last tile of land, four across
+the middle - and one sentence a cause. Found on the way: the weather
+drawing indexed one column past the east edge of any unwrapped map and
+panicked on the valley presets; fixed in the same commit.
+
+**Tests (item 5).** `why_test.go`: `TestWhyIsDeterministic` (one goroutine
+twice and four, every chain and feature equal), `TestABeltIsRaisedByOneMeeting`,
+`TestTheBookCostsWhatItSays` (twelve bytes a line, one a tile, none on a
+drawn world) and a golden chain for tile 1000 of the ancient valley. All
+in the short tier; the four take under two seconds.
+
+What the pages say, seed 1. Ancient, the shore of the largest lake: *The
+Unelbist Rift dropped this ground by 6186 m of the history's own, 48
+million years ago, in a rift. The history's weather has taken 4580 m of
+that off since. It stands at 38.9 m on the map, riding the Dornven Plate.*
+Globe256, the driest land: *14.3 mm of rain falls here in a year, in the
+Kenvak Drylands. The mean over its row of the map is 792 mm. In the spring
+quarter, which carries most of the air's water here, the ground's lift
+wrung nothing out of the air over this cell. The sea lies 303 km upwind in
+that quarter's wind.*
+
+Budget after items 3 to 5: unchanged; nothing in them runs while a world is
+made. `TERRA_DIGEST=check` passes on every commit of the branch; the short
+tier passes; `cmd/overview`'s tests pass.
+
+---
+
+
 ## 2026-09-16 - S2 to the end: the view, and Flow, Drain, Soil, Sand and Clay beside the map
 
 **What this is.** The owner chose the read-only view over moving the game,

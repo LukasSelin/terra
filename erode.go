@@ -224,6 +224,8 @@ func (w *Land) Erode() {
 	// if it is cold enough, and ice that is no longer sea is water again.
 	g.freeze()
 	g.Recount() // the water has moved, and the woods with it
+	// And the features are joined again over the ground as it now lies.
+	g.readFeatures()
 }
 
 // wear is the moving of the ground itself: what an age of weather takes off
@@ -283,6 +285,10 @@ func (g *Grid) wear(years float64) {
 			// first by lifting a sea bed that lay under it and then by refusing
 			// to let the creep ease one down a hand's breadth further.
 			g.Height[i] += change[i]
+			// A history's book keeps what its weather took off. See ledger.
+			if g.deep > 0 && g.ledger != nil {
+				g.ledger[i].wear(-change[i])
+			}
 			// What is left of the soil, what arrived on it, and what the rock
 			// made under it over the age. What arrives is worked into what was
 			// there; what the rock makes is the rock's own mixture.
