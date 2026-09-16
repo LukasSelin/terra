@@ -6,6 +6,34 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - cmd/overview: salt lakes drawn, and maps of the soil and of Köppen–Geiger
+
+**What this is.** `cmd/overview` and `README.md` only, on
+`claude/overview-maps-review-0119b3` off b137614. Nothing in terra is
+touched: every world is as it was, and the digest, budget and yardsticks do
+not see it. `go test -timeout 60m ./cmd/overview` passes.
+
+**Fixed.** The terrain map had no colour for `Salt` and `Pan` (transparent
+black); the biome and landform maps named them as a fresh lake, or the sea,
+and as their climate. The greatest river was printed to the unit and read
+0 m³/s on the seed 1 globe, where it is 0.062.
+
+**Added.** Five maps (21 to 26): soil depth, soil chemistry (saline over
+1 kg/m² salt, calcic over 25 kg/m² carbonate, leached at a fifth of the
+bases gone, strongly at half, else base-rich), soil carbon, surface age
+(`Exposed`, log scale 100 yr to 1 Myr) and the full Köppen–Geiger type in
+Beck et al. (2018)'s colours. Drawing them adds nothing measurable beside
+making the globe (56 s made).
+
+**Seen while looking, not fixed.** On the seed 1 globe dry ground runs only
+23-266 m and the greatest river is 0.062 m³/s; Woods and Soil texture carry
+straight row-aligned edges near 15% and 85% of the height; Height shows
+square blocks of shelf round small islands; Drainage hatches flats
+diagonally. Rock age is two values (epoch 0 or 15) and is in epochs, not
+years.
+
+---
+
 ## 2026-09-16 - zarr/: fuzzed, held to what its metadata implies, and measured
 
 **What this is.** `zarr/` only, on `claude/zarr-robust` off 3973917: no
