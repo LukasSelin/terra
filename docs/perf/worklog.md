@@ -6,6 +6,82 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - zarrdiff: signed change, by cause, expectations
+
+**What this is.** On `claude/zarrdiff-signed`, inside `cmd/zarr/zarrdiff`
+only: zarrdiff said how much an array changed as `|a-b|` over the whole
+map; now it says which way, where by cause, and whether that is what the
+change was meant to do. No world, the digest, the budget or `perf.sh`
+moved: nothing outside `cmd/zarr/zarrdiff` changed but this entry, and the
+yardsticks were not run.
+
+**What it adds.**
+- *Signed change* for arrays of amounts: mean, least, most, 5/50/95th
+  percentiles of `b-a` over the changed elements, and how many went up and
+  down. The percentiles come off a fixed histogram (32 bins an octave of
+  `|b-a|`, 2^-64 to 2^64 each side of zero, 64 KiB), within 1.1% of the
+  sorted value and clamped to the exact least and most.
+- `-by group/array` (repeatable, `-by-side a|b`): every map-shaped array's
+  changes by the category of each tile in a map of codes. A coded map
+  names every category from its CF flags; a map of feature ids lists the
+  `-top` N by tiles changed, reading the array a second time to bin just
+  those. `-only` limits the arrays; `-mask group/array=code[,code]` limits
+  the tiles.
+- `-expect file.json`: checks of `changed`, `tiles`, `share`, `mean`,
+  `p5/p50/p95`, `up`, `down` or `code` from/to, on an array or within a
+  `where` of a map's codes, with `min`/`max`/`above`/`below`. Exit 0 all
+  hold, 3 one does not; 1 and 2 as before.
+
+**Measured.** Globe seed 1 (1024 by 512, 83 arrays), `-water 7.5`
+(default) against `-water 8`, both exported from this branch; Ryzen 9
+3900X, 24 threads, other sessions loading the machine. Wall times
+interleaved with main's zarrdiff built from a temporary worktree:
+
+| run | wall |
+|---|---|
+| main's zarrdiff, plain | 3.8, 3.9, 4.2 s |
+| this branch, plain | 4.0, 3.8, 3.8 s |
+| `-by book/meeting`, before the chunk cache | 29 s |
+| `-by features/belt`, before the chunk cache | 26 s |
+| `-by book/meeting`, with the cache | 4.3 s |
+| `-by features/belt`, with the cache | 6.4 s |
+| four `-by` (meeting, koppen, terrain, belt), with the cache | 4.9 s |
+| `-expect` of 7 checks, `-only book/meeting` | 0.4 s |
+
+Plain runs match main. (The 0.9 s of the entry below was on a quieter
+machine.) The first `-by` build re-read the map for every block of every
+array. A CPU profile put 94% of the time in `cgocall`, nearly all of it
+file `Close` in the directory store, from 24 goroutines opening the same
+map's shards. The decoded chunks of the `-by`/`-mask`/`where` maps are now
+read once and shared between the arrays, at most `budget × processors`
+codes of 8 bytes held, the oldest dropped first. Peak working set, polled
+from PowerShell, was too noisy to compare: main's plain run read 113 MiB
+once and 1.2 GiB another time. The four `-by` run read 525 MiB once. Treat
+those as unmeasured.
+
+**What it showed about `-water 8`.** Checks written down first: history
+untouched (holds, `book/meeting` 0 changed); sea rose (holds, 1 383 open
+to water); did not fall back (fails, 397 water to open); Köppen share ≤ 2%
+(holds, 1.99%); collision belts' height unchanged (fails, 71% changed);
+dry ground not lowered on average (fails, mean -0.23 m); plate ids kept
+(fails, every tile's id down by 106, as the features numbered before
+plates changed). By `tile/terrain`: every open and wood tile's height
+moved, median +1e-5 m, 5-95% from -8.8 to +6.2 m. Half a metre of water
+reaches the ground's wearing everywhere, not just the shore. That is a
+finding for the water stage, not a fault in the tool. The worked example
+in `cmd/zarr/zarrdiff/README.md` is this run.
+
+**Held.** `cd cmd/zarr && go test -short ./...`. New tests on small stores
+written with the zarr package: histogram percentiles against a sort over
+three magnitudes; signed change on a known tweak (+10 on a collision, -1
+to -10 on a rift); `-by` a coded map and a map of ids with `-top`, the same
+report at `-budget 1` (the cache evicting on nearly every read), `-by-side b`,
+and the maps `-by` refuses; `-only`, one and two `-mask`s, masks by name
+and number; `-expect` all holding (exit 0), failing (3), a check that
+cannot measure, and malformed files and unknown code names (2).
+
+---
+
 ## 2026-09-16 - cmd/zarr experiment loop: kept histories, every term, a store per stage
 
 **What this is.** On `claude/zarr-experiment-loop`: `cmd/zarr` gains
@@ -50,6 +126,8 @@ quarter of the 72-76 s of making it. `zarrdiff` finds the store made from
 the history the same as the made one in all 83 arrays, and `-stages-diff`
 finds every stage's store the same whether the world was made from the
 plates or from the kept history, the ground stage included.
+
+---
 
 ## 2026-09-16 - zarrdiff: where and by how much two worlds differ
 

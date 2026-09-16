@@ -26,6 +26,8 @@ type store struct {
 	top     []float32 // strata/top, H by W by beds, NaN fill
 	kind    []int32   // features/table/kind, one dimension
 	missing bool      // leave tile/terrain out
+	meeting []uint8   // book/meeting, H by W with CF flags; nil for none
+	belt    []int32   // features/belt, H by W, ids; nil for none
 }
 
 const beds = 3
@@ -92,9 +94,20 @@ func (s *store) write(t *testing.T) string {
 	a, err = group("strata").CreateArray(ctx, "top", opts([]int{s.h, s.w, beds}, zarr.Float32, float32(math.NaN()), nil))
 	must(err)
 	must(zarr.Write(ctx, a, nil, nil, s.top))
-	tab, err := root.CreateGroup(ctx, "features", nil)
+	if s.meeting != nil {
+		a, err = group("book").CreateArray(ctx, "meeting", opts([]int{s.h, s.w}, zarr.Uint8, nil,
+			map[string]any{"flag_values": []int{0, 1, 2, 3, 4, 5}, "flag_meanings": "no_meeting collision arc islands rift hotspot"}))
+		must(err)
+		must(zarr.Write(ctx, a, nil, nil, s.meeting))
+	}
+	features, err := root.CreateGroup(ctx, "features", nil)
 	must(err)
-	tab, err = tab.CreateGroup(ctx, "table", nil)
+	if s.belt != nil {
+		a, err = features.CreateArray(ctx, "belt", opts([]int{s.h, s.w}, zarr.Int32, nil, nil))
+		must(err)
+		must(zarr.Write(ctx, a, nil, nil, s.belt))
+	}
+	tab, err := features.CreateGroup(ctx, "table", nil)
 	must(err)
 	a, err = tab.CreateArray(ctx, "kind", opts([]int{len(s.kind)}, zarr.Int32, nil, nil))
 	must(err)
