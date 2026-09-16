@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/LukasSelin/terra"
 	"github.com/LukasSelin/terra/geom"
@@ -39,6 +38,14 @@ type server struct {
 	// pages to be asked about without making them again. See keep.
 	keptMu sync.Mutex
 	kept   []keptLand
+	// The jobs, by id and in the order they came; work is the worker's
+	// queue, and rates the seconds a tile the last job of each kind took.
+	// See jobs.go.
+	jobsMu sync.Mutex
+	jobs   map[string]*job
+	order  []string
+	work   chan *job
+	rates  map[string]float64
 }
 
 type keptLand struct {
@@ -55,9 +62,13 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 func newServer(dir string, o options) *server {
 	mux := http.NewServeMux()
-	s := &server{mux: mux, dir: dir, o: o}
+	s := &server{mux: mux, dir: dir, o: o, jobs: map[string]*job{}, work: make(chan *job, queueCap), rates: map[string]float64{}}
+	go s.worker()
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("POST /generate", s.generate)
+	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
+	mux.HandleFunc("GET /jobs/{id}/status", s.jobState)
+	mux.HandleFunc("POST /jobs/{id}/cancel", s.cancel)
 	mux.HandleFunc("GET /runs/{run}/tile", s.tile)
 	mux.Handle("GET /runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(dir))))
 	return s
@@ -84,8 +95,8 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	s.page(w, http.StatusOK, o.values(), msg)
 }
 
-// generate makes the world the form asks for and sends the browser to its
-// page, or shows the form again with what was wrong.
+// generate queues the world the form asks for and sends the browser to the
+// job's page, or shows the form again with what was wrong.
 func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.page(w, http.StatusBadRequest, nil, err.Error())
@@ -101,27 +112,12 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.one.Lock()
-	defer s.one.Unlock()
-	run := fmt.Sprintf("%s-%s-seed%d", time.Now().Format("20060102-150405.000"), o.Preset, o.Seed)
-	out := filepath.Join(s.dir, run)
-	land, _, err := generate(o, out)
-	if err != nil {
-		os.RemoveAll(out)
-		status := http.StatusInternalServerError
-		if errors.Is(err, terra.ErrTooBig) {
-			status = http.StatusUnprocessableEntity
-		}
-		s.page(w, status, r.PostForm, "making the world: "+err.Error())
+	j, ok := s.queue(o)
+	if !ok {
+		s.page(w, http.StatusServiceUnavailable, r.PostForm, fmt.Sprintf("%d worlds are already waiting to be made; try again when some are done", queueCap))
 		return
 	}
-	if b, err := json.MarshalIndent(o, "", "  "); err == nil {
-		os.WriteFile(filepath.Join(out, settingsFile), b, 0o644)
-	}
-	s.keep(run, land)
-	// The directory and not its index.html, which the file server would send
-	// back to the directory.
-	http.Redirect(w, r, "/runs/"+run+"/", http.StatusSeeOther)
+	http.Redirect(w, r, "/jobs/"+j.ID, http.StatusSeeOther)
 }
 
 // tile answers a click on a run's map: the world's account of the tile at
@@ -173,7 +169,7 @@ func (s *server) landOf(run string) (*terra.Land, int, error) {
 	if land := s.kept1(run); land != nil {
 		return land, 0, nil
 	}
-	land, _, _, err := makeWorld(o)
+	land, _, _, err := makeWorld(o, func(string) {})
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -280,6 +276,20 @@ func optionsFrom(f url.Values) (options, error) {
 	number("sea", &o.Sea, 0, 1)
 	number("water", &o.Water, 0, 1e5)
 	o.Wrap = field("wrap") != ""
+	number("wetness", &o.Wetness, 0.05, 10)
+	for _, r := range []struct {
+		name string
+		to   *string
+	}{{"woods", &o.Woods}, {"growth", &o.Growth}} {
+		if v := field(r.name); v != "" {
+			if _, ok := rules[v]; !ok {
+				errs = append(errs, fmt.Errorf("%s: want tuned or climate, or nothing for the map's own, not %q", r.name, v))
+				continue
+			}
+			*r.to = v
+		}
+	}
+	o.Glacial = field("glacial") != ""
 	whole("scale", &o.Scale, 0, 64)
 	whole("day", &o.Day, 0, 3650)
 	return o, errors.Join(errs...)
@@ -302,6 +312,10 @@ func (o options) values() url.Values {
 	set("sea", o.Sea >= 0, strconv.FormatFloat(o.Sea, 'g', -1, 64))
 	set("water", o.Water >= 0, strconv.FormatFloat(o.Water, 'g', -1, 64))
 	set("wrap", o.Wrap, "on")
+	set("wetness", o.Wetness > 0, strconv.FormatFloat(o.Wetness, 'g', -1, 64))
+	set("woods", o.Woods != "", o.Woods)
+	set("growth", o.Growth != "", o.Growth)
+	set("glacial", o.Glacial, "on")
 	set("scale", o.Scale > 0, strconv.Itoa(o.Scale))
 	set("day", o.Day != 30, strconv.Itoa(o.Day))
 	return v
@@ -348,8 +362,9 @@ func (s *server) page(w http.ResponseWriter, status int, form url.Values, msg st
 		Presets []presetView
 		Error   string
 		Runs    []run
+		Jobs    []jobStatus
 		Chunk   int
-	}{fields, views, msg, s.runs(), terra.ChunkSide})
+	}{fields, views, msg, s.runs(), s.active(), terra.ChunkSide})
 }
 
 // runs is the worlds made before, newest first.
@@ -357,7 +372,7 @@ func (s *server) runs() []run {
 	entries, _ := os.ReadDir(s.dir)
 	var runs []run
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || s.unfinished(e.Name()) {
 			continue
 		}
 		r := run{Name: e.Name()}
@@ -367,7 +382,7 @@ func (s *server) runs() []run {
 				v := o.values()
 				r.Tune = "/?" + v.Encode()
 				var about []string
-				for _, k := range []string{"preset", "seed", "w", "h", "epochs", "sea", "water", "wrap", "scale", "day"} {
+				for _, k := range []string{"preset", "seed", "w", "h", "epochs", "sea", "water", "wrap", "wetness", "woods", "growth", "glacial", "scale", "day"} {
 					if v.Has(k) {
 						about = append(about, k+" "+v.Get(k))
 					}
@@ -399,6 +414,7 @@ label small{color:var(--mut);font-size:12px}
 input,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
 .check{flex-direction:row;align-items:center;gap:6px;align-self:end;padding-bottom:6px}
 .seed{display:flex;gap:4px} .seed input{flex:1}
+h3{font-size:13px;margin:18px 0 8px;color:var(--mut);font-weight:600}
 button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:4px 8px;cursor:pointer}
 button[type=submit]{font-size:16px;border:0;background:var(--fg);color:var(--bg);border-radius:8px;padding:10px 18px;margin-top:16px}
 button:disabled{opacity:.6;cursor:progress}
@@ -422,8 +438,17 @@ a{color:inherit}
  <label>Scale<input name="scale" type="number" min="0" max="64" value="{{index .F "scale"}}" placeholder="auto"><small>pixels a tile</small></label>
  <label class="check"><input name="wrap" type="checkbox" id="wrap"{{if index .F "wrap"}} checked{{end}}>Wrap east to west</label>
 </div>
+<h3>Climate and cover</h3>
+<div class="fields">
+ <label>Wetness<input name="wetness" type="number" min="0.05" max="10" step="any" value="{{index .F "wetness"}}" placeholder="1"><small>rain against the real world's: 2 twice as wet</small></label>
+ <label>Woods<select name="woods" class="rule">{{$w := index .F "woods"}}<option value="">the map's own</option><option value="tuned"{{if eq $w "tuned"}} selected{{end}}>tuned</option><option value="climate"{{if eq $w "climate"}} selected{{end}}>climate</option></select><small>tuned: a fixed share wooded; climate: by rain and warmth</small></label>
+ <label>Growth<select name="growth" class="rule">{{$g := index .F "growth"}}<option value="">the map's own</option><option value="tuned"{{if eq $g "tuned"}} selected{{end}}>tuned</option><option value="climate"{{if eq $g "climate"}} selected{{end}}>climate</option></select><small>tuned: never stops in winter; climate: by warm days and rain</small></label>
+ <label class="check" title="Only a drawn map (0 epochs) is cut this way"><input name="glacial" type="checkbox" id="glacial"{{if index .F "glacial"}} checked{{end}}><span>Glacial cycle<br><small id="glacialNote">valleys cut as the sea fell and rose with the ice</small></span></label>
+</div>
 <button type="submit">Generate world</button>
 </form>
+{{if .Jobs}}<h2 class="mut">Being made</h2>
+<ul>{{range .Jobs}}<li><a href="/jobs/{{.ID}}">{{.ID}}</a> · <span class="mut">{{if eq .State "queued"}}waiting, {{.Ahead}} ahead{{else}}{{.Stage}}{{end}}</span></li>{{end}}</ul>{{end}}
 {{if .Runs}}<h2 class="mut">Made before</h2>
 <ul>{{range .Runs}}<li><a href="/runs/{{.Name}}/">{{.Name}}</a> · <a class="mut" href="/runs/{{.Name}}/why.html">why</a>{{if .Tune}} · <a class="mut" href="{{.Tune}}">tune from this</a><br><span class="mut">{{.About}}</span>{{end}}</li>{{end}}</ul>{{end}}
 </main>
@@ -437,8 +462,16 @@ function placeholders(){
  if(forced&&!wrap.disabled){wrap.dataset.was=wrap.checked;wrap.checked=true}
  if(!forced&&wrap.disabled)wrap.checked=wrap.dataset.was==='true';
  wrap.disabled=forced;
+ // The map's own rule is the climate's on a map that wraps.
+ const own="the map's own: "+(wrap.checked?'climate':'tuned');
+ document.querySelectorAll('select.rule').forEach(s=>s.options[0].textContent=own);
+ // Only a drawn map is cut through the glacial cycle.
+ const epochs=+(form.elements.epochs.value||d.epochs), glacial=document.getElementById('glacial');
+ glacial.disabled=epochs>0;
+ document.getElementById('glacialNote').textContent=epochs>0?'drawn maps only: set epochs to 0':'valleys cut as the sea fell and rose with the ice';
 }
 preset.onchange=placeholders; placeholders();
+form.elements.epochs.oninput=placeholders; document.getElementById('wrap').onchange=placeholders;
 document.getElementById('dice').onclick=()=>{document.getElementById('seed').value=Math.floor(Math.random()*4294967296)};
 form.onsubmit=()=>{const b=form.querySelector('button[type=submit]');b.disabled=true;b.textContent='Making a world…'};
 </script></body></html>

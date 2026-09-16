@@ -135,6 +135,9 @@ func codeKey() (string, error) {
 			if path != "." && (strings.HasPrefix(d.Name(), ".") || d.Name() == "cmd" || d.Name() == "docs" || d.Name() == "testdata") {
 				return filepath.SkipDir
 			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); path != "." && err == nil {
+				return filepath.SkipDir // a module of its own, which this one does not import
+			}
 			return nil
 		}
 		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") || path == "go.mod" {

@@ -61,6 +61,115 @@ being tuned, or with `trust` while a later stage is being worked on.
 
 ---
 
+## 2026-09-16 - cmd/overview: wetness, woods, growth and glacial, on the flags and the form
+
+**What this is.** The four terms `cmd/overview` could not set, on
+`claude/world-generator-web-ui-c36c93`: `-wetness` (rain against the real
+world's; 0 keeps the preset's), `-woods` and `-growth` (`tuned` or
+`climate`; empty is the map's own, climate where it wraps and the rules
+where it does not) and `-glacial`. The form has them under "Climate and
+cover": the empty rule shows which one the map would take, and the glacial
+box is off unless the map is drawn (epochs 0), which is the only map it
+cuts. They go into `settings.json`, the list of runs and "tune from this",
+and the map page's summary line names them where they are set. Runs from
+before read them as unset.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed. The command line's stdout and every png and `why.html` on
+the default valley are what they were byte for byte. A 48x32 valley at
+wetness 2 rains more than half again what it does at 1, which the test
+holds; `go test -short ./cmd/overview` runs in under four seconds.
+
+---
+
+
+---
+
+## 2026-09-16 - A world into a Zarr v3 store: zarr/, sharding, cmd/zarr
+
+**What this is.** On `claude/docker-tree-resources-a9e433`: a way to keep a
+world as a column store, one chunked array for each thing a tile has, that
+Go and Python both read. Three pieces, one commit each:
+
+- `zarr/` (4cd6007, db585d5) is `github.com/LukasSelin/zarr`, a Zarr v3
+  module of its own, standard library only, which terra does not import
+  and which is meant to leave for its own repository as it stands. Arrays,
+  groups, the bytes, gzip and crc32c codecs, and `sharding_indexed` with
+  partial reads through a `RangeGetter`. `TestZarrPython` (skipped unless
+  `ZARR_PYTHON` names a Python with zarr and numpy) has zarr-python 3.4.0
+  write twelve arrays for the module to read and read twelve the module
+  wrote; a shard is laid out byte for byte as zarr-python lays it.
+- `readout.go` (28b7cb2) in the root package: `AppendBeds`, `Record` and
+  `FeatureOf`, read-outs of the beds, the book and the registry, which were
+  kept in shapes of the map's own. They copy and change nothing.
+- `cmd/zarr` (28b7cb2), a module of its own so that terra's `go.mod` stays
+  the standard library's: makes a world and writes 67 arrays in seven
+  groups, in the types the world keeps them in.
+
+**Every world is as it was.** Nothing in the making of a world changed.
+`TERRA_DIGEST=check` passes, and the short tier passes (69.9 s). The budget
+was not rerun, as nothing it measures was touched; the read-outs allocate
+only when called, and nothing in the making calls them.
+
+**What an export costs.** One run, AMD Ryzen 9 3900X, 24 threads, with other
+sessions on the machine - a reading, not a baseline:
+
+| | |
+|---|---|
+| making the 1024 by 512 globe (`-preset globe`) | 49.9 s |
+| writing it: 67 arrays, gzip 5, chunks of 64, shards of 16 chunks | 0.8 s |
+| on disk | 143 files, 41.2 MiB |
+
+The export is two percent of the making, so it is not worth a benchmark of
+its own yet. Unsharded, the same store is 67 arrays of 128 chunks: some
+8 600 files; the shards are what keep a large world to a file count a
+directory or an object store is comfortable with. A shard is written whole,
+so writing costs a shard's worth of memory per array at once (a 1024-square
+shard of float64 is 8 MiB), and the arrays are written over GOMAXPROCS
+goroutines. Reading a 3 by 3 region of a 256-square array in 128-square
+shards fetches two ranges - the index and one 16-square chunk - and not the
+shard (`TestReadingAChunkReadsOnlyItsPartOfTheShard`).
+
+**Held.** The export reads back tile for tile as the world
+(`TestAMadeWorldReadsBackAsItIs`); the same world writes the same store
+byte for byte on one goroutine or eight
+(`TestTheSameWorldWritesTheSameStore`); zarr-python reads the globe's
+heights to the same digits the Go module does.
+
+**Not yet.** The export is the world as made, at tick 0, not a day of its
+weather. Features are not named, as terra names nothing without a namer
+and Zarr v3 has no core string type. xarray has not been tried on a store.
+
+---
+
+
+## 2026-09-16 - cmd/overview -serve: worlds made in the background
+
+**What this is.** The fourth step of the web page, on
+`claude/world-generator-web-ui-c36c93`. A press of the button no longer
+holds the request open while the world is made: it queues a job and sends
+the browser to `/jobs/<id>`, which asks `/jobs/<id>/status` every second
+and goes on to the world's page when it is drawn. One worker makes the
+jobs in the order they came (up to 64 waiting), under the same lock as a
+tile's world made again. The page shows the stage `generate` reports
+(making the world, running the weather, drawing each layer), the time so
+far, and, once a job of the same kind (history or not, globe or not) has
+been made, a guess at the time left from its seconds a tile. A job still
+waiting can be called off; one running is made to the end, since nothing
+in making a world can stop part way. A failed job says why and links back
+to the form filled in with its settings. The home page lists the jobs
+being made, and leaves their half-drawn directories out of the runs.
+Jobs live as long as the server.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed. On this machine, with a 128x64 globe made first to learn
+the pace, a 512x256 globe guessed 20 s at 6 s in and was drawn at about
+20 s. `go test -short -race ./cmd/overview` passes in 11 s: it holds the
+worker off to check the order and the count ahead, calls a job off, and
+fails one that asks for more memory than there is.
+
+---
+
 ## 2026-09-16 - Generate in stages, and a history kept in a file
 
 **What this is.** The first step of phase 3 of the scaling plan ("stages as

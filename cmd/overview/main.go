@@ -55,6 +55,13 @@ type options struct {
 	Epochs     int
 	Sea, Water float64
 	Wrap       bool
+	// Wetness, Woods, Growth and Glacial are the terms of the same names,
+	// left as the preset's where Wetness is nought, Woods and Growth are
+	// empty and Glacial is off. Woods and Growth are a rule's name: see
+	// rules.
+	Wetness       float64
+	Woods, Growth string
+	Glacial       bool
 	// Scale is pixels per tile, 0 to pick one; Day is the day whose weather
 	// is drawn; Max makes the world as big as memory allows.
 	Scale, Day int
@@ -75,6 +82,10 @@ func main() {
 	flag.Float64Var(&o.Sea, "sea", -1, "share of the ground under the sea, for a drawn map or a made one given no water (overrides the preset)")
 	flag.Float64Var(&o.Water, "water", -1, "metres of water a made world is given, spread over the whole map; 0 floods by -sea instead (overrides the preset)")
 	flag.BoolVar(&o.Wrap, "wrap", false, "join the east edge to the west (forced on by -preset globe)")
+	flag.Float64Var(&o.Wetness, "wetness", 0, "rain the air carries against the real world's: 2 twice as wet, 0.5 half (0 keeps the preset's, which is the real world's)")
+	flag.StringVar(&o.Woods, "woods", "", "where trees stand: tuned (a fixed share of the land, as a settlement was tuned on) or climate (by the rain and the warmth); empty is climate on a map that wraps and tuned on one that does not")
+	flag.StringVar(&o.Growth, "growth", "", "how fast green things grow: tuned (never stopping in winter) or climate (by the warm days and the rain); empty is climate on a map that wraps and tuned on one that does not")
+	flag.BoolVar(&o.Glacial, "glacial", false, "cut a drawn map's valleys through the last glacial cycle, the sea falling and rising with the ice, rather than through two thousand years at today's sea")
 	flag.IntVar(&o.Scale, "scale", 0, "pixels per tile (0 picks one)")
 	flag.IntVar(&o.Day, "day", 30, "the day of the world whose weather is drawn")
 	flag.BoolVar(&o.Max, "max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
@@ -90,10 +101,14 @@ func main() {
 	if *serve != "" {
 		fail(listen(*serve, *runs, o))
 	}
-	if _, _, err := generate(o, *out); err != nil {
+	if _, _, err := generate(o, *out, nil); err != nil {
 		fail(err)
 	}
 }
+
+// rules is the woods and growth rules by the names the flags and the form
+// give them. terra.ByShape has none: it is what an empty one leaves.
+var rules = map[string]terra.Rule{"tuned": terra.Tuned, "climate": terra.ByClimate}
 
 // terms is the preset the options name, with their overrides laid over it.
 func (o options) terms() (terra.Terms, error) {
@@ -125,6 +140,25 @@ func (o options) terms() (terra.Terms, error) {
 	}
 	if o.Wrap {
 		t.Wrap = true
+	}
+	if o.Wetness > 0 {
+		t.Wetness = o.Wetness
+	}
+	for _, r := range []struct {
+		name, v string
+		to      *terra.Rule
+	}{{"woods", o.Woods, &t.Woods}, {"growth", o.Growth, &t.Growth}} {
+		if r.v == "" {
+			continue
+		}
+		rule, ok := rules[r.v]
+		if !ok {
+			return t, fmt.Errorf("unknown %s rule %q: want tuned or climate", r.name, r.v)
+		}
+		*r.to = rule
+	}
+	if o.Glacial {
+		t.Glacial = true
 	}
 	if o.Max {
 		return t.Largest()
@@ -182,10 +216,14 @@ func makeLand(o options, t terra.Terms) (*terra.Land, error) {
 // generate makes the world the options describe and draws it into out: an
 // index.html, a why.html and a png per layer. It prints a summary to the
 // terminal as it goes and returns the world and the path of index.html.
+// Where stage is not nil it is told what is being done, as it starts.
 //
 // It sets the package's namer, so no two may run at once.
-func generate(o options, out string) (*terra.Land, string, error) {
-	land, t, took, err := makeWorld(o)
+func generate(o options, out string, stage func(string)) (*terra.Land, string, error) {
+	if stage == nil {
+		stage = func(string) {}
+	}
+	land, t, took, err := makeWorld(o, stage)
 	if err != nil {
 		return nil, "", err
 	}
@@ -193,7 +231,7 @@ func generate(o options, out string) (*terra.Land, string, error) {
 		// The seed and the terms are the history's, whatever the flags said.
 		o.Seed, o.Preset = land.Seed(), presetOf(t)
 	}
-	page, err := draw(land, o, t, took, out)
+	page, err := draw(land, o, t, took, out, stage)
 	return land, page, err
 }
 
@@ -203,7 +241,10 @@ func generate(o options, out string) (*terra.Land, string, error) {
 // file is made on the seed and terms the file carries.
 //
 // It sets the package's namer, so no two may run at once.
-func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
+func makeWorld(o options, stage func(string)) (*terra.Land, terra.Terms, time.Duration, error) {
+	if stage == nil {
+		stage = func(string) {}
+	}
 	var t terra.Terms
 	var err error
 	from := ""
@@ -218,6 +259,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 	}
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)%s...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap, from)
+	stage("making the world")
 	start := time.Now()
 	terra.SetNamer(namerFor(o.Seed))
 	land, err := makeLand(o, t)
@@ -233,6 +275,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 	}
 
 	// The day's weather, run from the founding up to the day asked for.
+	stage(fmt.Sprintf("running the weather to day %d", o.Day))
 	for tick := 0; tick <= max(o.Day, 0); tick++ {
 		land.Tick = tick
 		land.Climate.Advance(tick, land.RNG)
@@ -242,7 +285,7 @@ func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 }
 
 // draw draws a made world into out. See generate.
-func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string) (string, error) {
+func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string, stage func(string)) (string, error) {
 	px := o.Scale
 	if px <= 0 {
 		px = max(1, min(12, 1024/max(t.Width, 1)))
@@ -252,6 +295,7 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 		return "", err
 	}
 	g := land.Grid
+	stage("measuring the world")
 	stats := measure(land)
 	cls := classify(land)
 	stats.Biomes = legendOf(cls.Biome, biomeClasses, biomeOf)
@@ -259,7 +303,9 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 	stats.print()
 
 	var layers []layer
-	for _, l := range drawings(land, stats, cls) {
+	all := drawings(land, stats, cls)
+	for k, l := range all {
+		stage(fmt.Sprintf("drawing %s, %d of %d", l.title, k+1, len(all)))
 		img := render(g, px, l.color)
 		if l.overlay != nil {
 			l.overlay(img, px)
@@ -293,6 +339,7 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 		return "", err
 	}
 	// And the world's account of eight of its tiles. See why.go.
+	stage("writing why.html")
 	if err := writeWhy(filepath.Join(out, "why.html"), land, o.Seed, o.Preset); err != nil {
 		return "", err
 	}
@@ -868,6 +915,15 @@ var pageTmpl = template.Must(template.New("page").Funcs(template.FuncMap{
 	"m":   func(v float64) string { return fmt.Sprintf("%.0f", v) },
 	"c":   func(v float64) string { return fmt.Sprintf("%.1f", v) },
 	"css": func(s string) template.CSS { return template.CSS(s) },
+	// rule is a woods or growth rule's name, or nothing for the map's own.
+	"rule": func(r terra.Rule) string {
+		for name, v := range rules {
+			if v == r {
+				return name
+			}
+		}
+		return ""
+	},
 }).Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>terra · seed {{.Seed}}</title>
@@ -903,7 +959,7 @@ figcaption{margin-top:8px}
 #tile p{margin:2px 0}
 </style></head><body><main data-w="{{.W}}" data-h="{{.H}}">
 <h1>A world from seed {{.Seed}}</h1>
-<div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · {{if and (gt .Terms.Epochs 0) (gt .Terms.Water 0.0)}}water {{.Terms.Water}} m, {{pct .Stats.SeaPct}} sea{{else}}sea {{.Terms.SeaShare}}{{end}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}} · made in {{.Took}}</div>
+<div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · {{if and (gt .Terms.Epochs 0) (gt .Terms.Water 0.0)}}water {{.Terms.Water}} m, {{pct .Stats.SeaPct}} sea{{else}}sea {{.Terms.SeaShare}}{{end}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}}{{if gt .Terms.Wetness 0.0}} · wetness {{.Terms.Wetness}}{{end}}{{with rule .Terms.Woods}} · woods {{.}}{{end}}{{with rule .Terms.Growth}} · growth {{.}}{{end}}{{if .Terms.Glacial}} · glacial{{end}} · made in {{.Took}}</div>
 <div class="stats">
  <div class="stat"><span class="mut">Tiles</span><b>{{.Stats.Tiles}}</b></div>
  <div class="stat"><span class="mut">Plates</span><b>{{.Stats.Plates}}</b></div>

@@ -1,6 +1,7 @@
 /overview/
 *.test.exe
 *.test
+/cmd/zarr/*.zarr/
 /runs/
 *.history
 /.cache/
