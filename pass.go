@@ -11,10 +11,10 @@ package terra
 // its own, and every loop here is a loop over one slice asking that word
 // whether the tile is the kind it is looking for. Nothing in the pass
 // reads a tile. It is the shape the pass has to be in for the arithmetic
-// to be done several tiles at a time, which is what pass_simd_amd64.go
-// does with it where the build and the processor allow; pass_noasm.go is
-// the same loops one tile at a time, and the helpers here are the tails of
-// the runs either way.
+// to be done several tiles at a time, which is what the kernels in
+// kernel_simd_amd64.go do with it where the build and the processor allow;
+// kernel.go is the same loops one tile at a time, and the helpers here are
+// the fillings, which are one tile at a time on every processor.
 //
 // Nothing here changes a result to the last bit. Each tile is given the
 // same operations on the same operands in the same order as Ripen and
@@ -59,14 +59,11 @@ var aging []int64
 // stocking is one process that fills a stock on one kind of ground: which
 // kind, how long it takes in full, how much of the stock a growing day puts
 // on, and the layer the stock is kept in. It is a Growth with its kind
-// beside it and its span worked out, so that the pass works nothing out.
+// beside it, so that the pass works nothing out.
 type stocking struct {
 	kind       int64
 	full, rate float64
-	// spanned is whether the process takes any time at all - full over
-	// nought - settled here so that the pass need not compare it.
-	spanned bool
-	stock   func(*Grid) []float64
+	stock      func(*Grid) []float64
 }
 
 // stocked is every growth that fills a stock, by kind and then in the order
@@ -111,11 +108,10 @@ func readGrowth() {
 					continue
 				}
 				stocked = append(stocked, stocking{
-					kind:    k,
-					full:    f.Full,
-					rate:    f.Rate,
-					spanned: f.Full > 0,
-					stock:   f.Stock,
+					kind:  k,
+					full:  f.Full,
+					rate:  f.Rate,
+					stock: f.Stock,
 				})
 			}
 		}
@@ -154,7 +150,7 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 	// has had; see fillStand. Each filling is a pass of its own over the run,
 	// in the order the growing table has them.
 	for _, e := range stocked {
-		fill(e.stock(g)[lo:hi], age, ks, e.kind, e.spanned, e.full, e.rate, k)
+		fill(e.stock(g)[lo:hi], age, ks, e.kind, e.full, e.rate, k)
 	}
 	// And what comes back that is not a stand coming on; see Replenish.
 	shoal(g.Fish[lo:hi], ks, regrow(FishRegrowth, k))
@@ -162,31 +158,17 @@ func (g *Grid) Grow(lo, hi int, k float64) {
 	meadow(g.Sward[lo:hi], ks, regrow(SwardRegrowth, k))
 }
 
-// The passes one tile at a time. They are the whole of the pass where the
-// arithmetic is not done several tiles at once, and the tail of every run
-// where it is, and each is the statement in grow.go with the tile's kind
-// read off ks rather than off the tile.
+// The fillings and the replenishing, one tile at a time on every processor.
+// Each is a closed form - a cube root, a logarithm and an exponential for a
+// stand, a division for the rest - and none of those is an instruction the
+// vectors have; see stand and logistic. Each is the statement in grow.go
+// with the tile's kind read off ks rather than off the tile. What is done
+// several tiles at once is the ageing and the fading, which touch every
+// tile: fade and grow, in kernel.go and kernel_simd_amd64.go.
 
-// fadeScalar is FadeWear over a run.
-func fadeScalar(wear []float64, by float64) {
-	for i := range wear {
-		wear[i] *= by
-	}
-}
-
-// growScalar puts k of weather on the age of every tile that has something
-// growing on it.
-func growScalar(age []float64, ks []int64, k float64) {
-	for j, kk := range ks {
-		if ages[kk] {
-			age[j] += k
-		}
-	}
-}
-
-// fillScalar fills the stock s on every tile of the given kind over k of
+// fill fills the stock s on every tile of the given kind over k of
 // growing weather, up to what its age over full accounts for; see fillStand.
-func fillScalar(s, age []float64, ks []int64, kind int64, full, rate, k float64) {
+func fill(s, age []float64, ks []int64, kind int64, full, rate, k float64) {
 	for j, kk := range ks {
 		if kk == kind {
 			s[j] = fillStand(s[j], age[j], k, full, rate)
@@ -194,9 +176,9 @@ func fillScalar(s, age []float64, ks []int64, kind int64, full, rate, k float64)
 	}
 }
 
-// shoalScalar puts the fish back in the water, up to full, by the run's
+// shoal puts the fish back in the water, up to full, by the run's
 // logistic factor; see logistic.
-func shoalScalar(fish []float64, ks []int64, fall float64) {
+func shoal(fish []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isWater[kk] {
 			fish[j] = logistic(fish[j], 1, fall)
@@ -204,8 +186,8 @@ func shoalScalar(fish []float64, ks []int64, fall float64) {
 	}
 }
 
-// restScalar rests the fields, up to what the ground can hold.
-func restScalar(fert, rich []float64, ks []int64, fall float64) {
+// rest rests the fields, up to what the ground can hold.
+func rest(fert, rich []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isField[kk] {
 			fert[j] = logistic(fert[j], rich[j], fall)
@@ -213,8 +195,8 @@ func restScalar(fert, rich []float64, ks []int64, fall float64) {
 	}
 }
 
-// meadowScalar puts the grass back on open ground, up to full.
-func meadowScalar(sward []float64, ks []int64, fall float64) {
+// meadow puts the grass back on open ground, up to full.
+func meadow(sward []float64, ks []int64, fall float64) {
 	for j, kk := range ks {
 		if isGrass[kk] {
 			sward[j] = logistic(sward[j], 1, fall)
