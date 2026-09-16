@@ -1,0 +1,61 @@
+perf: building the test binary with and without GOEXPERIMENT=simd
+perf: round 1 of 6, -bench 'Kernel|FFT'
+perf: round 2 of 6, -bench 'Kernel|FFT'
+perf: round 3 of 6, -bench 'Kernel|FFT'
+perf: round 4 of 6, -bench 'Kernel|FFT'
+perf: round 5 of 6, -bench 'Kernel|FFT'
+perf: round 6 of 6, -bench 'Kernel|FFT'
+goos: windows
+goarch: amd64
+pkg: github.com/LukasSelin/terra
+cpu: AMD Ryzen 9 3900X 12-Core Processor            
+                       │ scalar.txt │ simd.txt │
+                       │                               sec/op                                │                   sec/op                    vs base               │
+FFT/64-24                                                                       1136.0n ± 3%                                  839.4n ± 3%  -26.11% (p=0.002 n=6)
+FFT/256-24                                                                       5.588µ ± 2%                                  3.533µ ± 3%  -36.78% (p=0.002 n=6)
+FFT/1024-24                                                                      26.16µ ± 2%                                  15.52µ ± 1%  -40.66% (p=0.002 n=6)
+Kernel/fade-24                                                                   331.0n ± 1%                                  139.4n ± 1%  -57.88% (p=0.002 n=6)
+Kernel/grow-24                                                                   771.2n ± 3%                                  490.4n ± 4%  -36.41% (p=0.002 n=6)
+Kernel/axpy-24                                                                   519.3n ± 1%                                  200.0n ± 2%  -61.48% (p=0.002 n=6)
+Kernel/lerp-24                                                                   522.4n ± 1%                                  271.7n ± 2%  -48.00% (p=0.002 n=6)
+Kernel/clamp-24                                                                  982.9n ± 1%                                  199.4n ± 2%  -79.71% (p=0.002 n=6)
+Kernel/sumTree-24                                                                690.7n ± 1%                                  187.4n ± 1%  -72.87% (p=0.002 n=6)
+Kernel/stencil5-24                                                               977.6n ± 2%                                  502.1n ± 3%  -48.64% (p=0.002 n=6)
+Kernel/minmaxSelect-24                                                          1207.5n ± 4%                                  258.9n ± 1%  -78.55% (p=0.002 n=6)
+geomean                                                                          1.224µ                                       524.8n       -57.12%
+
+                       │ scalar.txt │ simd.txt │
+                       │                                B/op                                 │                      B/op                       vs base           │
+FFT/64-24                                                                       0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+FFT/256-24                                                                      0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+FFT/1024-24                                                                     0.000 ± 0%                                         1.000 ± 0%  ? (p=0.002 n=6)
+Kernel/fade-24                                                                  0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/grow-24                                                                  0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/axpy-24                                                                  0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/lerp-24                                                                  0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/clamp-24                                                                 0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/sumTree-24                                                               0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/stencil5-24                                                              0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+Kernel/minmaxSelect-24                                                          0.000 ± 0%                                         0.000 ± 0%  ~ (p=1.000 n=6) ¹
+geomean                                                                                    ²                                                   ?               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                       │ scalar.txt │ simd.txt │
+                       │                              allocs/op                              │                 allocs/op                  vs base                │
+FFT/64-24                                                                       0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+FFT/256-24                                                                      0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+FFT/1024-24                                                                     0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/fade-24                                                                  0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/grow-24                                                                  0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/axpy-24                                                                  0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/lerp-24                                                                  0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/clamp-24                                                                 0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/sumTree-24                                                               0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/stencil5-24                                                              0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Kernel/minmaxSelect-24                                                          0.000 ± 0%                                    0.000 ± 0%       ~ (p=1.000 n=6) ¹
+geomean                                                                                    ²                                              +0.00%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+perf: the runs are in (a temporary directory) (scalar.txt, simd.txt)
+exit 0

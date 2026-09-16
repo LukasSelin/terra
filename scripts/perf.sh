@@ -10,6 +10,10 @@
 #   scripts/perf.sh scaling    make globes at 128, 256 and 512 wide, PERF_COUNT (3)
 #                              times each, and fail if a tile at 512 costs more
 #                              than PERF_SCALING times a tile at 256
+#   scripts/perf.sh simd       build the test binary with and without
+#                              GOEXPERIMENT=simd, run the benchmarks on each turn
+#                              and turn about PERF_COUNT times, and benchstat the
+#                              scalar build against the vector one
 #
 # Settings, from the environment:
 #   PERF_BENCH      benchmark regex   (default: the worlds that take seconds,
@@ -25,6 +29,10 @@
 # Baselines are only comparable on the machine they were taken on: check
 # refuses a baseline whose cpu line is not this machine's. Nothing else heavy
 # should run meanwhile. See docs/perf/README.md.
+#
+# simd never fails: it is the vector build's gain as a number, and the scalar
+# build run beside it so that neither path rots unmeasured. The kernels on their
+# own are PERF_BENCH='Kernel|FFT' scripts/perf.sh simd.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -149,8 +157,29 @@ scaling)
 		}
 	' "$new"
 	;;
+simd)
+	# One test binary built each way and run turn and turn about, a round
+	# each, so that a drift in the machine's load falls on both alike; then
+	# benchstat with the scalar build as the old column. The vector kernels
+	# are used only where the processor has AVX2, so on one without them the
+	# two columns are the same code and the table says so.
+	dir="$(mktemp -d -t terra-perf-simd.XXXXXX)"
+	exe="$(go env GOEXE)"
+	echo "perf: building the test binary with and without GOEXPERIMENT=simd" >&2
+	go test -c -o "$dir/scalar$exe" .
+	GOEXPERIMENT=simd go test -c -o "$dir/simd$exe" .
+	: >"$dir/scalar.txt"
+	: >"$dir/simd.txt"
+	for ((i = 1; i <= count; i++)); do
+		echo "perf: round $i of $count, -bench '$bench'" >&2
+		"$dir/scalar$exe" -test.run '^$' -test.bench "$bench" -test.benchmem -test.count 1 -test.timeout 120m >>"$dir/scalar.txt"
+		"$dir/simd$exe" -test.run '^$' -test.bench "$bench" -test.benchmem -test.count 1 -test.timeout 120m >>"$dir/simd.txt"
+	done
+	benchstat "$dir/scalar.txt" "$dir/simd.txt"
+	echo "perf: the runs are in $dir (scalar.txt, simd.txt)" >&2
+	;;
 *)
-	sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,35p' "$0" | sed 's/^# {0,1}//'
 	exit 2
 	;;
 esac

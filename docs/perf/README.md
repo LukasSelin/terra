@@ -160,6 +160,37 @@ interrupted run of `globe512` would otherwise fail it. It still moves under
 load, which slows a long run more than a short one: a failure taken on a
 busy machine is run again before it is believed, like `check`.
 
+### The vector build: `scripts/perf.sh simd` (by hand, when a kernel changes)
+
+```bash
+scripts/perf.sh simd
+```
+
+The kernels in [kernel.go](../../kernel.go) - the day's fade and grow, the
+transform's butterflies, axpy, lerp, clamp, sumTree, stencil5 and
+minmaxSelect - are each written twice: the statement one number at a time,
+and the same four lanes at a time in `kernel_simd_amd64.go`, which is built
+only under `GOEXPERIMENT=simd` and used only on a processor with AVX2.
+`kernel_test.go` holds every lane to the statement bit for bit (a NaN to a
+NaN), so the two builds make the same worlds; `TERRA_DIGEST=check` on both
+is the proof for a change to a kernel.
+
+This mode builds the test binary both ways, runs `valley`, `ancient` and
+`globe256` on each turn and turn about `PERF_COUNT` times, and prints
+benchstat with the scalar build as the old column. It **never fails**: it
+is the vector build's gain as a number, and the scalar build run beside it
+so that neither path rots unmeasured. A world is set by its serial passes,
+so the gain on a world is small (see the work log); the kernels on their
+own are
+
+```bash
+PERF_BENCH='Kernel|FFT' scripts/perf.sh simd
+```
+
+The two binaries run alternately rather than one after the other so that
+a drift in the machine's load falls on both alike. On a processor without
+AVX2 the two columns are the same code, and the table says so.
+
 ## A before/after comparison by hand
 
 Nothing else heavy should be running: these benchmarks use every core.
