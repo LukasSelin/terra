@@ -332,6 +332,113 @@ the deep grid (phase 3), which shrinks the tile count the floods run
 over. SIMD throughout and the deep grid are complements, not
 alternatives.
 
+### Level 2: the metre, and the export to Unreal (the end goal)
+
+Added 2026-09-16. The owner's end goal is ground at one metre a tile
+instead of twenty-five, exported to Unreal for use in game engines. The
+metre is for looking, colliding, placing and exporting; the simulation
+does not act at it. That settles the design: the metre is a level derived
+from the map, never a state.
+
+**The arithmetic.** `TileSpan` is one constant, and the map's physics
+reads through it. At one metre the same ground is 625 times the tiles.
+
+| world | tiles at 25 m | tiles at 1 m | peak today (880 B/tile) | at 400 B/tile |
+|---|---:|---:|---:|---:|
+| valley, 2 km x 0.9 km | 2,880 | 1.8 M | 1.6 GB | 0.7 GB |
+| globe, 25.6 km x 12.8 km | 524 k | 328 M | 290 GB | 130 GB |
+
+The valley at a metre is a change of one constant. Anything larger cannot
+be one grid in memory on any plan. So the metre is a third level.
+
+**Three levels, each derived from the one above.**
+
+- Level 0, the planet, kilometres a tile: the history (phase 3).
+- Level 1, the map, 25 m a tile: the state. Flow, drainage, wear, soils,
+  the daily passes, routing, waking, the game. The finest thing ever whole
+  in memory.
+- Level 2, the metre: a pure function of the seed, a chunk, and its 25 m
+  neighbourhood with a halo. Made per chunk, streamed to disk or cached,
+  never whole. A 64 by 64 map chunk is 1600 by 1600 cells, 10 MB of
+  float32 heights; the whole globe at a metre is 328 M cells, seconds of
+  CPU in kernels spread over chunks, and one chunk per worker in memory.
+
+**Why the metre keeps realism.** Every yardstick is a catchment-scale
+fact - Hack, concavity, hypsometry, meander wavelength, drainage density -
+and the 25 m level answers all of them; the metre cannot change them. What
+is real at a metre is a different list, and each item is a function of the
+25 m state: channel width and depth from the discharge, the banks and
+levees the overbank pass already lays, terraces from the sea-level
+history, ledges where the strata's beds crop out, talus at the angle of
+repose under cliffs (`stand` in slide.go), the smoothness creep gives a
+hillslope, beach and flat profiles from the waves and tides, and
+microrelief conditioned on slope, soil and cover. Large scales simulated,
+small scales conditioned, which is how real terrain is downscaled too.
+
+**How a chunk is derived**, as map and stencil kernels on float32:
+
+1. Heights by bicubic interpolation of the 25 m tiles, two tiles of halo,
+   so hillslopes are C1 and show no facets.
+2. Channels: a centreline through the tile centres along `down`, bent by
+   the meander state; width and depth from `Flow` by the hydraulic
+   geometry the fluvial step already uses; a parabolic bed cut below the
+   surface; levees from what overbank laid.
+3. Lakes flat at `lakeLevel`; the sea at `sea`; tidal flats at `ebb`.
+4. Rock: where the soil is thin or the ground is `Rock`, ledges at the
+   strata's bed tops with their dip, talus below at the angle of repose.
+5. Microrelief: noise with amplitude by slope and thinness of soil and a
+   spectrum by process, drawn from the seed and the global metre
+   coordinates, so two chunks agree on their shared edge to the bit.
+6. Cover at a metre: the weight of each surface (grass, forest floor,
+   rock, sand, mud, snow and ice, salt, field, river bed) from `Terrain`,
+   `Wood`, `Sward`, the soil's texture and the same conditioned noise.
+
+**What Unreal takes.** A Landscape is a grid of quads, 100 units (1 m) a
+quad by default, so a metre level imports one to one and the 25 m level
+imports faceted at an XY scale of 2500. Heights are 16-bit, 32768 at zero,
+with a range of 512 m times Z scale over 100: the globe's relief needs a Z
+scale near 1000, which is steps of 8 cm, fine for looking at. One
+Landscape actor is at most 8129 vertices a side (the recommended sizes are
+1009, 2017, 4033, 8129); the globe at a metre is 25,600 by 12,800, which is
+World Partition and a tiled import, 7 by 4 tiles of 4033 named
+`name_x0_y0`. Weightmaps are 8-bit, one per surface layer, at the
+heightmap's resolution. Rivers go to the Water plugin as splines with a
+width and depth per point; lakes as water bodies with a level; the sea as
+an ocean body at `sea`. Trees go as instance points (position, species by
+biome, scale by `Age` and `Wood`) for foliage or PCG. A manifest carries
+the seed, the terms, the origin, the scales and the sea level.
+
+terra stays standard-library only: `cmd/unreal` writes 16-bit PNGs
+(`image.Gray16`), 8-bit PNGs, JSON and CSV. The editor-side import is a
+Python script that lives with the game, not here.
+
+**Milestones.**
+
+- **U1, the pipeline at 25 m** (days, new files only, can run alongside
+  anything). `cmd/unreal` exports today's map as a tiled Landscape at 25 m
+  quads with weightmaps, water bodies, foliage points and the manifest.
+  Faceted, but it proves the whole path in the editor before the metre
+  exists.
+- **U2, the metre level** (two weeks, after S1 lands, since it is written
+  in kernels). A `detail` stage: `DetailChunk(seed, chunk) -> heights,
+  weights` from the six steps above. `cmd/unreal -m 1` streams the level
+  chunk by chunk into the tiles. A golden-digest test per chunk, a seam
+  test that two neighbours agree on their shared column, and a time and
+  memory budget per chunk.
+- **U3, the editor side.** The import script, the Water plugin bodies, PCG
+  foliage, in the game's repository.
+- **Later, edits.** If the game ever changes the ground at a metre - a dig,
+  a wall - it is a per-chunk overlay of deltas over the derived level, not
+  a metre state.
+
+**What it changes elsewhere.** The hand-down from level 0 to 1 and from 1
+to 2 are the same mechanism, a level made from the level above with a
+halo: build it once, use it twice. The kernel layer (S1) and the
+struct-of-arrays move (S2) are the foundation of level 2 as much as of
+anything, because a chunk at a metre is millions of cells of float32
+arithmetic and nothing else. Larger areas come from phases 3 and 4; finer
+detail from level 2; a large world at a metre needs both.
+
 ## 5. Guards, so it does not drift back
 
 The heap budget and `scripts/perf.sh check` exist. They catch bytes and
