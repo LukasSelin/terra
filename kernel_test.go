@@ -148,6 +148,12 @@ func BenchmarkKernel(b *testing.B) {
 			axpy(y, x, 0.5)
 		}
 	})
+	b.Run("lerp", func(b *testing.B) {
+		y := slices.Clone(x)
+		for b.Loop() {
+			lerp(y, y, x, 0.25)
+		}
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -197,6 +203,26 @@ func FuzzAxpy(f *testing.F) {
 			axpy(got, x, a)
 			axpyScalar(want, x, a)
 			sameBits(t, "axpy", n, got, want)
+		}
+	})
+}
+
+func FuzzLerp(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 5))
+		for _, n := range lengths(rng) {
+			tt := draw(rng)
+			a, b := run(rng, n+rng.IntN(3)), run(rng, n+rng.IntN(3))
+			got, want := make([]float64, n), make([]float64, n)
+			lerp(got, a, b, tt)
+			lerpScalar(want, a, b, tt)
+			sameBits(t, "lerp", n, got, want)
+			// And in place, over a itself.
+			got, want = slices.Clone(a[:n]), slices.Clone(a[:n])
+			lerp(got, got, b, tt)
+			lerpScalar(want, want, b, tt)
+			sameBits(t, "lerp in place", n, got, want)
 		}
 	})
 }

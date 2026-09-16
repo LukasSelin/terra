@@ -178,3 +178,19 @@ func axpy(y, x []float64, a float64) {
 	archsimd.ClearAVXUpperBits()
 	axpyScalar(y[n:], x[n:], a)
 }
+
+func lerp(dst, a, b []float64, t float64) {
+	if !vector {
+		lerpScalar(dst, a, b, t)
+		return
+	}
+	a, b = a[:len(dst)], b[:len(dst)]
+	n := whole(len(dst))
+	tv := archsimd.BroadcastFloat64x4(t)
+	for j := 0; j < n; j += lanes {
+		av := archsimd.LoadFloat64x4(a[j : j+lanes])
+		av.Add(archsimd.LoadFloat64x4(b[j : j+lanes]).Sub(av).Mul(tv)).Store(dst[j : j+lanes])
+	}
+	archsimd.ClearAVXUpperBits()
+	lerpScalar(dst[n:], a[n:], b[n:], t)
+}

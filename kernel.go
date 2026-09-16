@@ -90,3 +90,12 @@ func axpyScalar(y, x []float64, a float64) {
 		y[i] = float64(y[i] + float64(a*x[i]))
 	}
 }
+
+// lerpScalar blends a toward b by t, entry by entry: dst = a + (b-a)*t, each
+// operation rounded, on both paths. dst may be a or b.
+func lerpScalar(dst, a, b []float64, t float64) {
+	a, b = a[:len(dst)], b[:len(dst)]
+	for i := range dst {
+		dst[i] = float64(a[i] + float64(float64(b[i]-a[i])*t))
+	}
+}
