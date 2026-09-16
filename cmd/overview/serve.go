@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/LukasSelin/terra"
+	"github.com/LukasSelin/terra/geom"
 )
 
 // listen serves the page that makes worlds at addr until it fails. The page's
@@ -28,20 +29,38 @@ func listen(addr, dir string, o options) error {
 
 // A server makes a world when asked and serves every world it has made.
 type server struct {
+	mux *http.ServeMux
 	dir string
 	o   options
 	// one holds the worlds to one at a time: the namer is the package's,
 	// and a world takes every core it is given.
 	one sync.Mutex
+	// kept is the worlds made last, newest last, for the tiles on their
+	// pages to be asked about without making them again. See keep.
+	keptMu sync.Mutex
+	kept   []keptLand
 }
 
-func newServer(dir string, o options) http.Handler {
-	s := &server{dir: dir, o: o}
+type keptLand struct {
+	run  string
+	land *terra.Land
+}
+
+// keepTiles is how many tiles of made worlds the server holds on to: a few
+// valleys, or one globe. The newest world is always kept, whatever its size;
+// one let go is made again from its settings when it is asked about.
+const keepTiles = 1 << 20
+
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+
+func newServer(dir string, o options) *server {
 	mux := http.NewServeMux()
+	s := &server{mux: mux, dir: dir, o: o}
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("POST /generate", s.generate)
+	mux.HandleFunc("GET /runs/{run}/tile", s.tile)
 	mux.Handle("GET /runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(dir))))
-	return mux
+	return s
 }
 
 // settingsFile is where a run keeps the options it was made from, so that
@@ -86,7 +105,8 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 	defer s.one.Unlock()
 	run := fmt.Sprintf("%s-%s-seed%d", time.Now().Format("20060102-150405.000"), o.Preset, o.Seed)
 	out := filepath.Join(s.dir, run)
-	if _, err := generate(o, out); err != nil {
+	land, _, err := generate(o, out)
+	if err != nil {
 		os.RemoveAll(out)
 		status := http.StatusInternalServerError
 		if errors.Is(err, terra.ErrTooBig) {
@@ -98,9 +118,104 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 	if b, err := json.MarshalIndent(o, "", "  "); err == nil {
 		os.WriteFile(filepath.Join(out, settingsFile), b, 0o644)
 	}
+	s.keep(run, land)
 	// The directory and not its index.html, which the file server would send
 	// back to the directory.
 	http.Redirect(w, r, "/runs/"+run+"/", http.StatusSeeOther)
+}
+
+// tile answers a click on a run's map: the world's account of the tile at
+// x, y, as JSON. A world no longer kept is made again from the run's
+// settings, which makes the same world.
+func (s *server) tile(w http.ResponseWriter, r *http.Request) {
+	run := r.PathValue("run")
+	if strings.HasPrefix(run, ".") {
+		jsonError(w, http.StatusNotFound, "no such run")
+		return
+	}
+	land, status, err := s.landOf(run)
+	if err != nil {
+		jsonError(w, status, err.Error())
+		return
+	}
+	g := land.Grid
+	x, xerr := strconv.Atoi(r.URL.Query().Get("x"))
+	y, yerr := strconv.Atoi(r.URL.Query().Get("y"))
+	p := geom.Pos{X: x, Y: y}
+	if xerr != nil || yerr != nil || !g.In(p) {
+		jsonError(w, http.StatusBadRequest, fmt.Sprintf("want a tile x, y on the %dx%d map", g.W, g.H))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(describe(g, p))
+}
+
+// landOf is the world a run made: kept, or made again.
+func (s *server) landOf(run string) (*terra.Land, int, error) {
+	if land := s.kept1(run); land != nil {
+		return land, 0, nil
+	}
+	b, err := os.ReadFile(filepath.Join(s.dir, run, settingsFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, http.StatusNotFound, fmt.Errorf("run %s kept no settings to make its world again from", run)
+	}
+	var o options
+	if err == nil {
+		err = json.Unmarshal(b, &o)
+	}
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+
+	s.one.Lock()
+	defer s.one.Unlock()
+	// Somebody else may have made it while this waited.
+	if land := s.kept1(run); land != nil {
+		return land, 0, nil
+	}
+	land, _, _, err := makeWorld(o)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	s.keep(run, land)
+	return land, 0, nil
+}
+
+// kept1 is the kept world of the run, or nil.
+func (s *server) kept1(run string) *terra.Land {
+	s.keptMu.Lock()
+	defer s.keptMu.Unlock()
+	for _, k := range s.kept {
+		if k.run == run {
+			return k.land
+		}
+	}
+	return nil
+}
+
+// keep holds on to a run's world, letting the oldest go while the kept
+// worlds come to more than keepTiles.
+func (s *server) keep(run string, land *terra.Land) {
+	s.keptMu.Lock()
+	defer s.keptMu.Unlock()
+	s.kept = slices.DeleteFunc(s.kept, func(k keptLand) bool { return k.run == run })
+	s.kept = append(s.kept, keptLand{run, land})
+	tiles := 0
+	for _, k := range s.kept {
+		tiles += len(k.land.Grid.Tiles)
+	}
+	for len(s.kept) > 1 && tiles > keepTiles {
+		tiles -= len(s.kept[0].land.Grid.Tiles)
+		s.kept = s.kept[1:]
+	}
+}
+
+func jsonError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(struct {
+		Error string `json:"error"`
+	}{msg})
 }
 
 // check turns away, before any making starts, what the terms would refuse

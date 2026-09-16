@@ -77,7 +77,7 @@ func main() {
 	if *serve != "" {
 		fail(listen(*serve, *runs, o))
 	}
-	if _, err := generate(o, *out); err != nil {
+	if _, _, err := generate(o, *out); err != nil {
 		fail(err)
 	}
 }
@@ -121,13 +121,27 @@ func (o options) terms() (terra.Terms, error) {
 
 // generate makes the world the options describe and draws it into out: an
 // index.html, a why.html and a png per layer. It prints a summary to the
-// terminal as it goes and returns the path of index.html.
+// terminal as it goes and returns the world and the path of index.html.
 //
 // It sets the package's namer, so no two may run at once.
-func generate(o options, out string) (string, error) {
+func generate(o options, out string) (*terra.Land, string, error) {
+	land, t, took, err := makeWorld(o)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err := draw(land, o, t, took, out)
+	return land, page, err
+}
+
+// makeWorld makes the world the options describe and runs its weather up to
+// the day they ask for: everything a drawing or a tile's account reads. The
+// same options make the same world, every time.
+//
+// It sets the package's namer, so no two may run at once.
+func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
 	t, err := o.terms()
 	if err != nil {
-		return "", err
+		return nil, t, 0, err
 	}
 
 	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
@@ -135,7 +149,7 @@ func generate(o options, out string) (string, error) {
 	terra.SetNamer(namerFor(o.Seed))
 	land, err := terra.MakeLand(o.Seed, t)
 	if err != nil {
-		return "", err
+		return nil, t, 0, err
 	}
 	took := time.Since(start)
 	fmt.Printf("made in %v\n\n", took.Round(time.Millisecond))
@@ -151,7 +165,11 @@ func generate(o options, out string) (string, error) {
 		land.Climate.Advance(tick, land.RNG)
 		land.AdvanceWeather()
 	}
+	return land, t, took, nil
+}
 
+// draw draws a made world into out. See generate.
+func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out string) (string, error) {
 	px := o.Scale
 	if px <= 0 {
 		px = max(1, min(12, 1024/max(t.Width, 1)))
@@ -193,7 +211,8 @@ func generate(o options, out string) (string, error) {
 		Stats  summary
 		Layers []layer
 		Width  int
-	}{o.Seed, t, o.Preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px})
+		W, H   int
+	}{o.Seed, t, o.Preset, took.Round(time.Millisecond).String(), stats, layers, t.Width * px, t.Width, t.Height})
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -804,7 +823,12 @@ figcaption{margin-top:8px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:22px}
 .grid figure{padding:8px;cursor:pointer} .grid img{width:100%;image-rendering:pixelated;display:block}
 .grid figcaption{margin-top:4px;font-size:13px}
-</style></head><body><main>
+.map{position:relative}
+.pick{position:absolute;pointer-events:none;box-sizing:border-box;border:2px solid #fff;outline:2px solid #000;border-radius:2px}
+#tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:10px}
+#tile h2{font-size:15px;margin:0 0 2px} #tile h3{font-size:13px;margin:12px 0 2px;text-transform:capitalize}
+#tile p{margin:2px 0}
+</style></head><body><main data-w="{{.W}}" data-h="{{.H}}">
 <h1>A world from seed {{.Seed}}</h1>
 <div class="mut">{{.Terms.Width}}×{{.Terms.Height}} tiles · preset {{.Preset}} · {{.Terms.Epochs}} epochs · {{if and (gt .Terms.Epochs 0) (gt .Terms.Water 0.0)}}water {{.Terms.Water}} m, {{pct .Stats.SeaPct}} sea{{else}}sea {{.Terms.SeaShare}}{{end}} · {{if .Terms.Wrap}}globe{{else}}valley{{end}} · made in {{.Took}}</div>
 <div class="stats">
@@ -823,12 +847,13 @@ figcaption{margin-top:8px}
 </div>
 <div class="tabs" id="tabs">{{range $i, $l := .Layers}}<button data-i="{{$i}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$l.Title}}</button>{{end}}</div>
 <div class="zoom"><button id="zout" title="Zoom out (-)">−</button><output id="zlevel">100%</output><button id="zin" title="Zoom in (+)">+</button><button id="zfit" title="Fit to width (0)">Fit</button><button id="zone" title="Actual size (1)">1:1</button>
- <span class="mut">Scroll to zoom, drag to pan.</span></div>
+ <span class="mut">Scroll to zoom, drag to pan, click a tile to ask why it is so.</span></div>
 {{range $i, $l := .Layers}}<figure class="big" data-i="{{$i}}"{{if ne $i 0}} hidden{{end}}>
- <div class="map"><img src="{{$l.File}}" width="{{$.Width}}" alt="{{$l.Title}}"></div>
+ <div class="map"><img src="{{$l.File}}" width="{{$.Width}}" alt="{{$l.Title}}"><div class="pick" hidden></div></div>
  <figcaption><b>{{$l.Title}}</b> <span class="mut">{{$l.About}}</span>
  {{if $l.Legend}}<div class="legend">{{range $l.Legend}}<span><i style="background:{{css .Color}}"></i>{{.Name}} <span class="mut">{{pct .Pct}}</span></span>{{end}}</div>{{end}}
  </figcaption></figure>{{end}}
+<section id="tile" aria-live="polite" hidden></section>
 <div class="grid">{{range $i, $l := .Layers}}<figure data-i="{{$i}}"><img src="{{$l.File}}" alt="{{$l.Title}}"><figcaption>{{$l.Title}}</figcaption></figure>{{end}}</div>
 </main>
 <script>
@@ -847,6 +872,45 @@ function setZoom(z,cx,cy){
  bigs.forEach(f=>f.querySelector('img').style.width=(base*zoom)+'px');
  m.scrollLeft=x*zoom-cx; m.scrollTop=y*zoom-cy;
  document.getElementById('zlevel').value=Math.round(zoom*100)+'%';
+ placePick();
+}
+// A click on a tile asks the server why it is so; see serve.go. The page
+// written by the command line alone has no server to ask, and says so.
+const W=+document.querySelector('main').dataset.w;
+let picked=null;
+function placePick(){
+ const s=base*zoom/W, side=Math.max(s,8);
+ bigs.forEach(f=>{
+  const d=f.querySelector('.pick');
+  d.hidden=!picked; if(!picked)return;
+  d.style.width=d.style.height=side+'px';
+  d.style.left=((picked.x+.5)*s-side/2)+'px'; d.style.top=((picked.y+.5)*s-side/2)+'px';
+ });
+}
+function el(tag,text,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;return e}
+async function pick(x,y){
+ picked={x,y}; placePick();
+ const box=document.getElementById('tile');
+ box.hidden=false; box.replaceChildren(el('h2','Tile ('+x+', '+y+')'),el('p','Asking…','mut'));
+ let a;
+ try{
+  if(location.protocol==='file:')throw new Error('Tiles answer only when the page is served: go run ./cmd/overview -serve :8080');
+  const r=await fetch('tile?x='+x+'&y='+y);
+  a=await r.json();
+  if(!r.ok)throw new Error(a.error||r.statusText);
+ }catch(err){
+  if(picked.x!==x||picked.y!==y)return;
+  box.replaceChildren(el('h2','Tile ('+x+', '+y+')'),el('p',err.message,'mut'));
+  return;
+ }
+ if(picked.x!==x||picked.y!==y)return;
+ const head=[el('h2','Tile ('+x+', '+y+'): '+a.terrain+', '+a.height)];
+ if(a.features&&a.features.length)head.push(el('p','Part of '+a.features.join(', '),'mut'));
+ box.replaceChildren(...head);
+ for(const as of a.aspects){
+  box.append(el('h3',as.name));
+  for(const s of as.sentences||[])box.append(el('p',s));
+ }
 }
 function show(i){
  // Read before hiding: a hidden element has no scroll position.
@@ -871,7 +935,16 @@ bigs.forEach(f=>{
  m.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,l:m.scrollLeft,t:m.scrollTop};m.setPointerCapture(e.pointerId);m.classList.add('drag')});
  m.addEventListener('pointermove',e=>{if(drag){m.scrollLeft=drag.l-(e.clientX-drag.x);m.scrollTop=drag.t-(e.clientY-drag.y)}});
  const end=()=>{drag=null;m.classList.remove('drag')};
- m.addEventListener('pointerup',end); m.addEventListener('pointercancel',end);
+ // A press that barely moved is a click, not a pan.
+ m.addEventListener('pointerup',e=>{
+  if(drag&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<4){
+   const r=f.querySelector('img').getBoundingClientRect(), s=r.width/W;
+   const x=Math.floor((e.clientX-r.left)/s), y=Math.floor((e.clientY-r.top)/s);
+   if(x>=0&&y>=0&&x<W&&y<+document.querySelector('main').dataset.h)pick(x,y);
+  }
+  end();
+ });
+ m.addEventListener('pointercancel',end);
 });
 document.querySelectorAll('#tabs button, .grid figure').forEach(e=>e.onclick=()=>{show(e.dataset.i);window.scrollTo({top:0,behavior:'smooth'})});
 document.addEventListener('keydown',e=>{

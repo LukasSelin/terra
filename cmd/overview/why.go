@@ -21,18 +21,19 @@ import (
 // across the middle of the map.
 
 // whyPlace is one tile on the page.
+// It is also what the server answers a click on a tile with, as JSON.
 type whyPlace struct {
-	Title    string
-	Pos      geom.Pos
-	Terrain  string
-	Height   string
-	Features []string
-	Aspects  []whyAspect
+	Title    string      `json:"title,omitempty"`
+	Pos      geom.Pos    `json:"pos"`
+	Terrain  string      `json:"terrain"`
+	Height   string      `json:"height"`
+	Features []string    `json:"features"`
+	Aspects  []whyAspect `json:"aspects"`
 }
 
 type whyAspect struct {
-	Name      string
-	Sentences []string
+	Name      string   `json:"name"`
+	Sentences []string `json:"sentences"`
 }
 
 // whyPlaces picks the eight tiles. Where a world has no lake, the shore is
@@ -124,18 +125,25 @@ func whyPlaces(g *terra.Grid) []whyPlace {
 		add(fmt.Sprintf("Land %d of 4 across the middle", k+1), g.Index(q))
 	}
 	for k := range places {
-		pl := &places[k]
-		i := g.Index(pl.Pos)
-		pl.Terrain = terrainName(g.Tiles[i].Terrain)
-		pl.Height = fmt.Sprintf("%.0f m", g.Height[i])
-		for _, id := range g.FeaturesAt(pl.Pos) {
-			pl.Features = append(pl.Features, featureName(g, id))
-		}
-		for a := terra.OfHeight; a <= terra.OfCover; a++ {
-			pl.Aspects = append(pl.Aspects, whyAspect{Name: a.String(), Sentences: sentences(g, g.Why(pl.Pos, a))})
-		}
+		title := places[k].Title
+		places[k] = describe(g, places[k].Pos)
+		places[k].Title = title
 	}
 	return places
+}
+
+// describe is the world's account of the tile at p, which must be on the
+// map: what it is, what it is part of, and why, aspect by aspect.
+func describe(g *terra.Grid, p geom.Pos) whyPlace {
+	i := g.Index(p)
+	pl := whyPlace{Pos: p, Terrain: terrainName(g.Tiles[i].Terrain), Height: fmt.Sprintf("%.0f m", g.Height[i])}
+	for _, id := range g.FeaturesAt(p) {
+		pl.Features = append(pl.Features, featureName(g, id))
+	}
+	for a := terra.OfHeight; a <= terra.OfCover; a++ {
+		pl.Aspects = append(pl.Aspects, whyAspect{Name: a.String(), Sentences: sentences(g, g.Why(p, a))})
+	}
+	return pl
 }
 
 // isSea is whether tile i is under the sea: water with no lake over it.
