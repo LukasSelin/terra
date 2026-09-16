@@ -288,3 +288,24 @@ The environment is read once, when the package is initialised, which is
 before `go test` starts watching the environment for its cache: a test run
 that switches `TERRA_PHASES` needs `-count=1`, or the cache answers for the
 other setting.
+
+## Working on the stages after the history
+
+`Generate` runs in six stages (`stages.go`), and with `TERRA_PHASES=1` each
+is a row, `stage.ground` to `stage.cover`. The ground stage is the history,
+about four fifths of a globe. To change anything after it without paying
+for it every run, keep the history once and make the world from it:
+
+```bash
+go run ./cmd/overview -preset globe -keep-history globe.history
+```
+
+```bash
+TERRA_PHASES=1 go run ./cmd/overview -from-history globe.history
+```
+
+The world made from the file is the world made straight through, to the
+bit (`TestAWorldResumedFromItsHistoryIsTheSameWorld`). A history file is
+refused by a build whose grid is laid out differently, but not by one whose
+history code has changed: after a change to anything the ground stage runs,
+keep the history again.

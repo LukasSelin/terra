@@ -57,3 +57,7 @@ the heap budget, `scripts/perf.sh check` and `scaling`, the digest, and the
 profiles. `docs/perf/scaling-plan.md` is where world creation goes from
 here and why. `docs/perf/worklog.md` is what was measured and what it
 bought, newest first.
+
+`Generate` runs in stages (`stages.go`); the first is the history. Work on
+the later stages from a kept history (`cmd/overview -keep-history` once,
+then `-from-history`); see the end of `docs/perf/README.md`.

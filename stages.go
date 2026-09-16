@@ -41,10 +41,10 @@ const (
 	stageSea    = 1
 )
 
-// generateFrom runs the stages from the one numbered from to the last on g,
-// which has to be the grid the stage before from left.
-func (w *Land) generateFrom(g *Grid, cfg Terms, from int) {
-	for _, s := range stages[from:] {
+// generateFrom runs the stages numbered from up to but not including to on
+// g, which has to be the grid the stage before from left.
+func (w *Land) generateFrom(g *Grid, cfg Terms, from, to int) {
+	for _, s := range stages[from:to] {
 		stop := phase(s.name)
 		s.run(w, g, cfg)
 		stop()
