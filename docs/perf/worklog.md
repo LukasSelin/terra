@@ -119,6 +119,613 @@ scale linearly, since the shard-sized parts are fixed.
 - *`climate` and `book`.* Building the Köppen types and records inside
   their jobs instead of up front saves ~40 B a tile.
 
+**After merging main (abaf1ee).** Main had since kept gzip writers in
+`zarr/` (6fe433e), made the Köppen codes a fixed table built inside their
+job, given the strata a `noBed` fill, and consolidated the metadata
+(so the discarding store in `memory_test.go` now keeps `zarr.json` keys).
+The change was redone over that; the store is byte-identical to main's
+code again (sha256 of all 4424 keys, same worlds and options as above).
+Globe, quiet machine (CPU 0 % before and after), two runs each, peak MiB
+over the land (428 MiB) at 1 / 4 / 24 goroutines, and time at 24:
+
+| | GOGC 100 | GOGC 5 | time at 24, GOGC 100 |
+|---|---|---|---:|
+| main | 532, 532 / 568, 552 / 984, 974 | 107, 104 / 163, 139 / 428, 446 | 0.33, 0.32 s |
+| this branch | 490, 487 / 518, 511 / 748, 771 | 95, 97 / 129, 130 / 222, 245 | 0.33, 0.32 s |
+
+Allocation fell from 6.8 to 1.2 GiB with the pooled gzip writers, so the
+first `zarr/` item above is partly done. The whole-shard `filled` buffer
+and the per-chunk `extract` copy are still there.
+
+---
+
+## 2026-09-16 - the deep floor at GDH1's depths
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`.
+`floorDepth` (`abyss.go`) is Stein and Stein's GDH1 (1992), 2600 + 365
+sqrt(t) m to 20 Myr and 5651 - 2473 exp(-0.0278 t) past it, where it was
+Parsons and Sclater's (1977), which comes toward 6.4 km on old floor where
+GDH1 comes toward 5.65. With the earth's ages the old floor is most of the
+ocean. `sinksPastCCD` is the curve turned round: 27.5 Myr (was 32.7).
+
+**Readings.** Globe, seed 1: oceanic hypsometric mode -5.375 km (-5.625),
+still a gap, a sixth of the deep floor at 5.25-5.5 km; ridge 2.77 km (2.51),
+subsidence to 70 Myr 317 m/sqrt(Myr) (347), flattening 0.19 (0.48), all in
+range; sediment 773 m on the mean (797). Every other reading is the
+sediment commit's: the land does not move, since the floor is out of
+`meanHard`.
+
+**Held.** `go test -short`, `cmd/zarr` tests, the yardsticks: no failures.
+Digest: `globe128` rewritten. `perf.sh check` not run.
+
+---
+
+## 2026-09-16 - sediment on the deep floor, and the floor out of the land's mean hardness
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`, after
+main was merged in for the zarr experiment loop. The deep floor carried some
+twenty metres of sediment: what the history lays on it is squeezed with its
+other beds into the map's spread of heights. `floorSediment` (`abyss.go`)
+gives it what its age gathers: calcareous ooze at 1 cm/kyr under a warm sea
+while the floor is above a 4.5 km compensation depth, red clay at 1 mm/kyr,
+and a turbidite apron off the continents (1.5 km at the slope's foot, e-fold
+300 km, laid over 20 Myr; chosen). The floor stands 0.57 of it higher, for
+the load. `layAbyss` lays what the pile lacks as limestone and shale in the
+order they came. `cmd/zarr` writes `ground/floor_age` and
+`ground/floor_sediment`.
+
+`seafloorSubsidence` reads the basement, the sounded depth with the
+sediment's lift put back, as Parsons and Sclater's depths were: read at the
+sediment's top, flattening came out 0.63.
+
+**What the zarr loop found.** With the sediment, the small globes' Flint R2
+(0.71), Hack exponent (0.523) and Hack at 2x less 1x (0.101) failed. A globe
+before and after, `-stages` and `-stages-diff`: the first stage differs at
+ground, on the floor only; by shape, 95 % of land tiles had moved by up to
+10 m. `meanHard` averaged the rock's hardness over every tile, and the floor
+turned from basalt to limestone and shale softened the land's mean. The
+deep floor, which the weather does not reach, is now left out of it. That
+moves the land once; every yardstick then passes.
+
+`TestTheTideLaysFlatsOnlyWhereItReaches` reads flats off small globe 2 and
+not 3: the tide reads the sea's depth, and the six small globes hold none to
+two flats each.
+
+**Readings.** Globe, seed 1: sediment on ocean crust 797 m on the mean, 745
+on the deep floor; the floor's top rock 28 % limestone. Ridge 2.51 km,
+subsidence 347 m/sqrt(Myr), flattening 0.48, all as before. The oceanic
+hypsometric mode is -5.625 km (was -5.875), still a gap. Gap readings moved
+by the land's move: small-globe concavity 0.312 (0.294), its 2x less 1x
+0.151 (0.199), valley floor soil 0.41 m (0.48), floor over hillslope 1.79x
+(2.11), Oxisols 0.023 (0.024).
+
+**Held.** `go test -short`, `cmd/zarr` tests, and the yardsticks: no
+failures. Digest: `globe128` rewritten; `valley` and `ancient`, which have no
+deep floor, unchanged. `perf.sh check` not run.
+
+---
+
+## 2026-09-16 - the first plates' ocean floor has ages: flattening closes
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. The
+first plates' ocean crust was all dated from the start of the history, so
+half a globe's deep floor was 64 Myr old and 5.3 km down, and no floor was
+old enough to flatten. `firstFloorAges` (`abyss.go`) now gives it the ages
+it had before the history began: the earth's age-area law (Sclater and
+others 1980; Parsons 1982), area falling linearly to nothing at 180 Myr
+(Müller and others 2008) less the history still to come, ranked by distance
+from the seams between ocean plates. The crust carries them (`crust.aged`),
+`floorDepths` lays the floor by them, and the grid keeps each tile's age as
+`floorAge`, which the history file keeps by reflection and `handDown` reads
+by the nearest tile.
+
+The ages do not feed the subduction. Letting the older of two first-plate
+crusts sink first changed which crust went down, and with it every globe's
+continents: the sea on the globe covered 6 % less, and the mean land carbon
+(8.99), the small globe's Hack exponent at 2x less 1x (0.083), its discharge
+exceedance exponent (0.481) and the tide flats of small globe 3 all failed.
+Without it the land is the soil commit's to the bit, and only the deep floor
+moves: the digest's `globe128` changes, and `valley` and `ancient`, which
+have no ocean, do not.
+
+`seafloorSubsidence` reads each tile's age off `floorAge`, in bins of an
+epoch, and only on floor a shelf and a slope's width (230 km, six globe
+tiles) from continental crust, which is the floor `floorDepths` lays at its
+age's depth. Read over the margins too, the floor of 50 to 75 Myr, much of
+it on the first rifts' margins, came out a kilometre shallow and the old
+floor sank 0.83 as fast as the young.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | before | now | real |
+|---|---|---|---|
+| ridge crest depth, km | in range | 2.51 | 2.0-3.0 |
+| subsidence to 70 Myr, m/sqrt(Myr) | in range | 347 | 250-450 |
+| flattening past 70 Myr | NaN (gap) | 0.48 | -0.2-0.6 |
+| oceanic hypsometric mode, km | -5.375 (gap) | -5.875 (gap) | -5.0 to -3.8 |
+
+The mode goes the wrong way, and stays a gap: with the earth's ages the
+Parsons and Sclater depths heap up at 5.5-6 km. The earth's floor stands
+shallower under its sediment and its plateaus and swells; a globe's carries
+some twenty metres.
+
+**Held.** `go test -short` passes. `TestRealNumbers|TestTheRealWorld`: no
+failures, and every other reading is the soil commit's. `scripts/perf.sh
+check` not run: the machine was loaded.
+
+---
+
+## 2026-09-16 - soil orders and soil carbon: six soil yardsticks close
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. Two
+changes to the soil (workstream I), and the world moves: the digest is
+rewritten.
+
+- `carbonLevel` (`pedogenesis.go`): what grows into the soil is the Miami
+  model's warmth term times its rain term, where it was West's runoff term
+  and nothing below -5 C. The decay goes by a Q10 of 1.4 (Mahecha and
+  others 2010) where it was 2, slows with drought as the rain term to 0.7,
+  and runs at a fifth on permafrost. Half the carbon (0.8 on permafrost)
+  lies in the litter and needs no mineral soil under it. The constants were
+  fitted offline against the globe's forest, grass, desert and tundra.
+- `SoilOrderOf` (`soilorder.go`, new): Soil Taxonomy's key asked of what a
+  tile carries, for Gelisols, Histosols, Oxisols, Aridisols, Ultisols,
+  Mollisols, Alfisols, Inceptisols and Entisols, and no soil.
+- `carbonByBiome` reads the biome ratios over tiles with soil, as Jobbágy
+  and Jackson's pits were dug; the land mean still counts bare ground at
+  nothing. Half the desert tiles have no soil, so without this forest over
+  desert reads 3.7.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | main | this | real |
+|---|---|---|---|
+| carbon, forest over desert | 143x | 1.93x | 1.5-3.2 |
+| carbon, tundra over desert | 0.19x | 1.81x | 1.5-3.2 |
+| mean land carbon, kg C/m2 | 1.96 | 9.54 | 9-13 |
+| Aridisols | - | 0.111 | 0.09-0.15 |
+| Gelisols | - | 0.098 | 0.06-0.11 |
+| Mollisols | - | 0.064 | 0.05-0.09 |
+| Oxisols | - | 0.024 (gap) | 0.05-0.10 |
+
+The rest of the land: no soil 0.125, Alfisols 0.397, Inceptisols 0.145,
+Histosols 0.020, Ultisols 0.013, Entisols 0.004. Alfisols stand at half
+again Earth's share and Ultisols and Oxisols at a fraction, for one reason:
+the warm humid land's surfaces are a median of fourteen thousand years old,
+too young to be leached.
+
+**Held.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout 60m .`
+on this branch and on its base (312900f), side by side: no failures on
+either, and every other gap reads the same. `go test -short` passes, the
+budget test with it, so the heap budget is not rewritten. The digest was
+checked on the base (it holds) and rewritten here: all three budget worlds
+move, as fertility reads the carbon through `humus`. `scripts/perf.sh check`
+was not run: the machine was loaded by other sessions.
+
+---
+
+## 2026-09-16 - cmd/overview: salt lakes drawn, and maps of the soil and of Köppen–Geiger
+
+**What this is.** `cmd/overview` and `README.md` only, on
+`claude/overview-maps-review-0119b3` off b137614. Nothing in terra is
+touched: every world is as it was, and the digest, budget and yardsticks do
+not see it. `go test -timeout 60m ./cmd/overview` passes.
+
+**Fixed.** The terrain map had no colour for `Salt` and `Pan` (transparent
+black); the biome and landform maps named them as a fresh lake, or the sea,
+and as their climate. The greatest river was printed to the unit and read
+0 m³/s on the seed 1 globe, where it is 0.062.
+
+**Added.** Five maps (21 to 26): soil depth, soil chemistry (saline over
+1 kg/m² salt, calcic over 25 kg/m² carbonate, leached at a fifth of the
+bases gone, strongly at half, else base-rich), soil carbon, surface age
+(`Exposed`, log scale 100 yr to 1 Myr) and the full Köppen–Geiger type in
+Beck et al. (2018)'s colours. Drawing them adds nothing measurable beside
+making the globe (56 s made).
+
+**Seen while looking, not fixed.** On the seed 1 globe dry ground runs only
+23-266 m and the greatest river is 0.062 m³/s; Woods and Soil texture carry
+straight row-aligned edges near 15% and 85% of the height; Height shows
+square blocks of shelf round small islands; Drainage hatches flats
+diagonally. Rock age is two values (epoch 0 or 15) and is in epochs, not
+years.
+
+---
+
+## 2026-09-16 - zarr/: fuzzed, held to what its metadata implies, and measured
+
+**What this is.** `zarr/` only, on `claude/zarr-robust` off 3973917: no
+feature added, no public API changed, nothing in terra or `cmd/zarr`
+touched. Every world is as it was; the digest, budget and yardsticks do
+not see this module.
+
+**Limits** (1123a63). A store could make the module panic or allocate
+without bound. Now an array does not open if its shape counts more
+elements than an int, or if a chunk, a shard or a shard's index would be
+more than 2 GiB (`maxStoredBytes`, the one constant: a chunk is made whole
+when read, and a chunk never written is made of the fill). A gzip chunk
+inflates to no more than its chunk spec implies, carried through the codecs
+before it (the bytes codec exactly, crc32c +4, gzip +1% +1 KiB; an unknown
+codec falls back to the 2 GiB). A shard's index must put every chunk inside
+the shard, clear of the index and of every other chunk. Region ends and
+`NumChunks` no longer overflow near the top of an int. `limit_test.go`
+holds each; on main's code they were:
+
+| case | main | branch |
+|---|---|---|
+| shape [MaxInt64, 4], `Read` | panic: makeslice len out of range | does not open |
+| chunk shape [2^62, 2^62] | panic: slice bounds out of range | does not open |
+| chunk shape [65536, 65536] int16 | opens and reads (8 GiB a chunk) | does not open |
+| shard of 2^32 one-element chunks | 48 GB allocated at open (killed) | does not open |
+| shape [MaxInt64] in chunks of 1024, `Read` of all; a region whose end overflows | panic: makeslice len out of range | error |
+| a 16-byte chunk as 1 MiB of gzip zeros | inflates it whole (5.3 MB allocated), then errors | stops at 16 bytes |
+| shard index entries overlapping, or the same chunk twice | read as data | error |
+
+**Fuzzing** (2f9e5c2). Native Go fuzz targets: `FuzzMetadata` (array and
+group zarr.json; what opens must write and reopen as the same metadata),
+`FuzzOpenAndRead` (zarr.json and two fuzzed keys in a MemoryStore, a region
+and a chunk read by range and with shards read whole), `FuzzBytesCodec`,
+`FuzzGzipCodec`, `FuzzCRC32CCodec` (each round-trips what decodes),
+`FuzzShard` (three sharding layouts; what decodes re-encodes to the same
+elements) and `FuzzShardIndex` (`checkIndex` against a pairwise check).
+The corpus is seeded from all twelve `testdata/interop` cases as this module
+writes them, three more arrays, and the other tests. Each fails on more
+than 256 MiB allocated per input, with chunks lowered to 64 KiB for the run.
+
+| target | branch, 5 min | after the gzip pools, 4 min | main's code, 3 min |
+|---|---:|---:|---:|
+| FuzzOpenAndRead | 24.8 M execs, nothing | 11.5 M, nothing | **found**: chunk grid 6 x 8888888 uint32, 853 MB for a 16-element read |
+| FuzzMetadata | 38.1 M, nothing | | 17.2 M, nothing |
+| FuzzShard | 36.0 M, nothing | 31.0 M, nothing | 21.8 M, nothing |
+| FuzzGzipCodec | 22.1 M, nothing | 18.0 M, nothing | (needs the limit) |
+| FuzzBytesCodec | 28.0 M, nothing | | 27.1 M, nothing |
+| FuzzShardIndex | 37.6 M, nothing | | (new) |
+| FuzzCRC32CCodec | 45.2 M, nothing | | |
+
+The one crasher is kept in `testdata/fuzz/FuzzOpenAndRead` (3dc1115). The
+byte mutator rarely makes a JSON number huge, so the overflow panics above
+were found by reading the code and are held by `limit_test.go`, not by the
+fuzzer.
+
+**Benchmarks** (fb5b111, `bench_test.go`). 512 x 1024 float64, chunks of
+64, gzip 5, MemoryStore; shards are 4 x 4 chunks; the region is 3 x 3
+across four chunks of one shard in a DirStore. AMD Ryzen 9 3900X, 24
+threads, Windows 11, go1.27.0, `-count 6`, main's module and the branch
+back to back with no other test running:
+
+| benchmark | main time/op | branch time/op | main B/op | branch B/op | main allocs | branch allocs |
+|---|---:|---:|---:|---:|---:|---:|
+| Write, chunks | 101.2 ms | 81.2 ms (-20%) | 119.4 MiB | 20.6 MiB (-83%) | 4 868 | 2 709 |
+| Write, shards | 100.8 ms | 89.6 ms (-11%) | 142.2 MiB | 44.5 MiB (-69%) | 4 573 | 2 443 |
+| Read, chunks | 41.9 ms | 38.7 ms (-8%) | 35.9 MiB | 16.1 MiB (-55%) | 4 614 | 2 443 |
+| Read, shards | 41.7 ms | 40.7 ms (-3%) | 35.8 MiB | 16.1 MiB (-55%) | 3 942 | 1 795 |
+| ReadRegion (DirStore, shards) | 1.73 ms | 1.56 ms (-10%) | 1 025 KiB | 394 KiB (-62%) | 173 | 108 |
+| ReadChunk, chunks | 317 µs | 294 µs (~) | 255 KiB | 97 KiB (-62%) | 36 | 19 |
+| ReadChunk, shards | 326 µs | 302 µs (~) | 256 KiB | 98 KiB (-62%) | 42 | 28 |
+| WriteChunk, chunks | 783 µs | 658 µs (-16%) | 923 KiB | 132 KiB (-86%) | 36 | 19 |
+| WriteChunk, shards | 18.0 ms | 17.2 ms (~) | 21.7 MiB | 7.2 MiB (-67%) | 992 | 468 |
+
+(~ is benchstat's no significant difference at p < 0.05.) The waste B/op
+pointed at was gzip: a new
+`gzip.Writer` for every chunk (most of a megabyte of compressor state) and
+a new reader, inflating through `io.ReadAll`'s doublings. 6fe433e keeps
+writers per level and readers in `sync.Pool`s and inflates into one buffer
+sized from the gzip trailer, held to the chunk's bound. A reset writer
+writes what a new one does (`TestAKeptGzipWriterWritesWhatANewOneDoes`),
+and the store `cmd/zarr` writes for seed 3 is the same byte for byte, all
+1 406 keys under four sets of options (chunk 16 shard 2 gzip 1; 64, 0, none;
+32, 4, 5; 16, 0, 9), before and after. Not changed: a sharded WriteChunk
+still decodes and re-encodes its whole shard, as zarr-python does, and the
+ranged read already fetched only the index and the chunks it needs.
+
+**Checked.** `go test ./...` and `go vet ./...` in `zarr/`;
+`TestZarrPython` against zarr-python 3.4.0 and numpy 2.5.3; `cd cmd/zarr &&
+go test -short ./...`, and `TestTheSameWorldWritesTheSameStore`.
+
+---
+
+## 2026-09-16 - zarrdiff: signed change, by cause, expectations
+
+**What this is.** On `claude/zarrdiff-signed`, inside `cmd/zarr/zarrdiff`
+only: zarrdiff said how much an array changed as `|a-b|` over the whole
+map; now it says which way, where by cause, and whether that is what the
+change was meant to do. No world, the digest, the budget or `perf.sh`
+moved: nothing outside `cmd/zarr/zarrdiff` changed but this entry, and the
+yardsticks were not run.
+
+**What it adds.**
+- *Signed change* for arrays of amounts: mean, least, most, 5/50/95th
+  percentiles of `b-a` over the changed elements, and how many went up and
+  down. The percentiles come off a fixed histogram (32 bins an octave of
+  `|b-a|`, 2^-64 to 2^64 each side of zero, 64 KiB), within 1.1% of the
+  sorted value and clamped to the exact least and most.
+- `-by group/array` (repeatable, `-by-side a|b`): every map-shaped array's
+  changes by the category of each tile in a map of codes. A coded map
+  names every category from its CF flags; a map of feature ids lists the
+  `-top` N by tiles changed, reading the array a second time to bin just
+  those. `-only` limits the arrays; `-mask group/array=code[,code]` limits
+  the tiles.
+- `-expect file.json`: checks of `changed`, `tiles`, `share`, `mean`,
+  `p5/p50/p95`, `up`, `down` or `code` from/to, on an array or within a
+  `where` of a map's codes, with `min`/`max`/`above`/`below`. Exit 0 all
+  hold, 3 one does not; 1 and 2 as before.
+
+**Measured.** Globe seed 1 (1024 by 512, 83 arrays), `-water 7.5`
+(default) against `-water 8`, both exported from this branch; Ryzen 9
+3900X, 24 threads, other sessions loading the machine. Wall times
+interleaved with main's zarrdiff built from a temporary worktree:
+
+| run | wall |
+|---|---|
+| main's zarrdiff, plain | 3.8, 3.9, 4.2 s |
+| this branch, plain | 4.0, 3.8, 3.8 s |
+| `-by book/meeting`, before the chunk cache | 29 s |
+| `-by features/belt`, before the chunk cache | 26 s |
+| `-by book/meeting`, with the cache | 4.3 s |
+| `-by features/belt`, with the cache | 6.4 s |
+| four `-by` (meeting, koppen, terrain, belt), with the cache | 4.9 s |
+| `-expect` of 7 checks, `-only book/meeting` | 0.4 s |
+
+Plain runs match main. (The 0.9 s of the entry below was on a quieter
+machine.) The first `-by` build re-read the map for every block of every
+array. A CPU profile put 94% of the time in `cgocall`, nearly all of it
+file `Close` in the directory store, from 24 goroutines opening the same
+map's shards. The decoded chunks of the `-by`/`-mask`/`where` maps are now
+read once and shared between the arrays, at most `budget × processors`
+codes of 8 bytes held, the oldest dropped first. Peak working set, polled
+from PowerShell, was too noisy to compare: main's plain run read 113 MiB
+once and 1.2 GiB another time. The four `-by` run read 525 MiB once. Treat
+those as unmeasured.
+
+**What it showed about `-water 8`.** Checks written down first: history
+untouched (holds, `book/meeting` 0 changed); sea rose (holds, 1 383 open
+to water); did not fall back (fails, 397 water to open); Köppen share ≤ 2%
+(holds, 1.99%); collision belts' height unchanged (fails, 71% changed);
+dry ground not lowered on average (fails, mean -0.23 m); plate ids kept
+(fails, every tile's id down by 106, as the features numbered before
+plates changed). By `tile/terrain`: every open and wood tile's height
+moved, median +1e-5 m, 5-95% from -8.8 to +6.2 m. Half a metre of water
+reaches the ground's wearing everywhere, not just the shore. That is a
+finding for the water stage, not a fault in the tool. The worked example
+in `cmd/zarr/zarrdiff/README.md` is this run.
+
+**Held.** `cd cmd/zarr && go test -short ./...`. New tests on small stores
+written with the zarr package: histogram percentiles against a sort over
+three magnitudes; signed change on a known tweak (+10 on a collision, -1
+to -10 on a rift); `-by` a coded map and a map of ids with `-top`, the same
+report at `-budget 1` (the cache evicting on nearly every read), `-by-side b`,
+and the maps `-by` refuses; `-only`, one and two `-mask`s, masks by name
+and number; `-expect` all holding (exit 0), failing (3), a check that
+cannot measure, and malformed files and unknown code names (2).
+
+---
+
+## 2026-09-16 - cmd/zarr experiment loop: kept histories, every term, a store per stage
+
+**What this is.** On `claude/zarr-experiment-loop`: `cmd/zarr` gains
+`-keep-history` and `-from-history` (as `cmd/overview` has them),
+`-wetness`, `-woods`, `-growth`, `-glacial` and `-terms file.json`, and
+`-stages dir`, which writes a store at the end of every stage, with
+`-stages-diff a b` to name the first stage two experiments differ at. The
+recipe is the "experiment loop" section of `cmd/zarr/README.md`.
+
+**The root package.** One hook and nothing else: `StageWatch`, a
+`func(stage string, l *Land, g *Grid)`, which `generateFrom` calls after
+each stage when it is not nil; `Stages()`, the names; and
+`MakeLandWatching(seed, t, history io.Writer, watch)` and
+`LandFromHistoryWatching(in, watch)`, of which `MakeLandKeepingHistory` and
+`LandFromHistory` are now the nil-watch cases. `Generate` passes nil: an
+unwatched making does one nil compare per stage and allocates nothing more.
+`TestAWatchedWorldIsTheSameWorld` holds that a watched world, from the
+plates and from its history, is NewLand's, and that both see the same
+grid at every stage.
+
+**Digest.** `TERRA_DIGEST=write` on the base commit (312900f) rewrote
+`docs/perf/digest.json` to the bytes already committed; `TERRA_DIGEST=check`
+after the change passes. No world moved.
+
+**Budget.** `TestWorldCreationBudget` passes unchanged; not rewritten.
+`perf.sh` and the yardsticks were not run: nothing in the root package but
+the hook changed. `go test -short -timeout 60m .` passes (95 s).
+
+**Demonstrated.** Ryzen 9 3900X, 24 threads, other sessions on the machine,
+so the times are indicative. A globe (`-preset globe`, 1024 by 512):
+
+| run | making | writing |
+|---|---|---|
+| made, `-out` | 76.3 s | 1.4 s |
+| made, `-keep-history` (198 MiB file) | 72.4 s | 1.9 s |
+| `-from-history`, twice | 17.5 s, 16.3 s | 1.8 s, 1.1 s |
+| `-from-history -stages` | 22.5 s with the six stores (0.6-0.9 s each) | |
+| made, `-stages` | 93.8 s with the six stores | |
+
+A globe re-exported from its history takes the later stages' 16-17 s, a
+quarter of the 72-76 s of making it. `zarrdiff` finds the store made from
+the history the same as the made one in all 83 arrays, and `-stages-diff`
+finds every stage's store the same whether the world was made from the
+plates or from the kept history, the ground stage included.
+
+---
+
+## 2026-09-16 - zarrdiff: where and by how much two worlds differ
+
+**What this is.** On `claude/zarrdiff`: `cmd/zarr/zarrdiff`, a command in
+the `cmd/zarr` module that compares two stores `cmd/zarr` wrote. The digest
+says whether a change moved a world; this says which fields moved, over how
+much of the map, by how much, and where, as evidence to set beside the
+yardsticks. Recipe and output in `cmd/zarr/zarrdiff/README.md`. Nothing
+outside `cmd/zarr` changed besides this entry, and nothing in `zarr/`,
+`main.go` or `export.go`: every world, the digest and the budget are main's,
+and `perf.sh` and the yardsticks were not run.
+
+**What it does.** Walks both directory stores for `zarr.json` (the store
+interface cannot list); lists the arrays and groups in one alone; compares
+group attributes; for each array in both, shape, type, attributes, then
+elements: count changed with NaN equal to NaN, max and mean `|a-b|`, share
+of tiles changed (beds folded into their tile), the bounding box in y/x,
+and for arrays with a legend the commonest code changes named from each
+side's legend. Text by share of tiles changed, `-json`, `-png dir`. Exit 0
+the same, 1 different, 2 error.
+
+**Demonstrated.** One run, Ryzen 9 3900X, 24 threads, other sessions on
+the machine. Three globes (`-preset globe`, 1024 by 512, 67 arrays, 41 MiB
+each) exported from this branch, whose world code is main's (3973917):
+
+| | exit | wall | peak working set |
+|---|---|---|---|
+| seed 1 against seed 1, made and written twice | 0 | 1.3 s | ~120 MiB |
+| seed 1 against seed 2 | 1 | 0.9 s | ~130 MiB |
+
+Seed 1 made twice is the same store in every element, a second check,
+from outside the package, of what the digest holds. Seed 2 moves 60 of 67
+arrays: the climate means and rain on every tile (`climate/mean` max 41 °C,
+mean 19 °C), `ground/height` on 96 % (mean 2 927 m), `tile/terrain` on 58 %
+(commonest: 76 755 water to open, 55 583 ice to open), `features/lake` on
+2 %, and all 15 columns of `features/table` not compared, as the tables are
+28 576 and 27 820 features long. A seed is the loudest change there is; an
+algorithm change is expected to light a few arrays over part of the map.
+
+**Memory.** Arrays are read in blocks of whole chunks: one chunk high and as
+wide as `-budget` (2^20 elements) allows, one array a processor, so the most
+held is about 2 x 2^20 x 8 B x 24, some 400 MiB, however large the world;
+the two globes whole would be several hundred MiB. Not run on two `-max`
+worlds, which take this machine's memory to make.
+
+**Held.** `cd cmd/zarr && go test -short ./...`: the stores written with
+the zarr package (identical; one element and one code changed, at a budget
+of one element and of 2^20; NaN fills against numbers; a shape mismatch;
+an array in one store alone; attributes; arguments that cannot be
+compared), and `TestZarrdiffSeesTheSameWorldAsTheSame`, which builds the
+command, exports an ancient world twice with `export` and another seed
+once, and expects exit 0 and 1.
+
+---
+
+## 2026-09-16 - cmd/zarr stores that xarray reads: coordinates, CF flags, stable Köppen codes
+
+**What this is.** On `claude/zarr-xarray`, off main at 3973917: the first
+time xarray was pointed at a store, and the fixes to `cmd/zarr` for what
+it found. Only `cmd/zarr` changed; `zarr/` and the root package did not, so
+every world, the digest and the budget are main's.
+
+**What xarray reported before.** xarray 2026.7.0, zarr-python 3.4.0,
+numpy 2.5.3, on the seed 1 globe (1024 by 512) and the default valley,
+both written by main's command:
+
+- No errors, and every array's values came back equal to zarr-python's.
+  The valley has no `book` group, which is right for a drawn map.
+- Every default `open_zarr` and `open_datatree` warned: *Failed to open
+  Zarr store with consolidated metadata* (RuntimeWarning).
+- No coordinates: `Dimensions without coordinates: y, x`, so no `.sel` by
+  place, and no tile size anywhere in the store.
+- `to_netcdf` of `tile` or `climate` failed: `Invalid value for attr
+  'legend'` (a JSON object). The whole datatree's failed with `Object
+  dtype dtype('O') has no native HDF5 equivalent`, and h5netcdf refuses a
+  bool attribute such as the root's `wrap`.
+- Misdecoded meaning, not bits: `strata/rock` and `strata/formed` held 0
+  past the bottom of a pile, which reads as granite laid in epoch 0 (70 %
+  of the globe's beds); `climate/koppen` numbered only the types present,
+  so code 9 was `Cfb` in the globe and nothing in the valley (whose
+  `Cfb` was 1); the legends of the other coded arrays stopped at the
+  largest code present.
+- xarray does not use a Zarr v3 `fill_value` as a mask unless told to,
+  so the only masking it would do is by a `_FillValue` attribute.
+
+**What changed.** `y`/`x` coordinate arrays (float64 metres of the tile
+centre, index times `terra.TileSpan`) in every group of the map, `bed` in
+strata and `feature` (the id) in the features table; `long_name` for
+`about` and UDUNITS spellings of units; `flag_values`/`flag_meanings`
+over every code the type has, instead of `legend` (dropped: a dict attribute
+cannot go to netCDF, and two tables of one thing can disagree); one fixed
+table of the 27 Köppen types `koppenCode` can give, checked by a sweep of
+`KoppenOf`, with an export error for a type not in it; `_FillValue` 255
+(and fill 255) on `strata/rock` and `strata/formed`; `scale_factor` on
+`leached`, `lime`, `salt` and `strata/sand`; the root's `terms` as JSON
+text, `wrap` as 0/1, and `tile_span`; and the root's metadata written
+again last with every node's inline under `consolidated_metadata`
+(`must_understand: false`), as zarr-python consolidates v3. Every array
+keeps the world's type. `cmd/zarr/README.md` documents the layout.
+
+**What xarray reports after.** On both stores, opening and loading every
+group with defaults raises no warning (also under `python -W error`), every
+array decodes to zarr-python's elements with its scale and mask applied,
+`.sel(x=, y=)` finds tiles by metres, `cf_xarray` sees the coded arrays as
+flag variables (`koppen.cf == "Cfb"` works), and the whole datatree writes
+to netCDF with h5netcdf. That write still warns once each for the four
+scaled integer arrays (no `_FillValue` to keep for NaN): they have no
+spare value, as 65535 and 255 are real shares.
+
+`TestXarrayReadsAStore` (skipped unless `ZARR_PYTHON` names a Python with
+xarray) writes a small made world and runs `testdata/read_xarray.py`; it
+fails when the strata mask is removed. `TestEveryKoppenTypeHasACode` and
+`TestAStoreHasCoordinatesAndConsolidatedMetadata` are Go-only.
+
+**What it costs.** The globe store is 83 arrays, 176 files and 41.4 MiB
+(was 67, 143 and 41.2 MiB), written in 1.26 s against 0.76 s, one run
+with other sessions on the machine: a reading, not a baseline.
+
+**Existing stores.** The layout change breaks readers of stores written
+before it, not the stores: Go and zarr-python still open them. What
+changed under a reader: `legend` is gone for `flag_values`/`flag_meanings`
+(and meanings use underscores), Köppen codes are renumbered, `terms` is
+a string and `wrap` a number, `about` is `long_name` on arrays, units are
+spelt differently, and `strata/rock`/`formed` past a pile are 255, not 0.
+Old stores have no coordinates; rewrite them to get them.
+
+---
+
+## 2026-09-16 - Phase 3, step 1: the history on a grid of its own
+
+**What this is.** The first step of the history grid (phase 3 of
+[scaling-plan.md](scaling-plan.md)), on `claude/history-grid` from main at
+3973917. No world moves: `TERRA_DIGEST=check` passes, the budget and pinned
+pass counts hold, the goroutine-independence test and the short tier pass.
+
+**What changed.** `history` ends where the history's own work ends - the
+floor's depth and the rock's rise read off the crust, the plates kept, the
+rock settled, the heights softened - and returns a `deepStage` (the ocean
+crust, the floor depths and shares, the uplift). The rest of what it did,
+which is the map's and not the planet's, is `settleHistory` on the map: the
+rescaling by rank (`basins`, `normalise`, `restrata`), the slides, the deep
+floor, `expose` and the drain. Between the two, `historyGround` gives the
+grid the history runs on and `handDown` (`historygrid.go`) lays a finished
+history onto the map when that grid is not the map: heights, uplift, floor
+depth and share read between the history's tiles (bilinear, wrapping east
+to west on a globe); the tile, its soil, its line of the book and its pile
+of beds from the nearest history tile, the beds moved with the ground; the
+ocean crust by nearest; the water, weather and lakes read afresh on the map.
+The history grid is the map (`historyShrink` is 1) everywhere but in tests.
+
+Found on the way, which step 2 is: `deepSpan`, the kilometres a history
+tile is, is not a fact about the planet. It follows from the plate count and
+spacing, which follow from the grid's width, and about fifteen constants
+of the history are counted in tiles (the plate count, the molten era's
+cells, the floods' grain, the bow and grain of the ranges, `seamLeast`,
+`marginRamp`, the fold's wave). A history on a coarser grid is so far a
+history of another planet, laid onto this map.
+
+**Tests.** `TestAHistoryHandedDownOntoItsOwnSizeIsItself`: handed down onto
+a map of its own size by the reading between tiles, a history is itself to
+the bit (ancient, globe128). `TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner`:
+from half the size, no height outside the history's range, every tile the
+nearest history tile's, beds where they stood against the ground, every
+plate on the map. `TestAWorldOnACoarserHistoryIsAWorld`: ancient on a
+half-size history is independent of the goroutines and resumes from its
+history file to the bit.
+
+**What it measured**, for scale only, since these worlds are not today's
+(the full globe, one run each, quiet machine):
+
+| history grid | globe wall | land share | plates | forest tiles |
+|---|---:|---:|---:|---:|
+| 1024x512 (the map) | 49.7 s | 0.394 | 48 | 45 797 |
+| 512x256 | 26.7 s | 0.329 | 46 | 41 797 |
+| 256x128 | 15.7 s | 0.375 | 27 | 41 792 |
+
+The quarter-size history has 27 plates to the map's 48 because the plate
+count is read off the grid's width: the size-dependence step 2 takes out
+before any of these is judged by the yardsticks.
+
 ---
 
 ## 2026-09-16 - The suite's histories kept between runs

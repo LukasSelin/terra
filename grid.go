@@ -241,10 +241,13 @@ type Grid struct {
 	// abyss is, for each tile of the deep sea floor, the height it stood at
 	// before its crust's age laid it kilometres lower, and NaN on every other
 	// tile; uplift is how fast a history left each tile's rock
-	// rising, in metres a year. Both are a watered history's, and nil on any
-	// other map. See abyss.go.
-	abyss  []float64
-	uplift []float64
+	// rising, in metres a year; and floorAge is how old each tile's ocean
+	// crust is, in millions of years, and NaN where the crust is continent.
+	// All three are a watered history's, and nil on any other map. See
+	// abyss.go.
+	abyss    []float64
+	uplift   []float64
+	floorAge []float64
 
 	// pedons says the soil's age and chemistry have been laid and are kept
 	// from here on, which they are from the end of the making of a map. See

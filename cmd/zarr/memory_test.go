@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 	"runtime/metrics"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,16 +26,34 @@ import (
 // The readings here are of the export alone: the land is made first, the
 // collector run, and the heap read from there.
 
-// discard is a store that keeps nothing but a count of what it was given,
-// so that what is read is the export's and not the store's.
-type discard struct{ bytes atomic.Int64 }
+// discard is a store that keeps nothing of the arrays but a count of the
+// bytes it was given, so that what is read is the export's and not the
+// store's. It keeps the metadata, which the export reads back to
+// consolidate it.
+type discard struct {
+	bytes atomic.Int64
+	meta  sync.Map
+}
 
-func (d *discard) Get(context.Context, string) ([]byte, error) { return nil, zarr.ErrNotFound }
-func (d *discard) Set(_ context.Context, _ string, v []byte) error {
+func (d *discard) Get(_ context.Context, key string) ([]byte, error) {
+	if v, ok := d.meta.Load(key); ok {
+		return v.([]byte), nil
+	}
+	return nil, zarr.ErrNotFound
+}
+
+func (d *discard) Set(_ context.Context, key string, v []byte) error {
+	if path.Base(key) == "zarr.json" {
+		d.meta.Store(key, v)
+	}
 	d.bytes.Add(int64(len(v)))
 	return nil
 }
-func (d *discard) Delete(context.Context, string) error { return nil }
+
+func (d *discard) Delete(_ context.Context, key string) error {
+	d.meta.Delete(key)
+	return nil
+}
 
 // spent is what one export cost.
 type spent struct {

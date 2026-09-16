@@ -70,7 +70,7 @@ func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
 // a new grid. See stages.go.
 func (w *Land) Generate(cfg Terms) {
 	defer phase("Generate")()
-	w.generateFrom(w.newGround(cfg), cfg, stageGround, len(stages))
+	w.generateFrom(w.newGround(cfg), cfg, stageGround, len(stages), nil)
 }
 
 // newGround is the grid a world is made on, before any stage has run.
@@ -88,7 +88,14 @@ func (w *Land) stageGround(g *Grid, cfg Terms) {
 	if cfg.Epochs > 0 {
 		// A world that made itself: the land and the rock under it are both
 		// what its history left. See history.go.
-		w.history(g, cfg.Epochs, cfg.SeaShare, cfg.Water)
+		// It runs on a grid of its own size, and is handed down onto the
+		// map when that is not the map's. See historygrid.go.
+		hg := w.historyGround(g, cfg)
+		d := w.history(hg, cfg.Epochs, cfg.SeaShare, cfg.Water)
+		if hg != g {
+			d = handDown(hg, g, d)
+		}
+		w.settleHistory(g, d, cfg.Water)
 	} else {
 		w.raise(g)
 		// What is under the ground is laid down with the ground, and before
