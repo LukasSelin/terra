@@ -154,9 +154,9 @@ func (g *Grid) shoreUp(s *surf, rise float64) {
 				laid[gr] = got[gr] / float64(len(at))
 			}
 			tile := &g.Tiles[i]
-			mix(tile, float64(tile.Soil), laid)
+			mix(tile, float64(g.Soil[i]), laid)
 			d := carrying(laid)
-			tile.Soil += float32(d)
+			g.Soil[i] += float32(d)
 			g.Height[i] += d
 		}
 	}

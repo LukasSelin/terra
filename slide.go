@@ -131,7 +131,7 @@ func (g *Grid) landslide(keep bool) {
 	queue := make([]int32, 0, n)
 	seen := make([]int32, n) // which runout last passed each tile, by number
 	for i := range g.Tiles {
-		h[i], soil[i] = g.Height[i], float64(g.Tiles[i].Soil)
+		h[i], soil[i] = g.Height[i], float64(g.Soil[i])
 		queue = append(queue, int32(i))
 		queued[i] = true
 	}
@@ -258,7 +258,7 @@ func (g *Grid) landslide(keep bool) {
 		}
 	}
 	for i := range g.Tiles {
-		g.Height[i], g.Tiles[i].Soil = h[i], float32(soil[i])
+		g.Height[i], g.Soil[i] = h[i], float32(soil[i])
 	}
 }
 

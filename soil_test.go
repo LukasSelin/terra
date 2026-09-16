@@ -42,7 +42,7 @@ func TestSoilIsThinOnCrestsAndDeepInHollows(t *testing.T) {
 			if tl.Wet() || tl.Terrain.Tidal() || tl.Mark != None {
 				continue
 			}
-			h := float64(tl.Soil)
+			h := float64(g.Soil[i])
 			switch round := roundOver(g, i); {
 			case round < -2:
 				crest, nc = crest+h, nc+1
@@ -88,7 +88,7 @@ func ridge(soil float32) *Grid {
 	g.Wrap = true
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Terrain, t.Soil, t.Sand, t.Clay = Grass, soil, 0.3, 0.3
+		t.Terrain, g.Soil[i], t.Sand, t.Clay = Grass, soil, 0.3, 0.3
 	}
 	return g
 }
@@ -151,8 +151,8 @@ func TestTheCreepMovesOnlySoilItHas(t *testing.T) {
 	for i := range change {
 		sum += change[i]
 		moved += math.Abs(change[i])
-		if lost[i] > float64(g.Tiles[i].Soil)*(1+1e-9) {
-			t.Errorf("tile %d gave %.4f m of soil and had %.4f", i, lost[i], g.Tiles[i].Soil)
+		if lost[i] > float64(g.Soil[i])*(1+1e-9) {
+			t.Errorf("tile %d gave %.4f m of soil and had %.4f", i, lost[i], g.Soil[i])
 		}
 	}
 	if moved == 0 {
@@ -174,13 +174,13 @@ func TestLandslidesConserveTheGround(t *testing.T) {
 		for i := range g.Tiles {
 			before += g.Height[i]
 			scale += math.Abs(g.Height[i])
-			soil += float64(g.Tiles[i].Soil)
+			soil += float64(g.Soil[i])
 		}
 		g.landslide(true)
 		after, soilAfter := 0.0, 0.0
 		for i := range g.Tiles {
 			after += g.Height[i]
-			soilAfter += float64(g.Tiles[i].Soil)
+			soilAfter += float64(g.Soil[i])
 		}
 		if math.Abs(after-before) > 1e-12*scale {
 			t.Errorf("%s: the ground came to %.9g before the slides and %.9g after", name, before, after)

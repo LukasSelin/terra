@@ -157,9 +157,9 @@ func soilDepths(gs []*Grid) soilDepthReading {
 				}
 				switch s := g.Slope(g.PosOf(i)); {
 				case s > 0.1 && g.Drain[i] > FloodDepth:
-					hs, hn = hs+float64(t.Soil), hn+1
+					hs, hn = hs+float64(g.Soil[i]), hn+1
 				case s < 0.05 && g.Drain[i] <= FloodDepth:
-					fs, fn = fs+float64(t.Soil), fn+1
+					fs, fn = fs+float64(g.Soil[i]), fn+1
 				}
 			}
 		}
@@ -187,7 +187,7 @@ func clayByClimate(gs []*Grid, wet bool) float64 {
 		for _, g := range gs {
 			for i := range g.Tiles {
 				t := &g.Tiles[i]
-				if g.underSea(i) || t.Wet() || t.Terrain.Tidal() || t.Terrain == Rock || t.Soil <= 0 {
+				if g.underSea(i) || t.Wet() || t.Terrain.Tidal() || t.Terrain == Rock || g.Soil[i] <= 0 {
 					continue
 				}
 				k := g.meanTempOf(i)

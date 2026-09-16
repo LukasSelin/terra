@@ -217,7 +217,7 @@ func (g *Grid) laySoil(made bool) {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			h, pace := g.soilDepthOf(i)
-			g.Tiles[i].Soil = float32(h)
+			g.Soil[i] = float32(h)
 			// The history's age bounds the ground's own reading of it, except
 			// where the history last saw the tile under its sea: the map's sea
 			// is poured again, and when that ground came out of it the history

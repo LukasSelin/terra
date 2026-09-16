@@ -154,7 +154,7 @@ func TestTheCoastConservesTheGround(t *testing.T) {
 	g, _ := headland()
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
-		t.Soil, t.Sand, t.Clay = 2, 0.5, 0.2
+		g.Soil[i], t.Sand, t.Clay = 2, 0.5, 0.2
 		if p := g.PosOf(i); p.X < 20 && p.X > 14 {
 			g.Height[i] = 9.5 // a shallow shelf the sand moves over
 		}

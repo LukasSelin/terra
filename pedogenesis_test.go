@@ -109,7 +109,7 @@ func soilStateReadings() {
 		carbon := map[Terrain][2]float64{}
 		for i := range g.Tiles {
 			t := &g.Tiles[i]
-			if !forms(t) || t.Soil <= 0 {
+			if !forms(t) || g.Soil[i] <= 0 {
 				continue
 			}
 			ages = append(ages, float64(t.Exposed))
@@ -153,7 +153,7 @@ func soilStateReadings() {
 // tile for its soil's age and chemistry. See memory.go.
 func TestTheSoilStateCostsATileNothing(t *testing.T) {
 	if got := unsafe.Sizeof(Tile{}); got != 48 {
-		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 48 since the height, the flow and the drain went beside the map", got)
+		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 48 since the height, the flow, the drain and the soil went beside the map (the soil left four bytes of padding before Sand)", got)
 	}
 }
 
@@ -163,7 +163,7 @@ func one(rain, runoff float64) *Grid {
 	g := NewGrid(1, 1)
 	g.rain, g.runoff = []float64{rain}, []float64{runoff}
 	t := &g.Tiles[0]
-	t.Terrain, t.Bedrock, t.Soil, g.Drain[0] = Grass, Basalt, 1, 50
+	t.Terrain, t.Bedrock, g.Soil[0], g.Drain[0] = Grass, Basalt, 1, 50
 	return g
 }
 
@@ -291,7 +291,7 @@ func TestTheSoilIsOldWhereTheGroundIsStill(t *testing.T) {
 				}
 				continue
 			}
-			if tl.Mark != None || tl.Soil <= 0 {
+			if tl.Mark != None || g.Soil[i] <= 0 {
 				continue
 			}
 			age := float64(tl.Exposed)

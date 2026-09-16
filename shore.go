@@ -96,7 +96,7 @@ func deanSlope(d, y float64) float64 {
 func (g *Grid) medianGrain(i int) float64 {
 	t := &g.Tiles[i]
 	share := parts(t)
-	if t.Soil <= 0 {
+	if g.Soil[i] <= 0 {
 		sand, clay := g.TextureAt(g.PosOf(i))
 		share = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
 	}
@@ -698,8 +698,8 @@ func (g *Grid) silt(level func()) {
 			for _, i := range c.shoal[b] {
 				t := &g.Tiles[i]
 				g.Height[i] += change[i]
-				mix(t, float64(t.Soil), gained[i])
-				t.Soil += float32(carrying(gained[i]))
+				mix(t, float64(g.Soil[i]), gained[i])
+				g.Soil[i] += float32(carrying(gained[i]))
 			}
 		}
 		level()

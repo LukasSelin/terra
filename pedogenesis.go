@@ -315,11 +315,10 @@ func dryness(wetness, wetter, drier float64) float64 {
 // carbonLevel is what the carbon on tile i comes to and how fast: input over
 // decay, for the soil it has, and the decay.
 func (g *Grid) carbonLevel(i int, c pedoClimate, cv cover) (level, rate float64) {
-	t := &g.Tiles[i]
 	grow := growthOf(c.temp) * ramp(c.temp, -5, 5) * c.wetnessShare()
 	middle := growthOf(MeanTemp) * ramp(MeanTemp, -5, 5) * (1 - math.Exp(-middleRunoff/weatherRunoff))
 	decay := math.Pow(2, (c.temp-MeanTemp)/10) * (1 - 0.6*c.sodden) * cv.decay / carbonYears
-	held := -math.Expm1(-float64(t.Soil)/carbonDepth) / -math.Expm1(-1/carbonDepth)
+	held := -math.Expm1(-float64(g.Soil[i])/carbonDepth) / -math.Expm1(-1/carbonDepth)
 	return carbonMiddle * grow / middle * cv.input * held / (decay * carbonYears), decay
 }
 

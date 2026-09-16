@@ -311,7 +311,7 @@ func (g *Grid) wear(years float64) {
 					h += made
 				}
 			}
-			t.Soil = float32(h)
+			g.Soil[i] = float32(h)
 			switch {
 			case g.deep > 0:
 				g.deepExposure(i, -change[i], years)
@@ -503,11 +503,11 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	span := g.span()
 	// How deep the soil the creep carries is counted, against SoilScale: see
 	// above for why a history does not count it.
-	depth := func(t *Tile) float64 {
+	depth := func(i int) float64 {
 		if g.deep > 0 {
 			return 1
 		}
-		return math.Min(float64(t.Soil), soilActive) / SoilScale
+		return math.Min(float64(g.Soil[i]), soilActive) / SoilScale
 	}
 	// Half the pairs, so that each is taken once: east, and the three below.
 	pairs := [...]struct {
@@ -548,15 +548,15 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			if (a.Wet() && g.Flow[i] >= wander) || (b.Wet() && g.Flow[j] >= wander) {
 				continue
 			}
-			top := a
+			top, over := a, i
 			if g.Height[j] > g.Height[i] {
-				top = b
+				top, over = b, j
 			}
 			fall := math.Min(math.Abs(g.Height[i]-g.Height[j])/pr.run, creepSteepest*Critical) / Critical
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
-			kk := share / 8 * pr.near * hold(top) * depth(top) / (1 - fall*fall)
+			kk := share / 8 * pr.near * hold(top) * depth(over) / (1 - fall*fall)
 			if kk <= 0 {
 				continue
 			}
@@ -609,7 +609,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		if moved <= 0 {
 			continue
 		}
-		if have := float64(g.Tiles[hi].Soil) - lost[hi]; gives[hi] > have {
+		if have := float64(g.Soil[hi]) - lost[hi]; gives[hi] > have {
 			moved *= math.Max(0, have) / gives[hi]
 		}
 		change[hi] -= moved
@@ -754,11 +754,11 @@ func (g *Grid) waterStep(years float64) fluvial {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			t := &g.Tiles[i]
 			c.h[i] = g.Height[i]
-			c.soil[i] = float64(t.Soil)
+			c.soil[i] = float64(g.Soil[i])
 			// What the water takes off a tile is its soil, or its rock where it
 			// has none, which is the soil the rock would make.
 			c.parts[i] = parts(t)
-			if t.Soil <= 0 {
+			if g.Soil[i] <= 0 {
 				sand, clay := g.TextureAt(g.PosOf(i))
 				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
 			}

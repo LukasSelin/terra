@@ -164,7 +164,7 @@ func estuary() *Grid {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		t.Soil, t.Sand, t.Clay = 1, 0.1, 0.4
+		g.Soil[i], t.Sand, t.Clay = 1, 0.1, 0.4
 		switch {
 		case p.X < 40:
 			g.Height[i] = 2

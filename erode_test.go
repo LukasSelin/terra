@@ -231,7 +231,7 @@ func TestTheWaterWearsShaleBeforeGranite(t *testing.T) {
 		g := w.Grid
 		for i := range g.Tiles {
 			g.Tiles[i].Bedrock = rock
-			g.Tiles[i].Soil = 0
+			g.Soil[i] = 0
 		}
 		g.wear(ageYears)
 		return g.exported[Sand] + g.exported[Silt] + g.exported[Clay]

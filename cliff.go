@@ -58,7 +58,7 @@ func (g *Grid) cliffs(s *surf, years float64, supply []float64) {
 			}
 			face := g.Height[j] - g.sea
 			stuff := int(t.Bedrock)
-			if float64(t.Soil) >= face {
+			if float64(g.Soil[j]) >= face {
 				stuff = int(BedrockCount)
 			}
 			rate := cliffRate * attack[stuff]
@@ -93,5 +93,5 @@ const beachSand = 0.85
 // sea up, all soil, and that soil sand.
 func (g *Grid) beach(i int) bool {
 	t := &g.Tiles[i]
-	return t.Sand >= beachSand && float64(t.Soil) >= g.Height[i]-g.sea
+	return t.Sand >= beachSand && float64(g.Soil[i]) >= g.Height[i]-g.sea
 }

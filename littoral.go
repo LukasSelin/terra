@@ -104,8 +104,8 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 			return
 		}
 		t := &g.Tiles[i]
-		mix(t, float64(t.Soil), [Grains]float64{Sand: d})
-		t.Soil += float32(d)
+		mix(t, float64(g.Soil[i]), [Grains]float64{Sand: d})
+		g.Soil[i] += float32(d)
 		g.Height[i] += d
 	}
 	// seen marks the cells a search for a ring has walked through, with the
@@ -187,10 +187,10 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 			lay(i, d)
 			carried -= d
 		} else if t.Mark == None {
-			bed := float64(t.Soil) * t.Sand
+			bed := float64(g.Soil[i]) * t.Sand
 			e := math.Min(capacity-carried, bed)
 			if e > 0 {
-				soil := float64(t.Soil)
+				soil := float64(g.Soil[i])
 				rest := soil - e
 				if rest > 1e-12 {
 					t.Clay = t.Clay * soil / rest
@@ -198,7 +198,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 				} else {
 					rest = 0
 				}
-				t.Soil = float32(rest)
+				g.Soil[i] = float32(rest)
 				g.Height[i] -= e
 				carried += e
 			}

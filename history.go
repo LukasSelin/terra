@@ -1465,7 +1465,8 @@ type crust struct {
 	mark       []bool
 	ring, next []int32
 	tiles      []Tile
-	height     []float64 // the tiles' heights, beside them as on the Grid
+	height     []float64 // the tiles' heights and soil, beside them as on the Grid
+	soil       []float32
 	book       []record
 	strata     []column
 }
@@ -1521,7 +1522,7 @@ func newCrust(g *Grid) *crust {
 		fresh: make([]bool, n), nfresh: make([]bool, n),
 		nborn: make([]uint8, n), mark: make([]bool, n),
 		off: make([][2]float32, n), noff: make([][2]float32, n),
-		tiles: make([]Tile, n), height: make([]float64, n), book: make([]record, n), strata: make([]column, n),
+		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), book: make([]record, n), strata: make([]column, n),
 	}
 }
 
@@ -1589,10 +1590,12 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 
 	copy(cr.tiles, g.Tiles)
 	copy(cr.height, g.Height)
+	copy(cr.soil, g.Soil)
 	copy(cr.book, book)
 	copy(cr.strata, g.strata)
 	for j := range g.Tiles {
 		t := cr.tiles[cr.org[j]]
+		g.Soil[j] = cr.soil[cr.org[j]] // the soil goes with the tile, fresh floor taking its neighbour's
 		if cr.fresh[j] {
 			// New floor, with the soil of the tile beside it: basalt, dated
 			// from now, at the level ocean floor rides at. Set higher, as a

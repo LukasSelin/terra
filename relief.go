@@ -228,7 +228,7 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	i := g.Index(p)
 	t := &g.Tiles[i]
 	// Relief and time: how much of a root's reach there is soil to fill.
-	depth := -math.Expm1(-float64(t.Soil) / rootReach)
+	depth := -math.Expm1(-float64(g.Soil[i]) / rootReach)
 	// Water: the valley floor has the river's; a shoulder has what the rain
 	// leaves in it.
 	damp := clamp01(1 - g.Drain[i]/FloodDepth)
