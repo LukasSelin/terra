@@ -6,6 +6,171 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - the deep floor at GDH1's depths
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`.
+`floorDepth` (`abyss.go`) is Stein and Stein's GDH1 (1992), 2600 + 365
+sqrt(t) m to 20 Myr and 5651 - 2473 exp(-0.0278 t) past it, where it was
+Parsons and Sclater's (1977), which comes toward 6.4 km on old floor where
+GDH1 comes toward 5.65. With the earth's ages the old floor is most of the
+ocean. `sinksPastCCD` is the curve turned round: 27.5 Myr (was 32.7).
+
+**Readings.** Globe, seed 1: oceanic hypsometric mode -5.375 km (-5.625),
+still a gap, a sixth of the deep floor at 5.25-5.5 km; ridge 2.77 km (2.51),
+subsidence to 70 Myr 317 m/sqrt(Myr) (347), flattening 0.19 (0.48), all in
+range; sediment 773 m on the mean (797). Every other reading is the
+sediment commit's: the land does not move, since the floor is out of
+`meanHard`.
+
+**Held.** `go test -short`, `cmd/zarr` tests, the yardsticks: no failures.
+Digest: `globe128` rewritten. `perf.sh check` not run.
+
+---
+
+## 2026-09-16 - sediment on the deep floor, and the floor out of the land's mean hardness
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`, after
+main was merged in for the zarr experiment loop. The deep floor carried some
+twenty metres of sediment: what the history lays on it is squeezed with its
+other beds into the map's spread of heights. `floorSediment` (`abyss.go`)
+gives it what its age gathers: calcareous ooze at 1 cm/kyr under a warm sea
+while the floor is above a 4.5 km compensation depth, red clay at 1 mm/kyr,
+and a turbidite apron off the continents (1.5 km at the slope's foot, e-fold
+300 km, laid over 20 Myr; chosen). The floor stands 0.57 of it higher, for
+the load. `layAbyss` lays what the pile lacks as limestone and shale in the
+order they came. `cmd/zarr` writes `ground/floor_age` and
+`ground/floor_sediment`.
+
+`seafloorSubsidence` reads the basement, the sounded depth with the
+sediment's lift put back, as Parsons and Sclater's depths were: read at the
+sediment's top, flattening came out 0.63.
+
+**What the zarr loop found.** With the sediment, the small globes' Flint R2
+(0.71), Hack exponent (0.523) and Hack at 2x less 1x (0.101) failed. A globe
+before and after, `-stages` and `-stages-diff`: the first stage differs at
+ground, on the floor only; by shape, 95 % of land tiles had moved by up to
+10 m. `meanHard` averaged the rock's hardness over every tile, and the floor
+turned from basalt to limestone and shale softened the land's mean. The
+deep floor, which the weather does not reach, is now left out of it. That
+moves the land once; every yardstick then passes.
+
+`TestTheTideLaysFlatsOnlyWhereItReaches` reads flats off small globe 2 and
+not 3: the tide reads the sea's depth, and the six small globes hold none to
+two flats each.
+
+**Readings.** Globe, seed 1: sediment on ocean crust 797 m on the mean, 745
+on the deep floor; the floor's top rock 28 % limestone. Ridge 2.51 km,
+subsidence 347 m/sqrt(Myr), flattening 0.48, all as before. The oceanic
+hypsometric mode is -5.625 km (was -5.875), still a gap. Gap readings moved
+by the land's move: small-globe concavity 0.312 (0.294), its 2x less 1x
+0.151 (0.199), valley floor soil 0.41 m (0.48), floor over hillslope 1.79x
+(2.11), Oxisols 0.023 (0.024).
+
+**Held.** `go test -short`, `cmd/zarr` tests, and the yardsticks: no
+failures. Digest: `globe128` rewritten; `valley` and `ancient`, which have no
+deep floor, unchanged. `perf.sh check` not run.
+
+---
+
+## 2026-09-16 - the first plates' ocean floor has ages: flattening closes
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. The
+first plates' ocean crust was all dated from the start of the history, so
+half a globe's deep floor was 64 Myr old and 5.3 km down, and no floor was
+old enough to flatten. `firstFloorAges` (`abyss.go`) now gives it the ages
+it had before the history began: the earth's age-area law (Sclater and
+others 1980; Parsons 1982), area falling linearly to nothing at 180 Myr
+(Müller and others 2008) less the history still to come, ranked by distance
+from the seams between ocean plates. The crust carries them (`crust.aged`),
+`floorDepths` lays the floor by them, and the grid keeps each tile's age as
+`floorAge`, which the history file keeps by reflection and `handDown` reads
+by the nearest tile.
+
+The ages do not feed the subduction. Letting the older of two first-plate
+crusts sink first changed which crust went down, and with it every globe's
+continents: the sea on the globe covered 6 % less, and the mean land carbon
+(8.99), the small globe's Hack exponent at 2x less 1x (0.083), its discharge
+exceedance exponent (0.481) and the tide flats of small globe 3 all failed.
+Without it the land is the soil commit's to the bit, and only the deep floor
+moves: the digest's `globe128` changes, and `valley` and `ancient`, which
+have no ocean, do not.
+
+`seafloorSubsidence` reads each tile's age off `floorAge`, in bins of an
+epoch, and only on floor a shelf and a slope's width (230 km, six globe
+tiles) from continental crust, which is the floor `floorDepths` lays at its
+age's depth. Read over the margins too, the floor of 50 to 75 Myr, much of
+it on the first rifts' margins, came out a kilometre shallow and the old
+floor sank 0.83 as fast as the young.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | before | now | real |
+|---|---|---|---|
+| ridge crest depth, km | in range | 2.51 | 2.0-3.0 |
+| subsidence to 70 Myr, m/sqrt(Myr) | in range | 347 | 250-450 |
+| flattening past 70 Myr | NaN (gap) | 0.48 | -0.2-0.6 |
+| oceanic hypsometric mode, km | -5.375 (gap) | -5.875 (gap) | -5.0 to -3.8 |
+
+The mode goes the wrong way, and stays a gap: with the earth's ages the
+Parsons and Sclater depths heap up at 5.5-6 km. The earth's floor stands
+shallower under its sediment and its plateaus and swells; a globe's carries
+some twenty metres.
+
+**Held.** `go test -short` passes. `TestRealNumbers|TestTheRealWorld`: no
+failures, and every other reading is the soil commit's. `scripts/perf.sh
+check` not run: the machine was loaded.
+
+---
+
+## 2026-09-16 - soil orders and soil carbon: six soil yardsticks close
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`. Two
+changes to the soil (workstream I), and the world moves: the digest is
+rewritten.
+
+- `carbonLevel` (`pedogenesis.go`): what grows into the soil is the Miami
+  model's warmth term times its rain term, where it was West's runoff term
+  and nothing below -5 C. The decay goes by a Q10 of 1.4 (Mahecha and
+  others 2010) where it was 2, slows with drought as the rain term to 0.7,
+  and runs at a fifth on permafrost. Half the carbon (0.8 on permafrost)
+  lies in the litter and needs no mineral soil under it. The constants were
+  fitted offline against the globe's forest, grass, desert and tundra.
+- `SoilOrderOf` (`soilorder.go`, new): Soil Taxonomy's key asked of what a
+  tile carries, for Gelisols, Histosols, Oxisols, Aridisols, Ultisols,
+  Mollisols, Alfisols, Inceptisols and Entisols, and no soil.
+- `carbonByBiome` reads the biome ratios over tiles with soil, as Jobbágy
+  and Jackson's pits were dug; the land mean still counts bare ground at
+  nothing. Half the desert tiles have no soil, so without this forest over
+  desert reads 3.7.
+
+**Readings.** Globe, seed 1:
+
+| yardstick | main | this | real |
+|---|---|---|---|
+| carbon, forest over desert | 143x | 1.93x | 1.5-3.2 |
+| carbon, tundra over desert | 0.19x | 1.81x | 1.5-3.2 |
+| mean land carbon, kg C/m2 | 1.96 | 9.54 | 9-13 |
+| Aridisols | - | 0.111 | 0.09-0.15 |
+| Gelisols | - | 0.098 | 0.06-0.11 |
+| Mollisols | - | 0.064 | 0.05-0.09 |
+| Oxisols | - | 0.024 (gap) | 0.05-0.10 |
+
+The rest of the land: no soil 0.125, Alfisols 0.397, Inceptisols 0.145,
+Histosols 0.020, Ultisols 0.013, Entisols 0.004. Alfisols stand at half
+again Earth's share and Ultisols and Oxisols at a fraction, for one reason:
+the warm humid land's surfaces are a median of fourteen thousand years old,
+too young to be leached.
+
+**Held.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout 60m .`
+on this branch and on its base (312900f), side by side: no failures on
+either, and every other gap reads the same. `go test -short` passes, the
+budget test with it, so the heap budget is not rewritten. The digest was
+checked on the base (it holds) and rewritten here: all three budget worlds
+move, as fertility reads the carbon through `humus`. `scripts/perf.sh check`
+was not run: the machine was loaded by other sessions.
+
+---
+
 ## 2026-09-16 - cmd/overview: salt lakes drawn, and maps of the soil and of Köppen–Geiger
 
 **What this is.** `cmd/overview` and `README.md` only, on

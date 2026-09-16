@@ -189,16 +189,18 @@ func estuary() *Grid {
 // globe cut into steep country is not everywhere, and they are no great part of
 // it. A valley has no sea and no tide.
 //
-// A small globe with flats on it: the third. The fourth had sixteen while its
+// A small globe with flats on it: the second. The fourth had sixteen while its
 // whole ocean floor lay within twenty metres of the sea and every tile of it
 // was surf the littoral drift carried sand across; with the deep floor laid at
 // its age's depth - see abyss.go - that sand stays on the shelves, and the
-// fourth has none.
+// fourth has none. The third had them until the floor was given its sediment
+// and stood some hundreds of metres higher, which moved the tides the basins
+// ring with; the six small globes hold none to two flats each.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 3", yardWorld("small", 3, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})

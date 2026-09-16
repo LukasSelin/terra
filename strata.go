@@ -223,12 +223,21 @@ func (g *Grid) bedAt(i int, h float64) Bedrock {
 // the water and holds up the slopes against this and not against a fixed
 // figure, so that a map of all one rock wears exactly as it did before there
 // were beds, and the rates the yardsticks measure are the map's own.
+//
+// The deep floor is not in it: nothing the weather does reaches it (see
+// abyssal), and it was, so that the sediment laid on the floor - limestone
+// and shale over its basalt - softened the mean and moved every hillside on
+// the land, and a small globe's rivers with them.
 func (g *Grid) meanHard() float64 {
-	sum := 0.0
+	sum, n := 0.0, 0
 	for i := range g.Tiles {
+		if g.abyssal(i) {
+			continue
+		}
 		sum += g.Tiles[i].Hard()
+		n++
 	}
-	return sum / math.Max(1, float64(len(g.Tiles)))
+	return sum / math.Max(1, float64(n))
 }
 
 // expose takes off every tile's pile whatever the ground no longer reaches,

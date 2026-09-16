@@ -413,6 +413,11 @@ func (e *exporter) ground(grp *zarr.Group) {
 	put(e, grp, field{name: "soil", units: "m", about: "soil over the rock"}, same(g.Soil))
 	put(e, grp, field{name: "sand", units: "1", about: "share of the soil that is sand"}, same(g.Sand))
 	put(e, grp, field{name: "clay", units: "1", about: "share of the soil that is clay; the rest of sand and clay is silt"}, same(g.Clay))
+	n := len(g.Tiles)
+	put(e, grp, field{name: "floor_age", units: "Myr", about: "how old the ocean crust is; NaN on continental crust or a map with no watered history"},
+		func() []float64 { return tiles(n, g.FloorAge) })
+	put(e, grp, field{name: "floor_sediment", units: "m", about: "the beds over the ocean crust's basalt; NaN on continental crust"},
+		func() []float64 { return tiles(n, g.FloorSediment) })
 }
 
 func (e *exporter) tiles(grp *zarr.Group) {
