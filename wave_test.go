@@ -100,7 +100,7 @@ func exposure() (*Grid, func(i, k int) (float64, float64)) {
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		t := &g.Tiles[i]
-		g.Height[i], g.Soil[i], t.Sand, t.Clay = 10.2, 1, 0.4, 0.2
+		g.Height[i], g.Soil[i], g.Sand[i], t.Clay = 10.2, 1, 0.4, 0.2
 		switch {
 		case p.X < 30 && !(p.X == 20 && p.Y >= 16):
 			g.Height[i], t.Terrain = 9, Water
@@ -129,7 +129,7 @@ func TestAnExposedBeachIsSandier(t *testing.T) {
 	sand := func(y0, y1 int) float64 {
 		sum := 0.0
 		for y := y0; y <= y1; y++ {
-			sum += g.At(geom.Pos{X: 30, Y: y}).Sand
+			sum += g.Sand[g.Index(geom.Pos{X: 30, Y: y})]
 		}
 		return sum / float64(y1-y0+1)
 	}
@@ -137,7 +137,7 @@ func TestAnExposedBeachIsSandier(t *testing.T) {
 	if !(open > sheltered+0.1) || !(sheltered > 0.4) {
 		t.Errorf("the open beach is %.2f sand and the sheltered one %.2f, from 0.40", open, sheltered)
 	}
-	if deep := g.At(geom.Pos{X: 45, Y: 10}).Sand; deep != 0.4 {
+	if deep := g.Sand[g.Index(geom.Pos{X: 45, Y: 10})]; deep != 0.4 {
 		t.Errorf("ground well above the beach was sorted to %.2f sand", deep)
 	}
 	gone := g.exported[Sand] + g.exported[Silt] + g.exported[Clay]

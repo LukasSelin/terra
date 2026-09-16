@@ -186,9 +186,9 @@ func (g *Grid) soilDepthOf(i int) (depth, pace float64) {
 		}
 		round += near * (g.Height[g.Index(q)] - g.Height[i])
 	}
-	water := Erodibility * math.Sqrt(g.Flow[i]) * hold(t) * g.Slope(p)
+	water := Erodibility * math.Sqrt(g.Flow[i]) * g.hold(i) * g.Slope(p)
 	// Creep at a metre of soil per metre of soil, and in from the hollow.
-	creepy := g.creepShare(1) / 8 * hold(t) / SoilScale
+	creepy := g.creepShare(1) / 8 * g.hold(i) / SoilScale
 	taken := func(h float64) float64 {
 		return water - creepy*math.Min(h, soilActive)*round
 	}

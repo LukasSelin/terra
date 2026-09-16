@@ -98,9 +98,9 @@ func TestCalibrate(t *testing.T) {
 			}
 			switch {
 			case g.Drain[i] < FloodDepth/2:
-				floor, fN = floor+tl.Sand, fN+1
+				floor, fN = floor+g.Sand[i], fN+1
 			case g.Slope(g.PosOf(i)) > 0.1:
-				hill, hN = hill+tl.Sand, hN+1
+				hill, hN = hill+g.Sand[i], hN+1
 			}
 		}
 		fmt.Printf("  seed 5, 12 ages: sand on the floor %.3f, on the hillsides %.3f (margin %.3f)\n",

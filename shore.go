@@ -94,8 +94,7 @@ func deanSlope(d, y float64) float64 {
 // three sizes' logarithms, weighed by how much of each there is in its soil, or
 // in the soil its rock makes where it has none.
 func (g *Grid) medianGrain(i int) float64 {
-	t := &g.Tiles[i]
-	share := parts(t)
+	share := g.parts(i)
 	if g.Soil[i] <= 0 {
 		sand, clay := g.TextureAt(g.PosOf(i))
 		share = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
@@ -696,9 +695,8 @@ func (g *Grid) silt(level func()) {
 		c.account(next, change, gained, func(int32, [Grains]float64) {})
 		for b := range c.shoal {
 			for _, i := range c.shoal[b] {
-				t := &g.Tiles[i]
 				g.Height[i] += change[i]
-				mix(t, float64(g.Soil[i]), gained[i])
+				g.mix(int(i), float64(g.Soil[i]), gained[i])
 				g.Soil[i] += float32(carrying(gained[i]))
 			}
 		}

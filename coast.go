@@ -135,9 +135,8 @@ func (g *Grid) facing(s *surf) []int32 {
 // takeGround takes d metres off the top of tile i, its soil first and the rock
 // after, and says what it was made of by grain.
 func (g *Grid) takeGround(i int, d float64) [Grains]float64 {
-	t := &g.Tiles[i]
 	soil := math.Min(float64(g.Soil[i]), d)
-	was := parts(t)
+	was := g.parts(i)
 	var out [Grains]float64
 	for gr := range out {
 		out[gr] = soil * was[gr]
@@ -188,15 +187,15 @@ func (g *Grid) winnow(s *surf, years float64) {
 		}
 		soil := float64(g.Soil[i])
 		share := -math.Expm1(-mixingDepth * s.storm[c] * years / yr / soil)
-		silt, clay := share*soil*t.Silt(), share*soil*t.Clay
+		silt, clay := share*soil*g.siltAt(i), share*soil*t.Clay
 		gone := silt + clay
 		if gone <= 0 {
 			continue
 		}
 		rest := soil - gone
-		sand := soil * t.Sand
+		sand := soil * g.Sand[i]
 		if rest > 1e-12 {
-			t.Sand = sand / rest
+			g.Sand[i] = sand / rest
 			t.Clay = (soil*t.Clay - clay) / rest
 		}
 		g.Soil[i] = float32(math.Max(0, rest))

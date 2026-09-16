@@ -242,7 +242,7 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	if g.pedons {
 		chem = t.soilChemistry()
 	}
-	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*t.Loam())*g.humus(i)*chem)
+	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*g.loamAt(i))*g.humus(i)*chem)
 }
 
 // rootReach is how deep the soil a crop's roots fill is, in metres: most of

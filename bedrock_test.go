@@ -100,10 +100,11 @@ func TestSoilStaysAMixtureThroughTheWeather(t *testing.T) {
 	for age := 0; age < 8; age++ {
 		w.Erode()
 	}
-	for i := range w.Grid.Tiles {
-		t2 := &w.Grid.Tiles[i]
-		if t2.Sand < 0 || t2.Clay < 0 || t2.Sand+t2.Clay > 1+1e-9 || t2.Silt() < 0 {
-			t.Fatalf("tile %d is sand %v silt %v clay %v", i, t2.Sand, t2.Silt(), t2.Clay)
+	g := w.Grid
+	for i := range g.Tiles {
+		t2 := g.Tile(i)
+		if t2.Sand() < 0 || t2.Clay < 0 || t2.Sand()+t2.Clay > 1+1e-9 || t2.Silt() < 0 {
+			t.Fatalf("tile %d is sand %v silt %v clay %v", i, t2.Sand(), t2.Silt(), t2.Clay)
 		}
 	}
 }
@@ -178,15 +179,13 @@ func TestTheWaterSortsWhatItCarries(t *testing.T) {
 // one of nothing but clay are both poor, and neither is poorer for being
 // further past the best than the other is short of it.
 func TestLoamIsBestInTheMiddle(t *testing.T) {
-	best := &Tile{Sand: bestSand, Clay: bestClay}
-	if math.Abs(best.Loam()-1) > 1e-9 {
-		t.Errorf("the best mixture reads %v, want 1", best.Loam())
+	best := loamOf(bestSand, bestClay)
+	if math.Abs(best-1) > 1e-9 {
+		t.Errorf("the best mixture reads %v, want 1", best)
 	}
-	sand := &Tile{Sand: 1}
-	clay := &Tile{Clay: 1}
-	for _, poor := range []*Tile{sand, clay} {
-		if !(poor.Loam() < best.Loam()) {
-			t.Errorf("sand %v clay %v reads %v, as good as a loam", poor.Sand, poor.Clay, poor.Loam())
+	for _, poor := range [][2]float64{{1, 0}, {0, 1}} {
+		if got := loamOf(poor[0], poor[1]); !(got < best) {
+			t.Errorf("sand %v clay %v reads %v, as good as a loam", poor[0], poor[1], got)
 		}
 	}
 }
@@ -194,14 +193,11 @@ func TestLoamIsBestInTheMiddle(t *testing.T) {
 // Sand moves and clay stays, and the ground in between moves at the rate the
 // weathering was measured at before any of this existed.
 func TestSandWashesAndClayHolds(t *testing.T) {
-	sandy := &Tile{Sand: 1}
-	heavy := &Tile{Clay: 1}
-	even := &Tile{Sand: 0.35, Clay: 0.35}
-	if !(sandy.Wash() > even.Wash() && even.Wash() > heavy.Wash()) {
-		t.Errorf("sand %v, even %v, clay %v: they should fall in that order",
-			sandy.Wash(), even.Wash(), heavy.Wash())
+	sandy, heavy, even := washOf(1, 0), washOf(0, 1), washOf(0.35, 0.35)
+	if !(sandy > even && even > heavy) {
+		t.Errorf("sand %v, even %v, clay %v: they should fall in that order", sandy, even, heavy)
 	}
-	if math.Abs(even.Wash()-1) > 1e-9 {
-		t.Errorf("ground with as much sand as clay washes at %v, want 1", even.Wash())
+	if math.Abs(even-1) > 1e-9 {
+		t.Errorf("ground with as much sand as clay washes at %v, want 1", even)
 	}
 }

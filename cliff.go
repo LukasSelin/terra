@@ -92,6 +92,5 @@ const beachSand = 0.85
 // beach reports whether tile i is a beach and not a cliff: its face, from the
 // sea up, all soil, and that soil sand.
 func (g *Grid) beach(i int) bool {
-	t := &g.Tiles[i]
-	return t.Sand >= beachSand && float64(g.Soil[i]) >= g.Height[i]-g.sea
+	return g.Sand[i] >= beachSand && float64(g.Soil[i]) >= g.Height[i]-g.sea
 }

@@ -1465,8 +1465,9 @@ type crust struct {
 	mark       []bool
 	ring, next []int32
 	tiles      []Tile
-	height     []float64 // the tiles' heights and soil, beside them as on the Grid
+	height     []float64 // the tiles' heights, soil and sand, beside them as on the Grid
 	soil       []float32
+	sand       []float64
 	book       []record
 	strata     []column
 }
@@ -1522,7 +1523,7 @@ func newCrust(g *Grid) *crust {
 		fresh: make([]bool, n), nfresh: make([]bool, n),
 		nborn: make([]uint8, n), mark: make([]bool, n),
 		off: make([][2]float32, n), noff: make([][2]float32, n),
-		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), book: make([]record, n), strata: make([]column, n),
+		tiles: make([]Tile, n), height: make([]float64, n), soil: make([]float32, n), sand: make([]float64, n), book: make([]record, n), strata: make([]column, n),
 	}
 }
 
@@ -1591,11 +1592,12 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 	copy(cr.tiles, g.Tiles)
 	copy(cr.height, g.Height)
 	copy(cr.soil, g.Soil)
+	copy(cr.sand, g.Sand)
 	copy(cr.book, book)
 	copy(cr.strata, g.strata)
 	for j := range g.Tiles {
 		t := cr.tiles[cr.org[j]]
-		g.Soil[j] = cr.soil[cr.org[j]] // the soil goes with the tile, fresh floor taking its neighbour's
+		g.Soil[j], g.Sand[j] = cr.soil[cr.org[j]], cr.sand[cr.org[j]] // the soil goes with the tile, fresh floor taking its neighbour's
 		if cr.fresh[j] {
 			// New floor, with the soil of the tile beside it: basalt, dated
 			// from now, at the level ocean floor rides at. Set higher, as a
@@ -3107,18 +3109,18 @@ func (g *Grid) keepBook(book []record, epoch int) {
 		// Ground below the water it drains into is ground being filled in,
 		// and rock made of what is falling on it now dates from now.
 		if g.Drain[i] < FloodDepth/2 {
-			book[i].laid[Sand] += t.Sand * fill
-			book[i].laid[Silt] += t.Silt() * fill
+			book[i].laid[Sand] += g.Sand[i] * fill
+			book[i].laid[Silt] += g.siltAt(i) * fill
 			book[i].laid[Clay] += t.Clay * fill
 			t.Formed = uint8(epoch)
 			// The epoch's fill is a bed, coarse or fine as the water sorted
 			// it. Which of the two it finally counts as is read against the
 			// world's other fills at the end; see settleRock.
 			rock := Shale
-			if t.Sand >= sandyBed {
+			if g.Sand[i] >= sandyBed {
 				rock = Sandstone
 			}
-			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(t.Sand))), g.Height[i], bedPerFill)
+			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(g.Sand[i]))), g.Height[i], bedPerFill)
 		}
 	}
 }

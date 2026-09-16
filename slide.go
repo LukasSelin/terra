@@ -199,7 +199,7 @@ func (g *Grid) landslide(keep bool) {
 		// What comes down: the soil first, then the rock the soil was made
 		// of, as the mixture that rock makes.
 		fromSoil := math.Min(d, soil[i])
-		came := parts(&g.Tiles[i])
+		came := g.parts(int(i))
 		for gr := range came {
 			came[gr] *= fromSoil / d
 		}
@@ -248,7 +248,7 @@ func (g *Grid) landslide(keep bool) {
 				for gr := range laid {
 					laid[gr] *= lay
 				}
-				mix(&g.Tiles[at], soil[at], laid)
+				g.mix(int(at), soil[at], laid)
 				h[at] += lay
 				soil[at] += lay
 				left -= lay

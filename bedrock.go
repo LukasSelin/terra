@@ -270,10 +270,14 @@ func Bedrocks() []Bedrock {
 	return out
 }
 
-// Silt is the share of the soil that is neither sand nor clay. It is not
+// siltAt is the share of tile i's soil that is neither sand nor clay, and
+// TileView.Silt the same for a reader that asks by tile. It is not
 // stored, because three shares of one thing are two numbers and a
 // subtraction, and storing the third is storing a chance to disagree.
-func (t *Tile) Silt() float64 { return clamp01(1 - t.Sand - t.Clay) }
+func (g *Grid) siltAt(i int) float64 { return siltOf(g.Sand[i], g.Tiles[i].Clay) }
+
+// siltOf is the silt share of a soil with the given sand and clay.
+func siltOf(sand, clay float64) float64 { return clamp01(1 - sand - clay) }
 
 // The mixture that grows most: a sandy loam, enough sand to drain and work
 // and enough clay to hold water and what is dissolved in it. loamSpan is how
@@ -286,16 +290,21 @@ const (
 	loamSpan = 0.55
 )
 
-// Loam is how near this soil is to the mixture that grows most, in [0,1]. It
+// loamAt is how near tile i's soil is to the mixture that grows most, in
+// [0,1]; TileView.Loam is the same for a reader that asks by tile. It
 // is what the fertility of a tile is multiplied by: the same damp, gentle,
 // sunny ground is a good field over a loam and a poor one over sand that will
 // not hold what it is given or clay that will not let go of it.
-func (t *Tile) Loam() float64 {
-	d := math.Hypot(t.Sand-bestSand, t.Clay-bestClay) / loamSpan
+func (g *Grid) loamAt(i int) float64 { return loamOf(g.Sand[i], g.Tiles[i].Clay) }
+
+// loamOf is Loam for a soil with the given sand and clay.
+func loamOf(sand, clay float64) float64 {
+	d := math.Hypot(sand-bestSand, clay-bestClay) / loamSpan
 	return clamp01(1 - d)
 }
 
-// Wash is how fast this soil moves for what it is made of. Sand is loose
+// washAt is how fast tile i's soil moves for what it is made of; TileView.Wash
+// is the same for a reader that asks by tile. Sand is loose
 // grains and goes; clay sticks to itself and stays. It multiplies what an age
 // of weather strips off a tile, alongside what is growing on it - see hold in
 // erode.go - and it is the term that lets a settlement's own choice of where
@@ -305,7 +314,10 @@ func (t *Tile) Loam() float64 {
 // sand as clay weathers at the rate the whole thing was measured at. Pure
 // sand reads 1.6 and pure clay 0.4: the reading is a multiplier and is not
 // held to a share, only to being positive.
-func (t *Tile) Wash() float64 { return math.Max(0, 1+0.6*(t.Sand-t.Clay)) }
+func (g *Grid) washAt(i int) float64 { return washOf(g.Sand[i], g.Tiles[i].Clay) }
+
+// washOf is Wash for a soil with the given sand and clay.
+func washOf(sand, clay float64) float64 { return math.Max(0, 1+0.6*(sand-clay)) }
 
 // TextureAt is what the soil the rock at p makes is made of: what the rock
 // weathers to, turned further toward clay the warmer and wetter the ground
@@ -455,6 +467,6 @@ func (g *Grid) swellAt(seed uint64, x, y int) float64 {
 func (g *Grid) soilTexture() {
 	for i := range g.Tiles {
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
-		g.Tiles[i].Sand, g.Tiles[i].Clay = g.TextureAt(p)
+		g.Sand[i], g.Tiles[i].Clay = g.TextureAt(p)
 	}
 }

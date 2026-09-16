@@ -152,8 +152,8 @@ func soilStateReadings() {
 // The state fits in the padding the tile already had: a map pays nothing a
 // tile for its soil's age and chemistry. See memory.go.
 func TestTheSoilStateCostsATileNothing(t *testing.T) {
-	if got := unsafe.Sizeof(Tile{}); got != 48 {
-		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 48 since the height, the flow, the drain and the soil went beside the map (the soil left four bytes of padding before Sand)", got)
+	if got := unsafe.Sizeof(Tile{}); got != 40 {
+		t.Errorf("a tile is %d bytes; it was 72 before the soil kept its age, and 40 since the height, the flow, the drain, the soil and the sand went beside the map", got)
 	}
 }
 
@@ -258,7 +258,7 @@ func TestNewGroundIsYoungGround(t *testing.T) {
 	g.ripenSoil(0, 100e3)
 	t0 := g.Tiles[0]
 	tl := &g.Tiles[0]
-	mix(tl, 1, [Grains]float64{Silt: 1})
+	g.mix(0, 1, [Grains]float64{Silt: 1})
 	if got := float64(tl.Exposed); math.Abs(got-50e3) > 1 {
 		t.Errorf("a metre laid on a metre of soil 100 kyr old leaves it %.0f years old", got)
 	}

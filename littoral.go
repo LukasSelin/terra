@@ -103,8 +103,7 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 		if d <= 0 {
 			return
 		}
-		t := &g.Tiles[i]
-		mix(t, float64(g.Soil[i]), [Grains]float64{Sand: d})
+		g.mix(i, float64(g.Soil[i]), [Grains]float64{Sand: d})
 		g.Soil[i] += float32(d)
 		g.Height[i] += d
 	}
@@ -187,14 +186,14 @@ func (g *Grid) littoral(s *surf, years float64, supply []float64) {
 			lay(i, d)
 			carried -= d
 		} else if t.Mark == None {
-			bed := float64(g.Soil[i]) * t.Sand
+			bed := float64(g.Soil[i]) * g.Sand[i]
 			e := math.Min(capacity-carried, bed)
 			if e > 0 {
 				soil := float64(g.Soil[i])
 				rest := soil - e
 				if rest > 1e-12 {
 					t.Clay = t.Clay * soil / rest
-					t.Sand = (bed - e) / rest
+					g.Sand[i] = (bed - e) / rest
 				} else {
 					rest = 0
 				}

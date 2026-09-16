@@ -53,13 +53,13 @@ const (
 	Grains
 )
 
-// parts is what a tile's soil is made of, as the three shares. It is the
+// parts is what tile i's soil is made of, as the three shares. It is the
 // composition a stripping takes away and a deposit arrives with.
-func parts(t *Tile) [Grains]float64 {
-	return [Grains]float64{Sand: t.Sand, Silt: t.Silt(), Clay: t.Clay}
+func (g *Grid) parts(i int) [Grains]float64 {
+	return [Grains]float64{Sand: g.Sand[i], Silt: g.siltAt(i), Clay: g.Tiles[i].Clay}
 }
 
-// hold is how much of the soil on a tile the creep moves in an age, by what is
+// hold is how much of the soil on tile i the creep moves in an age, by what is
 // growing or standing on it and by what the soil itself is made of. Roots are
 // what hold a hillside together against its own weight; a roof or a road takes
 // the ground it covers out of the weather altogether; and loose sand goes where
@@ -67,11 +67,12 @@ func parts(t *Tile) [Grains]float64 {
 //
 // The water is charged differently: by the rock, which is rockErodibility, and
 // by what grows, as a stress to clear and not a share - see criticalFall.
-func hold(t *Tile) float64 {
+func (g *Grid) hold(i int) float64 {
+	t := &g.Tiles[i]
 	if t.Mark != None {
 		return 0
 	}
-	return t.Terrain.Hold() * t.Wash()
+	return t.Terrain.Hold() * g.washAt(i)
 }
 
 // Water on the ground: how deep it runs, how wide, and the stress it puts on
@@ -300,14 +301,14 @@ func (g *Grid) wear(years float64) {
 				}
 			}
 			if surface {
-				mix(t, h, gained[i])
+				g.mix(i, h, gained[i])
 			}
 			h += laid
 			if surface {
 				made := soilMade(h, years, SoilMaking*g.weathering(i)) - h
 				if made > 0 {
 					sand, clay := g.TextureAt(g.PosOf(i))
-					blend(t, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
+					g.blend(i, h, [Grains]float64{Sand: made * sand, Silt: made * clamp01(1-sand-clay), Clay: made * clay})
 					h += made
 				}
 			}
@@ -548,15 +549,15 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			if (a.Wet() && g.Flow[i] >= wander) || (b.Wet() && g.Flow[j] >= wander) {
 				continue
 			}
-			top, over := a, i
+			over := i
 			if g.Height[j] > g.Height[i] {
-				top, over = b, j
+				over = j
 			}
 			fall := math.Min(math.Abs(g.Height[i]-g.Height[j])/pr.run, creepSteepest*Critical) / Critical
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
-			kk := share / 8 * pr.near * hold(top) * depth(over) / (1 - fall*fall)
+			kk := share / 8 * pr.near * g.hold(over) * depth(over) / (1 - fall*fall)
 			if kk <= 0 {
 				continue
 			}
@@ -615,7 +616,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 		change[hi] -= moved
 		change[lo] += moved
 		lost[hi] += moved
-		was := parts(&g.Tiles[hi])
+		was := g.parts(int(hi))
 		for gr := range was {
 			gained[lo][gr] += moved * was[gr]
 		}
@@ -694,20 +695,21 @@ func carrying(load [Grains]float64) float64 {
 // rock has made the field.
 //
 // And what arrives is younger than what was there: see buryIn.
-func mix(t *Tile, held float64, laid [Grains]float64) {
-	blend(t, held, laid)
-	buryIn(t, held, carrying(laid))
+func (g *Grid) mix(i int, held float64, laid [Grains]float64) {
+	g.blend(i, held, laid)
+	buryIn(&g.Tiles[i], held, carrying(laid))
 }
 
 // blend is mix for the mixture alone: what the rock makes under a soil is part
 // of that soil's forming and not new ground laid on it.
-func blend(t *Tile, held float64, laid [Grains]float64) {
+func (g *Grid) blend(i int, held float64, laid [Grains]float64) {
 	d := carrying(laid)
 	if d <= 0 {
 		return
 	}
 	held = math.Max(0, held)
-	t.Sand = (t.Sand*held + laid[Sand]) / (held + d)
+	t := &g.Tiles[i]
+	g.Sand[i] = (g.Sand[i]*held + laid[Sand]) / (held + d)
 	t.Clay = (t.Clay*held + laid[Clay]) / (held + d)
 }
 
@@ -757,7 +759,7 @@ func (g *Grid) waterStep(years float64) fluvial {
 			c.soil[i] = float64(g.Soil[i])
 			// What the water takes off a tile is its soil, or its rock where it
 			// has none, which is the soil the rock would make.
-			c.parts[i] = parts(t)
+			c.parts[i] = g.parts(i)
 			if g.Soil[i] <= 0 {
 				sand, clay := g.TextureAt(g.PosOf(i))
 				c.parts[i] = [Grains]float64{Sand: sand, Silt: clamp01(1 - sand - clay), Clay: clay}
@@ -771,7 +773,7 @@ func (g *Grid) waterStep(years float64) fluvial {
 			// is made of for the soil and to the rock for the rock. See
 			// fluvial.go and rockErodibility.
 			power := years * Erodibility * math.Sqrt(g.Flow[i]) / run[i]
-			c.f[i] = power * t.Wash()
+			c.f[i] = power * g.washAt(i)
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
 			// What grows on it holds its soil until the water's stress in a

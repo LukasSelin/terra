@@ -29,7 +29,7 @@ func digest(l *Land) string {
 		u, v := g.MeanWind(i)
 		fmt.Fprintf(h, "{%v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v %v}",
 			t.Terrain, t.Mark, t.Owner, g.Fertility[i], g.Rich[i], g.Wood[i], g.Wild[i], g.Fish[i],
-			g.Height[i], g.Flow[i], g.Drain[i], t.Bedrock, t.Sand, t.Clay, t.Plate, t.Formed,
+			g.Height[i], g.Flow[i], g.Drain[i], t.Bedrock, g.Sand[i], t.Clay, t.Plate, t.Formed,
 			g.Age[i], t.Fenced, g.Traffic[i], g.Rain(i), g.Runoff(i), u, v, g.PressureOn(i, Year/4))
 	}
 	// And the piles under the tiles, bed by bed.

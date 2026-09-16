@@ -208,7 +208,7 @@ func (g *Grid) meander(by float64) {
 		// bed at every bend every age, and on the valleys as they were when
 		// this was found, forty ages of it took the concavity of their rivers
 		// from 0.51 to 0.16, steep where they should have been gentle.
-		for gr, part := range parts(&g.Tiles[bank]) {
+		for gr, part := range g.parts(bank) {
 			g.bankLoad[i][gr] += took * (1 - pointBar) * part
 		}
 	}
