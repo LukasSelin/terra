@@ -70,6 +70,10 @@ func export(land *terra.Land, opt options) (*manifest, error) {
 		return nil, err
 	}
 	x.m.add(waterName, "water", "", -1, -1, filepath.Join(opt.Out, waterName))
+	if err := writeFoliage(filepath.Join(opt.Out, foliageName), trees(g, opt.Seed, opt.RiverFlow)); err != nil {
+		return nil, err
+	}
+	x.m.add(foliageName, "foliage", "", -1, -1, filepath.Join(opt.Out, foliageName))
 	if err := x.m.write(filepath.Join(opt.Out, manifestName)); err != nil {
 		return nil, err
 	}
