@@ -311,6 +311,23 @@ type Grid struct {
 	// from. Taken by RefreshLandmarks; see landmark.go.
 	landmarks Landmarks
 
+	// Scratch: the working memory of the passes that make and wear the
+	// ground, kept between calls so that a pass called thirty times over a
+	// history does not make its slices afresh each time. None of it means
+	// anything between two calls; every pass fills or clears what it reads
+	// before it reads it, and Clone leaves it nil for the pass to remake.
+	// floodScratch backs the queue flow floods the map from, and slideScratch
+	// the one cutBack and fillFrom do; fillScratch is fillFrom's done. The
+	// rest are the tile-sized slices of pool, flow, waterStep and creep,
+	// which were made afresh on every call and are now fitted once: see sized.
+	floodScratch []floodNode
+	slideScratch []slideAt
+	fillScratch  []bool
+	poolScratch  poolScratch
+	flowScratch  flowScratch
+	stepScratch  stepScratch
+	creepScratch creepScratch
+
 	// islanded is set on a view of the map an island acts on for a day,
 	// which mends no reading of its own - the water's labels are read as
 	// they stood when the day's acting began. See island.go.
@@ -376,10 +393,25 @@ func (g *Grid) Clone() *Grid {
 	c.area = append([]float64(nil), g.area...)
 	c.water = g.water
 	c.lenders = make([]uint8, len(g.Tiles))
+	// The scratch fields - floodScratch, slideScratch, fillScratch and the
+	// four structs of them - are left nil: they mean nothing between calls,
+	// and the pass that needs one remakes it.
 	c.layChunks()
 	c.layPatches()
 	c.Recount()
 	return c
+}
+
+// sized is s at length n: s itself where it already is, and a fresh slice
+// where it is not. It is how a pass's scratch is kept on the Grid between
+// calls without the pass making it again each time. What comes back holds
+// whatever the last call left in it: the pass writes every entry it reads,
+// or clears it first where it relied on make's zeroing.
+func sized[T any](s []T, n int) []T {
+	if len(s) != n {
+		return make([]T, n)
+	}
+	return s
 }
 
 // Count returns how many tiles satisfy ok.

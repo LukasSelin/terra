@@ -108,12 +108,16 @@ const settleIters = 4
 // the sea, still water - is its own receiver and is a root: its height is what
 // everything above it is cut down toward.
 func (g *Grid) receivers() (recv []int32, run []float64) {
-	if g.deep > 0 {
-		return g.deepReceivers()
-	}
 	n := len(g.Tiles)
-	recv = make([]int32, n)
-	run = make([]float64, n)
+	return g.receiversInto(make([]int32, n), make([]float64, n))
+}
+
+// receiversInto is receivers written into recv and run, which are the tile
+// count long; every entry of both is written.
+func (g *Grid) receiversInto(recv []int32, run []float64) ([]int32, []float64) {
+	if g.deep > 0 {
+		return g.deepReceiversInto(recv, run)
+	}
 	span := g.span()
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
@@ -156,11 +160,18 @@ func (g *Grid) receivers() (recv []int32, run []float64) {
 // to uncut, so the floor of a filled hollow is only ever built up.
 func (g *Grid) deepReceivers() (recv []int32, run []float64) {
 	n := len(g.Tiles)
-	recv = make([]int32, n)
-	run = make([]float64, n)
+	return g.deepReceiversInto(make([]int32, n), make([]float64, n))
+}
+
+// deepReceiversInto is deepReceivers written into recv and run. The filled
+// ground it routes over is the Grid's stepScratch.
+func (g *Grid) deepReceiversInto(recv []int32, run []float64) ([]int32, []float64) {
+	n := len(g.Tiles)
 	span := g.span()
-	h := make([]float64, n)
-	root := make([]bool, n)
+	s := &g.stepScratch
+	s.fill, s.root = sized(s.fill, n), sized(s.root, n)
+	h, root := s.fill, s.root
+	clear(root)
 	for i := range g.Tiles {
 		h[i] = g.Tiles[i].Height
 		if p := g.PosOf(i); g.sunk(i) || g.outlet(p.X, p.Y) {
@@ -203,8 +214,21 @@ func (g *Grid) deepReceivers() (recv []int32, run []float64) {
 // into each, breadth first. Walked forward it goes from the sea upstream;
 // walked backward, from the ridges down.
 func stackOf(recv []int32) []int32 {
+	return stackInto(recv, &stackScratch{})
+}
+
+// stackScratch is stackOf's working memory: the tally of donors by receiver,
+// the donors laid out by it, a cursor into them, and the stack itself.
+type stackScratch struct {
+	count, donors, next, stack []int32
+}
+
+// stackInto is stackOf on the scratch given; the stack returned is s.stack.
+func stackInto(recv []int32, s *stackScratch) []int32 {
 	n := len(recv)
-	count := make([]int32, n+1)
+	s.count = sized(s.count, n+1)
+	count := s.count
+	clear(count)
 	for i, r := range recv {
 		if int(r) != i {
 			count[r+1]++
@@ -213,15 +237,17 @@ func stackOf(recv []int32) []int32 {
 	for i := 0; i < n; i++ {
 		count[i+1] += count[i]
 	}
-	donors := make([]int32, count[n])
-	next := append([]int32(nil), count[:n]...)
+	s.donors = sized(s.donors, int(count[n]))
+	donors := s.donors
+	s.next = append(s.next[:0], count[:n]...)
+	next := s.next
 	for i, r := range recv {
 		if int(r) != i {
 			donors[next[r]] = int32(i)
 			next[r]++
 		}
 	}
-	stack := make([]int32, 0, n)
+	stack := s.stack[:0]
 	for i, r := range recv {
 		if int(r) == i {
 			stack = append(stack, int32(i))
@@ -231,7 +257,41 @@ func stackOf(recv []int32) []int32 {
 		i := stack[k]
 		stack = append(stack, donors[count[i]:count[i+1]]...)
 	}
+	s.stack = stack
 	return stack
+}
+
+// stepScratch is waterStep's working memory, kept on the Grid between steps:
+// see sized. It is the tile-sized slices of the fluvial it sets up, the
+// receivers and their stack, the filled ground deepReceivers routes over,
+// and the edge, keep and room that edgeWork and stillWork fill in. A fluvial
+// set up by waterStep holds these until the next step; nothing keeps one
+// longer.
+type stepScratch struct {
+	recv                                            []int32
+	run, h, f, drop, soil, rock, eff, abrade, lasts []float64
+	settle, parts                                   [][Grains]float64
+	stack                                           stackScratch
+	fill                                            []float64
+	root                                            []bool
+	edge, keep, room                                []float64
+	solve                                           solveScratch
+}
+
+// fit gives every tile-sized slice of the scratch length n.
+func (s *stepScratch) fit(n int) {
+	s.recv = sized(s.recv, n)
+	s.run = sized(s.run, n)
+	s.h = sized(s.h, n)
+	s.f = sized(s.f, n)
+	s.drop = sized(s.drop, n)
+	s.soil = sized(s.soil, n)
+	s.rock = sized(s.rock, n)
+	s.eff = sized(s.eff, n)
+	s.abrade = sized(s.abrade, n)
+	s.lasts = sized(s.lasts, n)
+	s.settle = sized(s.settle, n)
+	s.parts = sized(s.parts, n)
 }
 
 // fluvial is one step of the water's work on a column of ground: the heights,
@@ -301,7 +361,32 @@ type fluvial struct {
 	trap  [][Grains]float64
 	surf  []int32
 	sands []float64
+	// scratch is the working memory of solve and account, kept on the Grid
+	// between steps by waterStep, and nil on a fluvial made by hand, which
+	// makes its own. See solveScratch.
+	scratch *solveScratch
 }
+
+// solveScratch is what solve and account work in: the heights being solved
+// for, the cut and the load by tile, the trees of the outlets the solve is
+// dealt out by, and account's own load.
+type solveScratch struct {
+	next, cut []float64
+	load      [][Grains]float64
+	// tree is which outlet's tree each tile is in, by the outlet's place in
+	// the stack; order is the stack laid out tree by tree, each tree's tiles
+	// in the order the stack has them; start is where each tree begins in
+	// order; pos is the cursor that lays them out; and chunk is the trees
+	// cut into runs of about treeGrain tiles, one run to a goroutine.
+	tree, order, start, pos, chunk []int32
+	// booked is account's load.
+	booked [][Grains]float64
+}
+
+// treeGrain is about how many tiles a goroutine is handed at once in solve:
+// enough that the handing over is nothing beside the work, and few enough
+// that a coast of one-tile trees does not all land on one goroutine.
+const treeGrain = 1 << 12
 
 // edgeCut is how much the water takes off root i, whose height at the end of
 // the step is next: nothing, unless it is an edge that cuts toward lower ground.
@@ -411,24 +496,96 @@ func (c *fluvial) supplied(i int32, gr int) float64 {
 // solve is the heights at the end of the step, cut and filled together. With
 // nothing settling it is exactly Braun and Willett: h' = (h + F·h'_r)/(1 + F),
 // taken from the sea upward.
+//
+// It is dealt out to goroutines by outlet. A tile's step reads its receiver's
+// new height and what its donors passed it, and writes its own height, cut,
+// load and rate - nothing crosses from one outlet's tree to another's - so
+// each tree is solved on its own, all its sweeps together. Each tree's stack
+// is its tiles in the order the whole stack has them, which keeps what
+// arrives at a tile arriving in the order it always did, so the heights are
+// the same bits however many goroutines there are, and the same as one
+// sweep of the whole stack gave. See TestMakingAWorldDoesNotDependOnTheGoroutines.
 func (c *fluvial) solve(iters int) []float64 {
 	defer phase("fluvial.solve")()
 	n := len(c.h)
-	next := append([]float64(nil), c.h...)
-	cut := make([]float64, n)
-	load := make([][Grains]float64, n)
+	s := c.scratch
+	if s == nil {
+		s = &solveScratch{}
+	}
+	s.next, s.cut, s.load = sized(s.next, n), sized(s.cut, n), sized(s.load, n)
+	next, cut, load := s.next, s.cut, s.load
+	copy(next, c.h)
+	clear(cut)
 	// A step where nothing settles anywhere - every step of a history, whose
 	// tiles are too wide for their rivers to lay anything down (see
 	// waterStep) - has no settling to take: a share of nought times what is
 	// carried is nought, and keeping all of it is keeping it, so leaving the
 	// sums out gives the same bits for every load a river can carry.
 	settles := c.settles()
+	chunks := c.forest(s)
+	InParallel(chunks, WorkersFor(chunks), func(k, _ int) {
+		for t := s.chunk[k]; t < s.chunk[k+1]; t++ {
+			c.sweep(s.order[s.start[t]:s.start[t+1]], iters, next, cut, load, settles)
+		}
+	})
+	return next
+}
+
+// forest lays the stack out tree by tree in s - see solveScratch - and cuts
+// the trees into runs of about treeGrain tiles, returning how many runs.
+func (c *fluvial) forest(s *solveScratch) int {
+	n := len(c.h)
+	s.tree, s.order = sized(s.tree, n), sized(s.order, n)
+	// Which tree each tile is in: its outlet's place among the roots, which
+	// come first in the stack and before anything that drains to them.
+	roots := int32(0)
+	for _, i := range c.stack {
+		if r := c.recv[i]; r == i {
+			s.tree[i] = roots
+			roots++
+		} else {
+			s.tree[i] = s.tree[r]
+		}
+	}
+	s.start, s.pos = sized(s.start, int(roots)+1), sized(s.pos, int(roots))
+	clear(s.start)
+	for _, i := range c.stack {
+		s.start[s.tree[i]+1]++
+	}
+	for t := range roots {
+		s.start[t+1] += s.start[t]
+	}
+	copy(s.pos, s.start[:roots])
+	for _, i := range c.stack {
+		t := s.tree[i]
+		s.order[s.pos[t]] = i
+		s.pos[t]++
+	}
+	// The runs: whole trees, closed once a run has treeGrain tiles.
+	s.chunk = append(s.chunk[:0], 0)
+	for t := int32(0); t < roots; t++ {
+		if s.start[t+1]-s.start[s.chunk[len(s.chunk)-1]] >= treeGrain {
+			s.chunk = append(s.chunk, t+1)
+		}
+	}
+	if last := s.chunk[len(s.chunk)-1]; last < roots {
+		s.chunk = append(s.chunk, roots)
+	}
+	return len(s.chunk) - 1
+}
+
+// sweep solves the tiles of stack, which is one or more whole trees in stack
+// order, over iters sweeps up and down. It reads and writes nothing outside
+// those tiles.
+func (c *fluvial) sweep(stack []int32, iters int, next, cut []float64, load [][Grains]float64, settles bool) {
 	for it := 0; it < iters; it++ {
 		// What arrives at each tile, from the ridges down, off the last
 		// sweep's cutting and settling.
-		clear(load)
-		for k := len(c.stack) - 1; k >= 0; k-- {
-			i := c.stack[k]
+		for _, i := range stack {
+			load[i] = [Grains]float64{}
+		}
+		for k := len(stack) - 1; k >= 0; k-- {
+			i := stack[k]
 			r := c.recv[i]
 			if r == i {
 				continue
@@ -443,7 +600,7 @@ func (c *fluvial) solve(iters int) []float64 {
 		}
 		// The heights, from the sea up, with what arrives held where the last
 		// sweep left it.
-		for _, i := range c.stack {
+		for _, i := range stack {
 			r := c.recv[i]
 			if r == i {
 				next[i], cut[i] = c.h[i], 0
@@ -479,7 +636,6 @@ func (c *fluvial) solve(iters int) []float64 {
 			cut[i] = f * max(0, next[i]-hr)
 		}
 	}
-	return next
 }
 
 // settles reports whether anything settles anywhere in the step.
@@ -496,9 +652,21 @@ func (c *fluvial) settles() bool {
 // loses to the water, what settles on it by grain, and what goes to the sea.
 // It is taken from the ridges down in one pass, so every grain the water takes
 // is somewhere at the end of it.
+//
+// It is one pass on one goroutine, unlike solve, because what it books does
+// cross from tree to tree: lay puts what a river lays over its banks onto
+// whatever ground lies beside it (see overbank), and exported, the bays'
+// pools and the surf's sands are sums over the whole map, taken in stack
+// order.
 func (c *fluvial) account(next []float64, change []float64, gained [][Grains]float64, lay func(i int32, laid [Grains]float64)) (exported [Grains]float64) {
 	n := len(c.h)
-	load := make([][Grains]float64, n)
+	s := c.scratch
+	if s == nil {
+		s = &solveScratch{}
+	}
+	s.booked = sized(s.booked, n)
+	load := s.booked
+	clear(load)
 	pooled := make([][Grains]float64, len(c.shoal))
 	for k := len(c.stack) - 1; k >= 0; k-- {
 		i := c.stack[k]
@@ -621,7 +789,8 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 		return
 	}
 	n := len(g.Tiles)
-	c.edge = make([]float64, n)
+	g.stepScratch.edge = sized(g.stepScratch.edge, n)
+	c.edge = g.stepScratch.edge
 	base := math.Max(0, g.base)
 	for i := range n {
 		c.edge[i] = math.Inf(1)
@@ -653,7 +822,11 @@ func (g *Grid) stillWork(c *fluvial, recv []int32) {
 			continue
 		}
 		if c.keep == nil {
-			c.keep, c.room = make([]float64, n), make([]float64, n)
+			s := &g.stepScratch
+			s.keep, s.room = sized(s.keep, n), sized(s.room, n)
+			c.keep, c.room = s.keep, s.room
+			clear(c.keep)
+			clear(c.room)
 		}
 		c.keep[i], c.room[i] = 1, math.Inf(1)
 	}

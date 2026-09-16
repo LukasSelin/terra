@@ -214,29 +214,60 @@ func (g *Grid) drain() {
 	g.flow()
 }
 
+// poolScratch is pool's working memory, kept on the Grid between calls: see
+// fit. order is every tile by height; own the basin each tile was taken into;
+// b, uf and tiles the basins' tree; runoff, loss, fall, bottom and gathered
+// the water's way down to the hollows; count the tally that lays tiles out
+// basin by basin; stack is the walk down the tree from the top; and under,
+// shore and walk are stand's, which pool calls while its own stack still has
+// basins on it.
+type poolScratch struct {
+	order []heightNode
+	// moved is how many entries of order the last call found out of place,
+	// or -1 where it sorted afresh: see reorder.
+	moved              int
+	own                []int32
+	b                  []basin
+	uf                 []int32
+	tiles              []int32
+	count              []int32
+	runoff, loss       []float64
+	fall, bottom       []int32
+	gathered           []float64
+	stack              []int32
+	under, shore, walk []int32
+}
+
 // pool finds every hollow on the map and how full the weather keeps it, and
 // writes down the lakes and the salt flats that leaves.
 func (g *Grid) pool() {
 	defer phase("pool")()
 	n := len(g.Tiles)
-	order := make([]heightNode, n)
-	for i := range order {
-		order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
-	}
-	slices.SortFunc(order, func(a, b heightNode) int {
-		if a.h != b.h {
-			return cmp.Compare(a.h, b.h)
+	s := &g.poolScratch
+	// Every tile by height, and then by index, which is a total order: it is
+	// the same order whoever produces it. Between two drains the ground has
+	// moved little, so the last call's order, its heights read again, is put
+	// right with an insertion pass rather than sorted afresh; see reorder.
+	if len(s.order) == n {
+		s.moved = g.reorder(s.order)
+	} else {
+		s.order = make([]heightNode, n)
+		for i := range s.order {
+			s.order[i] = heightNode{h: g.Tiles[i].Height, idx: int32(i)}
 		}
-		return cmp.Compare(a.idx, b.idx)
-	})
+		sortHeights(s.order)
+		s.moved = -1
+	}
+	order := s.order
 
 	// The tree, lowest ground first. A tile with nothing lower beside it
 	// already taken in starts a hollow of its own; one beside a single
 	// hollow joins it; and one beside two is the saddle between them, where
 	// they become one. The sea and the edges of the map are one basin from
 	// the start, at whatever height each of them stands.
-	t := &basins{b: []basin{{parent: -1, kids: [2]int32{-1, -1}, spill: math.Inf(1)}}, uf: []int32{0}}
-	own := make([]int32, n)
+	t := &basins{b: append(s.b[:0], basin{parent: -1, kids: [2]int32{-1, -1}, spill: math.Inf(1)}), uf: append(s.uf[:0], 0)}
+	s.own = sized(s.own, n)
+	own := s.own
 	for i := range own {
 		own[i] = -1
 	}
@@ -321,14 +352,17 @@ func (g *Grid) pool() {
 	}
 
 	// Each basin's own tiles, lowest first: the order they were taken in.
-	count := make([]int32, len(t.b)+1)
+	s.count = sized(s.count, len(t.b)+1)
+	count := s.count
+	clear(count)
 	for i := range own {
 		count[own[i]+1]++
 	}
 	for x := 1; x <= len(t.b); x++ {
 		count[x] += count[x-1]
 	}
-	t.tiles = make([]int32, n)
+	s.tiles = sized(s.tiles, n)
+	t.tiles = s.tiles
 	for x := range t.b {
 		t.b[x].first, t.b[x].end = count[x], count[x]
 	}
@@ -345,8 +379,8 @@ func (g *Grid) pool() {
 	// takes; accounted as what runs off the tile plus what the lake gives
 	// back over and above that, the two come to the same thing, and every
 	// tile can be counted the same way whether or not it ends up wet.
-	runoff := make([]float64, n)
-	loss := make([]float64, n)
+	s.runoff, s.loss = sized(s.runoff, n), sized(s.loss, n)
+	runoff, loss := s.runoff, s.loss
 	for i := range g.Tiles {
 		runoff[i], loss[i] = g.runoff[i], g.loss(i)
 	}
@@ -364,7 +398,8 @@ func (g *Grid) pool() {
 			b.capacity += loss[j]
 		}
 	}
-	fall := make([]int32, n)
+	s.fall = sized(s.fall, n)
+	fall := s.fall
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			p := g.PosOf(i)
@@ -378,7 +413,8 @@ func (g *Grid) pool() {
 	})
 	// Where the steepest fall from each tile ends, lowest ground first so
 	// that the tile below is always settled before the one above it.
-	bottom := make([]int32, n)
+	s.bottom = sized(s.bottom, n)
+	bottom := s.bottom
 	for _, nd := range order {
 		if f := fall[nd.idx]; f >= 0 {
 			bottom[nd.idx] = bottom[f]
@@ -398,7 +434,9 @@ func (g *Grid) pool() {
 			b.entry = e
 		}
 	}
-	gathered := make([]float64, n)
+	s.gathered = sized(s.gathered, n)
+	gathered := s.gathered
+	clear(gathered)
 	for k := n - 1; k >= 0; k-- {
 		i := order[k].idx
 		gathered[i] += runoff[i]
@@ -421,7 +459,7 @@ func (g *Grid) pool() {
 		g.lakeLevel[i], g.lakeOf[i], g.pans[i] = -1, -1, false
 	}
 	g.Lakes = g.Lakes[:0]
-	var stack []int32
+	stack := s.stack[:0]
 	for x := int32(len(t.b)) - 1; x > 0; x-- {
 		if t.b[x].parent == 0 {
 			stack = append(stack, x)
@@ -441,6 +479,68 @@ func (g *Grid) pool() {
 			stack = append(stack, b.kids[1], b.kids[0])
 		}
 	}
+	s.b, s.uf, s.stack = t.b, t.uf, stack[:0]
+}
+
+// heightBefore is the order the tiles are pooled in: by height, and then by
+// index. It is total, so the sorted order is the same however it was sorted.
+func heightBefore(a, b heightNode) bool {
+	if a.h != b.h {
+		return a.h < b.h
+	}
+	return a.idx < b.idx
+}
+
+// sortHeights sorts order by heightBefore, from nothing.
+func sortHeights(order []heightNode) {
+	slices.SortFunc(order, func(a, b heightNode) int {
+		if a.h != b.h {
+			return cmp.Compare(a.h, b.h)
+		}
+		return cmp.Compare(a.idx, b.idx)
+	})
+}
+
+// reorder reads the tiles' heights again into order, which is every tile in
+// the order the last call sorted them, and puts it back in order. Ground that
+// has hardly moved since is an insertion pass, near linear; ground that has
+// moved a lot - more than a tenth of the entries out of place, or a shifting
+// that has run to four times the tiles - is sorted afresh. Either way the
+// order is the one sortHeights would give, since it is total. It returns how
+// many entries were out of place, or -1 where it gave up and sorted.
+//
+// Which it does on every drain of a history: an epoch moves the ground by
+// kilometres, and the pass gave up on all twenty-two of globe256's, hitting
+// the shift bound with under a tenth of the entries moved. The bound is set
+// so that giving up costs a tenth of the sort it then does. The drains after
+// the history - the silting and the cutting of the valleys - found at most
+// 171 of 32768 entries out of place, shifted under a fifth of the tiles,
+// and were put right in under half the sort's time.
+func (g *Grid) reorder(order []heightNode) int {
+	n := len(order)
+	for k := range order {
+		order[k].h = g.Tiles[order[k].idx].Height
+	}
+	moved, shifted := 0, 0
+	for k := 1; k < n; k++ {
+		nd := order[k]
+		if !heightBefore(nd, order[k-1]) {
+			continue
+		}
+		j := k
+		for j > 0 && heightBefore(nd, order[j-1]) {
+			order[j] = order[j-1]
+			j--
+		}
+		order[j] = nd
+		moved++
+		shifted += k - j
+		if moved > n/10 || shifted > 4*n {
+			sortHeights(order)
+			return -1
+		}
+	}
+	return moved
 }
 
 // pour puts w of water into basin x, where it runs down into whichever of the
@@ -554,9 +654,10 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 	if closed {
 		top = math.Min(spill, level+saltShore)
 	}
-	var under, shore []int32
+	s := &g.poolScratch
+	under, shore := s.under[:0], s.shore[:0]
 	floor := math.Inf(1)
-	stack := []int32{x}
+	stack := append(s.walk[:0], x)
 	for len(stack) > 0 {
 		m := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -578,6 +679,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 			}
 		}
 	}
+	s.under, s.shore, s.walk = under[:0], shore[:0], stack[:0]
 	if math.IsInf(floor, 1) {
 		return
 	}
@@ -608,6 +710,7 @@ func (g *Grid) stand(t *basins, x int32, level float64, closed bool) {
 	if !wet {
 		l.Level = floor
 		shore = append(shore, under...)
+		s.shore = shore[:0]
 		under = nil
 	}
 	for _, j := range under {
@@ -644,17 +747,33 @@ type floodNode struct {
 // Each tile is reached after the tile its water goes to, so the order it was
 // reached in, backwards, is an order in which everything above a tile is
 // finished before the tile is.
+// flowScratch is flow's working memory, kept on the Grid between calls: see
+// fit. stand, reached and from are the flood's, by tile; exit, pooled,
+// pooledArea and given are by lake.
+type flowScratch struct {
+	stand                     []float64
+	reached                   []bool
+	from                      []int32
+	exit                      []int32
+	pooled, pooledArea, given []float64
+}
+
 func (g *Grid) flow() {
 	defer phase("flow")()
 	n := len(g.Tiles)
-	stand := make([]float64, n) // the height the water stands at, flooded
-	reached := make([]bool, n)
-	from := make([]int32, n)
+	s := &g.flowScratch
+	s.stand, s.reached, s.from = sized(s.stand, n), sized(s.reached, n), sized(s.from, n)
+	stand := s.stand // the height the water stands at, flooded
+	reached := s.reached
+	from := s.from
+	clear(stand)
+	clear(reached)
+	clear(from)
 	if len(g.down) != n {
 		g.down, g.route = make([]int32, n), make([]int32, 0, n)
 	}
 	g.route = g.route[:0]
-	var q floodQueue
+	q := floodQueue(g.floodScratch[:0])
 	seq := int32(0)
 	for i := range g.Tiles {
 		p := g.PosOf(i)
@@ -683,8 +802,10 @@ func (g *Grid) flow() {
 			seq++
 		}
 	}
+	g.floodScratch = q[:0]
 
-	exit := make([]int32, len(g.Lakes))
+	s.exit = sized(s.exit, len(g.Lakes))
+	exit := s.exit
 	for k := range exit {
 		exit[k] = -1
 	}
@@ -752,9 +873,11 @@ func (g *Grid) flow() {
 		}
 	}
 	g.water = water
-	pooled := make([]float64, len(g.Lakes))
-	pooledArea := make([]float64, len(g.Lakes))
-	given := make([]float64, len(g.Lakes))
+	s.pooled, s.pooledArea, s.given = sized(s.pooled, len(g.Lakes)), sized(s.pooledArea, len(g.Lakes)), sized(s.given, len(g.Lakes))
+	pooled, pooledArea, given := s.pooled, s.pooledArea, s.given
+	clear(pooled)
+	clear(pooledArea)
+	clear(given)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 {
 			given[k] += g.loss(i) * perMM
@@ -833,7 +956,13 @@ func (g *Grid) flow() {
 	}
 }
 
-// floodQueue is a smallest-first heap of floodNodes.
+// floodQueue is a smallest-first heap of floodNodes: a 4-ary one, because
+// each pop of a binary heap walks a log2 n ladder and asks two neighbours at
+// every rung, and a 4-ary heap walks half the ladder for four neighbours a
+// rung that sit in one cache line. Which order the nodes come out in does not
+// depend on the heap's shape: floodBefore is a total order, by height and
+// then by when the node was pushed, so every pop is the one least node. Its
+// backing is kept on the Grid between floods, see floodScratch.
 type floodQueue []floodNode
 
 func (q *floodQueue) len() int { return len(*q) }
@@ -846,39 +975,48 @@ func floodBefore(a, b floodNode) bool {
 }
 
 func (q *floodQueue) push(n floodNode) {
+	i := len(*q)
 	*q = append(*q, n)
-	i := len(*q) - 1
+	h := *q
 	for i > 0 {
-		p := (i - 1) / 2
-		if !floodBefore((*q)[i], (*q)[p]) {
+		p := (i - 1) / 4
+		if !floodBefore(n, h[p]) {
 			break
 		}
-		(*q)[i], (*q)[p] = (*q)[p], (*q)[i]
+		h[i] = h[p]
 		i = p
 	}
+	h[i] = n
 }
 
 func (q *floodQueue) pop() floodNode {
-	old := *q
-	top := old[0]
-	last := len(old) - 1
-	old[0] = old[last]
-	old = old[:last]
-	*q = old
+	h := *q
+	top := h[0]
+	last := len(h) - 1
+	x := h[last]
+	h = h[:last]
+	*q = h
+	if last == 0 {
+		return top
+	}
 	i := 0
 	for {
-		l, best := 2*i+1, i
-		if l < len(old) && floodBefore(old[l], old[best]) {
-			best = l
-		}
-		if r := l + 1; r < len(old) && floodBefore(old[r], old[best]) {
-			best = r
-		}
-		if best == i {
+		first := 4*i + 1
+		if first >= last {
 			break
 		}
-		old[i], old[best] = old[best], old[i]
+		best := first
+		for c := first + 1; c < first+4 && c < last; c++ {
+			if floodBefore(h[c], h[best]) {
+				best = c
+			}
+		}
+		if !floodBefore(h[best], x) {
+			break
+		}
+		h[i] = h[best]
 		i = best
 	}
+	h[i] = x
 	return top
 }

@@ -262,9 +262,16 @@ func (g *Grid) landslide(keep bool) {
 	}
 }
 
-// slideQueue is a binary heap of tiles, lowest first, each held at the height
-// it was pushed at. A tile lowered after it was pushed is pushed again, and the
-// stale entry is passed over when it comes up: see done in landslide.
+// slideQueue is a heap of tiles, lowest first, each held at the height it was
+// pushed at. A tile lowered after it was pushed is pushed again, and the stale
+// entry is passed over when it comes up: see done in cutBack and fillFrom.
+//
+// It is a 4-ary heap rather than a binary one: a pop walks half the ladder,
+// and the four children it asks at each rung lie in one cache line. The order
+// the tiles come out in does not depend on the heap's shape, because less is a
+// total order - by height, then by index - so every pop is the one least
+// entry, and two entries that compare equal are the same tile at the same
+// height. Its backing is kept on the Grid between calls: see slideScratch.
 type slideQueue struct {
 	at []slideAt
 }
@@ -282,38 +289,51 @@ func (a slideAt) less(b slideAt) bool {
 }
 
 func (q *slideQueue) push(h float64, i int32) {
-	q.at = append(q.at, slideAt{h, i})
-	k := len(q.at) - 1
+	n := slideAt{h, i}
+	k := len(q.at)
+	q.at = append(q.at, n)
+	at := q.at
 	for k > 0 {
-		up := (k - 1) / 2
-		if !q.at[k].less(q.at[up]) {
+		up := (k - 1) / 4
+		if !n.less(at[up]) {
 			break
 		}
-		q.at[k], q.at[up] = q.at[up], q.at[k]
+		at[k] = at[up]
 		k = up
 	}
+	at[k] = n
 }
 
 func (q *slideQueue) pop() int32 {
-	top := q.at[0].i
-	last := len(q.at) - 1
-	q.at[0] = q.at[last]
-	q.at = q.at[:last]
+	at := q.at
+	top := at[0].i
+	last := len(at) - 1
+	x := at[last]
+	at = at[:last]
+	q.at = at
+	if last == 0 {
+		return top
+	}
 	k := 0
 	for {
-		l, r, least := 2*k+1, 2*k+2, k
-		if l < last && q.at[l].less(q.at[least]) {
-			least = l
+		first := 4*k + 1
+		if first >= last {
+			break
 		}
-		if r < last && q.at[r].less(q.at[least]) {
-			least = r
+		least := first
+		for c := first + 1; c < first+4 && c < last; c++ {
+			if at[c].less(at[least]) {
+				least = c
+			}
 		}
-		if least == k {
-			return top
+		if !at[least].less(x) {
+			break
 		}
-		q.at[k], q.at[least] = q.at[least], q.at[k]
+		at[k] = at[least]
 		k = least
 	}
+	at[k] = x
+	return top
 }
 
 // cutBack is landslide for the making of a map: every tile standing more than
@@ -333,7 +353,7 @@ func (g *Grid) cutBack() {
 	n := len(g.Tiles)
 	h := make([]float64, n)
 	done := make([]bool, n)
-	var q slideQueue
+	q := slideQueue{at: g.slideScratch[:0]}
 	for i := range g.Tiles {
 		h[i] = g.Tiles[i].Height
 		q.push(h[i], int32(i))
@@ -375,6 +395,7 @@ func (g *Grid) cutBack() {
 			}
 		}
 	}
+	g.slideScratch = q.at[:0]
 	for i := range g.Tiles {
 		g.Tiles[i].Height = h[i]
 	}

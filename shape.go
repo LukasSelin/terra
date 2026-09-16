@@ -399,8 +399,10 @@ func (g *Grid) openSea(root []bool) {
 // roots inward, so that every tile has somewhere lower to send its water.
 func (g *Grid) fillFrom(h []float64, root []bool) {
 	const hair = 1e-4
-	done := make([]bool, len(h))
-	var q slideQueue
+	g.fillScratch = sized(g.fillScratch, len(h))
+	done := g.fillScratch
+	clear(done)
+	q := slideQueue{at: g.slideScratch[:0]}
 	roots := 0
 	for i := range h {
 		if root[i] {
@@ -434,6 +436,7 @@ func (g *Grid) fillFrom(h []float64, root []bool) {
 			q.push(h[j], j)
 		}
 	}
+	g.slideScratch = q.at[:0]
 }
 
 // roughAt is a number in [0,1) fixed by the tile and its height, and by
