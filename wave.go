@@ -172,7 +172,7 @@ func (g *Grid) phaseWind(i, k int) (east, north float64) {
 	if w == nil {
 		return 0, 0
 	}
-	fx, fy := w.cellAt(g, i)
+	fx, fy := w.cellAt(i)
 	return w.sample32(w.u[k], fx, fy), w.sample32(w.v[k], fx, fy)
 }
 

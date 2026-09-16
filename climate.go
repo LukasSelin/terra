@@ -30,14 +30,6 @@ const (
 	Season = clock.Season
 )
 
-// The shape of the year. MeanTemp is the annual mean in degrees, Swing half
-// the distance from midwinter to midsummer. Tick zero is early spring:
-// people arrive with the growing season ahead of them, not behind them.
-const (
-	MeanTemp = 10.0
-	Swing    = 12.0
-)
-
 // The two wanderings, each an AR(1) process. Drift is the slow one, a run of
 // kind or unkind decades; Spell is the fast one, the warm week and the cold
 // snap. Keep is how much of the anomaly survives a tick - one part in the
@@ -89,24 +81,10 @@ func NewClimateOn(cfg Terms) Climate {
 	return c
 }
 
-// The globe's weather. Temperate is the latitude the default map's weather
-// is the weather of. A globe's year is the energy balance's, by latitude: see
-// ebm.go.
-const Temperate = 45.0
-
 // latitude is the latitude of row y in degrees, from ninety at the top
 // row to minus ninety at the bottom.
 func (c Climate) latitude(y int) float64 {
 	return 90 - 180*(float64(y)+0.5)/float64(c.rows)
-}
-
-// zonalMean is the year's mean at sea level at a latitude on a globe: the energy
-// balance's zonal mean there. It was MeanTemp and thirty degrees times how
-// far the cosine of the latitude stood from its value at Temperate, which put
-// the equator at nineteen degrees and the poles at minus eleven.
-func zonalMean(lat float64) float64 {
-	e := ebm()
-	return e.at(&e.mean, lat)
 }
 
 // TempAt is this tick's temperature on row y. On a valley it is Temp
@@ -228,26 +206,6 @@ func ramp(x, lo, hi float64) float64 {
 // answer; this is here so that callers reading the weather need not reach
 // past it for the date.
 func SeasonOf(tick int) clock.Quarter { return clock.SeasonOf(tick) }
-
-// The lapse rate: how much colder the air is for standing higher up.
-//
-// The weather is one temperature for a latitude, and it was one temperature
-// for a latitude at every height, which made the top of a mountain exactly as
-// warm as the valley it stands over. Height was the one thing the ground
-// carried that the weather never read - see Tile.Height, off which the
-// rivers, the soil and the going underfoot are all already read - so the high
-// country was hard to live on for its slope alone, and a wood grew on a peak
-// as readily as on the valley floor.
-//
-// Lapse is the real figure, six and a half degrees a kilometre, and it is
-// deliberately not tuned. What it is worth depends on what a map has standing
-// on it, and that follows from the map's own size: on the default valley the
-// skyline is Relief plus Upland, some three hundred metres, so the highest
-// ground on it is two degrees colder than the river and no more - which is
-// why nothing measured on the valley moves much, and why the want of this was
-// never felt there. On a globe the same rule over mountains ten times as high
-// is the difference between a tree line and no tree line.
-const Lapse = 0.0065
 
 // TempAt is the temperature on the ground at p: the weather of its latitude,
 // less what the height of the ground takes off it. It is the reading anything

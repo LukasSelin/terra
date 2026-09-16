@@ -584,28 +584,20 @@ func inversion(warm float64) float64 {
 	return 1 - inversionMost*c*c/(1+c*c)
 }
 
-// SeaWarmth is how many degrees the sea over tile i stands warmer than the
-// mean of its latitude, for the currents: warm in a western current, cold in
-// an eastern one and colder where the water comes up from under. It is
-// nothing on land, on a valley, and on a map whose weather has not been read.
-func (g *Grid) SeaWarmth(i int) float64 {
-	w := g.winds
-	if w == nil || w.warm == nil || i < 0 || i >= len(g.Tiles) {
+// seaWarmth is Grid.SeaWarmth for a tile of the map.
+func (w *Winds) seaWarmth(i int) float64 {
+	if w.warm == nil {
 		return 0
 	}
-	fx, fy := w.cellAt(g, i)
+	fx, fy := w.cellAt(i)
 	return w.sample(w.warm, fx, fy)
 }
 
-// CoastWarmth is how many degrees the currents offshore make the year's mean
-// on tile i warmer or colder: Norway's mildness, and the chill of the fog off
-// Peru. It is nothing on a valley and on a map whose weather has not been
-// read.
-func (g *Grid) CoastWarmth(i int) float64 {
-	w := g.winds
-	if w == nil || w.coast == nil || i < 0 || i >= len(g.Tiles) {
+// coastWarmth is Grid.CoastWarmth for a tile of the map.
+func (w *Winds) coastWarmth(i int) float64 {
+	if w.coast == nil {
 		return 0
 	}
-	fx, fy := w.cellAt(g, i)
+	fx, fy := w.cellAt(i)
 	return w.sample(w.coast, fx, fy)
 }

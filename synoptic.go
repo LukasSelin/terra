@@ -3,8 +3,6 @@ package terra
 import (
 	"math"
 	"math/rand/v2"
-
-	"github.com/LukasSelin/terra/geom"
 )
 
 // The day's weather.
@@ -169,39 +167,6 @@ const (
 
 // weatherStream is what the seed is mixed with for the weather's chance.
 const weatherStream = 0x5745415448455221
-
-// AdvanceWeather moves the day's weather on to today, w.Tick. A game calls it
-// once a day, beside Climate.Advance; nothing about the land needs it to have
-// been called, and it draws nothing from the world's chance. The first call
-// starts the weather with some weeks of systems already behind it.
-func (w *Land) AdvanceWeather() {
-	g := w.Grid
-	if g.winds == nil {
-		g.weather()
-	}
-	if w.Weather == nil || w.Weather.env != g.winds.airEnv {
-		wx := &Weather{
-			rng:   rand.New(rand.NewPCG(w.seed^weatherStream, w.seed*0x9E3779B97F4A7C15+weatherStream)),
-			winds: g.winds,
-			env:   g.winds.airEnv,
-			Day:   w.Tick - 1,
-		}
-		if w.Weather != nil {
-			// The ground has changed under the weather: keep its systems
-			// and its chance, and start the air over.
-			wx.rng, wx.Systems = w.Weather.rng, w.Weather.Systems
-		} else {
-			for d := spinUp; d > 0; d-- {
-				wx.step(w.Tick - d)
-			}
-		}
-		w.Weather = wx
-	}
-	wx := w.Weather
-	wx.step(w.Tick)
-	wx.solve(w.Tick)
-	wx.Day = w.Tick
-}
 
 // yearSin is how far into the north's summer day is.
 func yearSin(day int) float64 { return math.Sin(2 * math.Pi * float64(day) / Year) }
@@ -525,86 +490,78 @@ func (wx *Weather) carry(day int) {
 	wx.warm = next
 }
 
-// sampleDay reads a field of the day's weather at tile i.
-func (w *Land) sampleDay(field []float32, i int) float64 {
-	e := w.Weather.env
-	fx, fy := e.cellAt(w.Grid, i)
+// newWeather is the day's weather over the winds w, on the day before day,
+// for a world of seed: with some weeks of systems already behind it, or,
+// where was is the weather the ground stood under before it changed, with
+// was's systems and its chance, and the air started over.
+func newWeather(seed uint64, w *Winds, day int, was *Weather) *Weather {
+	wx := &Weather{
+		rng:   rand.New(rand.NewPCG(seed^weatherStream, seed*0x9E3779B97F4A7C15+weatherStream)),
+		winds: w,
+		env:   w.airEnv,
+		Day:   day - 1,
+	}
+	if was != nil {
+		// The ground has changed under the weather: keep its systems
+		// and its chance, and start the air over.
+		wx.rng, wx.Systems = was.rng, was.Systems
+	} else {
+		for d := spinUp; d > 0; d-- {
+			wx.step(day - d)
+		}
+	}
+	return wx
+}
+
+// over reports whether the weather stands over the winds w: whether it was
+// worked out for the ground they were.
+func (wx *Weather) over(w *Winds) bool {
+	return wx != nil && w != nil && wx.env == w.airEnv
+}
+
+// advance moves the weather on to day.
+func (wx *Weather) advance(day int) {
+	wx.step(day)
+	wx.solve(day)
+	wx.Day = day
+}
+
+// worked reports whether the day's air has been worked out at all.
+func (wx *Weather) worked() bool { return len(wx.u) > 0 }
+
+// sampleTile reads a field of the day's weather at tile i.
+func (wx *Weather) sampleTile(field []float32, i int) float64 {
+	e := wx.env
+	fx, fy := e.cellAt(i)
 	return e.sample32(field, fx, fy)
 }
 
-// today reports whether the day's weather has been worked out for the ground
-// the map now has.
-func (w *Land) today() bool {
-	return w.Weather != nil && len(w.Weather.u) > 0 && w.Grid.winds != nil && w.Weather.env == w.Grid.winds.airEnv
+// windAt, pressureAt and warmthAt are the day's wind, pressure and warmth at
+// tile i: see Land.WindAt, Land.PressureAt and Land.WarmthAt.
+func (wx *Weather) windAt(i int) (east, north float64) {
+	return wx.sampleTile(wx.u, i), wx.sampleTile(wx.v, i)
 }
 
-// WindAt is the wind near the ground at p today, in metres a second toward
-// the east and toward the north: the day's weather where AdvanceWeather has
-// been asked for it, and the climate's for the day of the year where it has
-// not.
-func (w *Land) WindAt(p geom.Pos) (east, north float64) {
-	g := w.Grid
-	if !g.In(p) {
-		return 0, 0
-	}
-	i := g.Index(p)
-	if !w.today() {
-		return g.WindOn(i, w.Tick)
-	}
-	return w.sampleDay(w.Weather.u, i), w.sampleDay(w.Weather.v, i)
+func (wx *Weather) pressureAt(i int) float64 { return wx.sampleTile(wx.p, i) }
+
+func (wx *Weather) warmthAt(i int) float64 {
+	e := wx.env
+	fx, fy := e.cellAt(i)
+	return e.sample(wx.warm, fx, fy)
 }
 
-// PressureAt is the pressure at sea level over p today, in hPa.
-func (w *Land) PressureAt(p geom.Pos) float64 {
-	g := w.Grid
-	if !g.In(p) {
-		return 0
-	}
-	i := g.Index(p)
-	if !w.today() {
-		return g.PressureOn(i, w.Tick)
-	}
-	return w.sampleDay(w.Weather.p, i)
-}
-
-// GustAt is how hard the wind at p gusts today, in metres a second: the
-// wind, and what the eddies the ground stirs up in it add. Open sea adds a
-// third, and broken country more than half again.
-func (w *Land) GustAt(p geom.Pos) float64 {
-	g := w.Grid
-	u, v := w.WindAt(p)
-	s := math.Hypot(u, v)
-	if g.winds == nil || !g.In(p) {
-		return s
-	}
-	e := g.winds.airEnv
-	fx, fy := e.cellAt(g, g.Index(p))
+// gust is how hard a wind of speed s gusts over tile i: see Land.GustAt.
+func (e *airEnv) gust(i int, s float64) float64 {
+	fx, fy := e.cellAt(i)
 	land := 1 - e.sample(e.sea, fx, fy)
 	rough := math.Min(1, e.sample(e.rough, fx, fy)/dragRough)
 	return s * (1.35 + land*(0.15+0.3*rough))
 }
 
-// WarmthAt is how many degrees warmer than an ordinary day of the year the
-// air at p is today, for what the day's wind has carried in. It is nothing
-// where the day's weather has not been asked for.
-func (w *Land) WarmthAt(p geom.Pos) float64 {
-	if !w.today() || !w.Grid.In(p) {
-		return 0
-	}
-	e := w.Weather.env
-	fx, fy := e.cellAt(w.Grid, w.Grid.Index(p))
-	return e.sample(w.Weather.warm, fx, fy)
-}
-
-// Place is where a system stands on the map, in tiles, and whether that is
-// on the map at all.
-func (w *Land) Place(s System) (x, y float64, on bool) {
-	g := w.Grid
-	if g.winds == nil {
-		return 0, 0, false
-	}
-	e := g.winds.airEnv
-	fx, fy, on := e.cellOf(s.Lat, s.Lon)
+// place is where a system at lat, lon stands on the map, in tiles, and
+// whether that is on the map at all: see Land.Place.
+func (e *airEnv) place(lat, lon float64) (x, y float64, on bool) {
+	fx, fy, on := e.cellOf(lat, lon)
 	k := float64(e.cell)
 	return (fx + 0.5) * k, (fy + 0.5) * k, on
 }

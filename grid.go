@@ -586,7 +586,7 @@ func (g *Grid) contAt(i int) float64 {
 		return contMiddling
 	}
 	e := g.winds.airEnv
-	fx, fy := e.cellAt(g, i)
+	fx, fy := e.cellAt(i)
 	return e.sample(e.cont, fx, fy)
 }
 

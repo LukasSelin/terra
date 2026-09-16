@@ -8,7 +8,7 @@ import (
 // The potential the cosine solve finds on a valley has, over the faces between
 // its cells, the Laplacian it was asked for: the gathering less its mean.
 func TestTheCosineSolveHasTheLaplacianAskedFor(t *testing.T) {
-	e := newAirEnv(ridged(300).withAir())
+	e := envOf(ridged(300).withAir())
 	n := e.w * e.h
 	div := make([]float64, n)
 	var mean float64

@@ -3,7 +3,7 @@ package terra
 import (
 	"math"
 
-	"github.com/LukasSelin/terra/internal/phase"
+	"github.com/LukasSelin/terra/geom"
 )
 
 // The wind, worked out rather than written down.
@@ -246,11 +246,12 @@ type airEnv struct {
 	warm, coast []float64
 }
 
-// airCell is how many tiles a side the air cells over g are.
-func airCell(g *Grid, a *Air) int {
+// airCell is how many tiles a side the air cells over a map m are. The map's
+// width and height are whole numbers of cells.
+func airCell(m *geom.Map, a *Air) int {
 	cell := 1
-	for float64(2*cell)*a.dy <= airReach*1.2 && g.W%(2*cell) == 0 && g.H%(2*cell) == 0 &&
-		g.W/(2*cell) >= airLeast && g.H/(2*cell) >= airLeast {
+	for float64(2*cell)*a.dy <= airReach*1.2 && m.W%(2*cell) == 0 && m.H%(2*cell) == 0 &&
+		m.W/(2*cell) >= airLeast && m.H/(2*cell) >= airLeast {
 		cell *= 2
 	}
 	return cell
@@ -262,11 +263,13 @@ func airCell(g *Grid, a *Air) int {
 // not be is so few cells that the ground has nothing to say to the wind.
 const airLeast = 16
 
-// newAirEnv reads the ground of g as the air sees it.
-func newAirEnv(g *Grid) *airEnv {
-	a := g.air
-	cell := airCell(g, a)
-	e := &airEnv{cell: cell, w: g.W / cell, h: g.H / cell, wrap: g.Wrap}
+// newAirEnv reads the ground of a map m as the air sees it, under the air a:
+// above is how far each tile stands over the water the air takes its fill
+// from, and wet is one where the tile is under that water and nothing where
+// it is not.
+func newAirEnv(m *geom.Map, a *Air, above, wet []float64) *airEnv {
+	cell := airCell(m, a)
+	e := &airEnv{cell: cell, w: m.W / cell, h: m.H / cell, wrap: m.Wrap}
 	n := e.w * e.h
 	e.lat, e.hemi, e.mean, e.dx, e.f = make([]float64, e.h), make([]float64, e.h), make([]float64, e.h), make([]float64, e.h), make([]float64, e.h)
 	e.dy = a.dy * 1000 * float64(cell)
@@ -288,7 +291,7 @@ func newAirEnv(g *Grid) *airEnv {
 		// share seasonTemp and differ only in this factor poleward of
 		// Temperate; bringing them together is a question for the water.
 		e.hemi[cy] = math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
-		if !g.Wrap {
+		if !m.Wrap {
 			// A valley is one latitude's weather, but the planet under it
 			// is still round: the pressure the belts lay down still falls
 			// across it from south to north, or the air would not move.
@@ -300,36 +303,24 @@ func newAirEnv(g *Grid) *airEnv {
 	}
 
 	// The ground, tile by tile, then gathered into cells.
-	base := math.Max(0, g.base)
-	above := make([]float64, len(g.Tiles))
-	wet := make([]float64, len(g.Tiles))
-	broken := make([]float64, len(g.Tiles))
-	g.EachRow(func(y int) {
-		for x := 0; x < g.W; x++ {
-			i := y*g.W + x
-			above[i] = math.Max(0, g.laidHeight(i)-base) // see laidHeight
-			if g.sunk(i) {
-				wet[i] = 1
-			}
-		}
-	})
-	g.EachRow(func(y int) {
-		for x := 0; x < g.W; x++ {
-			i := y*g.W + x
+	broken := make([]float64, m.W*m.H)
+	eachTileRow(m, func(y int) {
+		for x := 0; x < m.W; x++ {
+			i := y*m.W + x
 			var sum, sq, k float64
 			for dy := -1; dy <= 1; dy++ {
 				yy := y + dy
-				if yy < 0 || yy >= g.H {
+				if yy < 0 || yy >= m.H {
 					continue
 				}
 				for dx := -1; dx <= 1; dx++ {
 					xx := x + dx
-					if g.Wrap {
-						xx = (xx + g.W) % g.W
-					} else if xx < 0 || xx >= g.W {
+					if m.Wrap {
+						xx = (xx + m.W) % m.W
+					} else if xx < 0 || xx >= m.W {
 						continue
 					}
-					h := above[yy*g.W+xx]
+					h := above[yy*m.W+xx]
 					sum, sq, k = sum+h, sq+h*h, k+1
 				}
 			}
@@ -337,7 +328,7 @@ func newAirEnv(g *Grid) *airEnv {
 			broken[i] = math.Sqrt(math.Max(0, sq/k-m*m))
 		}
 	})
-	e.height, e.sea, e.rough = e.gather(g, above), e.gather(g, wet), e.gather(g, broken)
+	e.height, e.sea, e.rough = e.gather(above), e.gather(wet), e.gather(broken)
 
 	land := make([]float64, n)
 	for i := range land {
@@ -392,19 +383,20 @@ func (e *airEnv) climbs() []float64 {
 	return out
 }
 
-// gather is the mean of a reading of g's tiles over each air cell.
-func (e *airEnv) gather(g *Grid, v []float64) []float64 {
+// gather is the mean of a reading of the map's tiles over each air cell.
+func (e *airEnv) gather(v []float64) []float64 {
 	if e.cell == 1 {
 		return append([]float64(nil), v...)
 	}
 	out := make([]float64, e.w*e.h)
 	k := float64(e.cell * e.cell)
+	across := e.w * e.cell
 	for cy := 0; cy < e.h; cy++ {
 		for cx := 0; cx < e.w; cx++ {
 			var s float64
 			for y := cy * e.cell; y < (cy+1)*e.cell; y++ {
 				for x := cx * e.cell; x < (cx+1)*e.cell; x++ {
-					s += v[y*g.W+x]
+					s += v[y*across+x]
 				}
 			}
 			out[cy*e.w+cx] = s / k
@@ -542,12 +534,11 @@ func (e *airEnv) box(v []float64, across []int, down int) []float64 {
 	return out
 }
 
-// windsFor works out the climate of the wind over g as its ground now lies.
-// The phases are independent of one another and are worked out side by side;
-// each writes only its own slices.
-func windsFor(g *Grid) *Winds {
-	defer phase.Start("windsFor")()
-	e := newAirEnv(g)
+// windsFor works out the climate of the wind over a map m as its ground now
+// lies: see newAirEnv for above and wet. The phases are independent of one
+// another and are worked out side by side; each writes only its own slices.
+func windsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
+	e := newAirEnv(m, a, above, wet)
 	w := &Winds{airEnv: e}
 	n := e.w * e.h
 	for k := range phases {
@@ -832,8 +823,9 @@ func seasonWeights(day int) [phases]float64 {
 }
 
 // cellAt is where tile i's centre lies among the air cells, in cells.
-func (e *airEnv) cellAt(g *Grid, i int) (fx, fy float64) {
-	x, y := i%g.W, i/g.W
+func (e *airEnv) cellAt(i int) (fx, fy float64) {
+	across := e.w * e.cell
+	x, y := i%across, i/across
 	k := float64(e.cell)
 	return (float64(x)+0.5)/k - 0.5, (float64(y)+0.5)/k - 0.5
 }
@@ -849,16 +841,9 @@ func (e *airEnv) sample32(v []float32, fx, fy float64) float64 {
 	return a + (b-a)*ty
 }
 
-// WindOn is the wind near the ground on tile i on a day of the year, in
-// metres a second toward the east and toward the north: the climate of the
-// wind, what it is on that day in an ordinary year. It is nothing on a map
-// whose weather has not been read.
-func (g *Grid) WindOn(i, day int) (east, north float64) {
-	w := g.winds
-	if w == nil || i < 0 || i >= len(g.Tiles) {
-		return 0, 0
-	}
-	fx, fy := w.cellAt(g, i)
+// windOn is Grid.WindOn for a tile of the map.
+func (w *Winds) windOn(i, day int) (east, north float64) {
+	fx, fy := w.cellAt(i)
 	for k, m := range seasonWeights(day) {
 		east += m * w.sample32(w.u[k], fx, fy)
 		north += m * w.sample32(w.v[k], fx, fy)
@@ -866,14 +851,9 @@ func (g *Grid) WindOn(i, day int) (east, north float64) {
 	return east, north
 }
 
-// MeanWind is the wind near the ground on tile i over the whole year, in
-// metres a second toward the east and toward the north.
-func (g *Grid) MeanWind(i int) (east, north float64) {
-	w := g.winds
-	if w == nil || i < 0 || i >= len(g.Tiles) {
-		return 0, 0
-	}
-	fx, fy := w.cellAt(g, i)
+// meanWind is Grid.MeanWind for a tile of the map.
+func (w *Winds) meanWind(i int) (east, north float64) {
+	fx, fy := w.cellAt(i)
 	for k := range phases {
 		east += w.sample32(w.u[k], fx, fy) / phases
 		north += w.sample32(w.v[k], fx, fy) / phases
@@ -881,18 +861,24 @@ func (g *Grid) MeanWind(i int) (east, north float64) {
 	return east, north
 }
 
-// PressureOn is the pressure at sea level over tile i on a day of the year,
-// in hPa, in an ordinary year. It is nothing on a map whose weather has not
-// been read.
-func (g *Grid) PressureOn(i, day int) float64 {
-	w := g.winds
-	if w == nil || i < 0 || i >= len(g.Tiles) {
-		return 0
-	}
-	fx, fy := w.cellAt(g, i)
+// pressureOn is Grid.PressureOn for a tile of the map.
+func (w *Winds) pressureOn(i, day int) float64 {
+	fx, fy := w.cellAt(i)
 	var p float64
 	for k, m := range seasonWeights(day) {
 		p += m * w.sample32(w.p[k], fx, fy)
 	}
 	return p
+}
+
+// eachTileRow runs f for every row of the map's tiles, spread over goroutines
+// under the same rule as Grid.EachRow: f writes only at its own row's tiles.
+func eachTileRow(m *geom.Map, f func(y int)) {
+	if m.W*m.H < spreadTiles {
+		for y := 0; y < m.H; y++ {
+			f(y)
+		}
+		return
+	}
+	InParallel(m.H, WorkersFor(m.H), func(y, _ int) { f(y) })
 }

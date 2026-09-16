@@ -138,7 +138,7 @@ func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 // the wind round it blows a little in toward its middle in both.
 func TestALowTurnsTheOtherWaySouthOfTheEquator(t *testing.T) {
 	for _, lat := range []float64{45, -45} {
-		e := newAirEnv(oceanGlobe(256, 128).withAir())
+		e := envOf(oceanGlobe(256, 128).withAir())
 		c := Climate{rows: e.h, globe: true}
 		cy := 0
 		for y := 0; y < e.h; y++ {
@@ -178,6 +178,12 @@ func (g *Grid) withAir() *Grid {
 		g.air = defaultAir(g)
 	}
 	return g
+}
+
+// envOf is the ground of a grid as the air reads it, under the air it has.
+func envOf(g *Grid) *airEnv {
+	above, wet := g.airGround()
+	return newAirEnv(&g.Map, g.air, above, wet)
 }
 
 // A range too high for the wind to climb turns it aside along its face; a
@@ -249,7 +255,7 @@ func TestAWarmColumnWeighsWhatTheHypsometricEquationSays(t *testing.T) {
 // ten to twenty metres a second down a slope of a few in a hundred.
 func TestTheGroundQuickensAndDrainsTheWind(t *testing.T) {
 	g := oceanGlobe(64, 32)
-	e := newAirEnv(g)
+	e := envOf(g)
 	cy := e.h / 4
 	i := cy*e.w + 3
 	e.expose[i] = 100

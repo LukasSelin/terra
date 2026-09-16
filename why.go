@@ -279,7 +279,7 @@ func (g *Grid) whyRain(i int) []Cause {
 		return chain
 	}
 	e := w.airEnv
-	c := e.cellOfTile(g, i)
+	c := e.cellOfTile(i)
 	if len(w.budget[1].rain) <= c {
 		return chain
 	}
