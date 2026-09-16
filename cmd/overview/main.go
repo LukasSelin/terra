@@ -9,6 +9,13 @@
 //	go run ./cmd/overview -seed 7 -w 256 -h 128 -epochs 16 -sea 0.3
 //	go run ./cmd/overview -preset globe -max    the biggest globe memory allows
 //
+// A history is two thirds of making a globe. -keep-history writes it to a
+// file as the world is made, and -from-history makes the world again from
+// that file, on the seed and terms it was made on, without running it:
+//
+//	go run ./cmd/overview -preset globe -keep-history globe.history
+//	go run ./cmd/overview -from-history globe.history
+//
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
 //
@@ -52,6 +59,10 @@ type options struct {
 	// is drawn; Max makes the world as big as memory allows.
 	Scale, Day int
 	Max        bool
+	// KeepHistory is a file to write the world's history to as it is made;
+	// FromHistory a file to make the world from instead, on the seed and
+	// terms it carries. See terra.LandFromHistory.
+	KeepHistory, FromHistory string
 }
 
 func main() {
@@ -67,6 +78,8 @@ func main() {
 	flag.IntVar(&o.Scale, "scale", 0, "pixels per tile (0 picks one)")
 	flag.IntVar(&o.Day, "day", 30, "the day of the world whose weather is drawn")
 	flag.BoolVar(&o.Max, "max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
+	flag.StringVar(&o.KeepHistory, "keep-history", "", "write the world's history to this file as it is made")
+	flag.StringVar(&o.FromHistory, "from-history", "", "make the world from a history file -keep-history wrote, on the seed and terms it carries, instead of from the other flags")
 	var (
 		out   = flag.String("out", "overview", "directory to write into")
 		serve = flag.String("serve", "", "serve a page that makes worlds at this address (e.g. :8080) instead of making one; the other flags are what it makes")
@@ -119,6 +132,53 @@ func (o options) terms() (terra.Terms, error) {
 	return t, nil
 }
 
+// historyTerms is the seed and the terms of the history file at path.
+func historyTerms(path string) (uint64, terra.Terms, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, terra.Terms{}, err
+	}
+	defer f.Close()
+	return terra.HistoryTerms(f)
+}
+
+// presetOf is the name of the preset t is, where it is one unchanged, and
+// "custom" where it is not: the name a page gives a world whose terms came
+// from a history file rather than from the flags.
+func presetOf(t terra.Terms) string {
+	for name, p := range map[string]terra.Terms{"valley": terra.DefaultTerms(), "ancient": terra.AncientTerms(), "globe": terra.GlobeTerms()} {
+		if t == p {
+			return name
+		}
+	}
+	return "custom"
+}
+
+// makeLand makes the land on t: from o's history file if it names one, and
+// keeping its history in the file o names for that if it does.
+func makeLand(o options, t terra.Terms) (*terra.Land, error) {
+	switch {
+	case o.FromHistory != "":
+		f, err := os.Open(o.FromHistory)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return terra.LandFromHistory(f)
+	case o.KeepHistory != "":
+		f, err := os.Create(o.KeepHistory)
+		if err != nil {
+			return nil, err
+		}
+		land, err := terra.MakeLandKeepingHistory(o.Seed, t, f)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return land, err
+	}
+	return terra.MakeLand(o.Seed, t)
+}
+
 // generate makes the world the options describe and draws it into out: an
 // index.html, a why.html and a png per layer. It prints a summary to the
 // terminal as it goes and returns the world and the path of index.html.
@@ -129,25 +189,38 @@ func generate(o options, out string) (*terra.Land, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	if o.FromHistory != "" {
+		// The seed and the terms are the history's, whatever the flags said.
+		o.Seed, o.Preset = land.Seed(), presetOf(t)
+	}
 	page, err := draw(land, o, t, took, out)
 	return land, page, err
 }
 
 // makeWorld makes the world the options describe and runs its weather up to
 // the day they ask for: everything a drawing or a tile's account reads. The
-// same options make the same world, every time.
+// same options make the same world, every time. A world made from a history
+// file is made on the seed and terms the file carries.
 //
 // It sets the package's namer, so no two may run at once.
 func makeWorld(o options) (*terra.Land, terra.Terms, time.Duration, error) {
-	t, err := o.terms()
+	var t terra.Terms
+	var err error
+	from := ""
+	if o.FromHistory != "" {
+		o.Seed, t, err = historyTerms(o.FromHistory)
+		from = " from the history in " + o.FromHistory
+	} else {
+		t, err = o.terms()
+	}
 	if err != nil {
 		return nil, t, 0, err
 	}
 
-	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap)
+	fmt.Printf("making a %dx%d world from seed %d (epochs %d, sea %.2f, water %.1f m, wrap %v)%s...\n", t.Width, t.Height, o.Seed, t.Epochs, t.SeaShare, t.Water, t.Wrap, from)
 	start := time.Now()
 	terra.SetNamer(namerFor(o.Seed))
-	land, err := terra.MakeLand(o.Seed, t)
+	land, err := makeLand(o, t)
 	if err != nil {
 		return nil, t, 0, err
 	}

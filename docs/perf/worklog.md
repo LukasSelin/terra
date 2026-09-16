@@ -6,6 +6,93 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Generate in stages, and a history kept in a file
+
+**What this is.** The first step of phase 3 of the scaling plan ("stages as
+values"), on `claude/app-performance-structural-956966` from main at
+ad943a2. Two commits' worth, neither moving any world: `TERRA_DIGEST=check`
+passes after each, the budget passes unchanged, the pinned pass counts
+hold, and the short tier passes (70 s).
+
+**The stages.** `Generate` was one function of three hundred lines. It is
+six methods on `Land` run from a table in `stages.go` -
+`ground -> sea -> shape -> cut -> coast -> cover` - each over the grid the
+one before it left; the hand-off is the `Grid` and the position of
+`Land.RNG`, and no stage reads another's locals (the one that did,
+`poured`, is `Terms.poured`). With `TERRA_PHASES=1` each is timed as
+`stage.<name>`. The globe, quiet machine, one run:
+
+| stage | wall s | share |
+|---|---:|---:|
+| `stage.ground` (the history) | 36.74 | 78% |
+| `stage.cut` | 4.00 | 8% |
+| `stage.coast` | 3.14 | 7% |
+| `stage.shape` | 2.76 | 6% |
+| `stage.cover` | 0.37 | 1% |
+| `stage.sea` | 0.05 | 0% |
+| `Generate` | 47.14 | 100% |
+
+**The history file.** `historyfile.go`: `MakeLandKeepingHistory(seed,
+terms, w)` makes a world and writes it, stopped between the ground stage
+and the sea, to `w`; `LandFromHistory(r)` runs the other five stages on
+what it reads. `cmd/overview -keep-history f` and `-from-history f` use
+them. What is kept is every field of the `Grid` found by reflection, less
+the ten `historyDropped` names with a reason each (the seven scratch
+slices, the router, the landmarks, the features), so that a field added
+later is kept without anybody remembering to, and a field of a kind the
+file cannot hold fails the write rather than being left out. Fields are
+written as their memory, flat runs of numbers as one run of bytes; the
+header carries the architecture and a fingerprint of the layout of every
+type held, and a reader refuses anything else. It is a cache of a history,
+not an interchange format: nothing in it says whether the history code
+that wrote it is today's.
+
+What had to be kept that a hand-written list would have missed: the
+weather's winds with the vapour budget each reading warm-starts from, and
+`aired`, which the weather gate compares against - without them the first
+drain after the history rebuilds the weather, which it does not do in a
+world made straight through, and the world moves. And the chance: `Land`
+keeps its `*rand.PCG` now, whose state is sixteen bytes of the header.
+
+**What it measured.** The full globe, quiet machine:
+
+| | wall |
+|---|---:|
+| made straight through, keeping the history | 47.1 s |
+| made from the kept history | 10.5 s |
+
+The file is 198 MB (396 bytes a tile); the stages' times against the whole
+put the write and the read at about a tenth of a second each, on a warm
+page cache. Every one of the 21 maps
+`cmd/overview` draws is byte-identical between the two runs, as are the
+summary and the why page. `TestAWorldResumedFromItsHistoryIsTheSameWorld`
+holds valley, ancient and globe128 to the digest and every kept field bit
+for bit (NaN included, which the deep floor marks tiles with), the
+features and the chance; `TestAHistoryResumesTheSameOverAnyGoroutines`
+resumes ancient over 1, 3 and 8; `TestAHistoryFileIsRefusedWhenItIsNotOne`
+feeds it nothing, a PNG header, half a file, another version and another
+layout. History sizes: valley 0.6 MiB, ancient 1.1 MiB, globe128 4.9 MiB.
+
+**What it is for.** A change to anything after the history - the shaping,
+the cutting, the coast, the woods, the soil - is run on a kept history in
+a fifth of the time, and the history grid of phase 3 plugs in at the same
+boundary: the ground stage's output is what a coarse history will have to
+hand the map.
+
+**What is next.** The yardsticks read many small globes each made from
+scratch; making their histories once per run and resuming is the test
+suite's share of this. A second boundary kept (after `cut`) would do the
+same for the coast and the cover.
+
+**`scripts/perf.sh check`**, quiet machine, against the 07:18 baseline:
+passes, valley -5.9%, ancient -4.3%, globe256 -5.4% (p=0.002, intervals
+±1-3%), with B/op -18..-31%. The branch adds six timer calls to a world and
+nothing else to `NewLand`'s path, so the gain is what main has merged since
+07:18 (the hydrology's scratch on the grid, among it), not this change; the
+baseline stands until a change of its own moves it.
+
+---
+
 ## 2026-09-16 - cmd/overview -serve: click a tile to ask why it is so
 
 **What this is.** The third step of the web page, on
