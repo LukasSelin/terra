@@ -6,6 +6,405 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - Phase 3, step 2: a plate is carried the part of a tile a step leaves over
+
+**What this is.** The fix to the lag of the step before, on
+`claude/history-km`, and the world it moves. `move` stepped a plate a whole
+tile of its grid once its travel came to one and held the rest back, so a
+plate stood most of a tile of its grid behind its travel whatever the grid.
+
+**The change.** A plate steps to the nearest whole tile of its travel, and
+the rest - under half a tile either way - is the plate's: `turn` reads the
+whole plate that far off its tiles, from the tile the slide rounds to, the
+way it reads a turn, and a tile's own offset keeps only what turns leave.
+`TestASlowSlideIsNotHeldBack` holds a continent sliding 1, 0.4 and 0.25 tiles
+an epoch into the ocean to its travel within half a tile, whole, for ten
+epochs; on the old move the slow slides lagged.
+
+The first form of it (71e7f1a) put the rest into every tile's own offset and
+looked for a tile's crust two tiles round. It failed the suite: the offsets
+turns had left each tile no longer fitted together, lone tiles of the other
+crust came out ten times as many (37-187 a small globe against 3-9), `shape`
+graded lone continent tiles down to the deep floor beside them, the slides
+took a sixth of small globe 5 after them, and its sea poured at -3,100 m,
+which reads as no sea (`TestTheSeaIsTheWorldsToSay`: -2,599 m held). Held by
+the plate, lone tiles are 2-11 a small globe again.
+
+**What it measured.** Globes 1-8, the map against a half-size history
+(`TERRA_HISTORY_SHRINK=2`), before the per-plate form: collision ground
++38% (t 1.6), schist +17% (t 1.0), granite -23% (t -1.8), nothing past t 2,
+where the same comparison before the fix had schist at t 5.3 and the
+collisions at t 2.8. The globe on the map with the per-plate form: 48.8 s
+(main 47.5 s, three interleaved runs); the first form's search had it at
+55.4 s. Digest (ancient, globe128) and budget rewritten; the drawn valley is
+as it was. The golden chain reads tile 257 of the ancient valley, raised by
+an arc in the first epoch; the tide's flats are read off small globe 4,
+which has 2 (small globes 1-8 now have 1, 1, 1, 2, 0, 0, 0 and 2).
+
+**The suite** (`go test -json -timeout 60m .`, quiet, one binary a side,
+histories not kept). Main at 3a02e42, 399 s, fails
+`TestTheIceEdgeIsNotALineOfLatitude` and `TestTheWeatherChangesFromDayToDay`;
+the branch passes both, in 387 s, and fails six, each at its edge:
+
+| test | reading | range | why it is let stand |
+|---|---|---|---|
+| Hack exponent, globe | 0.6029 | 0.54-0.60 | at the edge, as it was at 0.6005 after T8 |
+| Horton bifurcation ratio, small globe | 5.009 | 3-5 | 0.2% over |
+| meander wavelength, small globe | 14.73 widths | 10-14 | some 21 reaches over 8 globes; one width is its noise |
+| Hack exponent, 2x less 1x, small globe | 0.079 | -0.05-0.05 | the resolution comparison moved with the plates; not yet looked into |
+| channel concavity, 2x less 1x, small globe | 0.077 | -0.1-0.1 | its known gap (B) closed; the marker is taken off |
+| `TestAHistoryLeavesItsBedsInLayers` | 49% layered | 50% | one seed: seeds 1-8 average 0.521 (0.538 before), and seeds 4 and 7 were under 50% before |
+
+Merged by the owner's word with these standing.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: a plate lags a tile of its grid, and opens less floor
+
+**What this is.** The move on a half-size history against the map's, globes
+1-8 made both ways, read through `epochWatch` each epoch; a throwaway test on
+`claude/history-km`. The lag is how far a plate has travelled and not yet
+moved - `cr.acc`, what is left over below a whole tile of its grid - in the
+map's tiles; fresh floor is the share of the planet `move` opened that epoch.
+
+| epoch | fresh floor, map / half | t | lag, mean over plates, map / half | t | plate speed, map tiles an epoch |
+|---:|---|---:|---|---:|---:|
+| 0 | 0.0414 / 0.0369 (-11%) | -3.5 | 0.65 / 1.43 | 21 | 5.33 / 5.33 |
+| 4 | 0.0365 / 0.0367 (+1%) | 0.2 | 0.76 / 1.31 | 12 | 4.20 / 4.20 |
+| 8 | 0.0291 / 0.0266 (-9%) | -1.8 | 0.71 / 1.48 | 17 | 3.06 / 3.06 |
+| 10 | 0.0261 / 0.0231 (-11%) | -3.4 | 0.74 / 1.50 | 13 | 2.49 / 2.49 |
+| 13 | 0.0185 / 0.0166 (-10%) | -3.0 | 0.75 / 1.42 | 30 | 1.64 / 1.64 |
+| 15 | 0.0138 / 0.0135 (-2%) | -0.5 | 0.71 / 1.42 | 15 | 1.07 / 1.07 |
+| all | 0.477 / 0.451 (**-5%**) | | 0.72 / 1.41 (**+95%**) | | 51.2 / 51.2 |
+
+The plates go as fast on both grids, to the digit. What they have not yet
+moved is a tile of their grid's worth, whatever the grid: 0.72 of the map's
+tiles on the map and 1.41 on a half-size history, every epoch. The floor a
+parting opens comes 5% short over the history, 11% in the first epoch and
+9-11% in the slow late epochs, where a plate's step is a larger share of
+what it travels. That is the first move's missing floor of the step before,
+and the rifts and islands short throughout.
+
+The move is right in taking many steps an epoch: it moves every plate a tile
+and settles, over and over, until the travel is used. What makes the grid's
+size matter is that a step is a tile of the grid, and what is below one is
+held back. The turn does not: it is read backwards once an epoch and each
+tile keeps how far its crust stands off it (`cr.off`), so a slow turn still
+goes round.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: the boundary is read alike; the first move changes it
+
+**What this is.** Whether a half-size history reads the same boundary
+between plates as closing or parting as the map does, globes 1-16, read
+through `epochWatch` at the first plates (nothing moved) and after the first
+epoch; a throwaway test, on `claude/history-km`. Map tiles of boundary per
+map tile of area; the difference and t are seed by seed.
+
+**At the first plates, nothing moved**, edge by edge by the crust either side
+and the sign of `closing`, and tile by tile as `tectonics` reads it
+(`meetingAt`'s hardest neighbour, `liftOf`'s kind):
+
+| | map | half | | t |
+|---|---:|---:|---:|---:|
+| continent-continent closing | 0.00192 | 0.00209 | +9% | 0.8 |
+| continent-continent parting | 0.00182 | 0.00222 | +22% | 1.9 |
+| continent-ocean closing / parting | 0.00498 / 0.00499 | 0.00499 / 0.00503 | 0% / +1% | 0.0 / 0.2 |
+| ocean-ocean closing / parting | 0.00302 / 0.00321 | 0.00281 / 0.00268 | -7% / -16% | -0.8 / -1.9 |
+| tiles read as collision / arc / trench / rift and islands | 0.00188 / 0.00246 / 0.00247 / 0.01275 | 0.00201 / 0.00246 / 0.00246 / 0.01241 | +7% / 0 / 0 / -3% | 0.5 / 0 / 0 / -1.0 |
+
+`closing`, `meetingAt` and `liftOf` read the same boundary the same way on
+both grids: the drift, the spin and the offsets are scale-free, and nothing
+there differs beyond chance.
+
+**After the first epoch:**
+
+| | map | half | | t |
+|---|---:|---:|---:|---:|
+| continent-ocean closing | 0.00304 | 0.00378 | +24% | 3.5 |
+| continent-ocean parting | 0.00130 | 0.00213 | **+64%** | **7.0** |
+| ocean-ocean closing | 0.00514 | 0.00419 | -19% | -5.3 |
+| ocean-ocean parting | 0.00746 | 0.00608 | -19% | -5.3 |
+| continent-continent closing / parting | 0.00072 / 0.00047 | 0.00084 / 0.00049 | +16% / +4% | 0.8 / 0.2 |
+| seams found: collision / arc / trench / rift and islands | 0.00115 / 0.00209 / 0.00177 / 0.01401 | 0.00145 / 0.00238 / 0.00206 / 0.01299 | +27% / +14% / +16% / -7% | 1.7 / 2.6 / 3.1 / -3.2 |
+
+The boundary is about as long after the move on both grids (0.0181 and
+0.0175), but what lies along it is not: on the coarser grid a continent
+still meets ocean where on the map fresh floor has opened between them and
+the plates meet ocean against ocean. The move is where they part: a plate
+goes a whole tile of the grid at a time once what it has travelled comes to
+one (`move`, `cr.acc`), so on a grid twice as coarse a slow parting has not
+yet opened a tile of floor that on the map has opened one, and the floor a
+parting makes comes a tile of the grid at a time. Next: the fresh floor made
+each epoch on both grids, and the lag between what a plate has travelled and
+where its tiles are.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: where the half-size history's collisions part, epoch by epoch
+
+**What this is.** When the collisions' extra ground on a half-size history
+appears, over globes 1-8 made both ways, on `claude/history-km`. `epochWatch`
+(historygrid.go), nil but for tests, is told of the first plates (as epoch
+-1) and of each epoch's end; throwaway tests read it. No world moves:
+`TERRA_DIGEST=check` passes. Boundaries are in the map's tiles of boundary
+per map tile of area, so the two sizes read alike; t is the seed-by-seed
+difference over its standard error.
+
+**The first plates** (16 seeds, before anything has moved):
+
+| | map | half-size | difference | t |
+|---|---:|---:|---:|---:|
+| plates | 32 | 32 | 0 | |
+| continent | 0.432 | 0.460 | +6% | 1.1 |
+| boundary, all | 0.0199 | 0.0198 | -1% | -0.5 |
+| continent against continent | 0.0037 | 0.0043 | +16% | 1.5 |
+| continent against ocean | 0.0100 | 0.0100 | 0% | 0.1 |
+| ocean against ocean | 0.0062 | 0.0055 | -12% | -1.4 |
+
+**Each epoch** (8 seeds; the book's ground raised most by a collision,
+cumulative, and the seams of the epoch):
+
+| epoch | book collision, map / half | t | collision seam, map / half | t | rift and island seam, map / half | t | plates standing, map / half |
+|---:|---|---:|---|---:|---|---:|---|
+| 0 | 0.021 / 0.037 | 3.0 | 0.0011 / 0.0017 | 2.7 | 0.0138 / 0.0130 | -1.6 | 29.0 / 28.3 |
+| 2 | 0.030 / 0.050 | 2.8 | 0.0005 / 0.0009 | 1.8 | 0.0141 / 0.0121 | -3.8 | 27.4 / 24.8 |
+| 4 | 0.037 / 0.055 | 1.9 | 0.0005 / 0.0004 | -0.1 | 0.0144 / 0.0121 | -4.7 | 27.6 / 25.3 |
+| 8 | 0.045 / 0.069 | 2.2 | 0.0004 / 0.0005 | 0.5 | 0.0155 / 0.0124 | -4.9 | 28.4 / 25.4 |
+| 12 | 0.050 / 0.079 | 2.6 | 0.0004 / 0.0008 | 2.5 | 0.0161 / 0.0131 | -5.0 | 28.8 / 26.4 |
+| 15 | 0.053 / 0.087 | 2.8 | 0.0005 / 0.0009 | 2.7 | 0.0166 / 0.0136 | -5.7 | 30.1 / 27.5 |
+
+Half of the collisions' extra ground is there at the end of the first
+epoch: the first move turns a continent-against-continent boundary that is
+16% longer (not beyond chance) into collision seams 61% longer, so on the
+coarser grid more of that boundary is read as closing. The seams then run
+alike for eight epochs and part again from the twelfth. The partings - rift
+and island seams - are shorter on the coarser grid from the first epoch to
+the last, by 13-18%, and it keeps some two and a half fewer plates standing
+from the second epoch. What is left to read is the first move: how
+`meetingAt` and `closing` read the same boundary on the coarser grid, and
+the crust kinds `cr.kinds` gives its tiles.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: a half-size history, eight globes
+
+**What this is.** Whether the globe on a half-size history (512x256, belts
+7.3 history tiles wide) is the globe on the map, over globes 1-8 made both
+ways, on `claude/history-km` at f8c1438. A throwaway test; no code changed.
+The difference is taken seed by seed (each seed's two worlds share their
+first draws, not their bits) with its standard error over the eight.
+
+| measure | map | half-size history | difference | se | t |
+|---|---:|---:|---:|---:|---:|
+| schist (share of land) | 0.062 ±0.003 | 0.087 ±0.013 | **+0.024** | 0.005 | 5.3 |
+| basalt | 0.019 | 0.026 | **+0.006** | 0.001 | 4.8 |
+| collision ground (book) | 0.053 ±0.016 | 0.087 ±0.028 | **+0.034** | 0.012 | 2.8 |
+| granite | 0.337 | 0.358 | +0.021 | 0.025 | 0.8 |
+| limestone | 0.282 | 0.270 | -0.012 | 0.015 | -0.8 |
+| shale | 0.233 | 0.203 | -0.030 | 0.022 | -1.3 |
+| land | 0.397 | 0.423 | +0.026 | 0.026 | 1.0 |
+| ocean crust | 0.536 | 0.532 | -0.003 | 0.030 | -0.1 |
+| rain, mm | 766 | 810 | +44 | 31 | 1.4 |
+| forest | 0.217 | 0.229 | +0.012 | 0.008 | 1.5 |
+| seconds | 55.9 | 27.9 | -28.0 | 1.9 | |
+
+Schist, basalt and the collisions' ground are larger on a half-size history,
+and not by chance: the collisions' by 64%. Seed 1, the one the step before
+read, had them 7% apart and was the least of the eight (0.050 against
+0.047); seeds 5 to 8 had them two to three times the map's. The rest -
+granite, the sedimentary rock, land, the ocean floor, rain and forest -
+hold within the spread. A half-size history halves the globe's time, and
+does not yet make the same belts: the spread of a belt is not only a matter
+of a belt a handful of tiles wide.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: the collision belts spread on a coarse history
+
+**What this is.** The first use of main's `cmd/zarr -stages` and `zarrdiff
+-by` on the schist left over, on `claude/history-km` after merging main
+(d1856d3). `TERRA_HISTORY_SHRINK=n`, read once at start-up, runs a history
+on a grid n times coarser than the map, so that `cmd/zarr` can write a world
+on one; nothing else changes and no world moves.
+
+**What it found.** The book's `meeting` - the kind of meeting that raised
+each tile most - counted in the ground stage's store of each world, seed 1:
+
+| world, history grid | a belt, history tiles | collision | arc | islands | rift | no meeting |
+|---|---:|---:|---:|---:|---:|---:|
+| small globe, 256x128 | 5.2 | 2 079 | 3 786 | 3 098 | 10 420 | 13 309 |
+| small globe, 64x32 | 1.3 | **4 592** | 3 024 | 2 384 | 10 544 | 12 144 |
+| globe, 1024x512 | 14.7 | 24 426 | 70 586 | 74 957 | 171 649 | 181 664 |
+| globe, 512x256 | 7.3 | 26 232 | 82 388 | 62 100 | 147 864 | 204 500 |
+| globe, 256x128 | 3.7 | **40 400** | 75 088 | 47 632 | 161 264 | 198 544 |
+
+(`zarrdiff -only book/meeting -by book/meeting -by-side b`; a belt's
+reach is `beltOn` in the map's tiles over the coarseness.) Where a belt is
+a few history tiles wide the ground a collision raises most spreads: by
+65% on the globe at 3.7 tiles and 120% on the small globe at 1.3, and by 7%
+on the globe at 7.3, inside one seed's noise. The seam is a whole tile of
+the grid on either side of the line between the plates, and a belt's reach
+is cut at whole tiles of it, so a belt resolved by a handful of tiles is as
+wide as those tiles and not as its reach. The schist is the crushing in
+that ground. This is a floor on how coarse a history can be for the belts it
+raises, rather than a count still made per tile; the arcs and islands lose
+ground to it.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: the rock decided on the map, and the band share made exact
+
+**What this is.** Two changes toward a coarser history making the same
+rock, on `claude/history-km`. No world moves: `TERRA_DIGEST=check` and the
+short tier pass.
+
+**The rock on the map.** A history on a coarser grid no longer lays the foot
+of its piles. Its book notes, for the melt, the arc's fire and the crushing,
+whether a tile was covered whole or the most of it a band covered and how
+far the tile's centre stood from the band's middle (`record.banded`), and
+the amounts are the amounts a tile in the band takes. `settleRock`'s switch
+is `cookFoot`; on the map it runs as it did, and on a coarser history
+`layFeet` runs it on the map after the hand-down: of the map tiles under a
+history tile, a band covering a share of it reaches that share, the nearest
+the band's middle by the distance read between the history's tiles, and
+each tile's foot is laid from the book less what does not reach it.
+`TestABandLaidOnTheMapKeepsItsShare` holds a quarter-covered history tile to
+four schist tiles of sixteen and a covered one to sixteen.
+
+**The share made exact.** Counting it, the step before's `bandShare` was
+wrong at the scale of one: set against the map's rule over the same four
+small globes' histories, it gave an arc's crushing 54 501 tile-epochs to the
+rule's 43 101, the arc's fire 103 100 to 81 197, a collision 19 138 to
+17 907 and the melt 371 429 to 344 748, because a band with edges between
+two tiles took a tile more than the rule. It now counts the map tiles a
+coarse tile at distance A stands for, A c to A c+c-1, that the rule takes:
+at a coarseness of one it is the rule, and the four sums came out equal.
+
+**What it measured** (`TERRA_PLANET=1`, small globes 1-8, globes 1-4):
+
+| world, history grid | granite | schist | basalt | limestone | shale |
+|---|---:|---:|---:|---:|---:|
+| small, 256x128 | 0.42 | 0.11 | 0.08 | 0.19 | 0.16 |
+| small, 128x64 | 0.37 | 0.16 | 0.11 | 0.16 | 0.16 |
+| small, 64x32 | 0.25 | 0.23 | 0.13 | 0.14 | 0.21 |
+| globe, 1024x512 | 0.345 | 0.062 | 0.017 | 0.29 | 0.23 |
+| globe, 512x256 | 0.338 | 0.085 | 0.025 | 0.25 | 0.24 |
+| globe, 256x128 | 0.349 | 0.100 | 0.027 | 0.25 | 0.22 |
+
+Against the step before (small schist 0.17 and 0.29, globe 0.085 and 0.110)
+the rock on the map took the quarter-size small globe's schist from 0.29 to
+0.23, and the exact share moved nothing further. The leak is upstream of
+the rock. Read off the books (small globes 1-8, the share each making
+covers, summed over tiles):
+
+| history grid | any crushing | any fire | any melt | crushed past 6 km | fire over crushing |
+|---|---:|---:|---:|---:|---:|
+| 256x128 (on the coarse path at one) | 0.085 | 0.104 | 0.514 | 0.061 | 0.054 |
+| 128x64 | 0.096 | 0.092 | 0.545 | 0.078 | 0.050 |
+| 64x32 | 0.127 | 0.059 | 0.525 | 0.108 | 0.034 |
+
+The bands themselves drift: an arc's crushing grows and its fire shrinks
+with the coarseness, though each epoch's share is now the map's rule at
+one, the boundaries per area of each kind of meeting hold (an earlier
+count: collisions 0.0019, 0.0018, 0.0025 a map tile), and the arc's gap in
+map tiles is the same at full and half size (3 on the small globe, 5.33 on
+the globe). What is left to find: where on a coarser grid an arc's front and
+its axis fall against the tiles (the seam is a tile of the grid either side
+of the line between the plates, and a coarse tile of the axis band reads the
+front's distance), and that a tile's book sums every epoch, so one coarse
+tile that was front in one epoch and axis in another carries both.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: the seam's bands read by the share of a tile
+
+**What this is.** The schist found by the step before, on
+`claude/history-km`. No world moves: `TERRA_DIGEST=check` and the short
+tier pass.
+
+**The leak.** The crushing that makes schist, the fire that makes granite
+and the melt that lays basalt are written into bands beside a seam, a few
+of the map's tiles wide (`axisWidth` 2, and an arc's front out to its
+axis). The distance from the seam is counted in the history grid's tiles,
+and the seam itself is two tiles thick, one on each plate, so a band was
+some 6 map tiles wide on the map, 8 on a half-size grid and 16 on a
+quarter-size one, where `axisWidth` cannot be narrower than a tile.
+
+**The change.** `bandShare`: on a coarser grid a tile takes the share of
+each band that lies across it - its reach from the seam in the map's
+tiles, [away c, (away+1) c], against the band's in [lo, hi+1] - and the
+crush, the fire and the melt are weighted by it; a lava bed and the rock's
+epoch go to a tile at least half in the band. On the map the map's rule
+runs as it was.
+
+**What it measured** (`TERRA_PLANET=1`, small globes 1-8, globes now 1-4,
+not a quiet machine; before the change in brackets, globes then over two
+seeds):
+
+| world, history grid | granite | schist | basalt | limestone | land | ocean crust | rain mm |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small, 256x128 | 0.42 | 0.11 | 0.08 | 0.19 | 0.38 | 0.53 | 648 |
+| small, 128x64 | 0.375 (0.36) | 0.17 (0.19) | 0.10 (0.11) | 0.16 | 0.36 | 0.55 | 702 |
+| small, 64x32 | 0.25 (0.25) | 0.29 (0.32) | 0.11 (0.11) | 0.13 | 0.41 | 0.44 | 679 |
+| globe, 1024x512 | 0.345 | 0.062 | 0.017 | 0.29 | 0.41 | 0.52 | 750±130 |
+| globe, 512x256 | 0.346 (0.34) | 0.085 (0.10) | 0.021 | 0.25 | 0.38 | 0.58 | 805±110 |
+| globe, 256x128 | 0.352 (0.31) | 0.110 (0.14) | 0.023 (0.05) | 0.25 | 0.42 | 0.52 | 804±54 |
+
+The globe's granite and basalt now hold; schist is a third lower but still
+grows with the coarseness, and the small globes barely moved. What is left
+is the threshold: a tile is schist once its crushing passes `madeEnough`,
+six kilometres, and a collision raises tens of kilometres an epoch, so a
+coarse tile a quarter in the band is crushed past it and is schist whole.
+The share is weighted and the rock it makes is still counted by the tile.
+The globe's rain over four seeds is inside the spread at every size.
+
+---
+
+## 2026-09-16 - Phase 3, step 2: the history's tiles counted against the planet
+
+**What this is.** Step 2 of the history grid, on `claude/history-km` from
+main at 91daf2d. No world moves: `TERRA_DIGEST=check` passes and the short
+tier passes.
+
+**What changed.** A history grid remembers the Span of the map it is the
+planet of (`Grid.planet`), and `historygrid.go` reads the history's counts
+through it: `planetSpan` for the plate and hotspot counts, `coarseness`
+for how many map tiles a history tile is, `inTiles` for a length counted in
+map tiles (never under one tile), `passes` for a softening's passes (over
+the coarseness squared). Through them: `plateTotal`, `driftScale` (and so
+`deepSpan`, which grows with the coarseness), the molten era's cells, the
+crust's fray, the bow's octaves, the belts' grain, `seamLeast`, `axisWidth`,
+`foldWave`, `marginRamp`, `smoothing` in `soften` and `upliftOf`, the
+hotspot count. On the map every one is the number it was to the bit.
+
+**What it measured** (`TERRA_PLANET=1 go test -run TestAPlanetOnCoarserHistories`,
+mean ± spread over seeds, small globes 1-8 and globes 1-2; the machine was
+not quiet for the globes, so read their seconds as relative):
+
+| world, history grid | s | plates | land | ocean crust | belts | rain mm | forest | granite | schist | basalt | limestone | shale |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| small, 256x128 | 4.1 | 16 | 0.38±0.05 | 0.53±0.05 | 0.28±0.03 | 648±55 | 0.21 | 0.42 | 0.11 | 0.08 | 0.19 | 0.16 |
+| small, 128x64 | 2.6 | 16 | 0.36±0.06 | 0.55±0.07 | 0.31±0.03 | 703±58 | 0.22 | 0.36 | 0.19 | 0.11 | 0.15 | 0.16 |
+| small, 64x32 | 1.5 | 16.1 | 0.41±0.03 | 0.44±0.05 | 0.32±0.04 | 679±52 | 0.21 | 0.25 | 0.32 | 0.11 | 0.11 | 0.17 |
+| globe, 1024x512 | 69 | 29.5 | 0.45±0.05 | 0.48±0.05 | 0.31±0.02 | 671±130 | 0.20 | 0.36 | 0.06 | 0.02 | 0.25 | 0.24 |
+| globe, 512x256 | 38 | 29.5 | 0.39±0.06 | 0.58±0.06 | 0.30±0.01 | 837±140 | 0.23 | 0.34 | 0.10 | 0.02 | 0.24 | 0.22 |
+| globe, 256x128 | 23 | 31 | 0.40±0.03 | 0.54±0.03 | 0.29±0.00 | 835±45 | 0.23 | 0.31 | 0.14 | 0.05 | 0.20 | 0.23 |
+
+What holds: the plate count (the quarter-size globe had 31 against 27
+before this step), the land share, the belts, the forest, the shale and the
+sandstone, within the spread between seeds. What does not: **the rock**.
+Schist doubles at half size and doubles again at a quarter on both worlds,
+at granite's and limestone's expense, and basalt rises. Schist is ground
+buried and squeezed; something that decides how deep a tile is buried or
+how much a meeting crushes is still counted per tile. The globe's rain at
+half size (837 against 671) is inside two seeds' spread and wants more
+seeds before it is believed. That is the next thing step 2 finds before a
+history size is chosen.
+
+---
+
 ## 2026-09-16 - zarr/ leaves for github.com/LukasSelin/zarr
 
 **What this is.** `zarr/` moved to its own repository,

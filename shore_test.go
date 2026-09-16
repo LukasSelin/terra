@@ -195,7 +195,9 @@ func estuary() *Grid {
 // its age's depth - see abyss.go - that sand stays on the shelves, and the
 // fourth has none. The third had them until the floor was given its sediment
 // and stood some hundreds of metres higher, which moved the tides the basins
-// ring with; the six small globes hold none to two flats each.
+// ring with; the six small globes hold none to two flats each. With the plates
+// carried the part of a tile a step leaves over as well (see move), small
+// globes 1-8 hold 2, 3, 2, 3, 1, 0, 1 and 3.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string

@@ -75,10 +75,10 @@ func TestAHistoryHandedDownOntoItsOwnSizeIsItself(t *testing.T) {
 }
 
 // Handed down from a grid half as fine, the map is the history read finer:
-// no height outside the history's, every tile riding the plate and standing
-// on the rock of the history tile nearest it, its beds standing where they
-// stood against the ground over them, and every plate of the history on the
-// map.
+// no height outside the history's, every tile riding the plate of the history
+// tile nearest it with its line of the book and its crust, the top of its pile
+// standing where it stood against the ground, and every plate of the history
+// on the map.
 func TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner(t *testing.T) {
 	small := GlobeTerms()
 	small.Width, small.Height = 128, 64
@@ -103,18 +103,16 @@ func TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner(t *testing.T) {
 				if h := to.Height[i]; h < lo || h > hi {
 					t.Fatalf("tile %v stands at %.3f, outside the history's %.3f..%.3f", p, h, lo, hi)
 				}
-				if to.Tiles[i] != from.Tiles[j] || to.ledger[i] != from.ledger[j] || got.ocean[i] != d.ocean[j] {
+				if to.Tiles[i].Plate != from.Tiles[j].Plate || to.ledger[i] != from.ledger[j] || got.ocean[i] != d.ocean[j] {
 					t.Fatalf("tile %v is not the nearest history tile's", p)
 				}
-				if to.strata[i].n != from.strata[j].n {
-					t.Fatalf("tile %v has %d beds under it, and the history's %d", p, to.strata[i].n, from.strata[j].n)
-				}
-				for k := 0; k < int(to.strata[i].n); k++ {
-					a := float64(to.strata[i].top[k]) - to.Height[i]
-					b := float64(from.strata[j].top[k]) - from.Height[j]
-					if math.Abs(a-b) > 1e-3*math.Max(1, math.Abs(b)) {
-						t.Fatalf("tile %v: bed %d stands %.4f under the ground, and %.4f in the history", p, k, a, b)
-					}
+				// The foot of the pile is laid on the map (see layFeet), so
+				// what is below may have been remade; the top of it stands
+				// where it stood against the ground.
+				a := float64(to.strata[i].top[0]) - to.Height[i]
+				b := float64(from.strata[j].top[0]) - from.Height[j]
+				if math.Abs(a-b) > 1e-3*math.Max(1, math.Abs(b)) {
+					t.Fatalf("tile %v: the top bed stands %.4f under the ground, and %.4f in the history", p, a, b)
 				}
 				plates[to.Tiles[i].Plate] = true
 			}
@@ -159,5 +157,33 @@ func TestAWorldOnACoarserHistoryIsAWorld(t *testing.T) {
 		if len(one.Grid.Tiles) != terms.Width*terms.Height || one.Grid.Forest() == 0 {
 			t.Fatalf("a world on a coarser history came out %d tiles with %d forest", len(one.Grid.Tiles), one.Grid.Forest())
 		}
+	}
+}
+
+// A band laid on the map keeps its share: of the map tiles under a history
+// tile a band covered a share of, that share is reached, the nearest the
+// band's middle first.
+func TestABandLaidOnTheMapKeepsItsShare(t *testing.T) {
+	from, to := NewGrid(2, 1), NewGrid(8, 4)
+	from.strata, to.strata = make([]column, 2), make([]column, 8*4)
+	for j := range from.strata {
+		from.strata[j] = basement(Granite, 0, 0)
+	}
+	book := make([]record, 2)
+	book[0].crush = 10 * madeEnough
+	book[0].banded(makingCrush, 0.25, 0.5)
+	book[1].crush = 10 * madeEnough
+	book[1].banded(makingCrush, 1, 0)
+	d := &deepStage{ocean: []bool{false, false}, book: book}
+	got := handDown(from, to, d)
+	_ = got
+	schist := [2]int{}
+	for i := range to.Tiles {
+		if to.strata[i].rock[to.strata[i].n-1] == Schist {
+			schist[to.PosOf(i).X/4]++
+		}
+	}
+	if schist[0] != 4 || schist[1] != 16 {
+		t.Fatalf("schist on %v of 16 map tiles under each history tile, want 4 and 16", schist)
 	}
 }

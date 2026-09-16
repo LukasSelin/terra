@@ -445,3 +445,60 @@ func TestMountainsAreNotAllOnTheCoast(t *testing.T) {
 		}
 	}
 }
+
+// A plate that slides less than a tile an epoch is not held back a tile: the
+// ground it carries stands where its travel has taken it, within the half tile
+// a grid rounds to, and goes whole - none of it lost, and no floor opened in
+// the middle of it. (Behind it, where it leaves ground, floor opens and part of
+// it is the plate's: that is a ridge, and it is not what is carried.) Held
+// back below a whole tile, a plate was on average most of a tile of its grid
+// behind, whatever the grid, so a history on a grid twice as coarse opened a
+// tenth less floor in its first epoch.
+func TestASlowSlideIsNotHeldBack(t *testing.T) {
+	for _, perEpoch := range []float64{1, 0.4, 0.25} {
+		const size, radius = 96, 20
+		g := NewGrid(size, size)
+		mid := size / 2
+		disc := 0
+		for i := range g.Tiles {
+			x, y := i%g.W, i/g.W
+			g.Tiles[i].Plate = 1
+			if math.Hypot(float64(x-mid), float64(y-mid)) <= radius {
+				g.Tiles[i].Plate = 0
+				disc++
+			}
+		}
+		scale := driftScale(g)
+		plates := []Plate{{DX: perEpoch / scale, into: 0}, {Ocean: true, into: 1}}
+		cr := newCrust(g)
+		for i := range g.Tiles {
+			cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
+		}
+		book := make([]record, len(g.Tiles))
+		for e := 1; e <= 10; e++ {
+			(&Land{}).move(g, plates, cr, book, e)
+			travel := perEpoch * float64(e)
+			var sx float64
+			carried, hole := 0, 0
+			for i := range g.Tiles {
+				x, y := i%g.W, i/g.W
+				if g.Tiles[i].Plate == 0 && g.Tiles[i].Formed == 0 {
+					carried++
+					sx += float64(x) - float64(mid)
+				}
+				if math.Hypot(float64(x-mid)-travel, float64(y-mid)) <= radius-3 && (g.Tiles[i].Plate != 0 || g.Tiles[i].Formed != 0) {
+					hole++
+				}
+			}
+			if got := sx / float64(carried); math.Abs(got-travel) > 0.5 {
+				t.Errorf("%.2f a tile an epoch, epoch %d: the plate's ground has gone %.2f tiles, and its travel %.2f", perEpoch, e, got, travel)
+			}
+			if hole > 0 {
+				t.Errorf("%.2f a tile an epoch, epoch %d: %d tiles inside the sliding plate are new floor or another plate's", perEpoch, e, hole)
+			}
+			if math.Abs(float64(carried-disc)) > 0.03*float64(disc) {
+				t.Errorf("%.2f a tile an epoch, epoch %d: the plate carried %d tiles before its slide and %d after", perEpoch, e, disc, carried)
+			}
+		}
+	}
+}
