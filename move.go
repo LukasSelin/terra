@@ -6,42 +6,6 @@ import (
 	"github.com/LukasSelin/terra/geom"
 )
 
-// moveCost is the effort of entering a tile of each terrain, measured in
-// ticks. Grass is the unit. Ground that fights back costs more of both things
-// an agent has to spend: time, because a slow tile is several ticks of walking
-// instead of one, and body, because the exertion drains the physiological
-// tier in proportion. Terrain is therefore not decoration; it is a standing
-// tax on every plan that crosses it, and the map shapes where people settle,
-// what they walk to, and which side of the river they give up on.
-//
-// Water stays where it was, and the reason is worth recording. A settlement
-// grows on both banks, because the ground worth farming is the ground near
-// the river, so a quarter of its people were spending their lives wading. The
-// obvious fix was to make the water dearer. It was tried at 5, 7 and 9 and it
-// was the wrong fix: a river nobody can afford to cross is a river nobody
-// wears a ford in, and a ford nobody wears is a ford nobody bridges. Dearer
-// water cut the wading barely at all and cost up to a quarter of the
-// population. What answers a river is a bridge, and the cheapest water is
-// what gets one built.
-var moveCost = [TerrainCount]float64{
-	Grass:  1,
-	Field:  1.3,
-	Forest: 2.2,
-	Water:  3.5,
-	Rock:   1.8,
-	// Ice is flat and it is treacherous, and the two nearly cancel: a little
-	// dearer than open grass and cheaper than anything with a slope on it.
-	// It is not water's 3.5 because nobody is swimming - see Tile.Deep.
-	Ice: 1.4,
-	// A flat the tide has left is mud: dearer than grass or ice, cheaper than
-	// a wood. Covered, it is waded like water; see Grid.Covered.
-	Flat: 1.6,
-	// A salt lake is swum like any other water. A salt flat is level and
-	// firm, and costs what open grass does.
-	Salt: 3.5,
-	Pan:  1,
-}
-
 // Saving is what a road laid on p would take off each crossing of it, as a
 // multiple of what a road on grass takes off. It is the other half of what a
 // length of road is worth, and until it was asked the only half being read
@@ -70,8 +34,8 @@ func (g *Grid) Saving(p geom.Pos, laying Mark) float64 {
 	if !g.In(p) {
 		return 0
 	}
-	paved := markCost[laying]
-	return (moveCost[g.At(p).Terrain] - paved) / (moveCost[Grass] - paved)
+	paved := laying.Cost()
+	return (g.At(p).Terrain.Cost() - paved) / (Grass.Cost() - paved)
 }
 
 // SwimLoad is the most a walker may be carrying and still take to the water.
@@ -112,12 +76,12 @@ func (g *Grid) MoveCost(p geom.Pos) float64 {
 	i := g.Index(p)
 	t := &g.Tiles[i]
 	if t.Mark != None {
-		return markCost[t.Mark]
+		return t.Mark.Cost()
 	}
 	if g.covered(i, t) {
-		return moveCost[Water]
+		return Water.Cost()
 	}
-	return moveCost[t.Terrain]
+	return t.Terrain.Cost()
 }
 
 // Climb and Descend are the ticks a metre of rise and a metre of fall add to
@@ -164,7 +128,7 @@ func (g *Grid) MoveDrain(p geom.Pos) float64 {
 	if !g.In(p) {
 		return 1
 	}
-	return markDrain[g.At(p).Mark]
+	return g.At(p).Mark.Drain()
 }
 
 // StepToward returns the tile an agent at from should enter next on its way

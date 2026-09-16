@@ -326,16 +326,16 @@ func TestTheFlatsAreAFortnightlyCrossing(t *testing.T) {
 		t.Errorf("at springs a laden walker cannot cross the flats")
 	}
 	open := g.TravelCost(from, to)
-	if got := g.MoveCost(geom.Pos{X: 20, Y: 6}); got != moveCost[Flat] {
-		t.Errorf("an open flat costs %v, want %v", got, moveCost[Flat])
+	if got := g.MoveCost(geom.Pos{X: 20, Y: 6}); got != Flat.Cost() {
+		t.Errorf("an open flat costs %v, want %v", got, Flat.Cost())
 	}
 
 	g.SetTide(neap)
 	if c := g.Carrying(1).TravelCost(from, to); !math.IsInf(c, 1) {
 		t.Errorf("at neaps a laden walker crossed covered flats for %v", c)
 	}
-	if got := g.MoveCost(geom.Pos{X: 20, Y: 6}); got != moveCost[Water] {
-		t.Errorf("a covered flat costs %v, want %v", got, moveCost[Water])
+	if got := g.MoveCost(geom.Pos{X: 20, Y: 6}); got != Water.Cost() {
+		t.Errorf("a covered flat costs %v, want %v", got, Water.Cost())
 	}
 	if shut := g.TravelCost(from, to); !(shut > open) {
 		t.Errorf("wading the covered flats cost %v and walking them open %v", shut, open)

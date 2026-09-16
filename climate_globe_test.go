@@ -141,11 +141,11 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 // difference shows up as ground that varies along a row instead of a row that
 // is all one height. See Grid.UplandLattice.
 func TestTheUplandMaskIsFinerThanTheMap(t *testing.T) {
-	valley := &Grid{W: DefaultWidth, H: DefaultHeight}
+	valley := &Grid{Map: geom.Map{W: DefaultWidth, H: DefaultHeight}}
 	if got, want := valley.UplandLattice(), float64(valley.Span())/2; got != want {
 		t.Fatalf("the valley's upland lattice is %.3f, want the %.3f it always was", got, want)
 	}
-	globe := &Grid{W: 1024, H: 512, Wrap: true}
+	globe := &Grid{Map: geom.Map{W: 1024, H: 512, Wrap: true}}
 	corners := math.Ceil(float64(globe.W)/globe.UplandLattice()) * (math.Floor(float64(globe.H)/globe.UplandLattice()) + 2)
 	if corners < 30 {
 		t.Fatalf("a globe draws its topography from %.0f corners, which is a tilt and not a world", corners)
@@ -320,11 +320,11 @@ func TestThePolarSeaIsIce(t *testing.T) {
 // outlet - unless it has no sea, in which case its poles are all it has and
 // a map with no outlet at all cannot be filled. See Grid.outlet.
 func TestOnlyTheSeaDrainsAGlobe(t *testing.T) {
-	valley := &Grid{W: 8, H: 4}
+	valley := &Grid{Map: geom.Map{W: 8, H: 4}}
 	if !valley.outlet(0, 2) || !valley.outlet(3, 0) || valley.outlet(3, 2) {
 		t.Fatal("a valley drains at its four edges and nowhere else")
 	}
-	globe := &Grid{W: 8, H: 4, Wrap: true, sea: 12}
+	globe := &Grid{Map: geom.Map{W: 8, H: 4, Wrap: true}, sea: 12}
 	for y := 0; y < globe.H; y++ {
 		for x := 0; x < globe.W; x++ {
 			if globe.outlet(x, y) {
@@ -332,7 +332,7 @@ func TestOnlyTheSeaDrainsAGlobe(t *testing.T) {
 			}
 		}
 	}
-	dry := &Grid{W: 8, H: 4, Wrap: true, sea: -1}
+	dry := &Grid{Map: geom.Map{W: 8, H: 4, Wrap: true}, sea: -1}
 	if !dry.outlet(3, 0) || !dry.outlet(3, 3) || dry.outlet(3, 1) {
 		t.Fatal("a globe with no sea falls back on its poles")
 	}

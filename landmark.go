@@ -77,9 +77,9 @@ const halfULP32 = 1.0 / (1 << 23)
 // enterCost is what stepping onto flat ground of this kind costs.
 func enterCost(t *Tile) float64 {
 	if t.Mark != None {
-		return markCost[t.Mark]
+		return t.Mark.Cost()
 	}
-	return moveCost[t.Terrain]
+	return t.Terrain.Cost()
 }
 
 // tableCost is what the tables charge for stepping onto flat ground of this
@@ -95,7 +95,7 @@ func tableCost(t *Tile) float64 {
 	if t.Wet() && t.Mark == None {
 		return c
 	}
-	return math.Min(c, moveCost[Grass])
+	return math.Min(c, Grass.Cost())
 }
 
 // tableStep is stepInto as the tables charge it: the ground entered at

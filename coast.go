@@ -63,7 +63,7 @@ func strength(b int) float64 {
 	if b >= int(BedrockCount) {
 		return soilStrength
 	}
-	return tensile[b]
+	return Bedrock(b).Tensile()
 }
 
 // mixingDepth is how deep a storm's breakers stir the bed, as a share of their

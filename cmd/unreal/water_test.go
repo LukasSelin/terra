@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/LukasSelin/terra"
+	"github.com/LukasSelin/terra/geom"
 )
 
 // readWater reads water.json back with every body's fields in one shape.
@@ -90,7 +91,7 @@ func TestLakesAreClosedAndTheSeaIsThere(t *testing.T) {
 // A lake's outline traced by hand: a two-by-two block of tiles is a square
 // of eight edges, and a hole in a ring is left out.
 func TestLakeOutlineTracesTheShore(t *testing.T) {
-	g := &terra.Grid{W: 5, H: 5}
+	g := &terra.Grid{Map: geom.Map{W: 5, H: 5}}
 	lakeOf := make([]int, 25)
 	for i := range lakeOf {
 		lakeOf[i] = -1

@@ -48,34 +48,6 @@ import "math"
 // A tile's state is five numbers in padding it already had, so it costs the
 // map nothing: see Tile.
 
-// Leaching is how much of the bases this tile's soil once held the water has
-// carried off, 0 to 1: base saturation turned round.
-func (t *Tile) Leaching() float64 { return float64(t.Leached) / math.MaxUint16 }
-
-// Carbonate is the carbonate built up in this tile's soil, in kilograms a
-// square metre.
-func (t *Tile) Carbonate() float64 { return float64(t.Lime) * limeUnit }
-
-// Salinity is the salt built up in this tile's soil, in kilograms a square
-// metre.
-func (t *Tile) Salinity() float64 { return float64(t.Salt) * saltUnit }
-
-// What a unit of Lime and of Salt is, in kilograms a square metre. The most
-// either can hold is 65535 of them: 655 of carbonate, which is past the
-// petrocalcic horizons of the oldest desert soils, and 65 of salt.
-const (
-	limeUnit = 0.01
-	saltUnit = 0.001
-)
-
-func (t *Tile) setLeaching(v float64) { t.Leached = uint16(math.Round(clamp01(v) * math.MaxUint16)) }
-func (t *Tile) setCarbonate(v float64) {
-	t.Lime = uint16(math.Round(math.Max(0, math.Min(math.MaxUint16, v/limeUnit))))
-}
-func (t *Tile) setSalinity(v float64) {
-	t.Salt = uint16(math.Round(math.Max(0, math.Min(math.MaxUint16, v/saltUnit))))
-}
-
 // Exposure.
 //
 // A map is made with no history of its soil to read, so how long each tile has
@@ -401,7 +373,7 @@ func (g *Grid) ripenSoil(i int, years float64) {
 	if !forms(t) {
 		clearSoil(t)
 		if t.Terrain == Pan {
-			t.setSalinity(math.Inf(1))
+			t.SetSalinity(math.Inf(1))
 		}
 		return
 	}
@@ -410,10 +382,10 @@ func (g *Grid) ripenSoil(i int, years float64) {
 	age := float64(t.Exposed) + years
 	// Order matters a little: the carbonate is what holds the bases, so it is
 	// moved first.
-	t.setCarbonate(gathered(t.Carbonate(), limeRate*dryness(c.wetness, limeWetter, limeDrier), c.water, limeWater, years))
-	t.setSalinity(gathered(t.Salinity(), saltRate*dryness(c.wetness, saltWetter, saltDrier), c.water, saltWater, years))
+	t.SetCarbonate(gathered(t.Carbonate(), limeRate*dryness(c.wetness, limeWetter, limeDrier), c.water, limeWater, years))
+	t.SetSalinity(gathered(t.Salinity(), saltRate*dryness(c.wetness, saltWetter, saltDrier), c.water, saltWater, years))
 	level, rate := g.leachLevel(i, c, cv, age)
-	t.setLeaching(toward(t.Leaching(), level, rate, years))
+	t.SetLeaching(toward(t.Leaching(), level, rate, years))
 	level, rate = g.carbonLevel(i, c, cv)
 	t.Carbon = float32(toward(float64(t.Carbon), level, rate, years))
 	t.Exposed = float32(age)
@@ -429,7 +401,7 @@ func (g *Grid) drownSoils() {
 		if t := &g.Tiles[i]; !forms(t) {
 			clearSoil(t)
 			if t.Terrain == Pan {
-				t.setSalinity(math.Inf(1))
+				t.SetSalinity(math.Inf(1))
 			}
 		}
 	}
@@ -450,7 +422,7 @@ func buryIn(t *Tile, held, d float64) {
 	}
 	keep := math.Max(0, held) / (math.Max(0, held) + d)
 	t.Exposed = float32(float64(t.Exposed) * keep)
-	t.setLeaching(t.Leaching() * keep)
+	t.SetLeaching(t.Leaching() * keep)
 }
 
 // strip takes the share gone of t's soil off it, from above: the stocks it
@@ -464,8 +436,8 @@ func strip(t *Tile, gone float64) {
 		return
 	}
 	keep := 1 - gone
-	t.setCarbonate(t.Carbonate() * keep)
-	t.setSalinity(t.Salinity() * keep)
+	t.SetCarbonate(t.Carbonate() * keep)
+	t.SetSalinity(t.Salinity() * keep)
 	t.Carbon = float32(float64(t.Carbon) * keep)
 }
 
@@ -498,7 +470,7 @@ func (g *Grid) laySoilState(i int, h, pace, made float64) {
 	clearSoil(t)
 	if !forms(t) {
 		if t.Terrain == Pan {
-			t.setSalinity(math.Inf(1))
+			t.SetSalinity(math.Inf(1))
 		}
 		return
 	}
@@ -588,7 +560,7 @@ func (g *Grid) restartBuried(epoch int) {
 // the made valleys of seeds one and two the mean went from 0.2018 and 0.2383
 // to 0.1988 and 0.2351, and on the small globes from 0.1718 and 0.1669 to
 // 0.1712 and 0.1661.
-func (t *Tile) soilChemistry() float64 {
+func soilChemistry(t *Tile) float64 {
 	bases := 1 + baseWeight*(leachMiddle-t.Leaching())
 	salt := 1 / (1 + t.Salinity()/saltHarm)
 	pan := 1 - 0.15*ramp(t.Carbonate(), 50, 300)

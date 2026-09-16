@@ -205,8 +205,8 @@ func TestTheDryYearsLeaveLimeAndSalt(t *testing.T) {
 		pc := g.pedoClimateOf(0)
 		pc.wetness = wetness
 		for k := 0; k < 50; k++ {
-			t.setCarbonate(gathered(t.Carbonate(), limeRate*dryness(pc.wetness, limeWetter, limeDrier), pc.water, limeWater, 1e3))
-			t.setSalinity(gathered(t.Salinity(), saltRate*dryness(pc.wetness, saltWetter, saltDrier), pc.water, saltWater, 1e3))
+			t.SetCarbonate(gathered(t.Carbonate(), limeRate*dryness(pc.wetness, limeWetter, limeDrier), pc.water, limeWater, 1e3))
+			t.SetSalinity(gathered(t.Salinity(), saltRate*dryness(pc.wetness, saltWetter, saltDrier), pc.water, saltWater, 1e3))
 		}
 		return t.Carbonate(), t.Salinity()
 	}
@@ -237,7 +237,7 @@ func TestWhatGrowsLeavesItsMarkOnTheSoil(t *testing.T) {
 		g.Tiles[0].Carbon = float32(level)
 		l, _ := g.leachLevel(0, c, cv, 20e3)
 		rate := c.water * cv.acid / leachWater
-		g.Tiles[0].setLeaching(l * -math.Expm1(-rate/l*20e3))
+		g.Tiles[0].SetLeaching(l * -math.Expm1(-rate/l*20e3))
 		return &g.Tiles[0]
 	}
 	grass, field := under(Grass, MeanTemp), under(Field, MeanTemp)

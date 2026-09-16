@@ -7,130 +7,11 @@ import (
 	"github.com/LukasSelin/terra/geom"
 )
 
-// Terrain is what a tile is made of.
-type Terrain uint8
-
-const (
-	Grass Terrain = iota
-	Forest
-	Water
-	Field
-	Rock // an outcrop: stone to cut, nothing to grow
-	Ice  // sea that never thaws: nothing to take, and walked over, not swum
-	Flat // mud the tide covers and leaves: see shore.go
-	Salt // a lake with no outlet, where the air takes all the water brings
-	Pan  // the dry floor of one: a crust of salt nothing grows on
-	// TerrainCount is how many kinds of ground there are. It sizes the
-	// tables that have to carry a row for each; see kind.go.
-	TerrainCount
-)
-
-// Tile is one cell of the world: what the ground is, what stands on it and
-// whose it is, and the land itself - its height, its drainage, the rock
-// under it and the soil over that. What changes on it by the day - how
-// worn it is, how far what grows on it has come, what it has to give and
-// what a field has in it - is kept beside the map rather than on the tile;
-// see Layers.
-type Tile struct {
-	Terrain Terrain
-	Mark    Mark
-	// Leached, Exposed, Lime, Salt and Carbon are what time has made of the
-	// soil, beyond how deep it is and what it is made of: how long the
-	// surface has been forming soil, in years; how much of the bases the
-	// rock gave it the water has since carried off, out of 65535; the
-	// carbonate and the salt the dry years have left in it, in hundredths
-	// and thousandths of a kilogram a square metre; and its organic carbon,
-	// in kilograms a square metre. Each sits in padding the tile already
-	// had, which is why they lie where they do. See pedogenesis.go.
-	Leached uint16
-	Exposed float32
-	Owner   Holder
-
-	// The height and the flow, which between them are the land itself - the
-	// rivers, the fertility and the going underfoot are all read off them -
-	// are kept beside the map as Grid.Height and Grid.Flow. See relief.go.
-	// Drain, how far the tile stands above the water it drains into, is beside
-	// the map too, as Grid.Drain.
-
-	// Bedrock is the rock under this tile, and Sand and Clay the shares of
-	// the soil over it that are one and the other, the rest being silt. The
-	// rock is the bed of the pile under the tile that its surface lies in,
-	// and changes as the weather wears down into the next one - see
-	// strata.go; what is made of it moves with every age of weather, sorted
-	// by the water that carries it. Between them they are
-	// what the ground is made of, and the fertility, the drainage and how
-	// fast a hillside comes down are all read off them. See bedrock.go.
-	//
-	// Soil is how many metres of that soil there are over the rock: made
-	// out of the rock by the weather, taken off by the water, the creep and
-	// the slides before any rock is, and laid down again where they stop.
-	// It is kept beside the map as Grid.Soil. See soil.go.
-	Bedrock Bedrock
-	// Fenced is whether this tile lies inside a fence: a strip of a block of
-	// worked ground large enough that somebody hedged it. It is not a
-	// structure and not a terrain - the ground under it is still field, and
-	// the fence itself is the line round the block rather than anything
-	// standing on a tile. See fence.go. It lies here, in the byte after
-	// Bedrock, so that the soil's Lime can have the two after it.
-	Fenced bool
-	Lime   uint16
-
-	// Plate is which piece of the crust this tile rides, and Formed the
-	// epoch its rock dates from. Both are written by a world made from its
-	// own history and are nothing on a world that was drawn; see history.go.
-	// They are kept because what a later change wants to ask of a map -
-	// where the ore is, where the ground still shakes - is a question about
-	// which plate and how old, and neither can be worked out afterwards.
-	Plate  uint8
-	Formed uint8
-	Salt   uint16
-	Carbon float32
-}
-
-// Buildable reports whether a tile is open ground nobody has claimed. A road
-// is not buildable: once a way is laid, it stays a way.
-func (t *Tile) Buildable() bool {
-	return t.Terrain == Grass && t.Mark == None && t.Owner == 0
-}
-
-// Pavable reports whether a road may be laid on this tile. Roads go over open
-// ground, through woods, which they clear, over outcrops, which the quarrymen
-// go on cutting from underneath, and across water, where the road is a
-// bridge. They do not take another building's place or run over land somebody
-// has claimed.
-func (t *Tile) Pavable() bool {
-	return t.Mark == None && t.Owner == 0
-}
-
-// Wet reports whether this tile is water rather than ground, whatever has
-// been carried over it. It is the question the map-maker asks of water nine
-// times over - what will not grow trees, what silt runs off, what nobody
-// stands on - and it is not the question of whether a river runs here, which
-// is Flow.
-func (t *Tile) Wet() bool { return t.Terrain.Wet() }
-
-// Bridged reports whether this tile is a way carried over water.
-func (t *Tile) Bridged() bool {
-	return markWay[t.Mark] && t.Wet()
-}
-
-// Deep reports whether crossing this tile means swimming: water with nothing
-// built over it. A bridge is not deep, because the walker is on the road and
-// the water is underneath. Neither is ice: it is wet in every sense the
-// map-maker means - nothing grows on it, no silt settles on it, it stands
-// above nothing - and in none of the senses a walker means. A frozen sea is
-// something you cross on your feet with a sack on your back, which is why the
-// ice is the one place a laden walker may cross open water.
-func (t *Tile) Deep() bool {
-	return t.Wet() && t.Terrain != Ice && t.Mark == None
-}
-
 // Grid is the world map, row-major. With Wrap the east edge is joined to the
 // west and the map is a globe drawn as a cylinder; without it the map is a
-// valley with edges. See globe.go.
+// valley with edges. See geom.Map.
 type Grid struct {
-	W, H  int
-	Wrap  bool
+	geom.Map
 	Tiles []Tile
 	// Height is metres above the lowest ground on the map, one entry per
 	// tile and indexed as Tiles is. It is beside the map rather than in the
@@ -383,20 +264,11 @@ func (g *Grid) ownRouter() *Router {
 
 // NewGrid returns an all-grass grid.
 func NewGrid(w, h int) *Grid {
-	g := &Grid{W: w, H: h, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
+	g := &Grid{Map: geom.Map{W: w, H: h}, Tiles: make([]Tile, w*h), Height: make([]float64, w*h), Flow: make([]float64, w*h), Drain: make([]float64, w*h), Soil: make([]float32, w*h), Sand: make([]float64, w*h), Clay: make([]float64, w*h), Layers: NewLayers(w * h), lenders: make([]uint8, w*h), sea: -1, base: -1}
 	g.layChunks()
 	g.layPatches()
 	g.repatch()
 	return g
-}
-
-// In reports whether p is on the map. On a globe every column is; only a
-// row past a pole is off it.
-func (g *Grid) In(p geom.Pos) bool {
-	if p.Y < 0 || p.Y >= g.H {
-		return false
-	}
-	return g.Wrap || (p.X >= 0 && p.X < g.W)
 }
 
 // At returns the tile at p. The caller must check In first.
@@ -453,7 +325,7 @@ func (v TileView) Wash() float64 { return v.g.washAt(v.i) }
 
 // Clone returns a deep copy, for snapshots.
 func (g *Grid) Clone() *Grid {
-	c := &Grid{W: g.W, H: g.H, Wrap: g.Wrap, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
+	c := &Grid{Map: g.Map, Tiles: make([]Tile, len(g.Tiles)), Height: slices.Clone(g.Height), Flow: slices.Clone(g.Flow), Drain: slices.Clone(g.Drain), Soil: slices.Clone(g.Soil), Sand: slices.Clone(g.Sand), Clay: slices.Clone(g.Clay), Layers: g.Layers.Copy(), sea: g.sea, base: g.base, air: g.air, winds: g.winds, tide: g.tide,
 		lakeLevel: slices.Clone(g.lakeLevel), lakeOf: slices.Clone(g.lakeOf), pans: slices.Clone(g.pans),
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
@@ -614,11 +486,6 @@ func (g *Grid) HasNeighbor(p geom.Pos, ok func(*Tile) bool) bool {
 	return false
 }
 
-// Roofed reports whether a tile is something somebody stands inside rather
-// than on. A way is not - a path beside a door is what a door is for. See
-// MarkDef.Roofs, where a game says which of its marks have a roof.
-func (t *Tile) Roofed() bool { return markRoofs[t.Mark] }
-
 // Frozen reports whether the ground here is permafrost: high enough, or far
 // enough toward the pole, or far enough from the sea, that the year's mean
 // stays under Permafrost. It is one rule where there were three - the poles
@@ -773,7 +640,7 @@ func (g *Grid) Raze(p geom.Pos) bool {
 		return false
 	}
 	t := g.At(p)
-	if markFixed[t.Mark] {
+	if t.Mark.Fixed() {
 		return false
 	}
 	if t.Mark == None && t.Owner == 0 {

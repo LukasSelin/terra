@@ -240,7 +240,7 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	// organic matter alone, as it was.
 	chem := 1.0
 	if g.pedons {
-		chem = t.soilChemistry()
+		chem = soilChemistry(t)
 	}
 	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*g.loamAt(i))*g.humus(i)*chem)
 }

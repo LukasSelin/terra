@@ -440,11 +440,11 @@ func (r *Router) fromSurvey(to geom.Pos) float64 {
 // bottom and up again.
 func stepInto(g *Grid, from, to int32) float64 {
 	t := &g.Tiles[to]
-	step := moveCost[t.Terrain]
+	step := t.Terrain.Cost()
 	if t.Mark != None {
-		step = markCost[t.Mark]
+		step = t.Mark.Cost()
 	} else if g.covered(int(to), t) {
-		step = moveCost[Water] // waded, today
+		step = Water.Cost() // waded, today
 	}
 	if d := g.Surface(int(to)) - g.Surface(int(from)); d > 0 {
 		step += Climb * d

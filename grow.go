@@ -1,6 +1,10 @@
 package terra
 
-import "math"
+import (
+	"math"
+
+	"github.com/LukasSelin/terra/tile"
+)
 
 // What grows on a tile takes time to come on, and that time is not the same
 // for everything growing. This is where that time is kept against an actual
@@ -30,14 +34,13 @@ type Growth struct {
 	Stock func(*Grid) []float64
 }
 
-// growth is what grows on each kind of ground, ripe how much growing weather
-// the slowest of it needs, and alive whether anything grows there at all.
-// The last is kept apart from the first because every tile on the map is
-// asked it on every tick and the answer is one bit.
+// growth is what grows on each kind of ground, and ripe how much growing
+// weather the slowest of it needs. Whether anything grows there at all is
+// kept apart, as tile.Alive, because every tile on the map is asked it on
+// every tick and the answer is one bit.
 var (
 	growth [MarkCount][TerrainCount][]Growth
 	ripe   [MarkCount][TerrainCount]float64
-	alive  [MarkCount][TerrainCount]bool
 )
 
 // SetGrowth says what grows on a kind of ground. It is the whole of what the
@@ -49,7 +52,7 @@ var (
 // differently.
 func SetGrowth(s Mark, t Terrain, gs []Growth) {
 	growth[s][t] = gs
-	alive[s][t] = len(gs) > 0
+	tile.SetAlive(s, t, len(gs) > 0)
 	ripe[s][t] = 0
 	for _, g := range gs {
 		ripe[s][t] = max(ripe[s][t], g.Full)
@@ -58,11 +61,6 @@ func SetGrowth(s Mark, t Terrain, gs []Growth) {
 	// one and laid out the way the pass wants them; see readGrowth.
 	readGrowth()
 }
-
-// Alive reports whether this tile carries a standing crop, which is to say
-// something that had to grow before it could be taken. It is exactly the
-// ground something was named to grow on, read as one bit.
-func (t *Tile) Alive() bool { return alive[t.Mark][t.Terrain] }
 
 // The age of what stands on a tile is kept in a layer beside the map - see
 // Layers - so what asks after it asks the grid, by the tile's index.
@@ -309,17 +307,4 @@ func (g *Grid) Replenish(i int, k float64) {
 	case Grass:
 		g.Sward[i] = logistic(g.Sward[i], 1, regrow(SwardRegrowth, k))
 	}
-}
-
-// Recovers reports whether ground of this kind puts something back on its
-// own when it is left alone, besides what grows on it by its age: the fish
-// in the water, the rest a worn field gets, the grass on open ground. See
-// Replenish, which is where the pace is; an outcrop is stone and does not
-// grow, and that is meant.
-func (k Terrain) Recovers() bool {
-	switch k {
-	case Water, Field, Grass:
-		return true
-	}
-	return false
 }

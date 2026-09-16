@@ -1,5 +1,7 @@
 package terra
 
+import "github.com/LukasSelin/terra/tile"
+
 // The day's pass over the ground, as flat loops over the layers.
 //
 // What the weather does to a tile in a day is stated tile by tile in
@@ -99,7 +101,7 @@ func readGrowth() {
 	for s := 0; s < MarkCount; s++ {
 		for t := 0; t < int(TerrainCount); t++ {
 			k := kindOf(&Tile{Mark: Mark(s), Terrain: Terrain(t)})
-			ages[k] = alive[s][t]
+			ages[k] = tile.Alive(Mark(s), Terrain(t))
 			if ages[k] {
 				aging = append(aging, k)
 			}

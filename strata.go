@@ -207,7 +207,7 @@ func (g *Grid) piles() {
 // hardAt is how hard the rock is at height h under tile i. A map with no
 // strata answers with the tile's own rock.
 func (g *Grid) hardAt(i int, h float64) float64 {
-	return hardness[g.bedAt(i, h)]
+	return g.bedAt(i, h).Hardness()
 }
 
 // bedAt is the rock at height h under tile i. A map with no strata answers
@@ -417,7 +417,7 @@ func (c *column) soft(h float64) float64 {
 		if k+1 < int(c.n) {
 			floor = math.Max(floor, float64(c.top[k+1]))
 		}
-		sum += (top - floor) / hardness[c.rock[k]]
+		sum += (top - floor) / c.rock[k].Hardness()
 		top = floor
 	}
 	return sum / denudeWindow

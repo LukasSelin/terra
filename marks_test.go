@@ -13,7 +13,7 @@ const (
 	rooted                   // the middle of a place, which cannot come down
 )
 
-// A variable and not an init, for the reason given in mark.go: anything
+// A variable and not an init, for the reason given in tile/mark.go: anything
 // worked out at the making of a variable would read a table an init has not
 // filled yet.
 var testMarks = func() bool {

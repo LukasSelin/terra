@@ -1,4 +1,4 @@
-package terra
+package tile
 
 // Ground that is spoken for.
 //

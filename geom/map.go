@@ -1,6 +1,4 @@
-package terra
-
-import "github.com/LukasSelin/terra/geom"
+package geom
 
 // The shape of the map. A valley has edges: walk off the side of it and
 // there is nothing there. A globe has none in one direction - it is drawn
@@ -12,43 +10,61 @@ import "github.com/LukasSelin/terra/geom"
 // Nothing in this file changes what an unwrapped map does: with Wrap off
 // every function here is the plain arithmetic it replaced.
 
+// Map is the size of a map and whether it goes round: W columns and H rows,
+// kept row-major, with the east edge joined to the west when Wrap is set.
+// It is the whole of what a position needs to be turned into a tile, and
+// the land's Grid is one with the ground laid over it.
+type Map struct {
+	W, H int
+	Wrap bool
+}
+
+// In reports whether p is on the map. On a globe every column is; only a
+// row past a pole is off it.
+func (m *Map) In(p Pos) bool {
+	if p.Y < 0 || p.Y >= m.H {
+		return false
+	}
+	return m.Wrap || (p.X >= 0 && p.X < m.W)
+}
+
 // WrapX brings a column onto the map by going round it.
-func (g *Grid) WrapX(x int) int {
-	if x >= 0 && x < g.W {
+func (m *Map) WrapX(x int) int {
+	if x >= 0 && x < m.W {
 		return x
 	}
-	x %= g.W
+	x %= m.W
 	if x < 0 {
-		x += g.W
+		x += m.W
 	}
 	return x
 }
 
 // Norm is p as the map holds it: the same column gone round the map to
 // where it is stored. Rows are never moved; a row off the map is off it.
-func (g *Grid) Norm(p geom.Pos) geom.Pos {
-	if g.Wrap {
-		p.X = g.WrapX(p.X)
+func (m *Map) Norm(p Pos) Pos {
+	if m.Wrap {
+		p.X = m.WrapX(p.X)
 	}
 	return p
 }
 
 // Index is where the tile at p is kept.
-func (g *Grid) Index(p geom.Pos) int {
-	if g.Wrap {
-		return p.Y*g.W + g.WrapX(p.X)
+func (m *Map) Index(p Pos) int {
+	if m.Wrap {
+		return p.Y*m.W + m.WrapX(p.X)
 	}
-	return p.Y*g.W + p.X
+	return p.Y*m.W + p.X
 }
 
 // PosOf is the position of the tile kept at i.
-func (g *Grid) PosOf(i int) geom.Pos {
-	return geom.Pos{X: i % g.W, Y: i / g.W}
+func (m *Map) PosOf(i int) Pos {
+	return Pos{X: i % m.W, Y: i / m.W}
 }
 
 // Dist is the Chebyshev distance between two positions, going round the
 // map where that is shorter.
-func (g *Grid) Dist(a, b geom.Pos) int {
+func (m *Map) Dist(a, b Pos) int {
 	dx, dy := a.X-b.X, a.Y-b.Y
 	if dx < 0 {
 		dx = -dx
@@ -56,9 +72,9 @@ func (g *Grid) Dist(a, b geom.Pos) int {
 	if dy < 0 {
 		dy = -dy
 	}
-	if g.Wrap {
-		dx %= g.W
-		if back := g.W - dx; back < dx {
+	if m.Wrap {
+		dx %= m.W
+		if back := m.W - dx; back < dx {
 			dx = back
 		}
 	}
@@ -71,45 +87,35 @@ func (g *Grid) Dist(a, b geom.Pos) int {
 // Delta is the shortest signed step from one position to another: how far
 // east and how far south, with east going round the map where the way
 // round is shorter than the way across.
-func (g *Grid) Delta(from, to geom.Pos) geom.Pos {
-	d := geom.Pos{X: to.X - from.X, Y: to.Y - from.Y}
-	if g.Wrap {
-		d.X %= g.W
-		if d.X > g.W/2 {
-			d.X -= g.W
-		} else if d.X < -g.W/2 {
-			d.X += g.W
+func (m *Map) Delta(from, to Pos) Pos {
+	d := Pos{X: to.X - from.X, Y: to.Y - from.Y}
+	if m.Wrap {
+		d.X %= m.W
+		if d.X > m.W/2 {
+			d.X -= m.W
+		} else if d.X < -m.W/2 {
+			d.X += m.W
 		}
 	}
 	return d
 }
 
 // Toward is from moved one tile straight toward to, the short way round.
-func (g *Grid) Toward(from, to geom.Pos) geom.Pos {
-	d := g.Delta(from, to)
-	return g.Norm(geom.Pos{X: from.X + sign(d.X), Y: from.Y + sign(d.Y)})
-}
-
-func sign(v int) int {
-	switch {
-	case v < 0:
-		return -1
-	case v > 0:
-		return 1
-	}
-	return 0
+func (m *Map) Toward(from, to Pos) Pos {
+	d := m.Delta(from, to)
+	return m.Norm(Pos{X: from.X + sign(d.X), Y: from.Y + sign(d.Y)})
 }
 
 // Columns is the columns within radius of x, as offsets from it: clipped to
 // the map on a valley, and on a globe the whole way round at most, so that
 // a window wider than the map reads each column once.
-func (g *Grid) Columns(x, radius int) (lo, hi int) {
-	if !g.Wrap {
-		return max(0, x-radius) - x, min(g.W-1, x+radius) - x
+func (m *Map) Columns(x, radius int) (lo, hi int) {
+	if !m.Wrap {
+		return max(0, x-radius) - x, min(m.W-1, x+radius) - x
 	}
-	if 2*radius+1 >= g.W {
-		half := g.W / 2
-		return -half, g.W - 1 - half
+	if 2*radius+1 >= m.W {
+		half := m.W / 2
+		return -half, m.W - 1 - half
 	}
 	return -radius, radius
 }
