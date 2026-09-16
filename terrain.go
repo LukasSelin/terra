@@ -70,7 +70,7 @@ func (g *Grid) cutValleys(rng interface{ Float64() float64 }) {
 // a new grid. See stages.go.
 func (w *Land) Generate(cfg Terms) {
 	defer phase("Generate")()
-	w.generateFrom(w.newGround(cfg), cfg, stageGround, len(stages))
+	w.generateFrom(w.newGround(cfg), cfg, stageGround, len(stages), nil)
 }
 
 // newGround is the grid a world is made on, before any stage has run.

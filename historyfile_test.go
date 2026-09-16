@@ -3,9 +3,14 @@ package terra
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -140,5 +145,58 @@ func TestTheFieldsAHistoryDropsAreTheGrids(t *testing.T) {
 		if why == "" {
 			t.Errorf("historyDropped gives no reason for %s", name)
 		}
+	}
+}
+
+// A watched world is the world NewLand makes, and a watch is told of every
+// stage in order, with the same grid at each whether the world is made from
+// the plates or from its kept history.
+func TestAWatchedWorldIsTheSameWorld(t *testing.T) {
+	for _, w := range budgetWorlds {
+		t.Run(w.name, func(t *testing.T) {
+			if testing.Short() && w.terms().Wrap {
+				t.Skip("a globe takes seconds to make, three times over")
+			}
+			heights := func(seen *[]string) StageWatch {
+				return func(stage string, l *Land, g *Grid) {
+					if l.Grid != nil && stage != "cover" {
+						t.Errorf("%s: the land has its grid before the cover stage is over", stage)
+					}
+					h := sha256.New()
+					binary.Write(h, binary.LittleEndian, g.Height)
+					for i := range g.Tiles {
+						h.Write([]byte{byte(g.Tiles[i].Terrain)})
+					}
+					*seen = append(*seen, fmt.Sprintf("%s %x", stage, h.Sum(nil)))
+				}
+			}
+			want := NewLand(1, w.terms())
+			var made, resumed []string
+			var file bytes.Buffer
+			l, err := MakeLandWatching(1, w.terms(), &file, heights(&made))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, wants := digest(l), digest(want); got != wants {
+				t.Fatalf("the watched world is %s, and NewLand's is %s", got, wants)
+			}
+			if l, err = LandFromHistoryWatching(&file, heights(&resumed)); err != nil {
+				t.Fatal(err)
+			}
+			if got, wants := digest(l), digest(want); got != wants {
+				t.Fatalf("the watched world resumed is %s, and NewLand's is %s", got, wants)
+			}
+			if len(made) != len(stages) {
+				t.Fatalf("told of %d stages, and there are %d", len(made), len(stages))
+			}
+			for i, name := range Stages() {
+				if !strings.HasPrefix(made[i], name+" ") {
+					t.Errorf("stage %d is told as %q, want %s", i, made[i], name)
+				}
+			}
+			if !slices.Equal(made, resumed) {
+				t.Errorf("made from the plates the stages are\n%v\nand from the history\n%v", made, resumed)
+			}
+		})
 	}
 }

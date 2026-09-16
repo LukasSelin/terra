@@ -157,6 +157,256 @@ history size is chosen.
 
 ---
 
+## 2026-09-16 - zarrdiff: signed change, by cause, expectations
+
+**What this is.** On `claude/zarrdiff-signed`, inside `cmd/zarr/zarrdiff`
+only: zarrdiff said how much an array changed as `|a-b|` over the whole
+map; now it says which way, where by cause, and whether that is what the
+change was meant to do. No world, the digest, the budget or `perf.sh`
+moved: nothing outside `cmd/zarr/zarrdiff` changed but this entry, and the
+yardsticks were not run.
+
+**What it adds.**
+- *Signed change* for arrays of amounts: mean, least, most, 5/50/95th
+  percentiles of `b-a` over the changed elements, and how many went up and
+  down. The percentiles come off a fixed histogram (32 bins an octave of
+  `|b-a|`, 2^-64 to 2^64 each side of zero, 64 KiB), within 1.1% of the
+  sorted value and clamped to the exact least and most.
+- `-by group/array` (repeatable, `-by-side a|b`): every map-shaped array's
+  changes by the category of each tile in a map of codes. A coded map
+  names every category from its CF flags; a map of feature ids lists the
+  `-top` N by tiles changed, reading the array a second time to bin just
+  those. `-only` limits the arrays; `-mask group/array=code[,code]` limits
+  the tiles.
+- `-expect file.json`: checks of `changed`, `tiles`, `share`, `mean`,
+  `p5/p50/p95`, `up`, `down` or `code` from/to, on an array or within a
+  `where` of a map's codes, with `min`/`max`/`above`/`below`. Exit 0 all
+  hold, 3 one does not; 1 and 2 as before.
+
+**Measured.** Globe seed 1 (1024 by 512, 83 arrays), `-water 7.5`
+(default) against `-water 8`, both exported from this branch; Ryzen 9
+3900X, 24 threads, other sessions loading the machine. Wall times
+interleaved with main's zarrdiff built from a temporary worktree:
+
+| run | wall |
+|---|---|
+| main's zarrdiff, plain | 3.8, 3.9, 4.2 s |
+| this branch, plain | 4.0, 3.8, 3.8 s |
+| `-by book/meeting`, before the chunk cache | 29 s |
+| `-by features/belt`, before the chunk cache | 26 s |
+| `-by book/meeting`, with the cache | 4.3 s |
+| `-by features/belt`, with the cache | 6.4 s |
+| four `-by` (meeting, koppen, terrain, belt), with the cache | 4.9 s |
+| `-expect` of 7 checks, `-only book/meeting` | 0.4 s |
+
+Plain runs match main. (The 0.9 s of the entry below was on a quieter
+machine.) The first `-by` build re-read the map for every block of every
+array. A CPU profile put 94% of the time in `cgocall`, nearly all of it
+file `Close` in the directory store, from 24 goroutines opening the same
+map's shards. The decoded chunks of the `-by`/`-mask`/`where` maps are now
+read once and shared between the arrays, at most `budget × processors`
+codes of 8 bytes held, the oldest dropped first. Peak working set, polled
+from PowerShell, was too noisy to compare: main's plain run read 113 MiB
+once and 1.2 GiB another time. The four `-by` run read 525 MiB once. Treat
+those as unmeasured.
+
+**What it showed about `-water 8`.** Checks written down first: history
+untouched (holds, `book/meeting` 0 changed); sea rose (holds, 1 383 open
+to water); did not fall back (fails, 397 water to open); Köppen share ≤ 2%
+(holds, 1.99%); collision belts' height unchanged (fails, 71% changed);
+dry ground not lowered on average (fails, mean -0.23 m); plate ids kept
+(fails, every tile's id down by 106, as the features numbered before
+plates changed). By `tile/terrain`: every open and wood tile's height
+moved, median +1e-5 m, 5-95% from -8.8 to +6.2 m. Half a metre of water
+reaches the ground's wearing everywhere, not just the shore. That is a
+finding for the water stage, not a fault in the tool. The worked example
+in `cmd/zarr/zarrdiff/README.md` is this run.
+
+**Held.** `cd cmd/zarr && go test -short ./...`. New tests on small stores
+written with the zarr package: histogram percentiles against a sort over
+three magnitudes; signed change on a known tweak (+10 on a collision, -1
+to -10 on a rift); `-by` a coded map and a map of ids with `-top`, the same
+report at `-budget 1` (the cache evicting on nearly every read), `-by-side b`,
+and the maps `-by` refuses; `-only`, one and two `-mask`s, masks by name
+and number; `-expect` all holding (exit 0), failing (3), a check that
+cannot measure, and malformed files and unknown code names (2).
+
+---
+
+## 2026-09-16 - cmd/zarr experiment loop: kept histories, every term, a store per stage
+
+**What this is.** On `claude/zarr-experiment-loop`: `cmd/zarr` gains
+`-keep-history` and `-from-history` (as `cmd/overview` has them),
+`-wetness`, `-woods`, `-growth`, `-glacial` and `-terms file.json`, and
+`-stages dir`, which writes a store at the end of every stage, with
+`-stages-diff a b` to name the first stage two experiments differ at. The
+recipe is the "experiment loop" section of `cmd/zarr/README.md`.
+
+**The root package.** One hook and nothing else: `StageWatch`, a
+`func(stage string, l *Land, g *Grid)`, which `generateFrom` calls after
+each stage when it is not nil; `Stages()`, the names; and
+`MakeLandWatching(seed, t, history io.Writer, watch)` and
+`LandFromHistoryWatching(in, watch)`, of which `MakeLandKeepingHistory` and
+`LandFromHistory` are now the nil-watch cases. `Generate` passes nil: an
+unwatched making does one nil compare per stage and allocates nothing more.
+`TestAWatchedWorldIsTheSameWorld` holds that a watched world, from the
+plates and from its history, is NewLand's, and that both see the same
+grid at every stage.
+
+**Digest.** `TERRA_DIGEST=write` on the base commit (312900f) rewrote
+`docs/perf/digest.json` to the bytes already committed; `TERRA_DIGEST=check`
+after the change passes. No world moved.
+
+**Budget.** `TestWorldCreationBudget` passes unchanged; not rewritten.
+`perf.sh` and the yardsticks were not run: nothing in the root package but
+the hook changed. `go test -short -timeout 60m .` passes (95 s).
+
+**Demonstrated.** Ryzen 9 3900X, 24 threads, other sessions on the machine,
+so the times are indicative. A globe (`-preset globe`, 1024 by 512):
+
+| run | making | writing |
+|---|---|---|
+| made, `-out` | 76.3 s | 1.4 s |
+| made, `-keep-history` (198 MiB file) | 72.4 s | 1.9 s |
+| `-from-history`, twice | 17.5 s, 16.3 s | 1.8 s, 1.1 s |
+| `-from-history -stages` | 22.5 s with the six stores (0.6-0.9 s each) | |
+| made, `-stages` | 93.8 s with the six stores | |
+
+A globe re-exported from its history takes the later stages' 16-17 s, a
+quarter of the 72-76 s of making it. `zarrdiff` finds the store made from
+the history the same as the made one in all 83 arrays, and `-stages-diff`
+finds every stage's store the same whether the world was made from the
+plates or from the kept history, the ground stage included.
+
+---
+
+## 2026-09-16 - zarrdiff: where and by how much two worlds differ
+
+**What this is.** On `claude/zarrdiff`: `cmd/zarr/zarrdiff`, a command in
+the `cmd/zarr` module that compares two stores `cmd/zarr` wrote. The digest
+says whether a change moved a world; this says which fields moved, over how
+much of the map, by how much, and where, as evidence to set beside the
+yardsticks. Recipe and output in `cmd/zarr/zarrdiff/README.md`. Nothing
+outside `cmd/zarr` changed besides this entry, and nothing in `zarr/`,
+`main.go` or `export.go`: every world, the digest and the budget are main's,
+and `perf.sh` and the yardsticks were not run.
+
+**What it does.** Walks both directory stores for `zarr.json` (the store
+interface cannot list); lists the arrays and groups in one alone; compares
+group attributes; for each array in both, shape, type, attributes, then
+elements: count changed with NaN equal to NaN, max and mean `|a-b|`, share
+of tiles changed (beds folded into their tile), the bounding box in y/x,
+and for arrays with a legend the commonest code changes named from each
+side's legend. Text by share of tiles changed, `-json`, `-png dir`. Exit 0
+the same, 1 different, 2 error.
+
+**Demonstrated.** One run, Ryzen 9 3900X, 24 threads, other sessions on
+the machine. Three globes (`-preset globe`, 1024 by 512, 67 arrays, 41 MiB
+each) exported from this branch, whose world code is main's (3973917):
+
+| | exit | wall | peak working set |
+|---|---|---|---|
+| seed 1 against seed 1, made and written twice | 0 | 1.3 s | ~120 MiB |
+| seed 1 against seed 2 | 1 | 0.9 s | ~130 MiB |
+
+Seed 1 made twice is the same store in every element, a second check,
+from outside the package, of what the digest holds. Seed 2 moves 60 of 67
+arrays: the climate means and rain on every tile (`climate/mean` max 41 °C,
+mean 19 °C), `ground/height` on 96 % (mean 2 927 m), `tile/terrain` on 58 %
+(commonest: 76 755 water to open, 55 583 ice to open), `features/lake` on
+2 %, and all 15 columns of `features/table` not compared, as the tables are
+28 576 and 27 820 features long. A seed is the loudest change there is; an
+algorithm change is expected to light a few arrays over part of the map.
+
+**Memory.** Arrays are read in blocks of whole chunks: one chunk high and as
+wide as `-budget` (2^20 elements) allows, one array a processor, so the most
+held is about 2 x 2^20 x 8 B x 24, some 400 MiB, however large the world;
+the two globes whole would be several hundred MiB. Not run on two `-max`
+worlds, which take this machine's memory to make.
+
+**Held.** `cd cmd/zarr && go test -short ./...`: the stores written with
+the zarr package (identical; one element and one code changed, at a budget
+of one element and of 2^20; NaN fills against numbers; a shape mismatch;
+an array in one store alone; attributes; arguments that cannot be
+compared), and `TestZarrdiffSeesTheSameWorldAsTheSame`, which builds the
+command, exports an ancient world twice with `export` and another seed
+once, and expects exit 0 and 1.
+
+---
+
+## 2026-09-16 - cmd/zarr stores that xarray reads: coordinates, CF flags, stable Köppen codes
+
+**What this is.** On `claude/zarr-xarray`, off main at 3973917: the first
+time xarray was pointed at a store, and the fixes to `cmd/zarr` for what
+it found. Only `cmd/zarr` changed; `zarr/` and the root package did not, so
+every world, the digest and the budget are main's.
+
+**What xarray reported before.** xarray 2026.7.0, zarr-python 3.4.0,
+numpy 2.5.3, on the seed 1 globe (1024 by 512) and the default valley,
+both written by main's command:
+
+- No errors, and every array's values came back equal to zarr-python's.
+  The valley has no `book` group, which is right for a drawn map.
+- Every default `open_zarr` and `open_datatree` warned: *Failed to open
+  Zarr store with consolidated metadata* (RuntimeWarning).
+- No coordinates: `Dimensions without coordinates: y, x`, so no `.sel` by
+  place, and no tile size anywhere in the store.
+- `to_netcdf` of `tile` or `climate` failed: `Invalid value for attr
+  'legend'` (a JSON object). The whole datatree's failed with `Object
+  dtype dtype('O') has no native HDF5 equivalent`, and h5netcdf refuses a
+  bool attribute such as the root's `wrap`.
+- Misdecoded meaning, not bits: `strata/rock` and `strata/formed` held 0
+  past the bottom of a pile, which reads as granite laid in epoch 0 (70 %
+  of the globe's beds); `climate/koppen` numbered only the types present,
+  so code 9 was `Cfb` in the globe and nothing in the valley (whose
+  `Cfb` was 1); the legends of the other coded arrays stopped at the
+  largest code present.
+- xarray does not use a Zarr v3 `fill_value` as a mask unless told to,
+  so the only masking it would do is by a `_FillValue` attribute.
+
+**What changed.** `y`/`x` coordinate arrays (float64 metres of the tile
+centre, index times `terra.TileSpan`) in every group of the map, `bed` in
+strata and `feature` (the id) in the features table; `long_name` for
+`about` and UDUNITS spellings of units; `flag_values`/`flag_meanings`
+over every code the type has, instead of `legend` (dropped: a dict attribute
+cannot go to netCDF, and two tables of one thing can disagree); one fixed
+table of the 27 Köppen types `koppenCode` can give, checked by a sweep of
+`KoppenOf`, with an export error for a type not in it; `_FillValue` 255
+(and fill 255) on `strata/rock` and `strata/formed`; `scale_factor` on
+`leached`, `lime`, `salt` and `strata/sand`; the root's `terms` as JSON
+text, `wrap` as 0/1, and `tile_span`; and the root's metadata written
+again last with every node's inline under `consolidated_metadata`
+(`must_understand: false`), as zarr-python consolidates v3. Every array
+keeps the world's type. `cmd/zarr/README.md` documents the layout.
+
+**What xarray reports after.** On both stores, opening and loading every
+group with defaults raises no warning (also under `python -W error`), every
+array decodes to zarr-python's elements with its scale and mask applied,
+`.sel(x=, y=)` finds tiles by metres, `cf_xarray` sees the coded arrays as
+flag variables (`koppen.cf == "Cfb"` works), and the whole datatree writes
+to netCDF with h5netcdf. That write still warns once each for the four
+scaled integer arrays (no `_FillValue` to keep for NaN): they have no
+spare value, as 65535 and 255 are real shares.
+
+`TestXarrayReadsAStore` (skipped unless `ZARR_PYTHON` names a Python with
+xarray) writes a small made world and runs `testdata/read_xarray.py`; it
+fails when the strata mask is removed. `TestEveryKoppenTypeHasACode` and
+`TestAStoreHasCoordinatesAndConsolidatedMetadata` are Go-only.
+
+**What it costs.** The globe store is 83 arrays, 176 files and 41.4 MiB
+(was 67, 143 and 41.2 MiB), written in 1.26 s against 0.76 s, one run
+with other sessions on the machine: a reading, not a baseline.
+
+**Existing stores.** The layout change breaks readers of stores written
+before it, not the stores: Go and zarr-python still open them. What
+changed under a reader: `legend` is gone for `flag_values`/`flag_meanings`
+(and meanings use underscores), Köppen codes are renumbered, `terms` is
+a string and `wrap` a number, `about` is `long_name` on arrays, units are
+spelt differently, and `strata/rock`/`formed` past a pile are 255, not 0.
+Old stores have no coordinates; rewrite them to get them.
+
+---
+
 ## 2026-09-16 - Phase 3, step 1: the history on a grid of its own
 
 **What this is.** The first step of the history grid (phase 3 of

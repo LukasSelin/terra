@@ -5,3 +5,4 @@
 /runs/
 *.history
 /.cache/
+__pycache__/
