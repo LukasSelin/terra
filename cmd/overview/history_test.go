@@ -14,11 +14,11 @@ func TestAWorldFromItsHistoryDrawsTheSame(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "ancient.history")
 	kept := options{Seed: 3, Preset: "ancient", Epochs: -1, Sea: -1, Water: -1, KeepHistory: file}
-	if _, err := generate(kept, filepath.Join(dir, "kept")); err != nil {
+	if _, _, err := generate(kept, filepath.Join(dir, "kept")); err != nil {
 		t.Fatal(err)
 	}
 	resumed := options{Preset: "valley", Epochs: -1, Sea: -1, Water: -1, FromHistory: file}
-	if _, err := generate(resumed, filepath.Join(dir, "resumed")); err != nil {
+	if _, _, err := generate(resumed, filepath.Join(dir, "resumed")); err != nil {
 		t.Fatal(err)
 	}
 	pngs, err := filepath.Glob(filepath.Join(dir, "kept", "*.png"))

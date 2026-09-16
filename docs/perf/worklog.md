@@ -93,6 +93,58 @@ baseline stands until a change of its own moves it.
 
 ---
 
+## 2026-09-16 - cmd/overview -serve: click a tile to ask why it is so
+
+**What this is.** The third step of the web page, on
+`claude/world-generator-web-ui-c36c93`. A click on a served run's map (a
+press that moves less than four pixels; more is a pan) marks the tile and
+asks `GET /runs/<run>/tile?x=&y=`, which answers with the world's account
+of that tile as JSON: its terrain, height and features, and `terra.Why`'s
+chain for height, rock, rain and cover, rendered by the same sentences
+`why.html` uses. The account shows under the map. `why.html`'s eight tiles
+are now built by the same `describe`.
+
+**How the world is found.** `generate` became `makeWorld`, which makes the
+world and runs its weather to the asked day, and `draw`. The server keeps
+the worlds it made last, up to 2^20 tiles together (a few valleys or one
+globe; the newest always), and makes a world it has let go again from the
+run's `settings.json`, under the same lock as making one. The test holds
+that the answer from a world made again is the answer from the one kept,
+byte for byte. Runs from before `settings.json` say they cannot answer.
+A page opened from disk, without the server, says it needs `-serve`.
+
+**What it measured.** Nothing about world creation. No file of the root
+package changed, so the digest, the budget and the yardsticks are what
+main's are. The command line's stdout and every png and `why.html` on the
+default valley are what they were byte for byte; `index.html` gains the
+click script. `go test -short ./cmd/overview` runs in under two seconds.
+
+---
+
+## 2026-09-16 - cmd/overview -serve: the options on a form
+
+**What this is.** The second step of the web page, on
+`claude/world-generator-web-ui-c36c93`. The home page is now a form of
+`cmd/overview`'s options - preset, seed (with a random one a click away),
+width, height, epochs, sea share, water, day, scale and wrap - filled in
+from the flags the server was started with. An empty field is the
+preset's own value, shown greyed, as a flag left off is. What the terms
+would refuse (a globe not a whole number of chunks round, a sea share
+past 1, a picture over 16384 pixels a side, a world that will not fit in
+memory) comes back as 422 with the reason above the form as it was
+filled in, and nothing is made. Each run keeps `settings.json`; the list
+of runs says what each was made from and links "tune from this", which
+fills the form in with it. `-max` is not on the form. No file of the
+root package changed, so the digest, the budget and the yardsticks are
+what main's are and were not re-run.
+
+**What it measured.** Nothing about world creation. `go test -short
+./cmd/overview` makes a 32x24 world through the form, turns away six
+forms that cannot be made, and reads options back from the fields they
+wrote, in under two seconds.
+
+---
+
 ## 2026-09-16 - cmd/overview -serve: a page with a button that makes a world
 
 **What this is.** The first step toward making worlds from a browser, on
