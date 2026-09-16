@@ -6,6 +6,27 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - the deep floor at GDH1's depths
+
+**What this is.** On `claude/missing-yardsticks-simulation-b40e20`.
+`floorDepth` (`abyss.go`) is Stein and Stein's GDH1 (1992), 2600 + 365
+sqrt(t) m to 20 Myr and 5651 - 2473 exp(-0.0278 t) past it, where it was
+Parsons and Sclater's (1977), which comes toward 6.4 km on old floor where
+GDH1 comes toward 5.65. With the earth's ages the old floor is most of the
+ocean. `sinksPastCCD` is the curve turned round: 27.5 Myr (was 32.7).
+
+**Readings.** Globe, seed 1: oceanic hypsometric mode -5.375 km (-5.625),
+still a gap, a sixth of the deep floor at 5.25-5.5 km; ridge 2.77 km (2.51),
+subsidence to 70 Myr 317 m/sqrt(Myr) (347), flattening 0.19 (0.48), all in
+range; sediment 773 m on the mean (797). Every other reading is the
+sediment commit's: the land does not move, since the floor is out of
+`meanHard`.
+
+**Held.** `go test -short`, `cmd/zarr` tests, the yardsticks: no failures.
+Digest: `globe128` rewritten. `perf.sh check` not run.
+
+---
+
 ## 2026-09-16 - sediment on the deep floor, and the floor out of the land's mean hardness
 
 **What this is.** On `claude/missing-yardsticks-simulation-b40e20`, after

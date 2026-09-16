@@ -16,16 +16,23 @@ import (
 // nothing the history knew about the floor - how old its crust was, where the
 // ridges had been - reached the map. The earth's floor is not like that. New
 // crust at a ridge stands two and a half kilometres under the sea and sinks as
-// it cools, as the root of its age: Parsons and Sclater (1977) fitted
+// it cools, as the root of its age, until the plate has cooled to the
+// thickness it can hold and the floor flattens. Stein and Stein's GDH1 (1992)
+// is
 //
-//	d = 2500 + 350 √t metres, t in millions of years, to about 70 Myr
-//	d = 6400 − 3200 exp(−t/62.8) past it
+//	d = 2600 + 365 √t metres, t in millions of years, to 20 Myr
+//	d = 5651 − 2473 exp(−0.0278 t) past it
 //
-// where the plate has cooled to the thickness it can hold and the floor
-// flattens; Stein and Stein's GDH1 (1992) is the same within a couple of
-// hundred metres, 2600 + 365 √t to 20 Myr. The history dates every tile of
-// crust by the epoch it was made in - see crust.born - so the floor is laid
-// at the depth its age gives it.
+// It was Parsons and Sclater's (1977), 2500 + 350 √t to 70 Myr and 6400 −
+// 3200 exp(−t/62.8) past it, which is within a couple of hundred metres of
+// GDH1 on young floor. On old floor it is not: Parsons and Sclater's comes
+// toward 6.4 km and GDH1's toward 5.65, and GDH1 was fitted to the floor of
+// the North Pacific and the Northwest Atlantic out to 160 Myr, which Parsons
+// and Sclater's is too deep for. With the earth's spread of ages the old
+// floor is most of the ocean, and laid at Parsons and Sclater's depths it
+// heaped up at 5.5 to 6 km. The history dates every tile of crust by the
+// epoch it was made in - see crust.born - so the floor is laid at the depth
+// its age gives it.
 //
 // Not all of it. A continent does not end at a wall four kilometres high: its
 // crust thins under a shelf, some eighty kilometres wide on the earth's
@@ -61,18 +68,18 @@ import (
 // constancy of continental freeboard), because the sea is most of the way to
 // the top of its basins and the edges are where it runs out of basin.
 const (
-	ridgeDepth = 2500.0 // metres under the sea, at the ridge
-	sinkRate   = 350.0  // metres per root million years
-	flattenAge = 70.0   // million years
-	oldDepth   = 6400.0 // metres, what the old floor comes toward
-	oldSpan    = 3200.0
-	oldTime    = 62.8 // million years
+	ridgeDepth = 2600.0 // metres under the sea, at the ridge
+	sinkRate   = 365.0  // metres per root million years
+	flattenAge = 20.0   // million years
+	oldDepth   = 5651.0 // metres, what the old floor comes toward
+	oldSpan    = 2473.0
+	oldTime    = 1 / 0.0278 // million years
 	shelfWidth = 80 * km
 	slopeWidth = 150 * km
 )
 
 // floorDepth is how far under the sea floor of an age of t million years
-// lies, in metres. See Parsons and Sclater above.
+// lies, in metres. See GDH1 above.
 func floorDepth(t float64) float64 {
 	t = math.Max(0, t)
 	if t <= flattenAge {
@@ -134,8 +141,8 @@ func (g *Grid) floorDepths(cr *crust, epochs int) (depth, share, ages, sediment 
 // as the history's lime is, limeCold to limeWarm - and only while the floor
 // is shallower than the carbonate compensation depth: below some four and a
 // half kilometres the deep water dissolves the shells as fast as they fall
-// (Berger and Winterer 1974), and new floor, which rises at the ridge 2.5 km
-// down, sinks past it in some thirty million years. The red clay, the dust
+// (Berger and Winterer 1974), and new floor, which rises at the ridge 2.6 km
+// down, sinks past it in some twenty-seven million years. The red clay, the dust
 // and the ash that reach every floor, at clayRate, a millimetre a thousand
 // years (Kennett 1982). And off the continents the turbidites the rivers'
 // mud comes down the slopes in, which build the abyssal plains: apronThick at
@@ -172,8 +179,14 @@ func oozeOf(age, warm float64) float64 {
 	return oozeRate * clamp01((warm-limeCold)/(limeWarm-limeCold)) * math.Min(age, sinksPastCCD)
 }
 
-// sinksPastCCD is how old floor is when it sinks past carbonateCCD.
-var sinksPastCCD = math.Pow((carbonateCCD-ridgeDepth)/sinkRate, 2) * myr
+// sinksPastCCD is how old floor is when it sinks past carbonateCCD: floorDepth
+// turned round.
+var sinksPastCCD = func() float64 {
+	if t := math.Pow((carbonateCCD-ridgeDepth)/sinkRate, 2); t <= flattenAge {
+		return t * myr
+	}
+	return -oldTime * math.Log((oldDepth-carbonateCCD)/oldSpan) * myr
+}()
 
 // seaWarmth is the year's mean over tile i's row, which is what the sea over
 // it is read at: see quietFloor.
