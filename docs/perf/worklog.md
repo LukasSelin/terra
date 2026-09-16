@@ -7,6 +7,87 @@ measurements is in [README.md](README.md).
 ---
 
 
+## 2026-09-16 - S2 to the end: the view, and Flow, Drain, Soil, Sand and Clay beside the map
+
+**What this is.** The owner chose the read-only view over moving the game,
+so the rest of S2 followed on `claude/simd-kernels`, one field per commit
+in the plan's order, each with the digest on both builds, the budget
+rewritten, `TestMakingAWorldDoesNotDependOnTheGoroutines`, the full suite,
+and globe256 interleaved n=6 against the commit before it with
+`TERRA_PHASES=1`. Every world is as it was: `TERRA_DIGEST=check` passes
+after every commit.
+
+**The view.** `g.Tile(i)` and `g.TileAt(p)` are a `TileView`: the `*Tile`
+embedded, so its fields and methods come through as they are, and a
+method for each field the map keeps beside it - `Height()`, `Flow()`,
+`Drain()`, `Soil()`, `Sand()`, `Clay()` - plus `Silt()`, `Loam()` and
+`Wash()`, which were methods on the tile reading its sand and clay. It is
+read-only and a reading, not a copy; what is beside the map is written on
+the map. A game reads `g.Tile(i).Height()` whatever holds the height.
+
+**The texture helpers.** `Silt`, `Loam` and `Wash` read two fields that
+moved, so they are `siltAt`, `loamAt` and `washAt` on the Grid by index,
+the view's `Silt`, `Loam` and `Wash` for a reader by tile, and `siltOf`,
+`loamOf` and `washOf` as the pure statements the tests hold (`silt` was
+taken: it is the pass). `parts`, `hold`, `blend` and `mix` take an index
+too, and the creep's depth reads by index.
+
+**The crust.** When the plates move, the tile went with the ground and
+took its soil, sand and clay with it. Height had a copy on the crust
+already; Soil moved the digest on every world with a history until the
+crust kept a copy of it too, and Sand and Clay went in the same way. Flow
+and Drain did not need it: the drain reads them afresh before anything
+does.
+
+**globe256, each field against the commit before it** (interleaved,
+n=6, `TERRA_PHASES=1`; only passes that moved with p < 0.05):
+
+| field | world | passes that moved |
+|---|---|---|
+| Flow | 4.020 s -> 4.050 s, ~ (p=0.065) | `waterStep` +6.6%, `wear` +3.9% |
+| Drain | 4.077 s -> 4.040 s, ~ (p=0.180) | `move` -11.8%, `airEnv.currents` -1.7%, `reshape` +7.0% |
+| Soil | 4.012 s -> 4.051 s, ~ (p=0.065) | `keepBook` +12.1%, `flow` +4.2%, `waterStep` +2.2%, `wear` +1.9% |
+| Sand | 4.043 s -> 4.031 s, ~ (p=0.240) | `waterStep` -7.5%, `fluvial.solve` -13.1%, `keepBook` -5.8%, `wear` -3.4%, `flow` -3.1%, `move` +2.3% |
+| Clay | 4.023 s -> 4.036 s, ~ (p=0.589) | `joinUp` +11.1%, `basins` +6.1%, `move` -1.5%, `orographic` +1.2%, `waterStep` +1.1% |
+
+No field moved the world as a whole. The passes go both ways: a pass that
+reads one moved field inside a loop that still walks the tile for another
+touches two lines where it touched one (`waterStep` after Flow), and one
+that reads the moved fields in a run of their own gets them in order
+(`waterStep` after Sand, `move` after Drain, whose tile shrank by a third
+before it was copied round the crust). Bytes per world did not move
+beyond a tenth of a percent at any step.
+
+**The budget** (workers 4), from Height's rewrite to Clay's:
+
+| world | bytes after Height | bytes after Clay | | allocs after Height | allocs after Clay |
+|---|---|---|---|---|---|
+| valley | 10 328 112 | 10 348 688 | +0.20% | 1299 | 1304 |
+| ancient | 58 196 144 | 58 195 848 | -0.00% | 10214 | 10230 |
+| globe128 | 437 518 152 | 437 453 760 | -0.01% | 33605 | 33617 |
+
+The tile is 32 bytes, from 72 when the day started: the six fields took
+44 and left 28, which pads to 32, so a tile costs four bytes more than
+its fields and the drawn valley, which has no crust copy to lose, is the
+one that shows it. The worlds with a history give the crust's copy of the
+tiles back what the slices cost.
+
+**The suite** (`go test -timeout 60m .`), the commit after each field,
+in a second checkout: Flow ok (386 s), Drain ok (386 s), Soil ok (386 s),
+Sand ok (384 s), Clay ok (381 s). Main at 3124515 is ok with no failures.
+
+**`scripts/perf.sh check`** at the branch's end, quiet machine, against
+the 07:18 baseline:
+
+
+
+**What lreat has to do.** Its reads of `Tiles[i].Height`, `At(p).Height`
+and `t.Height` (and `.Flow`, `.Drain`, `.Sand`, `.Clay`) become
+`g.Tile(i).Height()`, `g.TileAt(p).Height()` and so on; its test writes
+(`Tiles[i].Height = 0`) become `g.Height[i] = 0`. About twenty-five sites.
+
+---
+
 ## 2026-09-16 - The kernel layer, and Height off the Tile (track S)
 
 **What this is.** The SIMD track of the scaling plan, on
