@@ -6,6 +6,35 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-16 - U1: cmd/unreal, the Landscape export at 25 m
+
+**What this is.** Milestone U1 of the scaling plan's level 2, on
+`claude/unreal-export`: a command with `cmd/overview`'s flags that writes
+the world for Unreal's Landscape import. New files only under
+`cmd/unreal`; no file of the root package changed, so the digest, the
+budget and the yardsticks are what main's are and were not re-run. The
+tests (`go test ./cmd/unreal`) make the valley on seed 1 once and export
+it once, cut into 17-vertex tiles so that tile edges can be checked, and
+run in under two seconds.
+
+**What it writes.** A 16-bit heightmap per Landscape tile (1009, 2017,
+4033 or 8129 vertices, the largest not wider than the world, edges
+shared, padded by edge extension, the seam column of a globe written
+twice), ten 8-bit weightmaps per tile summing to 255 a vertex, the sea,
+lakes and river reaches as JSON with Finnegan's width and Manning's depth
+at the mean flow, one tree per forest tile as CSV with a species by
+overview's Köppen reading, and a manifest with the scales and the exact
+formula back to metres. The valley export is 14 files and 0.2 MB; globe256
+is 14 files and 0.3 MB; both are one tile of 1009.
+
+**What it measured.** Nothing about world creation. The export itself is
+about 0.1 s on the valley and on globe256, under load, and is not the
+point. The README's "What the metre level needs" lists what the root
+package would have to expose for U2: the channel constants, a lake tile
+index, the ebb per tile, the abyssal flag, the strata's bed tops, the
+meander phase, a shared Köppen reading, a gradient vector, and
+`DetailChunk` itself.
+
 
 ## 2026-09-16 - P1: the causal record. The book kept, features, and Why
 
