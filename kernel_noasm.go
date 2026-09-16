@@ -16,3 +16,4 @@ func widen(*fftPlan) *fftWide { return nil }
 func butterflies(x []complex128, pl *fftPlan, inverse bool) {
 	butterfliesScalar(x, pl, inverse, 1, len(x))
 }
+func axpy(y, x []float64, a float64) { axpyScalar(y, x, a) }

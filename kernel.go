@@ -25,6 +25,19 @@ package terra
 // A statement is what a kernel computes, and it is the tail of every run on
 // the vector path: a run is done in whole vectors and what is left over is
 // handed to the statement, so the two never disagree about the last few.
+// The one thing a lane is not held to is which NaN it is: a sum or a product
+// of two NaNs keeps the first operand's bits on this processor, and the
+// compiler is free to put either operand of a sum or a product first, so
+// the bits of a NaN are not a fact about the statement. That it is a NaN
+// is, and the tests hold that.
+
+// lanes is how many numbers one vector holds, and whole the length of the
+// part of a run of n that is done in whole vectors, the rest being the
+// tail. They are facts about the statements too: a sum over a run is a
+// tree by lanes on both paths.
+const lanes = 4
+
+func whole(n int) int { return n &^ (lanes - 1) }
 
 // fadeScalar multiplies every entry of wear by by. It is FadeWear over a
 // run: the ground forgetting its marking.
@@ -66,5 +79,14 @@ func butterfliesScalar(x []complex128, pl *fftPlan, inverse bool, from, to int) 
 				x[start+k], x[start+k+half] = a+b, a-b
 			}
 		}
+	}
+}
+
+// axpyScalar adds a times x onto y, entry by entry: y += a*x. The product is
+// rounded before it is added, on both paths.
+func axpyScalar(y, x []float64, a float64) {
+	x = x[:len(y)]
+	for i := range y {
+		y[i] = float64(y[i] + float64(a*x[i]))
 	}
 }

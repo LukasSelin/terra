@@ -572,9 +572,7 @@ func (w *Land) upland(g *Grid) []float64 {
 	for span := g.UplandLattice(); ; span, amp = span/2, amp/2 {
 		l := w.lattice(g, span)
 		g.EachRow(func(y int) {
-			for i := y * g.W; i < (y+1)*g.W; i++ {
-				out[i] += amp * l[i]
-			}
+			axpy(out[y*g.W:(y+1)*g.W], l[y*g.W:(y+1)*g.W], amp)
 		})
 		if span/2 < rangeSpan {
 			return out

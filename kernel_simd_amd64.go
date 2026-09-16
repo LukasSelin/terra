@@ -24,13 +24,6 @@ import (
 // vector is whether this processor can do a kernel four lanes at once.
 var vector = archsimd.X86.AVX2()
 
-// lanes is how many numbers one vector holds.
-const lanes = 4
-
-// whole is the length of the part of a run of n that is done in whole
-// vectors; the rest is the tail.
-func whole(n int) int { return n &^ (lanes - 1) }
-
 func fade(wear []float64, by float64) {
 	if !vector {
 		fadeScalar(wear, by)
@@ -169,4 +162,19 @@ func butterflies(x []complex128, pl *fftPlan, inverse bool) {
 		}
 	}
 	archsimd.ClearAVXUpperBits()
+}
+
+func axpy(y, x []float64, a float64) {
+	if !vector {
+		axpyScalar(y, x, a)
+		return
+	}
+	x = x[:len(y)]
+	n := whole(len(y))
+	av := archsimd.BroadcastFloat64x4(a)
+	for j := 0; j < n; j += lanes {
+		archsimd.LoadFloat64x4(y[j : j+lanes]).Add(archsimd.LoadFloat64x4(x[j : j+lanes]).Mul(av)).Store(y[j : j+lanes])
+	}
+	archsimd.ClearAVXUpperBits()
+	axpyScalar(y[n:], x[n:], a)
 }

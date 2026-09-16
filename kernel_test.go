@@ -50,12 +50,13 @@ func run(rng *rand.Rand, n int) []float64 {
 	return s
 }
 
-// sameBits fails the test where got and want differ in any bit, NaNs included:
-// two NaNs are the same number here if they are the same bits.
+// sameBits fails the test where got and want differ in any bit, except that a
+// NaN is any NaN: which NaN's bits a sum of two keeps is the compiler's
+// choice, see kernel.go.
 func sameBits(t *testing.T, what string, n int, got, want []float64) {
 	t.Helper()
 	for i := range want {
-		if math.Float64bits(got[i]) != math.Float64bits(want[i]) {
+		if !sameOrNaN(got[i], want[i]) {
 			t.Fatalf("%s, length %d: entry %d is %v (%#x) in lanes, and %v (%#x) one at a time",
 				what, n, i, got[i], math.Float64bits(got[i]), want[i], math.Float64bits(want[i]))
 		}
@@ -141,6 +142,12 @@ func BenchmarkKernel(b *testing.B) {
 			grow(y, ks, 0.37)
 		}
 	})
+	b.Run("axpy", func(b *testing.B) {
+		y := slices.Clone(x)
+		for b.Loop() {
+			axpy(y, x, 0.5)
+		}
+	})
 }
 
 // The butterflies, at every length a map asks for, forward and back; the
@@ -176,4 +183,20 @@ func FuzzButterflies(f *testing.F) {
 // sameOrNaN is whether a and b are the same bits, or both NaN.
 func sameOrNaN(a, b float64) bool {
 	return math.Float64bits(a) == math.Float64bits(b) || (math.IsNaN(a) && math.IsNaN(b))
+}
+
+func FuzzAxpy(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, 4))
+		for _, n := range lengths(rng) {
+			a := draw(rng)
+			x := run(rng, n+rng.IntN(3)) // x may be longer than y
+			want := run(rng, n)
+			got := slices.Clone(want)
+			axpy(got, x, a)
+			axpyScalar(want, x, a)
+			sameBits(t, "axpy", n, got, want)
+		}
+	})
 }
