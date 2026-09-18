@@ -23,7 +23,8 @@ import (
 // grid (TestTheSameWorldWritesTheSameStore), so a byte is a change. The root's
 // zarr.json is left out because it holds the terms, and a world made on other
 // terms whose grid has not moved yet is the same at that stage. Both
-// directories have to be written with the same -chunk, -shard and -gzip.
+// directories have to be written with the same -chunk, -shard, -compress
+// and -level.
 // zarrdiff says by how much a pair differs.
 func diffStages(w io.Writer, a, b string) (differ bool, err error) {
 	first := ""

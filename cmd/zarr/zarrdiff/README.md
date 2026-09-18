@@ -45,7 +45,7 @@ are listed. For each group in both, the attributes (`seed`, `terms`,
   that a store whose codes were numbered differently still reads right.
 
 How the arrays are chunked, sharded and compressed is not compared: a store
-written with `-shard 0 -gzip -1` is the same as one written with the
+written with `-shard 0 -compress none` is the same as one written with the
 defaults if its elements are.
 
 The summary has a row for each array that differs, most tiles changed

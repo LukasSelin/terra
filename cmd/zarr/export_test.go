@@ -19,7 +19,7 @@ var ctx = context.Background()
 
 // Small chunks and shards, so that a small world still has many of each and
 // shards that run past the edge of the map.
-var small = options{Chunk: 16, Shard: 2, Gzip: 1}
+var small = options{Chunk: 16, Shard: 2, Compress: "zstd", Level: 1}
 
 func read[T zarr.Element](t *testing.T, s zarr.Store, path string) []T {
 	t.Helper()
@@ -180,7 +180,7 @@ func TestAMadeWorldReadsBackAsItIs(t *testing.T) {
 
 func TestADrawnWorldHasNoBook(t *testing.T) {
 	land := terra.NewLand(1, terra.DefaultTerms())
-	s := exported(t, land, options{Chunk: 64, Shard: 0, Gzip: -1})
+	s := exported(t, land, options{Chunk: 64, Shard: 0, Compress: "none"})
 	if _, err := zarr.OpenArray(ctx, s, "book/lift"); err == nil {
 		t.Error("a drawn world has a book")
 	}

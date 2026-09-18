@@ -1,2 +1,8 @@
 github.com/LukasSelin/zarr v0.3.0 h1:tyoRoYzpCcv6duXxhYp9JUlIyEhFEdb3sas4qPzPPAM=
 github.com/LukasSelin/zarr v0.3.0/go.mod h1:S3qKKzi/I+oQOdIxcsTmM0jrCasDCun2XPZd08E5TGI=
+github.com/LukasSelin/zarr/zstd v0.0.0-20260918083450-a273522960fa h1:R3bxoeXuZiY05+FB947Ved8k0fX/gWgAYunKWJccn70=
+github.com/LukasSelin/zarr/zstd v0.0.0-20260918083450-a273522960fa/go.mod h1:KcMj0gQck3a2VGU6ZC2J44r+tSkVTGP6dXjpEm2b3T4=
+github.com/klauspost/compress v1.20.0 h1:a3C1ke2ohxFymNlb2HWAHjDeKCI90scRskErZkR0ezA=
+github.com/klauspost/compress v1.20.0/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
+go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=

@@ -69,7 +69,7 @@ until it reaches the grid. It prints each stage as the same or the arrays
 that differ, then the first stage that differs and the `zarrdiff` command
 that says by how much. It exits 0 when every stage is the same, 1 when one
 differs and 2 on an error. Both directories must be written with the same
-`-chunk`, `-shard` and `-gzip`.
+`-chunk`, `-shard`, `-compress` and `-level`.
 
 ```
 1-ground the same
@@ -94,6 +94,32 @@ threads, other sessions on the machine):
 | `-from-history globe.history -stages` | 22.5 s, the six stores included (0.6-0.9 s each) | |
 
 The history file is 198 MiB.
+
+## Compression
+
+Each chunk is compressed with **zstd at level 3** by default; `-compress`
+takes `zstd`, `gzip` or `none`, and `-level` a level (1 to 22 for zstd, 0
+to 9 for gzip) instead of the compressor's own default. A store is written
+once and read many times, so the compressor is chosen on what it costs a
+reader, not only on what it leaves. On the 1024 by 512 globe (24 threads,
+the whole store read back array by array):
+
+| codec | stored | writing | reading | peak heap |
+|---|---|---|---|---|
+| `none` | 131 MiB | 0.25 s | 0.12 s | 852 MiB |
+| `gzip 5` | 47 MiB | 0.35-0.38 s | 0.54-0.56 s | 735-775 MiB |
+| `zstd 1` | 48 MiB | 0.36 s | 0.28 s | 785 MiB |
+| **`zstd 3`** | 47 MiB | 0.42-0.45 s | 0.27-0.28 s | 769-818 MiB |
+| `zstd 7` | 46 MiB | 0.57 s | 0.28 s | 1327 MiB |
+
+zstd 3 leaves what gzip 5 leaves and is read back in half the time, for
+about 0.07 s more writing. Above level 3 the encoder's windows cost
+hundreds of MiB of heap for about a percent of size, which a `-max` world
+cannot spare; `TestCompression` in `compress_test.go` is the table, a row
+at a time.
+
+zarr-python reads zstd as it reads gzip (checked at zarr 3.4.0), and
+`zarrdiff` reads both.
 
 ## Layout
 

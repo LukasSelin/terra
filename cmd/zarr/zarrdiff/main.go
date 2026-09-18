@@ -25,6 +25,10 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	// The stores cmd/zarr writes are zstd; importing the codec is what
+	// registers it, so that their chunks decode.
+	_ "github.com/LukasSelin/zarr/zstd"
 )
 
 func main() {

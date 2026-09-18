@@ -61,7 +61,8 @@ func main() {
 		out         = flag.String("out", "world.zarr", "the store to write, a directory that must not exist yet")
 		chunk       = flag.Int("chunk", terra.ChunkSide, "tiles along a side of a chunk")
 		shard       = flag.Int("shard", 16, "chunks along a side of a shard; 0 keeps every chunk in a file of its own")
-		gzip        = flag.Int("gzip", 5, "gzip level for each chunk, 0 to 9; -1 is uncompressed")
+		compress    = flag.String("compress", "zstd", "what each chunk is compressed with: zstd, gzip or none")
+		level       = flag.Int("level", -1, "the level it compresses at, 1 to 22 for zstd and 0 to 9 for gzip; -1 is the compressor's default")
 	)
 	flag.Parse()
 	given := map[string]bool{}
@@ -138,7 +139,10 @@ func main() {
 			}
 		}
 	}
-	o := options{Chunk: *chunk, Shard: *shard, Gzip: *gzip}
+	o := options{Chunk: *chunk, Shard: *shard, Compress: *compress, Level: *level}
+	if l, ok := levels[o.Compress]; ok && !given["level"] {
+		o.Level = l.dflt
+	}
 	if err := o.check(); err != nil {
 		fail(err)
 	}

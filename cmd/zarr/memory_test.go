@@ -134,7 +134,7 @@ func spend(t testing.TB, land *terra.Land, o options, procs int) spent {
 }
 
 // defaults is what main writes with when no flag says otherwise.
-var defaults = options{Chunk: terra.ChunkSide, Shard: 16, Gzip: 5}
+var defaults = options{Chunk: terra.ChunkSide, Shard: 16, Compress: "zstd", Level: 3}
 
 // BenchmarkExport writes a 512 by 256 globe, made once, as main would, and
 // reports the export's peak heap over the world as peak-B/op.

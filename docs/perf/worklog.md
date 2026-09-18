@@ -6,6 +6,71 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-18 - The export compresses with zstd
+
+**What this is.** On `claude/zarr-version-upgrade`, on top of the v0.3.0
+bump below. `cmd/zarr` compressed every chunk with gzip 5; it compresses
+with zstd 3, through `github.com/LukasSelin/zarr/zstd` (klauspost's
+compressor, no cgo). `options.Gzip` is `options.Compress` and
+`options.Level`, and the `-gzip` flag is `-compress zstd|gzip|none` and
+`-level`. The root package still imports nothing but the standard library;
+`cmd/zarr` now has `klauspost/compress` under it. No world moves: no
+digest, budget or yardstick run is owed.
+
+**How it is measured.** `TestCompression` in `cmd/zarr/compress_test.go`
+(`TERRA_ZARR_COMPRESS=WxH`, `TERRA_ZARR_CODECS=zstd:3` for a row at a time,
+`TERRA_ZARR_HISTORY` as `TestExportPeak` uses it) makes one globe and
+writes it with each compressor: the bytes it hands the store, the time the
+export takes, the peak heap over the world (the sampler of
+`TestExportPeak`), and the time to read every array of the store back from
+memory. A store is written once and read many times, so the read is half
+the question.
+
+A compressor's encoder is made once and kept for the life of the process,
+so a run of the whole table charges a row only its own encoder but leaves
+the earlier ones live - on 512x256, zstd 3 reads as 900 MiB in the full
+table and 478 MiB in a run of its own. **The peak of a row is read from a
+run of that row alone**, which is what the numbers below are.
+
+**What it bought.** 1024x512 globe, chunk 64, shard 16, 24 goroutines;
+three runs of the two candidates, one run of the rest. Ryzen 9 3900X with a
+browser and Slack up - 17% - so the times are indicative and gate nothing.
+
+| codec | stored | of raw | writing | reading | peak |
+|---|---|---|---|---|---|
+| none | 131 MiB | 100% | 0.25 s | 0.12 s | 852 MiB |
+| gzip 5 | 47 MiB | 36.1% | 0.35-0.38 s | 0.54-0.56 s | 735-775 MiB |
+| zstd 1 | 48 MiB | 37.0% | 0.36 s | 0.28 s | 785 MiB |
+| zstd 3 | 47 MiB | 36.1% | 0.42-0.45 s | 0.27-0.28 s | 769-818 MiB |
+| zstd 7 | 46 MiB | 35.1% | 0.57 s | 0.28 s | 1327 MiB |
+
+zstd 3 leaves exactly what gzip 5 leaves and is **read back in half the
+time**, for about 0.07 s more writing and a peak inside gzip's spread. The
+shares are from a run of the whole table in one process, where every row is
+measured against the `none` of that run; the stored bytes do not depend on
+the process. A 512x256 globe compresses a shade further (gzip 5 and zstd 3
+both 35.3%, zstd 1 36.1%, zstd 7 34.6%) and puts the codecs in the same
+order, zstd 3 on gzip 5 again to the tenth.
+
+**Where it stops.** Above level 3 zstd's encoder windows cost hundreds of
+MiB of heap - 1327 MiB at level 7 here, and on 512x256, where zstd 3 holds
+478 MiB, 1375 MiB at level 7 and 1930 MiB at level 11 - for about a percent
+of size. A `-max` world is sized to fill the memory there is, so that is
+not a trade this export can make; 3 is both zstd's own default and the last
+level that is free. Checksums are off: a shard already
+carries a CRC32C index, and the four bytes a frame would add buy nothing
+here.
+
+**Checked.** `go vet ./...` and `go test -count=1 -timeout 60m ./...` in
+`cmd/zarr`, both ok. `TestXarrayReadsAStore` against a fresh venv
+(zarr-python 3.4.0, xarray 2026.7.0, numpy 2.5.3) reads the zstd store: 8
+groups as the world. `zarrdiff` told a zstd store and a gzip store of the
+same world to be the same, 85 arrays in both and none differing, which is
+the decoders agreeing element by element. `-compress` and `-level` were
+exercised from the command line, including the three ways they are refused.
+
+---
+
 ## 2026-09-18 - cmd/zarr takes zarr v0.3.0, and zarrdiff walks with it
 
 **What this is.** On `claude/zarr-version-upgrade`. `cmd/zarr` required
@@ -26,11 +91,11 @@ list its keys. It can now, so `walk` takes a `zarr.Store` rather than a
 path and recurses on `Group.Children`: a listing of one level and a read of
 each name's metadata per group, in place of `os.ReadDir` and the package's
 own parse of `node_type`. Eleven lines net and five imports (`os`,
-`filepath`, `io/fs`, `encoding/json`, `errors`) go, and the walk no longer knows that a
-store is a directory - the same `walk` would do for a bucket. A store whose
-root holds no `zarr.json` used to be walked for children anyway and is now
-an error naming the store, which is what `cmd/zarr` writes and `zarrdiff`
-compares in any case.
+`filepath`, `io/fs`, `encoding/json`, `errors`) go, and the walk no longer
+knows that a store is a directory - the same `walk` would do for a bucket.
+A store whose root holds no `zarr.json` used to be walked for children
+anyway and is now an error naming the store, which is what `cmd/zarr`
+writes and `zarrdiff` compares in any case.
 
 **Left alone.** `consolidate` (`export.go`) reads the nodes the export
 recorded rather than listing the store, which is fewer requests, not more.

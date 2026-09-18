@@ -12,6 +12,7 @@ import (
 
 	"github.com/LukasSelin/terra"
 	"github.com/LukasSelin/zarr"
+	"github.com/LukasSelin/zarr/zstd"
 )
 
 // What a store holds.
@@ -46,15 +47,41 @@ import (
 
 // options is how the arrays are cut and compressed.
 type options struct {
-	// Chunk is tiles along a side of a chunk, Shard chunks along a side of
-	// a shard (0, unsharded), and Gzip the level each chunk is compressed at
-	// (-1, not at all).
-	Chunk, Shard, Gzip int
+	// Chunk is tiles along a side of a chunk, and Shard chunks along a side
+	// of a shard (0, unsharded).
+	Chunk, Shard int
+	// Compress is what each chunk is compressed with - "zstd", "gzip", or
+	// "none" for not at all - and Level the level it compresses at: 1 to 22
+	// for zstd, 0 to 9 for gzip.
+	Compress string
+	Level    int
+}
+
+// levels is what each compressor takes, and what it is given when no level
+// is asked for. zstd's own default is 3; gzip's is what the export wrote
+// before it had a choice.
+var levels = map[string]struct{ min, max, dflt int }{
+	"zstd": {1, 22, 3},
+	"gzip": {0, 9, 5},
+	"none": {0, 0, 0},
 }
 
 func (o options) check() error {
-	if o.Chunk <= 0 || o.Shard < 0 || o.Gzip < -1 || o.Gzip > 9 {
-		return fmt.Errorf("chunk %d, shard %d, gzip %d: want a chunk above 0, a shard of 0 or more, and gzip from -1 to 9", o.Chunk, o.Shard, o.Gzip)
+	if o.Chunk <= 0 || o.Shard < 0 {
+		return fmt.Errorf("chunk %d, shard %d: want a chunk above 0 and a shard of 0 or more", o.Chunk, o.Shard)
+	}
+	l, ok := levels[o.Compress]
+	if !ok {
+		return fmt.Errorf("compress %q: want zstd, gzip or none", o.Compress)
+	}
+	if o.Compress == "none" {
+		if o.Level != 0 {
+			return fmt.Errorf("compress none, level %d: nothing is compressed, so there is no level", o.Level)
+		}
+		return nil
+	}
+	if o.Level < l.min || o.Level > l.max {
+		return fmt.Errorf("compress %s, level %d: want a level from %d to %d", o.Compress, o.Level, l.min, l.max)
 	}
 	return nil
 }
@@ -352,8 +379,11 @@ func (f field) attrs() map[string]any {
 // codecs is the chunk codecs of every array.
 func (e *exporter) codecs() []zarr.Codec {
 	codecs := []zarr.Codec{zarr.BytesCodec{Endian: zarr.Little}}
-	if e.o.Gzip >= 0 {
-		codecs = append(codecs, zarr.GzipCodec{Level: e.o.Gzip})
+	switch e.o.Compress {
+	case "zstd":
+		codecs = append(codecs, zstd.Codec{Level: e.o.Level})
+	case "gzip":
+		codecs = append(codecs, zarr.GzipCodec{Level: e.o.Level})
 	}
 	return codecs
 }
