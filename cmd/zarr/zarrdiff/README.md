@@ -23,7 +23,8 @@ first: `go build -o zarrdiff ./zarrdiff`.
 
 ## What it compares
 
-Both stores are walked for `zarr.json`; the arrays and groups in one alone
+Both stores are walked a group at a time (`Group.Children`), not a key at a
+time, so a walk does not read the chunks; the arrays and groups in one alone
 are listed. For each group in both, the attributes (`seed`, `terms`,
 `sea_level`...). For each array in both:
 
