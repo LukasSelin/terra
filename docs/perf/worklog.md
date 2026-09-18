@@ -6,6 +6,43 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-18 - cmd/zarr takes zarr v0.3.0, and zarrdiff walks with it
+
+**What this is.** On `claude/zarr-version-upgrade`. `cmd/zarr` required
+`github.com/LukasSelin/zarr v0.1.0`; the module is now at `v0.3.0`, which
+brought `Append`, `Resize` and `Refresh` (v0.2.0) and then listing,
+`Group.Children` and `Delete` (v0.3.0). Nothing in the root package imports
+it - its `go.mod` is still the standard library's alone - so no world
+moves: no digest, budget or yardstick run is owed.
+
+**What the version cost.** One break: `Store` gained `List` in v0.3.0, so
+the `discard` store of `memory_test.go` - which keeps the metadata and
+counts the rest away, so that `TestExportPeak` reads the export's heap and
+not a store's - needed one. It lists the metadata, which is all it holds.
+
+**What the version bought.** `zarrdiff`'s `walk` was a hand-rolled walk of
+the directories for `zarr.json`, under a comment saying `zarr.Store` cannot
+list its keys. It can now, so `walk` takes a `zarr.Store` rather than a
+path and recurses on `Group.Children`: a listing of one level and a read of
+each name's metadata per group, in place of `os.ReadDir` and the package's
+own parse of `node_type`. Eleven lines net and five imports (`os`,
+`filepath`, `io/fs`, `encoding/json`, `errors`) go, and the walk no longer knows that a
+store is a directory - the same `walk` would do for a bucket. A store whose
+root holds no `zarr.json` used to be walked for children anyway and is now
+an error naming the store, which is what `cmd/zarr` writes and `zarrdiff`
+compares in any case.
+
+**Left alone.** `consolidate` (`export.go`) reads the nodes the export
+recorded rather than listing the store, which is fewer requests, not more.
+`storeFiles` (`stages.go`) walks files to compare their bytes; `List` would
+make it store-agnostic, but it is not working around a gap in the package.
+
+**Checked.** `go vet ./...` and `go test -timeout 60m ./...` in `cmd/zarr`:
+`cmd/zarr` 22.3 s, `cmd/zarr/zarrdiff` 2.6 s, both ok. The root package is
+untouched.
+
+---
+
 ## 2026-09-16 - The air leaves the root package for internal/atmos
 
 **What this is.** The sixth move of splitting the root package, on

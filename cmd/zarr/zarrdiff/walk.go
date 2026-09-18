@@ -1,77 +1,66 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"sort"
+
+	"github.com/LukasSelin/zarr"
 )
 
 // A store's nodes, by path from its root ("" is the root): "array" or
 // "group".
 type nodes map[string]string
 
-// walk finds every node of the directory store at dir. zarr.Store cannot
-// list its keys, so the directories are walked for zarr.json. Under an
-// array there is nothing but its chunks, and the walk does not go there.
-func walk(dir string) (nodes, error) {
-	info, err := os.Stat(dir)
+// walk finds every node of the store s, named name in what it reports. It
+// lists the one level under each group and reads the metadata of the names
+// it finds, so it costs a listing and a read for each node rather than a
+// walk of every key; under an array there is nothing but its chunks, and
+// the walk does not go there.
+func walk(ctx context.Context, s zarr.Store, name string) (nodes, error) {
+	root, err := zarr.OpenGroup(ctx, s, "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s is not a store: %w", name, err)
 	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory store", dir)
-	}
-	found := nodes{}
-	var visit func(path string) error
-	visit = func(path string) error {
-		at := filepath.Join(dir, filepath.FromSlash(path))
-		b, err := os.ReadFile(filepath.Join(at, "zarr.json"))
-		switch {
-		case err == nil:
-			var head struct {
-				NodeType string `json:"node_type"`
-			}
-			if err := json.Unmarshal(b, &head); err != nil {
-				return fmt.Errorf("%s: %w", filepath.Join(at, "zarr.json"), err)
-			}
-			if head.NodeType != "array" && head.NodeType != "group" {
-				return fmt.Errorf("%s: node type %q", filepath.Join(at, "zarr.json"), head.NodeType)
-			}
-			found[path] = head.NodeType
-			if head.NodeType == "array" {
-				return nil
-			}
-		case !errors.Is(err, fs.ErrNotExist):
-			return err
-		}
-		entries, err := os.ReadDir(at)
+	found := nodes{"": "group"}
+	var visit func(g *zarr.Group) error
+	visit = func(g *zarr.Group) error {
+		children, err := g.Children(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %w", name, err)
 		}
-		for _, e := range entries {
-			if e.IsDir() {
-				child := e.Name()
-				if path != "" {
-					child = path + "/" + child
+		for _, c := range children {
+			path := join(g.Path(), c.Name)
+			switch c.Type {
+			case "array":
+				found[path] = "array"
+			case "group":
+				found[path] = "group"
+				sub, err := g.OpenGroup(ctx, c.Name)
+				if err != nil {
+					return fmt.Errorf("%s: %w", name, err)
 				}
-				if err := visit(child); err != nil {
+				if err := visit(sub); err != nil {
 					return err
 				}
+			default:
+				return fmt.Errorf("%s: %s: node type %q", name, path, c.Type)
 			}
 		}
 		return nil
 	}
-	if err := visit(""); err != nil {
+	if err := visit(root); err != nil {
 		return nil, err
 	}
-	if len(found) == 0 {
-		return nil, fmt.Errorf("%s holds no zarr.json", dir)
-	}
 	return found, nil
+}
+
+// join is a child's path under its group's.
+func join(path, name string) string {
+	if path == "" {
+		return name
+	}
+	return path + "/" + name
 }
 
 // of is the paths of the nodes of a type, sorted.

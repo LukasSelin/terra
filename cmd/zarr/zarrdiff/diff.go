@@ -131,15 +131,15 @@ func (a *Array) differs() bool {
 
 // compare compares the directory stores at dirA and dirB.
 func compare(ctx context.Context, dirA, dirB string, o config) (*Report, error) {
-	na, err := walk(dirA)
-	if err != nil {
-		return nil, err
-	}
-	nb, err := walk(dirB)
-	if err != nil {
-		return nil, err
-	}
 	sa, sb := zarr.NewDirStore(dirA), zarr.NewDirStore(dirB)
+	na, err := walk(ctx, sa, dirA)
+	if err != nil {
+		return nil, err
+	}
+	nb, err := walk(ctx, sb, dirB)
+	if err != nil {
+		return nil, err
+	}
 	r := &Report{A: dirA, B: dirB, Only: o.only, Mask: o.mask}
 	e, err := prepare(ctx, sa, sb, o)
 	if err != nil {

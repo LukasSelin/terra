@@ -55,6 +55,22 @@ func (d *discard) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+// List yields the metadata, which is all this store keeps: the chunks it
+// was given are gone, and a store is not asked to list what it does not
+// hold.
+func (d *discard) List(_ context.Context, prefix string, fn func(key string) error) error {
+	var err error
+	d.meta.Range(func(k, _ any) bool {
+		key := k.(string)
+		if !strings.HasPrefix(key, prefix) {
+			return true
+		}
+		err = fn(key)
+		return err == nil
+	})
+	return err
+}
+
 // spent is what one export cost.
 type spent struct {
 	// Peak is the most the heap's live objects held at once over what they
