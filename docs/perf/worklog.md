@@ -6,6 +6,129 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-09-19 - The crust breaks before its plates are grown
+
+**What this is.** On `claude/world-roundness-plate-smoothness`. A world felt
+too round, and the plates were where it came from. They are grown by flooding
+outward from middles over a cost field of three octaves of value noise plus
+per-tile jitter (`plateRough`, `plateJitter`), and smooth isotropic noise bends
+a boundary without ever breaking it: every plate came out a convex patch with a
+crinkled edge, and the continents, the coasts and the ranges inherited it.
+`history.go` now lays a fracture network over that field before any plate is
+grown - straight lines in three conjugate sets, lengths drawn log-uniform, each
+stopping on one laid before it - and the floods stall on them. See
+`fractureWall` and `fractures`.
+
+**How round is measured.** `TestAPlatesWallRunsStraight` (`plate_test.go`): the
+longest stretch of a plate's edge that stays inside a straight corridor two
+tiles wide, over the square root of the ground the plate holds, median over the
+plates holding a fiftieth of the map. It carries its own scale - a circle's
+longest such chord is 2*sqrt(2*r*w), so the reading is the same for a disc of
+any size - and it was calibrated on drawn shapes: a disc 0.48, a square 1.00, a
+Voronoi of sixteen middles 1.33, the blocks a fracture network cuts 1.42.
+
+| | before | after |
+| --- | --- | --- |
+| plate wall, three small globes (the test) | 0.91 | **1.17** |
+| plate wall, eight small globes, finished | 0.980 +- 0.033 | **1.182 +- 0.047** |
+| plate wall, eight small globes, first plates | 0.960 +- 0.043 | **1.313 +- 0.064** |
+| coast, eight small globes | 1.08 +- 0.08 | 1.16 +- 0.15 |
+
+The first plates come out at a Voronoi's reading, which is what a broken shell
+should give. Two thirds of that is then worn off by the history itself: the
+plates are carried bodily, eaten at the fronts and welded, and after sixteen
+epochs only a quarter of the boundary still lies on a fracture. That is the
+honest limit of this change - it makes the crust break in lines, and the
+history goes on rounding what it is given.
+
+**The tuning.** `fractureWall` at 6.5 was picked over 3.0, 4.5, 5.0 and 8.0 on
+the eight-globe reading. Under 5 the yardstick is not met (4.5 reads 1.02); at
+8 the first plates are straighter still, 1.372, but the finished ones are not
+(1.146) and the coast is worse. The wall multiplies the rough ground rather
+than adding to it, which is what makes it work at all: a flood's boundary
+settles on the dearest ground there is, and an additive wall worth forty tiles
+of ordinary going is decisive on the cheap ground where no boundary falls and
+worth a tile where they all do. Added, the eight-globe reading was 1.053 at
+best; multiplied, 1.313.
+
+**What it cost the heap, which is nothing.** The multiplicative wall makes the
+cost field span four decades, and `floodOver` sorts its frontier into buckets a
+fixed width apart: a world now wants some hundreds of thousands of buckets
+where it wanted a few hundred. A slice per bucket allocates the first time each
+bucket is pushed to, so the first draft of this added four thousand allocations
+to the making of a valley - so the frontier is now one arena, `head`/`next`/`at`
+on `flooding`, which is a linked list per bucket out of one growing slice. That
+is a saving in its own right and the budget moves down with the fractures in
+place:
+
+| | allocations | peak | bytes |
+| --- | --- | --- | --- |
+| ancient | 10420 -> **8848** (-15%) | 9.7 -> **8.6 MiB** (-12%) | +0.13% |
+| globe128 | 34090 -> **32056** (-6%) | 28.2 -> 28.6 MiB (+1.4%) | +0.02% |
+| valley | 1333 -> 1336 | 3.00 -> 3.06 MiB | +0% |
+
+The bytes are the fracture pass's own working, which is a map's worth of
+`float64` and a map's worth of `int32` held while the cost field is drawn and
+dropped after. Nothing is kept.
+
+**The digest is rewritten and the world has moved.** This is a change that
+means to move every world and says so. `TERRA_DIGEST=write` on this commit.
+
+**The yardsticks.** `go test -timeout 60m .` against the same run on `main`
+(9416a1f), both on this machine. Four of main's failures pass now:
+
+- `meander wavelength` 14.32 -> inside 10-14
+- `channel concavity, small globe` 0.2766 -> 0.3528, inside 0.35-0.6. The
+  "known gap: B" marker is taken off it, with a note that the reading is
+  barely inside and swings with the coast, so a change that puts it back under
+  0.35 has reopened an old gap rather than broken anything new
+- `drainage area exceedance exponent, small globe` 0.4641 -> inside
+- `Horton bifurcation ratio, globe` 5.311 -> inside 3-5
+- `TestAHistoryLeavesItsBedsInLayers`
+
+and these are new. Every one of them is a reading over a handful of worlds
+whose continents now stand somewhere else:
+
+- `land share of Gelisols` 0.148 against 0.06-0.11, and `land share of
+  Aridisols` 0.063 against 0.09-0.15: more of the land is polar and less of it
+  is desert on these seeds. Read over the globes there are, not over a
+  distribution.
+- `midlatitude over subtropical rain, globe` 0.81 against 1.1-2: the same
+  cause - where the land is decides where the rain is counted.
+- `ridge-valley wavelength, small globe` 533 m against 24-224: the reading is
+  a spectrum over runs of sixty-four land tiles in a row, and a world has as
+  many of those as its continents happen to give it. This is the one worth
+  looking at again: at 4.5 it fails too, so it is not only the strength of the
+  wall, and a wall does concentrate a world's seams onto fewer, longer lines
+  and leave the blocks between them flatter.
+- `hypsometric integral, small globe` 0.3121 against 0.32-0.6 and `discharge
+  exceedance exponent, small globe` 0.4638 against 0.4-0.46: both a hair
+  outside, both inside on main by a hair.
+
+That is eight failures against main's four, and it is the part of this change
+a reader should weigh: it buys a world whose plates are polygons and it costs
+four readings that were inside and are now outside, three of them by a hair or
+by where the continents fell and one - the valley spacing - by a factor of two
+and for a reason the wall is at least partly responsible for.
+- `TestAGlobeHasASeaItsRiversReach`: the globe is 0.73 water against a ceiling
+  of 0.70. How much of a globe is sea is the plates' to say (see `crustSlack`),
+  and the plates are different plates.
+- `TestTheTideLaysFlatsOnlyWhereItReaches`: small globe 2 has no tidal flats at
+  all. Small maps have tiny tides (see the coasts work); this seed's coast no
+  longer has anywhere shallow enough.
+
+**Also moved.** `TestTheChainForOneTileOfTheAncientValley` is a golden test and
+names a tile; tile 257 is no longer one an arc raised, and tile 2628 is.
+
+**Timing.** `scripts/perf.sh check` against `2026-09-16-0718-small`: no
+significant change on any of the three worlds, geomean -1.00% (valley 82.5 ->
+80.2 ms p=0.065, ancient 344.9 -> 344.0 ms p=1.000, globe256 4.117 -> 4.119 s
+p=0.589). Bytes and allocations against that baseline are down 26% and 15% in
+geomean, most of which predates this branch; the honest before/after for this
+change is the budget table above.
+
+---
+
 ## 2026-09-18 - cmd/zarr takes zarr v0.3.0, and zarrdiff walks with it
 
 **What this is.** On `claude/zarr-version-upgrade`. `cmd/zarr` required
