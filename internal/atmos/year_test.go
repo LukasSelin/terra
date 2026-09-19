@@ -92,3 +92,55 @@ func TestAYearOfClimateGrowthIsItsNPP(t *testing.T) {
 		t.Errorf("a year that never reaches the growing base grows %.3f", g)
 	}
 }
+
+// The share of the ground. It is none at the line Frozen keeps to, so that
+// ground holding any permafrost at all is exactly the ground over the line,
+// and it is all of it in a year that never thaws. In between it passes
+// through the zones where Nelson and Outcalt put them: their continuous
+// permafrost, F over 0.67, comes out at the nine tenths of the ground the
+// continuous zone is mapped at.
+func TestFrostShareRunsFromTheLineToTheContinuousZone(t *testing.T) {
+	for _, swing := range []float64{4, 8, 14, 20, 28} {
+		if s := FrostShare(Permafrost, swing); s != 0 {
+			t.Errorf("swing %.0f: a share of %.3f at the line itself", swing, s)
+		}
+		if s := FrostShare(Permafrost+1, swing); s != 0 {
+			t.Errorf("swing %.0f: a share of %.3f on the warm side of the line", swing, s)
+		}
+		if s := FrostShare(Permafrost-0.5, swing); s <= 0 {
+			t.Errorf("swing %.0f: no permafrost half a degree past the line", swing)
+		}
+		never := Permafrost - swing - 1 // a year whose warmest day is frozen
+		if s := FrostShare(never, swing); s != 1 {
+			t.Errorf("swing %.0f: a share of %.3f in a year that never thaws", swing, s)
+		}
+		// The warmest year the index calls continuous, by halving.
+		lo, hi := never, Permafrost
+		for range 60 {
+			if mid := (lo + hi) / 2; frostIndex(mid, swing) > 0.67 {
+				lo = mid
+			} else {
+				hi = mid
+			}
+		}
+		if s := FrostShare(lo, swing); math.Abs(s-0.9) > 0.01 {
+			t.Errorf("swing %.0f: the continuous zone begins at a share of %.3f, not nine tenths", swing, s)
+		}
+		// And the share only ever rises as the year cools.
+		last := 0.0
+		for mean := Permafrost; mean > never; mean -= 0.05 {
+			s := FrostShare(mean, swing)
+			if s < last {
+				t.Fatalf("swing %.0f: the share falls from %.3f to %.3f at a mean of %.2f", swing, last, s, mean)
+			}
+			last = s
+		}
+	}
+	// A year with no swing has no fringe to be in: every day of it is the
+	// mean, so the ground is frozen or it is not.
+	for _, mean := range []float64{Permafrost - 0.001, Permafrost - 20} {
+		if s := FrostShare(mean, 0); s != 1 {
+			t.Errorf("a share of %.3f at a mean of %.3f with no swing", s, mean)
+		}
+	}
+}

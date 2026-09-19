@@ -129,6 +129,99 @@ change is the budget table above.
 
 ---
 
+## 2026-09-18 - the permafrost edge is a fringe, not a line
+
+**What this is.** On `claude/permafrost-border-realism`. `Grid.Frozen` is a
+threshold: the year's mean on the tile under `atmos.Permafrost`, which is -2
+C. Every field behind that mean is smooth and large - the latitude's mean,
+the sea about the tile blurred over `maritimeSpan`, the currents off its
+coast, the lapse off its height - so the level set of the threshold is a
+smooth curve, and the map of the frozen ground stops at a ruled edge with
+nothing but terrain roughness to make it ragged.
+
+The real thing has no edge. Permafrost is mapped in four zones, told apart by
+the share of the ground each holds - continuous over nine tenths,
+discontinuous a half to nine tenths, sporadic a tenth to a half, isolated
+patches under a tenth (Brown and others, 1997; Obu and others, 2019) - and in
+central Siberia and northern Canada the walk from the first zone to the last
+is some hundreds of kilometres. What settles a hectare inside that band is
+the snow that drifts over it, the peat on it, which way its slope faces and
+whether there is a lake on it, none of which a tile kilometres across knows.
+What it can know is the share, and that is what was missing.
+
+**What was added.** `atmos.FrostShare(mean, swing)` and `Grid.FrostShare(i)`:
+the share of a tile's ground that is permafrost. It is read off the frost
+index the line already comes from - Nelson and Outcalt's F, which was in
+`year.go` as the derivation of the -2 and used nowhere - as a smoothstep from
+none at F = 0.5, the outer limit, to all of it at F = 0.71. `frostAll` is not
+picked: 0.71 is what puts F = 0.67, Nelson and Outcalt's continuous zone, at
+the nine tenths of the ground the continuous zone is mapped at.
+
+Its shape comes out right without tuning, because the index carries the
+swing. The zone the share crosses is narrow in a maritime year and wide in a
+continental one: nine tenths of the ground is reached 5.5 C under the line at
+a swing of 8 and 10.5 C under it at a swing of 20. That is the real pattern -
+the continuous limit stands at a warmer mean by the sea than inside a
+continent, and the Siberian transition is the wide one.
+
+**What it costs.** Nothing that is made. `FrostShare` is read-only and no
+stage calls it; `Frozen` is untouched and still what `pedogenesis`, `shore`
+and the yardsticks ask. `TERRA_DIGEST=check` passes on `docs/perf/digest.json`
+as `main` leaves it after the merge below, so every world is bit for bit what
+it would be without this branch, and the budget is unmoved (valley 10.0 MiB in
+1329 allocations, ancient 56.2 MiB, globe128 419.4 MiB, each against the same
+budget; time is +4 to +13% on a machine under load and is not a reading).
+
+**What it shows.** Read after `main` was merged in, so on the world the crust
+change of 2026-09-19 leaves. On the yardstick globe (seed 1, `GlobeTerms`), by
+the land's area: permafrost reaches 18.6% of the land and covers 11.4% of it,
+and 80% of what it reaches is fringe rather than continuous. Earth's permafrost
+region is some fifteen per cent of the exposed land and about three quarters of
+that region is actually underlain (Obu and others, 2021); this globe reaches a
+little wider and covers three fifths of what it reaches, so its continuous zone
+is still the thin part - as is its cold, the same globe putting 0.0% of its land
+under ice. How cold the poles run is the open question of the latitude profile
+work and not of this change. On `cmd/overview -preset globe`, counted by the
+tile, permafrost reaches 45.7% of the land and covers 35.9%.
+
+Before that merge the readings were 9.0% reached and 4.9% covered. The crust
+change moved how much ground is cold; it did not move the fringe, which held at
+80% of the reach across a world change of that size.
+
+**The map.** `overview`'s temperature map hatched the frozen ground on every
+third anti-diagonal. It now dithers that hatch by the share, through a 4x4
+ordered matrix whose thresholds are all under one, so the continuous zone is
+hatched exactly as before and only the fringe thins - solid lines in the
+north breaking into scattered dots over a wide band before they stop. The
+printed summary and the page carry both numbers now: what permafrost reaches
+and what it covers.
+
+**Left alone.** The share is a share of the ground within a tile and not a
+chance the tile is frozen: the same tile gives the same answer, which is what
+makes a fringe rather than a dice roll. What the fringe still cannot do is
+say *which* hectare - there is no snow depth, no peat, no aspect, no talik
+under a lake, and no relict permafrost carrying a colder past forward, which
+is the other reason the real edge does not sit on today's isotherm. Those are
+their own work and their own yardsticks.
+
+**The record.** `TestTheColdKeepsToThePoles` cites its readings in its own
+comment but printed only the area figure, which is how the by-tile one went
+stale twice over. It logs both now, and the comment carries today's - 18.6% of
+the land's area, 46.1% by the tile - with the crust change named as what took
+it there from 9.0%.
+
+**Checked.** `go vet ./...`; `go test -short -timeout 60m ./...`, green but
+for `TestTheTideLaysFlatsOnlyWhereItReaches` ("small globe 2 has no flats"),
+which fails the same way on `main` at d18d65d; `TERRA_DIGEST=check`;
+`TestWorldCreationBudget`; `TestTheColdKeepsToThePoles` and the new
+`TestThePermafrostEdgeIsAFringe` on the globe. The failure this branch was
+written against - `TestAHistoryLeavesItsBedsInLayers`, "only 49% of the map
+stands on more than one bed" - is gone with the crust change. The yardsticks
+are untouched by construction: the digest says no world moved and nothing they
+read has changed, so they were not re-run.
+
+---
+
 ## 2026-09-18 - cmd/zarr takes zarr v0.3.0, and zarrdiff walks with it
 
 **What this is.** On `claude/zarr-version-upgrade`. `cmd/zarr` required
