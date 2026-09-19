@@ -150,3 +150,53 @@ func TestTheDaysWeatherReplacesTheSpell(t *testing.T) {
 		t.Fatalf("with the day's weather a spell of five still adds %.3f", got)
 	}
 }
+
+// The edge of the frozen ground is a fringe and not a line. On the real world
+// the walk out of the continuous permafrost is some hundreds of kilometres of
+// ground that is partly frozen and partly not - discontinuous, then sporadic,
+// then the last isolated patches - and what a tile of this map can say about
+// that is the share of its ground that is permafrost. So the share thins to
+// nothing over a band of tiles rather than stopping, and it is nothing on
+// exactly the ground Frozen calls warm: see Grid.FrostShare.
+func TestThePermafrostEdgeIsAFringe(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a globe takes a while to make")
+	}
+	w := climateGlobe()
+	g := w.Grid
+	var land, reach, cover, fringe float64
+	for i := range g.Tiles {
+		if g.Tiles[i].Wet() {
+			continue
+		}
+		p := g.PosOf(i)
+		area := math.Cos(math.Abs(w.Climate.latitude(p.Y)) * math.Pi / 180)
+		land += area
+		s := g.FrostShare(i)
+		if (s > 0) != g.Frozen(p) {
+			t.Fatalf("a share of %.3f where Frozen says %v, at %v", s, g.Frozen(p), p)
+		}
+		if s == 0 {
+			continue
+		}
+		reach += area
+		cover += s * area
+		if s < 1 {
+			fringe += area
+		}
+	}
+	t.Logf("of the land's area: permafrost reaches %.1f%%, covers %.1f%%; %.0f%% of what it reaches is fringe",
+		100*reach/land, 100*cover/land, 100*fringe/reach)
+	if reach == 0 {
+		t.Fatal("no permafrost on the globe at all")
+	}
+	if cover >= reach {
+		t.Errorf("every tile permafrost reaches is wholly frozen: the edge is still a line")
+	}
+	if fringe < 0.1*reach {
+		t.Errorf("the fringe is %.0f%% of the ground permafrost reaches, which is an edge and not a fringe", 100*fringe/reach)
+	}
+	if cover < 0.2*reach {
+		t.Errorf("permafrost covers only %.0f%% of the ground it reaches: the continuous zone has gone", 100*cover/reach)
+	}
+}

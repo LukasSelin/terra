@@ -520,10 +520,30 @@ func (g *Grid) HasNeighbor(p geom.Pos, ok func(*Tile) bool) bool {
 // It is a fact about the ground and the latitude, both of which the weather
 // wanders around rather than changes, so it is read off the year written down
 // when the land was made and the height the ground now has. Water is not
-// frozen ground: see Freezing.
+// frozen ground: see Freezing. It is a yes or a no, which the fringe of the
+// real thing is not: how much of a tile is frozen is FrostShare.
 func (g *Grid) Frozen(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
 	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < Permafrost
+}
+
+// FrostShare is the share of tile i's ground that is permafrost: none where
+// Frozen is false, a little at the outer fringe, where the real world has
+// isolated patches in ground that is mostly not frozen, and all of it well
+// inside the continuous zone. It is the fact Frozen reports, answered with a
+// share instead of a yes; see atmos.FrostShare for the zones it is drawn from
+// and for what settles a hectare inside the fringe that a map of kilometre
+// tiles cannot know.
+//
+// Nothing in the making of a world reads it, and the making of a world does
+// not change for its being here. It is what a map of the frozen ground is to
+// be drawn from, so that the edge thins out over the hundreds of kilometres
+// it thins out over in Siberia rather than stopping at a line.
+func (g *Grid) FrostShare(i int) float64 {
+	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) || g.Tiles[i].Wet() {
+		return 0
+	}
+	return atmos.FrostShare(g.meanOn(i, g.Height[i]), float64(g.swing[i]))
 }
 
 // Treeless reports whether the summer here is too short or too cool for a

@@ -196,6 +196,55 @@ func frostIndex(mean, swing float64) float64 {
 	return math.Sqrt(ddf) / (math.Sqrt(ddf) + math.Sqrt(ddt))
 }
 
+// How much of it. Permafrost has no edge. The maps of it (Brown and others,
+// 1997; Obu and others, 2019) are maps of four zones, told apart by the share
+// of the ground each holds: continuous over nine tenths, discontinuous a half
+// to nine tenths, sporadic a tenth to a half, and isolated patches under a
+// tenth. In central Siberia and northern Canada the walk from the first zone
+// to the last is some hundreds of kilometres wide.
+//
+// What settles a given hectare inside that band is not its latitude. It is
+// the snow that drifts over it - a windswept ridge freezes while the hollow
+// beside it thaws - the peat and the moss on it, which way its slope faces,
+// how it drains, and whether there is a lake on it, since a lake holds
+// unfrozen ground under it in the middle of the continuous zone. None of that
+// is on this map, and a tile is kilometres across in any case. What a tile
+// can say is the share, which is what a zone is, and Nelson and Outcalt read
+// the zones off the same index the line comes from: F over 0.67 is the
+// continuous permafrost, and F over a half is the outer limit, the last of
+// the isolated patches.
+//
+// So the share runs from none at the line to all of it a little past the
+// continuous one, as a smoothstep. frostAll is not picked: it is set so that
+// 0.67 comes out at the nine tenths the continuous zone is mapped at.
+//
+// It is a share of the ground within a tile and not a chance that the tile is
+// frozen. A tile asked twice gives the same answer, and half a share is half
+// the ground, which is what makes a fringe a fringe rather than a dice roll.
+const (
+	frostOut = 0.5  // the outer limit: the last of the isolated patches
+	frostAll = 0.71 // all of it, set by the continuous zone's 0.67
+)
+
+// FrostShare is the share of the ground that is permafrost at a place whose
+// year has the given mean and swing: none where the year is warmer than
+// Permafrost, and one deep inside the continuous zone. It is zero exactly
+// where the permafrost line is not crossed, so ground holding any share of it
+// is the ground Grid.Frozen calls frozen and no other.
+func FrostShare(mean, swing float64) float64 {
+	if mean >= Permafrost {
+		return 0
+	}
+	t := (frostIndex(mean, swing) - frostOut) / (frostAll - frostOut)
+	switch {
+	case t <= 0:
+		return 0
+	case t >= 1:
+		return 1
+	}
+	return t * t * (3 - 2*t)
+}
+
 // The tree line. It is not set by the year's mean: a coast with a mild winter
 // and a cool summer is treeless at a mean a continent grows forest at. It is
 // set by the summer. Köppen drew the line at a warmest month of ten degrees,

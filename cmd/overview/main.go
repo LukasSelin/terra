@@ -363,6 +363,7 @@ type summary struct {
 	HeightMin, HeightP50, HeightMax float64
 	TempMin, TempMax                float64
 	Frozen                          share
+	FrozenGround                    float64
 	Rivers                          share
 	FlowMax                         float64
 	LandRain, LandRunoff            float64
@@ -394,6 +395,7 @@ func measure(land *terra.Land) summary {
 	plates := map[uint8]bool{}
 	heights := make([]float64, 0, n)
 	frozen, rivers, dry := 0, 0, 0
+	frostGround := 0.0
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		p := g.PosOf(i)
@@ -417,6 +419,7 @@ func measure(land *terra.Land) summary {
 		if g.Frozen(p) {
 			frozen++
 		}
+		frostGround += g.FrostShare(i)
 		if t.Terrain == terra.Water && g.Flow[i] > riverFlow {
 			rivers++
 		}
@@ -479,6 +482,7 @@ func measure(land *terra.Land) summary {
 	}
 	s.Plates = len(plates)
 	s.Frozen = shareOf("permafrost", frozen, land0, "")
+	s.FrozenGround = 100 * frostGround / float64(land0)
 	s.Rivers = shareOf("flowing water", rivers, n, "")
 	return s
 }
@@ -515,7 +519,8 @@ func (s summary) print() {
 	for _, x := range s.Forms {
 		fmt.Printf("  %-20s %6.1f%%  %s\n", x.Name, x.Pct, bar(x.Pct))
 	}
-	fmt.Printf("\npermafrost %.1f%% of land, flowing water %.1f%% of map, %d waterfalls\n", s.Frozen.Pct, s.Rivers.Pct, s.Waterfalls)
+	fmt.Printf("\npermafrost reaches %.1f%% of land and covers %.1f%% of it, flowing water %.1f%% of map, %d waterfalls\n",
+		s.Frozen.Pct, s.FrozenGround, s.Rivers.Pct, s.Waterfalls)
 	fmt.Printf("rain on land %.0f mm a year, of which %.0f runs off; greatest river %s m3/s\n", s.LandRain, s.LandRunoff, sig(s.FlowMax))
 	fmt.Printf("moon %s; open coast springs %.2f m, neaps %.2f m; spring range on the coast %.1f m middling, %.1f m tenth highest, %.1f m most; flats %.1f%% of map\n",
 		s.Moon, 2*(terra.TideM2+terra.TideS2), 2*(terra.TideM2-terra.TideS2), s.RangeP50, s.RangeP90, s.RangeMax, s.Flats.Pct)
@@ -770,10 +775,10 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		soils[0], soils[1], soils[2], soils[3],
 		{
 			file: "temperature", title: "Temperature",
-			about: fmt.Sprintf("Today's temperature, by latitude and height: %.1f to %.1f C. Frozen ground hatched white.", s.TempMin, s.TempMax),
+			about: fmt.Sprintf("Today's temperature, by latitude and height: %.1f to %.1f C. Frozen ground hatched white, the hatching thinning with the share of the ground that is permafrost: solid in the continuous zone, scattered over the fringe.", s.TempMin, s.TempMax),
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				c := ramp(thermal, (land.TempAt(p)-s.TempMin)/math.Max(s.TempMax-s.TempMin, 1e-9))
-				if g.Frozen(p) && (p.X+p.Y)%3 == 0 {
+				if (p.X+p.Y)%3 == 0 && g.FrostShare(i) > bayer(p) {
 					c = color.RGBA{250, 250, 255, 255}
 				}
 				if t.Wet() {
@@ -923,6 +928,24 @@ func sig(v float64) string {
 	return strconv.FormatFloat(v, 'f', max(0, 1-int(math.Floor(math.Log10(math.Abs(v))))), 64)
 }
 
+// The ordered 4x4 dither matrix. A share is drawn by colouring the tiles
+// whose threshold it beats, which spreads it evenly over a patch instead of
+// clumping the way a random draw does, and puts it in the same tiles every
+// time the map is drawn. Every threshold is under one, so a share of one
+// colours the lot.
+var dither4 = [16]float64{
+	0, 8, 2, 10,
+	12, 4, 14, 6,
+	3, 11, 1, 9,
+	15, 7, 13, 5,
+}
+
+// bayer is the threshold a share must beat to colour p.
+func bayer(p geom.Pos) float64 {
+	x, y := ((p.X%4)+4)%4, ((p.Y%4)+4)%4
+	return (dither4[y*4+x] + 0.5) / 16
+}
+
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
 var pageTmpl = template.Must(template.New("page").Funcs(template.FuncMap{
@@ -982,7 +1005,8 @@ figcaption{margin-top:8px}
  <div class="stat"><span class="mut">Height (m)</span><b>{{m .Stats.HeightMin}}–{{m .Stats.HeightMax}}</b></div>
  <div class="stat"><span class="mut">Land median (m)</span><b>{{m .Stats.HeightP50}}</b></div>
  <div class="stat"><span class="mut">Temperature (°C)</span><b>{{c .Stats.TempMin}} – {{c .Stats.TempMax}}</b></div>
- <div class="stat"><span class="mut">Frozen land</span><b>{{pct .Stats.Frozen.Pct}}</b></div>
+ <div class="stat"><span class="mut">Permafrost reaches</span><b>{{pct .Stats.Frozen.Pct}}</b></div>
+ <div class="stat"><span class="mut">Permafrost covers</span><b>{{pct .Stats.FrozenGround}}</b></div>
  <div class="stat"><span class="mut">Flowing water</span><b>{{pct .Stats.Rivers.Pct}}</b></div>
  <div class="stat"><span class="mut">Rain / runoff on land (mm)</span><b>{{m .Stats.LandRain}} / {{m .Stats.LandRunoff}}</b></div>
  <div class="stat"><span class="mut">Greatest river (m³/s)</span><b>{{sig .Stats.FlowMax}}</b></div>
