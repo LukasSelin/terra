@@ -19,11 +19,14 @@ func climateGlobe() *Land {
 //
 // The shares are of the land's area, each tile weighed by the cosine of its
 // latitude: a globe's rows are all as many tiles long, so a tile near the pole
-// is a sliver of the ground one at the equator is. Counted by the tile, seed
-// 1's permafrost was 30.9% of the land once the sea about a place stopped
-// warming every tile four degrees over its latitude; by the area it is 12.7%,
-// against some fifteen per cent of the real world's exposed land (Obu and
-// others, 2021).
+// is a sliver of the ground one at the equator is. Seed 1's permafrost is 9.0%
+// of the land by the area and 24.1% counted by the tile, against some fifteen
+// per cent of the real world's exposed land (Obu and others, 2021).
+//
+// It read 12.7% by the area and 30.9% by the tile when the sea about a place
+// stopped warming every tile four degrees over its latitude. The deep floor,
+// and the land shaped to the history's uplift with it, brought it to 10.5%;
+// carrying a plate's travel short of a whole tile brought it here.
 func TestTheColdKeepsToThePoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe takes a while to make")
