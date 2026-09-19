@@ -271,6 +271,115 @@ const (
 	// which is what the random flood fills of Red Blob Games and Experilous
 	// are after.
 	plateJitter = 0.8
+	// The fractures, which are what keeps a plate from coming out a blob.
+	//
+	// Rough ground and jitter between them make a wall that wanders and frays,
+	// and a wandering frayed wall is still a curve: the first globes came out a
+	// dozen rounded patches with a crinkled edge, every one of them convex, and
+	// nothing on such a map is ever going straight for any distance. The earth
+	// is not like that and the reason is not subtle. A plate boundary is a
+	// fracture in a brittle shell, and a brittle shell breaks in lines - the
+	// east wall of the Pacific runs a third of the way round the world without
+	// a real bend in it, the mid-Atlantic ridge is a flight of straight steps
+	// offset by straight transforms, and the Nazca is a wedge with two straight
+	// sides. Where a boundary does curve it is an arc over a slab going down,
+	// and that is the exception a map should have a few of, not the rule it
+	// should be made of.
+	//
+	// So before any plate is grown the crust is broken. Lines are laid across
+	// the map when it goes rigid, each stopping where it runs into one laid
+	// before it, and each is hard to grow across; the floods then stall on them
+	// and a plate comes out the union of a few of the blocks they cut. It is
+	// the crack pattern of a cooling shell - drying mud, columnar basalt,
+	// Gilbert's (1962) random lines - and what it gives that a warped Voronoi
+	// does not is straight runs meeting at corners, with the blocks still
+	// uneven in size because it is the floods and not the blocks that make the
+	// plates.
+	//
+	// This is not the Voronoi the flood was written to get away from, which the
+	// block above is about. Voronoi's walls are straight because every one of
+	// them is the bisector of two middles: they meet three at a time at a
+	// hundred and twenty degrees, every cell is convex, and no wall is longer
+	// than a cell. These are straight because the crust broke along them, and a
+	// wall runs past as many blocks as the fracture is long, a plate is as
+	// concave as the blocks it took, and a flood that has the room crosses a
+	// fracture and leaves it standing in the middle of a plate - which is what
+	// an aulacogen is.
+	//
+	// fractureWall is how much harder a fracture is to grow across than the
+	// ground it runs through, as the power of e; fractureCore how far out from
+	// the line it stands at that, in tiles; and fractureWide the width it falls
+	// away over beyond that.
+	//
+	// It multiplies the rough ground rather than adding to it, which is what
+	// makes it work at all. A flood's boundary settles on whatever is dear to
+	// cross, so it is already on the dearest ground there is - and the rough
+	// ground runs over two decades, so a wall worth a fixed forty tiles of
+	// ordinary going is decisive on the cheap ground where no boundary falls
+	// and worth a tile or two where they all do. Added, the plates came out as
+	// round as they went in; multiplied, a fracture is dear wherever it runs.
+	//
+	// The price is what that does to the floods' frontier, which is sorted into
+	// buckets a fixed width apart: the field now spans four decades and a world
+	// wants some hundreds of thousands of buckets. That is why the queue is one
+	// arena and not a slice per bucket - see flooding.
+	//
+	// The core is there because the wall has to be paid in whole tiles. Drawn
+	// as a bell with its peak on the line, the tile the line runs through
+	// stands at two thirds of the peak and the wall a flood actually pays is a
+	// fraction of the one the constant names; drawn with a flat top a tile
+	// wide, a crossing pays what it says.
+	fractureWall = 6.5
+	fractureCore = 1.0
+	fractureWide = 1.2
+	// fracturesPer is how many fractures are laid for each plate the world is
+	// to have, and fractureLong and fractureShort the longest and the shortest
+	// of them, in the spacing between plate middles. Each is drawn with its
+	// length as likely to be anywhere in that range by ratio as by amount,
+	// which is the power law fracture lengths follow wherever anybody has
+	// counted them (Bonnet et al. 2001): a few that cross the world and a
+	// crowd that divide one block. Most stop shorter still, on a fracture laid
+	// before them - that is what makes the junctions T-shaped and the blocks
+	// polygons rather than a crosshatch - so a length is a bound and not a
+	// size.
+	//
+	// The crowd is what keeps a small plate from coming out a disc. The first
+	// draft laid a few long ones only: a great plate then had straight walls,
+	// because a fracture ran the length of one, and a microplate sat in the
+	// middle of a block with no fracture within reach of it and came out as
+	// round as it ever was. A plate is only as straight-sided as the pieces
+	// the crust was broken into where it stands.
+	fracturesPer  = 2.5
+	fractureLong  = 2.5
+	fractureShort = 0.2
+	// fractureLeast is how strong the shortest fracture's wall is against the
+	// longest's, which stands at one; between them it goes as the square root
+	// of the length. A long fault has been moving for longer and has ground
+	// more rock to pieces on the way, so it is the weakness a boundary finds
+	// first; a short one is enough to hold a small plate's wall and not enough
+	// to stop a great plate crossing it.
+	fractureLeast = 0.6
+	// The crust breaks along a few bearings and not at every angle. A shell
+	// that contracts cracks in sets, and the sets stand at a whole fraction of
+	// a turn from each other: fractureSets of them, fractureWander radians of
+	// scatter either side, and the whole fan set down at an angle of the
+	// world's own. Three sets a sixth of a turn apart is the pattern a shell
+	// under its own contraction makes, and it is why a triple junction is near
+	// enough a hundred and twenty degrees on a real map as well as on a
+	// Voronoi one - the same angle for a different reason.
+	fractureSets   = 3
+	fractureWander = 0.22
+	// fractureCreep is how far a fracture's bearing wanders as it runs, in
+	// radians a tile, drawn afresh at every step. A fault is straight and it is
+	// not a ruled line: it bends by a few degrees over its length and steps
+	// sideways where it bends. Laid perfectly straight the walls showed
+	// through - a coast two hundred tiles long with not a bay in it, an ocean
+	// with four sides and four corners - which reads as drawn with a
+	// straightedge, which is the fault the round world had in the other
+	// direction. A run of sixty tiles still has to be straight to the eye, so
+	// the wander is slow: it comes to a few degrees over a whole fracture, and
+	// a stretch of that within a range of hills of it.
+	fractureCreep = 0.05
 	// plateStretch is the most a plate is drawn out along its own grain: a
 	// flood goes this much more slowly across the grain than along it, so a
 	// plate at the full stretch is about that much longer than it is wide.
@@ -1392,10 +1501,22 @@ type flooding struct {
 	dist []float32
 	from []uint8
 	done []bool
-	// queue is the floods' frontier, by how far each tile on it has been
-	// reached in steps of floodStep. A flood only ever reaches further, so the
-	// frontier is walked from the nearest step outwards and never back.
-	queue [][]int32
+	// The floods' frontier, sorted by how far each tile on it has been reached
+	// in steps of floodStep. A flood only ever reaches further, so the frontier
+	// is walked from the nearest step outwards and never back.
+	//
+	// It is a bucket queue kept as linked lists out of one arena rather than a
+	// slice per bucket: head[b] is the first entry of bucket b, next[e] the one
+	// after entry e, and at[e] the tile - so a queue of two hundred thousand
+	// buckets costs the same handful of allocations as a queue of two hundred.
+	// A slice per bucket allocates the first time each bucket is pushed to, and
+	// once the fractures made the cost field span four decades that was four
+	// thousand allocations added to the making of a world. The arena is also
+	// the whole of the queue's memory: eight bytes a push, where a slice per
+	// bucket kept a twenty-four byte header for every bucket besides.
+	head []int32
+	next []int32
+	at   []int32
 }
 
 // floodStep is how finely the frontier is sorted, in tiles of easy ground
@@ -1403,11 +1524,32 @@ type flooding struct {
 // meet by up to this much.
 const floodStep = 0.5
 
-// flood draws how hard the crust is to grow across. See plateRough.
+// reset empties the frontier, keeping what it has taken from the heap.
+func (fl *flooding) reset() {
+	for b := range fl.head {
+		fl.head[b] = -1
+	}
+	fl.next, fl.at = fl.next[:0], fl.at[:0]
+}
+
+// push puts tile i on the frontier at d.
+func (fl *flooding) push(i int32, d float32) {
+	b := int(d / floodStep)
+	for len(fl.head) <= b {
+		fl.head = append(fl.head, -1)
+	}
+	e := int32(len(fl.at))
+	fl.at, fl.next = append(fl.at, i), append(fl.next, fl.head[b])
+	fl.head[b] = e
+}
+
+// flood draws how hard the crust is to grow across: the rough ground, the
+// fractures laid over it, and the jitter over both. See plateRough.
 func (w *Land) flood(g *Grid, reach float64) *flooding {
 	coarse := w.lattice(g, roughGrain*reach)
 	fine := w.lattice(g, roughGrain*reach/3)
 	fray := w.lattice(g, g.inTiles(math.Max(4, roughGrain*reach/9*g.coarseness())))
+	broke := w.fractures(g, reach)
 	fl := &flooding{
 		cost: make([]float32, len(g.Tiles)),
 		dist: make([]float32, len(g.Tiles)),
@@ -1416,9 +1558,135 @@ func (w *Land) flood(g *Grid, reach float64) *flooding {
 	}
 	for i := range fl.cost {
 		v := ((coarse[i] - 0.5) + 0.5*(fine[i]-0.5) + 0.35*(fray[i]-0.5)) / 0.925 * 2
-		fl.cost[i] = float32(math.Exp(plateRough*v) * (1 + plateJitter*(w.RNG.Float64()-0.5)))
+		fl.cost[i] = float32(math.Exp(plateRough*v+fractureWall*broke[i]) * (1 + plateJitter*(w.RNG.Float64()-0.5)))
 	}
 	return fl
+}
+
+// fractures breaks the crust: the lines it parted along when it went rigid,
+// drawn once for a world and left where they are while the plates travel over
+// them. What comes back is how much of a fracture stands on each tile, one at
+// a core and nought on open ground, which flood carries into the exponent the
+// cost is drawn from. See fractureWall.
+//
+// A fracture is laid from a point of its own, out both ways along a bearing
+// from one of the sets, and each way stops where it meets a fracture laid
+// before it or when it has run fractureLong. Stopping on the older line is
+// the whole of what makes this a pattern rather than a hatching: the first few
+// run a long way and cut the map into great blocks, and every one after them
+// divides a block it is inside rather than crossing the whole map again. It is
+// how mud dries and how a lava flow columns, and the cells it leaves are
+// polygons of no two the same size.
+//
+// The walk is in map tiles and not on the sphere, which is what the rough
+// ground and the floods are in too: a fracture near a pole is drawn out east
+// and west by as much as everything else there is.
+func (w *Land) fractures(g *Grid, reach float64) []float64 {
+	wall := make([]float64, len(g.Tiles))
+	n := int(math.Round(fracturesPer * float64(plateTotal(g))))
+	if n <= 0 || len(g.Tiles) == 0 {
+		return wall
+	}
+	// Every fracture is drawn before any is laid, and they are laid longest
+	// first. The order is the order a shell breaks in - the great parting goes
+	// right across, and what comes after it divides what it left - and it is
+	// also the only order that works: laid at random, a long fracture drawn
+	// late is stopped by the crowd of short ones after a few tiles, and the
+	// world loses the through-going lines that are the whole point of it.
+	type broke struct{ x, y, ux, uy, long, amp float64 }
+	lines := make([]broke, n)
+	turn := 2 * math.Pi * w.RNG.Float64() // the fan's own bearing
+	long, short := fractureLong*reach, fractureShort*reach
+	for k := range lines {
+		set := int(float64(fractureSets) * w.RNG.Float64())
+		a := turn + float64(set)*math.Pi/fractureSets + fractureWander*2*(w.RNG.Float64()-0.5)
+		l := short * math.Pow(long/short, w.RNG.Float64())
+		lines[k] = broke{
+			x:    float64(g.W) * w.RNG.Float64(),
+			y:    float64(g.H) * w.RNG.Float64(),
+			ux:   math.Cos(a),
+			uy:   math.Sin(a),
+			long: l,
+			amp:  math.Max(fractureLeast, math.Sqrt(l/long)),
+		}
+	}
+	sort.SliceStable(lines, func(i, j int) bool { return lines[i].long > lines[j].long })
+	// Which fracture, if any, holds each tile's core. A line stops on another
+	// line and never on itself, so which one it is and not a bit is what is
+	// kept.
+	on := make([]int32, len(g.Tiles))
+	for i := range on {
+		on[i] = -1
+	}
+	// How far a step of the walk goes: half a tile, so that a line at any
+	// bearing marks every tile it passes through.
+	const step = 0.5
+	out := int(math.Ceil(fractureCore + 2*fractureWide))
+	for k, f := range lines {
+		for _, way := range [2]float64{1, -1} {
+			x, y, ux, uy := f.x, f.y, f.ux, f.uy
+			for d := 0.0; d <= f.long; d += step {
+				ix, iy := int(math.Floor(x)), int(math.Floor(y))
+				if iy < 0 || iy >= g.H {
+					break
+				}
+				if g.Wrap {
+					ix = g.WrapX(ix)
+				} else if ix < 0 || ix >= g.W {
+					break
+				}
+				i := iy*g.W + ix
+				// Run clear of where this line started before an older one is
+				// allowed to stop it, or a line seeded on top of one dies
+				// where it is born and the pattern loses half its length.
+				if on[i] >= 0 && on[i] != int32(k) && d > 2*fractureCore {
+					break
+				}
+				on[i] = int32(k)
+				// The wall the core carries, taken as the most of what any
+				// step or any line laid rather than the sum, so that a
+				// fracture is the same height along its length whatever angle
+				// it goes at and a crossing is not a tower.
+				for dy := -out; dy <= out; dy++ {
+					qy := iy + dy
+					if qy < 0 || qy >= g.H {
+						continue
+					}
+					for dx := -out; dx <= out; dx++ {
+						qx := ix + dx
+						if g.Wrap {
+							qx = g.WrapX(qx)
+						} else if qx < 0 || qx >= g.W {
+							continue
+						}
+						// From the walk's own place and not the tile's middle,
+						// so that the wall is as smooth as the line is straight.
+						ex, ey := g.across(float64(qx)+0.5-x), float64(qy)+0.5-y
+						v := f.amp
+						if r := math.Hypot(ex, ey); r > fractureCore {
+							r = (r - fractureCore) / fractureWide
+							if r > 2 {
+								continue
+							}
+							v *= math.Exp(-r * r)
+						}
+						if v > wall[qy*g.W+qx] {
+							wall[qy*g.W+qx] = v
+						}
+					}
+				}
+				// The bearing creeps as the line runs. Both halves start from
+				// the one the fracture was drawn at and wander away from it
+				// on their own, so the two of them are a line with a slow
+				// bend in it and not two lines meeting at the seed.
+				a := fractureCreep * step * 2 * (w.RNG.Float64() - 0.5)
+				sin, cos := math.Sin(a), math.Cos(a)
+				ux, uy = ux*cos-uy*sin, ux*sin+uy*cos
+				x, y = x+way*ux*step, y+way*uy*step
+			}
+		}
+	}
+	return wall
 }
 
 // bow is the shape a plate rides in, in metres off its own level: swells and
@@ -2120,16 +2388,8 @@ func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int
 		fl.dist[i] = float32(math.Inf(1))
 		fl.done[i] = false
 	}
-	for b := range fl.queue {
-		fl.queue[b] = fl.queue[b][:0]
-	}
-	push := func(i int32, d float32) {
-		b := int(d / floodStep)
-		for len(fl.queue) <= b {
-			fl.queue = append(fl.queue, nil)
-		}
-		fl.queue[b] = append(fl.queue[b], i)
-	}
+	fl.reset()
+	push := fl.push
 	for k, m := range mids {
 		// The tile the middle stands on. A middle can drift off a map that
 		// does not go round, and then its flood starts at the nearest edge,
@@ -2155,40 +2415,47 @@ func (g *Grid) floodOver(plates []Plate, mids []middle, fl *flooding, within int
 			push(i, d)
 		}
 	}
-	for b := 0; b < len(fl.queue); b++ {
-		// Indexed and not ranged: a step shorter than floodStep lands back in
-		// the bucket being walked, and has to be walked too.
-		for n := 0; n < len(fl.queue[b]); n++ {
-			i := fl.queue[b][n]
-			if fl.done[i] {
-				continue
+	for b := 0; b < len(fl.head); b++ {
+		// A step shorter than floodStep lands back in the bucket being walked,
+		// and has to be walked too; the bucket is taken off the queue and
+		// walked again for whatever the walking of it put back.
+		for {
+			e := fl.head[b]
+			if e < 0 {
+				break
 			}
-			fl.done[i] = true
-			k := fl.from[i]
-			x, y := int(i)%g.W, int(i)/g.W
-			for d, dir := range Dirs {
-				qx, qy := x+dir.X, y+dir.Y
-				if qy < 0 || qy >= g.H {
+			fl.head[b] = -1
+			for ; e >= 0; e = fl.next[e] {
+				i := fl.at[e]
+				if fl.done[i] {
 					continue
 				}
-				if qx < 0 || qx >= g.W {
-					if !g.Wrap {
+				fl.done[i] = true
+				k := fl.from[i]
+				x, y := int(i)%g.W, int(i)/g.W
+				for d, dir := range Dirs {
+					qx, qy := x+dir.X, y+dir.Y
+					if qy < 0 || qy >= g.H {
 						continue
 					}
-					qx = g.WrapX(qx)
-				}
-				j := int32(qy*g.W + qx)
-				if fl.done[j] || (within >= 0 && int(g.Tiles[j].Plate) != within) {
-					continue
-				}
-				nd := fl.dist[i] + step[k][d]*(fl.cost[i]+fl.cost[j])/2
-				if nd < fl.dist[j] {
-					fl.dist[j], fl.from[j] = nd, k
-					push(j, nd)
+					if qx < 0 || qx >= g.W {
+						if !g.Wrap {
+							continue
+						}
+						qx = g.WrapX(qx)
+					}
+					j := int32(qy*g.W + qx)
+					if fl.done[j] || (within >= 0 && int(g.Tiles[j].Plate) != within) {
+						continue
+					}
+					nd := fl.dist[i] + step[k][d]*(fl.cost[i]+fl.cost[j])/2
+					if nd < fl.dist[j] {
+						fl.dist[j], fl.from[j] = nd, k
+						push(j, nd)
+					}
 				}
 			}
 		}
-		fl.queue[b] = fl.queue[b][:0]
 	}
 	for i := range g.Tiles {
 		if within < 0 || fl.done[i] {
