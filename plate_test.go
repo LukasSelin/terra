@@ -3,6 +3,7 @@ package terra
 import (
 	"github.com/LukasSelin/terra/geom"
 	"math"
+	"sort"
 	"testing"
 )
 
@@ -188,6 +189,119 @@ func TestPlateBoundariesAreNotStraight(t *testing.T) {
 		t.Errorf("a plate needs %.2f times a circle's edge to hold its ground; "+
 			"a straight-sided cell needs about 1.1, so these are still Voronoi", got)
 	}
+}
+
+// A plate is a piece of a shell that broke, and a break is a line: so a
+// plate's wall runs a long way straight and then turns a corner. It is the
+// thing a flood over smooth ground cannot do - a wandering, frayed wall is
+// still a curve, and a world of them is a world of blobs - and it is why the
+// crust is broken into fractures before any plate is grown. See fractureWall.
+//
+// The reading is the longest straight run on a plate's edge over the square
+// root of the ground the plate holds: the longest stretch of the edge that
+// stays inside a straight corridor runCorridor tiles wide. It carries its own
+// scale, so plates of any size and any number can be read against each other
+// and against shapes whose answer is known. Measured on drawn shapes at this
+// corridor: a disc 0.48, which is the 2*sqrt(2*r*w)/sqrt(A) a circle gives
+// whatever its size; a square 1.00; a Voronoi of sixteen middles 1.33 and the
+// blocks a fracture network cuts 1.42, both of them straight-sided polygons
+// whose longest side beats a square's.
+//
+// Flooded over the rough ground alone a made globe read 0.98 - nearer a disc
+// than a polygon, which is what a world that felt too round looked like from
+// the inside. Over the broken crust it reads 1.18 on the eight seeds it was
+// tuned on, and the first plates, before any of them has been carried
+// anywhere, read 1.31. The floor here is under the reading and well over the
+// old one: what is being held is that a plate is a polygon and not a pebble,
+// not the exact number the tuning landed on.
+func TestAPlatesWallRunsStraight(t *testing.T) {
+	var sum float64
+	const seeds = 3
+	for seed := uint64(1); seed <= seeds; seed++ {
+		sum += wallRun(plateWorld(seed), runCorridor)
+	}
+	if got := sum / seeds; got < 1.05 {
+		t.Errorf("a plate's longest straight wall is %.2f of the root of its area; "+
+			"a disc gives 0.48 and a straight-sided cell 1.33, so these are still pebbles", got)
+	}
+}
+
+// How wide the corridor a straight run has to stay inside is, in tiles, and
+// how much of the map a plate has to hold before its wall is read. A small
+// piece is all corner whatever shape it is.
+const (
+	runCorridor = 2.0
+	runLeast    = 0.02
+)
+
+// wallRun is the reading TestAPlatesWallRunsStraight takes: the median over
+// the plates big enough to read of the longest stretch of a plate's edge that
+// stays inside a straight corridor wide tiles across, over the square root of
+// the tiles the plate holds.
+//
+// The run is found by trying every bearing a fixed number of ways round,
+// laying corridors across the edge at that bearing, and taking the longest
+// unbroken stretch in any of them. The corridors are laid twice, the second
+// set offset by half a corridor, so that a run is not cut in two by where the
+// corridors happen to fall.
+func wallRun(g *Grid, wide float64) float64 {
+	const bearings = 36
+	area := map[uint8]float64{}
+	for i := range g.Tiles {
+		area[g.Tiles[i].Plate]++
+	}
+	edge := map[uint8][][2]float64{}
+	for i := range g.Tiles {
+		of := g.Tiles[i].Plate
+		on := false
+		g.eachNear(i, func(j int) {
+			if g.Tiles[j].Plate != of {
+				on = true
+			}
+		})
+		if on {
+			edge[of] = append(edge[of], [2]float64{float64(i % g.W), float64(i / g.W)})
+		}
+	}
+	var runs []float64
+	for of, pts := range edge {
+		if area[of] < runLeast*float64(len(g.Tiles)) || len(pts) < 16 {
+			continue
+		}
+		best := 0.0
+		for b := 0; b < bearings; b++ {
+			a := math.Pi * float64(b) / bearings
+			ux, uy := math.Cos(a), math.Sin(a)
+			for _, shift := range []float64{0, wide} {
+				lanes := map[int][]float64{}
+				for _, q := range pts {
+					dx, dy := g.across(q[0]-pts[0][0]), q[1]-pts[0][1]
+					lane := int(math.Floor((-dx*uy + dy*ux + shift) / (2 * wide)))
+					lanes[lane] = append(lanes[lane], dx*ux+dy*uy)
+				}
+				for _, lane := range lanes {
+					sort.Float64s(lane)
+					run, from := 0.0, lane[0]
+					for k := 1; k < len(lane); k++ {
+						// A gap of more than a step is another stretch of the
+						// same wall and not the same run.
+						if lane[k]-lane[k-1] > 3 {
+							from = lane[k]
+							continue
+						}
+						run = math.Max(run, lane[k]-from)
+					}
+					best = math.Max(best, run)
+				}
+			}
+		}
+		runs = append(runs, best/math.Sqrt(area[of]))
+	}
+	if len(runs) == 0 {
+		return math.NaN()
+	}
+	sort.Float64s(runs)
+	return runs[len(runs)/2]
 }
 
 // Welding leaves the range it stops feeding where it was, inside the plate it
