@@ -6,6 +6,82 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-05 - The shape of the world held against the earth's
+
+**What this is.** On `claude/statistical-output-verification`. A world can
+answer to the yardsticks and still not look like the earth, because they read
+how much of a thing there is and how it goes with latitude, and not how it is
+laid out. `realism_shape_test.go` adds eleven that read the layout, each a
+figure measured on the earth and read off a world the way it was read there,
+at the globe's planetary scale (deepSpan, 37.5 km a tile) or with no scale in
+it. They join `realYardsticks` as the soil's do, so `TestTheRealWorld` holds
+them and `TestCalibrate` prints them. Nothing outside the tests changes.
+
+They read the three full globes `TestThePolarSeaIsIce` already makes, seeds 1
+to 3, pooled: a globe has a handful of continents, and one globe's handful
+mostly says which globe it was. Every measure is read first off drawn shapes
+whose answers are known, in `TestTheShapeMeasuresReadDrawnShapes` (short tier,
+4 s):
+
+| measure | drawn shape | reads | true |
+| --- | --- | --- | --- |
+| remoteness | disc, square | 0.992, 0.883 | 1, 0.886 |
+| Richardson divider dimension | disc, square, Koch island (depth 5) | 1.004, 1.004, 1.235 | 1, 1, 1.262 |
+| grid lock | disc, square, diamond; Brownian coasts H 0.5, 0.8 | 0.025, 0.985, 0.991; 0.013, 0.035 | 0, 1, 1; 0, 0 |
+| spectral exponent | Brownian relief H 0.5, 0.8 | 1.964, 2.591 | 2.0, 2.6 |
+| C1 by trace moments | lognormal cascade sigma 0.4; Brownian relief H 0.5, 0.8 | 0.109; 0.036, 0.037 | 0.115; 0 |
+
+The Brownian relief's 0.037 is the floor of the C1 reading: a relief rough
+everywhere alike reads that, and the earth's reads 0.12.
+
+**What the globes read.**
+
+| yardstick | globe 1 | globe 2 | globe 3 | pooled | earth | |
+| --- | --- | --- | --- | --- | --- | --- |
+| land share of the surface | 0.223 | 0.431 | 0.449 | 0.449 furthest | 0.292; 0.2-0.4 | gap |
+| remoteness of the continents | 0.63 | 0.33-0.58 | 0.40-0.68 | 0.521 median | 0.45-0.65 (G-C & Lombardo 2007) | holds |
+| island size exponent (Korcak) | 0.684 | 0.667 | 0.433 | 0.683 | 0.65; 0.5-0.75 (Mandelbrot) | holds |
+| coast dimension, 75-1200 km | 1.137 | 1.134 | 1.116 | 1.127 | 1.02-1.25 (Richardson) | holds |
+| grid lock of the coasts | 0.069 | 0.041 | 0.137 | 0.085 | nothing; 0.1 | holds, near the edge |
+| sea floor within 200 m | 0.083 | 0.108 | 0.126 | 0.103 | 0.073 (GEBCO 2019) | holds |
+| mean shelf width, km | 165 | 453 | 286 | 305 | 57 (Harris et al. 2014) | gap |
+| shelf, quiet over active margins | 0.95 | 2.78 | 0.97 | 1.60 | 2.85 (Harris et al. 2014) | gap |
+| grid lock of the sea floor off the coasts | 0.124 | 0.088 | 0.124 | 0.104 | nothing; 0.05 | gap |
+| land relief spectral exponent | 2.206 | 2.127 | 2.175 | 2.166 | 2.1 (Gagnon et al. 2006) | holds |
+| land relief intermittency C1 | 0.059 | 0.062 | 0.041 | 0.053 | 0.12 (Gagnon et al. 2006) | gap |
+
+Six hold and five are known gaps, under the letter K. The gaps are the three
+things that make a globe look made rather than found:
+
+- *The halo.* Every coast has the same pale band of shelf, five to twelve
+  times the earth's width, octagonal round a continent and square round an
+  islet. `floorDepths` lays the shelf and slope at `shelfWidth` and
+  `slopeWidth` from the edge of the continental crust, by `awayFrom`, which
+  counts a diagonal step as one: the same width on every margin, and a
+  Chebyshev ball at each.
+- *The carpet.* The land's relief has the earth's spectrum and half its
+  intermittency: it is rough in the same way at every scale, as the earth's
+  is, but rough everywhere alike, where the earth's roughness is gathered
+  into ranges with plains between.
+- *The land.* Two globes of three are 43 and 45 per cent land.
+
+**What it does not read.** The straight-edged polygon continents that
+`fractureWall` makes on purpose. Two readings were tried and neither tells
+them from natural coasts at this scale. The share of the coast lying in
+straight runs of 16 tiles inside a two-tile corridor is 0.17 to 0.26 on the
+globes, against 0.18 to 0.21 for Brownian coasts of H 0.8. Richardson's
+dimension at 300 to 2400 km openings is 1.15 to 1.16, against 1.15 to 1.18
+for the same Brownian coasts, and the earth's continental margins have H
+0.77. What the eye catches is the turning gathered into corners, and no
+published figure for the earth reads that. It would want the earth's coast
+read with the same instrument.
+
+**What it cost.** Nothing in the making: no file outside the tests changed,
+and `TERRA_DIGEST=check` passes. The readings take some three seconds over
+the three globes the suite already makes.
+
+---
+
 ## 2026-09-19 - The crust breaks before its plates are grown
 
 **What this is.** On `claude/world-roundness-plate-smoothness`. A world felt
