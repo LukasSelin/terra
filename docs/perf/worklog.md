@@ -6,6 +6,59 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-05 - The tide's flats are read off the first small globe
+
+**What this is.** On `claude/interesting-hellman`. Changes only a test.
+`TestTheTideLaysFlatsOnlyWhereItReaches` has failed on `main` since d18d65d
+with "small globe 2 has no flats", and it fails the same way with
+`TERRA_HISTORIES=off`, so a stale history is not the cause. I ran `git bisect`
+from 6c232a4 (good) to 0da2c55 (bad), running only that test with histories
+off. It stops on df5b2c1, "The crust breaks before its plates are grown". That
+commit changes `history.go` and nothing else outside the tests and docs, and
+its own entry below already lists this failure among the readings it moved.
+
+**Is the tide still right?** I counted tiles on small globes 1-8 through each
+gate that `tides` puts in front of a flat: does the tide reach the tile, does
+it stand within `f*flatTide` of mean sea, is it no steeper than `deanSlope`,
+is it tide-dominated, can its terrain turn, and is it unheld. The counts are
+from 9416a1f (before) and df5b2c1 (after). 0da2c55 reads the same as df5b2c1
+on all eight globes, so the permafrost fringe and the atmos move did not touch
+the flats.
+
+| | before | after |
+| --- | --- | --- |
+| flats, globes 1-8 | 2, 3, 2, 3, 1, 0, 1, 3 (15) | 2, 0, 1, 0, 1, 3, 1, 0 (8) |
+| within a spring's reach, eight globes | 857 | 622 |
+| of those, no steeper than Dean's slope | 29 (3.4%) | 17 (2.7%) |
+| globe 2: within reach / gentle enough / flats | 106 / 4 / 3 | 72 / 0 / 0 |
+| globe 2: gentlest in reach, over Dean's slope | under 1 | 6.35 |
+
+The tide's own factor in that band sits at a median of 1.00 before and after.
+The gates let about the same share through, about 3%. What fell is the amount
+of ground near sea level, by a quarter across the eight globes and by a third
+on globe 2. Every one of globe 2's 72 tiles in reach is at least six times
+steeper than the sea grades its grain. The plates now break on straight
+fractures, so the coasts stand somewhere else. The tide still lays flats
+wherever there is gentle ground, and on this seed there is none. This is a
+consequence of the world change, not a fault in the tide.
+
+**The change.** The test reads small globe 1. It kept its two flats through
+the crust change. The short tier already makes it for `TestRainFallsInBelts`,
+so the switch adds no world to that tier. The test's comment carries the new
+per-globe counts and says why globe 2 lost its flats. No source outside
+`shore_test.go` changed.
+
+**Checked.** `TERRA_DIGEST=write` on 0da2c55 leaves `docs/perf/digest.json` as
+committed, and `TERRA_DIGEST=check` passes after the change. The test passes
+with and without `TERRA_HISTORIES=off`. `go vet ./...` and
+`go test -short -timeout 60m ./...` are green. The budget, `scripts/perf.sh
+check` and the yardsticks were not run. No code that makes a world changed,
+and the digest shows that no world moved, so none of them can read
+differently. On a full run, the yardstick list should lose this test and
+gain nothing.
+
+---
+
 ## 2026-09-19 - The crust breaks before its plates are grown
 
 **What this is.** On `claude/world-roundness-plate-smoothness`. A world felt

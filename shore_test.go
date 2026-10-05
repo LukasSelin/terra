@@ -189,7 +189,7 @@ func estuary() *Grid {
 // globe cut into steep country is not everywhere, and they are no great part of
 // it. A valley has no sea and no tide.
 //
-// A small globe with flats on it: the second. The fourth had sixteen while its
+// A small globe with flats on it: the first. The fourth had sixteen while its
 // whole ocean floor lay within twenty metres of the sea and every tile of it
 // was surf the littoral drift carried sand across; with the deep floor laid at
 // its age's depth - see abyss.go - that sand stays on the shelves, and the
@@ -197,12 +197,16 @@ func estuary() *Grid {
 // and stood some hundreds of metres higher, which moved the tides the basins
 // ring with; the six small globes hold none to two flats each. With the plates
 // carried the part of a tile a step leaves over as well (see move), small
-// globes 1-8 hold 2, 3, 2, 3, 1, 0, 1 and 3.
+// globes 1-8 held 2, 3, 2, 3, 1, 0, 1 and 3. With the crust broken before its
+// plates are grown (see fractureWall) they hold 2, 0, 1, 0, 1, 3, 1 and 0: the
+// second's coast has seventy-two tiles within a spring's reach of the sea where
+// it had a hundred and six, and the gentlest of them is six times steeper than
+// the sea grades it. The first held its two through that change.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 1", yardWorld("small", 1, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})
