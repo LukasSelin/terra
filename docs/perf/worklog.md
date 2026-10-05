@@ -6,6 +6,97 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-05 - The sea floor is laid at the true distance from the continents
+
+**What this is.** On `claude/floor-exact-distance`, on top of
+`claude/statistical-output-verification`. `awayFrom` - what `floorDepths`
+lays the shelf and the slope at, and what `firstFloorAges` ranks the first
+plates' floor by - walked to the eight tiles round each and counted a
+diagonal step as one. What it read was the larger of the two distances
+across, and the floor laid at it was an octagon round every coast and a
+square round every islet: the K gap "grid lock of the sea floor off the
+coasts", 0.104. It is now the exact distance, Felzenszwalb and
+Huttenlocher's two passes of lower envelopes, which is the transform
+`realism_shape_test.go` already read the shelves with (`distanceFrom` there
+is gone; the tests call `awayFrom`).
+
+**The cause, measured before the fix.** A floor laid by each distance,
+`4000 * smooth((d - 2)/4)`, round coasts that lean to nothing - Brownian
+reliefs drawn on a 1024x512 map - and its grid lock read as the yardstick
+reads it:
+
+| coasts | the coasts' own lock | floor by the walk | floor by the true distance |
+| --- | --- | --- | --- |
+| H 0.5, 30% land | 0.014 | 0.230 | 0.013 |
+| H 0.5, 45% land | 0.020 | 0.233 | 0.033 |
+| H 0.8, 30% land | 0.067 | 0.251 | 0.066 |
+| H 0.8, 45% land | 0.018 | 0.216 | 0.035 |
+
+The walk locks a floor to the grid round coasts that have no lock; the true
+distance gives the floor its coast's lock and no more. That is now
+`TestTheFloorLeansAsItsCoastDoes`, with a check of `awayFrom` against
+Pythagoras round the seam (short tier, half a second).
+
+**The shelf's least width.** The shelf was floored at one tile, which under
+the walk was the whole ring of eight round a continent. At the true distance
+the ring's corners are a root of two out, and on a small globe, whose shelf
+is that one tile, they were laid a third of the way down the slope beside the
+corner of every coast. `shape` lays every tile over the water its drainage
+ends in, and there that was the floor, a kilometre and more down: in the first
+draft of this change the shaping laid the whole of small globes 1 and 2 under
+the sea (land 0.47 -> 0.00), the sea poured again on what it left stood at
+-691 and -712 m, and ten of the small globes' yardsticks went out of their
+bands (Hack 0.581 -> 0.427, Flint's R2 0.939 -> 0.731, channel concavity 0.353
+-> 0.260, the 99th centile slope 1.06 -> 2.05). `shelfLeast`, a tile and a
+half, keeps the whole ring shelf, and with it every small globe and valley is
+the world it was to the bit.
+
+**What the globes read.** Seeds 1-3, the shape yardsticks' globes:
+
+| | before | after |
+| --- | --- | --- |
+| grid lock of the floor off the coasts | 0.104 (0.124, 0.088, 0.124) | **0.082** (0.066, 0.085, 0.103) |
+| its terms, cos 4θ and cos 8θ | +0.072, +0.104 | -0.082, +0.023 |
+| grid lock of the coasts | 0.084 (cos 4θ -0.084) | 0.087 (cos 4θ -0.087) |
+| mean shelf width | 305 km | 279 km |
+| shelf, quiet over active | 1.60 | 1.67 |
+| sea floor within 200 m | 0.103 | 0.094 |
+
+The octagons are gone (cos 8θ 0.104 -> 0.023). What is left is cos 4θ, the
+floor leaning to the diagonals as the coasts do: the floor is now laid as its
+coast lies, and the coasts lean 0.087, which their own yardstick (0-0.1)
+allows. The gap stays open on that: the floor's band, 0-0.05, is tighter
+than a floor laid exactly can read round Brownian coasts of H 0.8 (0.066).
+The lean is born with the first plates: on globe 3 their seams read cos 4θ
+-0.16 before anything has moved. Flooding the plates over sixteen neighbours
+rather than eight did not take it away, so it is not the flood's metric
+alone.
+
+**The sea floor's yardsticks** read the first globe, beyond a shelf and a
+slope of the continents, and hardly notice: ridge 2.772 km, subsidence 317.4
+m per root Myr, flattening 0.201 -> 0.207, the hypsometric modes +0.125 and
+-5.375 km as they were. `TestThePolarSeaIsIce` passes.
+
+**The digest is rewritten**: `globe128` moves, `valley` and `ancient` do not
+(the ancient valley has no water, so no floor to lay).
+
+**The yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld'` here
+and on the base (cc67797) fail the same six: midlatitude over subtropical
+rain, the land shares of Aridisols and Gelisols, and the small globe's
+hypsometric integral, discharge exponent and ridge-valley wavelength. The
+full globe's networks move a little and stay in: drainage area exponent
+0.395 -> 0.388, Hack 0.583 -> 0.584, Horton 4.20 -> 4.46.
+
+**Heap and time.** `TestWorldCreationBudget` passes and is not rewritten:
+ancient +5 allocations, globe128 -2, bytes +0.03%. `scripts/perf.sh check`
+fails against `2026-09-16-0718-small` on this commit and on its base alike
+(+12 to +17% on all three worlds; the base moved 12% between two rounds of
+its own), so it cannot judge this. Base against this commit, twelve runs
+each, taken turn about on a quiet machine: valley, ancient and globe256 all
+within noise, geomean -2.8%.
+
+---
+
 ## 2026-10-05 - The shape of the world held against the earth's
 
 **What this is.** On `claude/statistical-output-verification`. A world can

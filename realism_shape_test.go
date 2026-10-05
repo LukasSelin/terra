@@ -111,21 +111,21 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014 (Geomorphology of the oceans): shelves are 57 km wide on the mean over all the oceans, 37 in the Indian Ocean to 110 in the South Pacific. Read here from each coast to the nearest floor deeper than 200 m",
 		measure: func() float64 { return shelvesOf(threeGlobes()).mean },
 	},
-		gap: "known gap: K - every coast is given the same shelf and slope, shelfWidth and slopeWidth out from the edge of the continental crust, and whatever of that crust is drowned inside the edge stands shallow as well: 305 km; 165, 453 and 286 globe by globe",
+		gap: "known gap: K - every coast is given the same shelf, shelfWidth out from the edge of the continental crust, which puts the first floor under 200 m three tiles out, 94 km; and an eighth of the coasts read are shores of hollows in the continents below the sea, with no deep floor anywhere in them, 1000 km and more: 279 km; 149, 411 and 266 globe by globe",
 	},
 	{yardstick: yardstick{
 		name: "shelf width, quiet margins over active, three globes", unit: "x", scale: "ground", lo: 1.8, hi: 4.5, slow: true,
 		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
 	},
-		gap: "known gap: K - shelfWidth is one width for every margin, active or quiet, and the quiet margins come out wider on globe 2 alone: 1.60; 0.95, 2.78 and 0.97 globe by globe",
+		gap: "known gap: K - shelfWidth is one width for every margin, active or quiet, and the quiet margins come out wider on globe 2 alone, for the hollows on them: 1.67; 1.02, 3.03 and 0.98 globe by globe",
 	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
 		source:  "the floor's slope within 300 km of a coast leans no more to the map's axes and diagonals than the coast does to the earth's lines of latitude; fractional Brownian relief drawn on this map reads within 0.025 of nothing. The band is not a measured figure",
 		measure: func() float64 { return gridLock(threeGlobes(), offshoreFloor) },
 	},
-		gap: "known gap: K - awayFrom counts a diagonal step as one, so the shelf and slope floorDepths lays at its distances are octagons round a coast and squares round an islet: 0.104",
+		gap: "known gap: K - the floor is laid at the true distance from the edge of the continental crust and leans as that edge does, and the coasts lean to the map's diagonals by 0.087, which their own yardstick allows: 0.082",
 	},
 
 	// 15. The relief. The earth's heights are rough in the same way at every
@@ -218,7 +218,7 @@ func remoteness(gs []*Grid) []float64 {
 	var out []float64
 	for _, g := range gs {
 		lm := landOf(g)
-		away := distanceFrom(g, g.underSea)
+		away := g.awayFrom(g.underSea)
 		far := make([]float64, len(lm.tiles))
 		for i, c := range lm.of {
 			if c >= 0 {
@@ -255,91 +255,6 @@ func islandExponent(gs []*Grid) float64 {
 		return math.NaN()
 	}
 	return exceedanceBetween(a, 2, slices.Max(a))
-}
-
-// distanceFrom is how far every tile of g lies from the nearest tile from
-// says, in tiles, straight across the map and round the seam where it wraps:
-// the exact Euclidean distance, by Felzenszwalb and Huttenlocher's two passes
-// of lower envelopes, down the columns and then along the rows. Where there
-// is no such tile it is 1e10 or more.
-func distanceFrom(g *Grid, from func(i int) bool) []float64 {
-	W, H := g.W, g.H
-	span := W
-	if g.Wrap {
-		span = 3 * W // a row laid three times over, so the envelope goes round
-	}
-	m := max(span, H)
-	f, d, v, z := make([]float64, m), make([]float64, m), make([]int, m), make([]float64, m+1)
-	col := make([]float64, W*H)
-	for x := 0; x < W; x++ {
-		for y := 0; y < H; y++ {
-			f[y] = farAway
-			if from(y*W + x) {
-				f[y] = 0
-			}
-		}
-		envelope(f[:H], d, v, z)
-		for y := 0; y < H; y++ {
-			col[y*W+x] = d[y]
-		}
-	}
-	out := make([]float64, W*H)
-	for y := 0; y < H; y++ {
-		for x := 0; x < span; x++ {
-			f[x] = col[y*W+x%W]
-		}
-		envelope(f[:span], d, v, z)
-		for x := 0; x < W; x++ {
-			at := x
-			if g.Wrap {
-				at += W
-			}
-			out[y*W+x] = math.Sqrt(d[at])
-		}
-	}
-	return out
-}
-
-// farAway is the squared distance distanceFrom gives a tile with nothing to
-// be near.
-const farAway = 1e20
-
-// envelope is the squared distance transform of f along one line: the lower
-// envelope of a parabola standing on every point of f under farAway.
-func envelope(f, d []float64, v []int, z []float64) {
-	cross := func(p, q int) float64 {
-		return ((f[q] + float64(q*q)) - (f[p] + float64(p*p))) / float64(2*q-2*p)
-	}
-	n, k := len(f), -1
-	for q := 0; q < n; q++ {
-		if f[q] >= farAway {
-			continue
-		}
-		if k < 0 {
-			k, v[0], z[0], z[1] = 0, q, math.Inf(-1), math.Inf(1)
-			continue
-		}
-		s := cross(v[k], q)
-		for s <= z[k] {
-			k--
-			s = cross(v[k], q)
-		}
-		k++
-		v[k], z[k], z[k+1] = q, s, math.Inf(1)
-	}
-	if k < 0 {
-		for q := range n {
-			d[q] = farAway
-		}
-		return
-	}
-	k = 0
-	for q := 0; q < n; q++ {
-		for z[k+1] < float64(q) {
-			k++
-		}
-		d[q] = float64((q-v[k])*(q-v[k])) + f[v[k]]
-	}
 }
 
 // coastlines are the lines between the land and the sea as marching squares
@@ -601,7 +516,7 @@ const offshoreReach = 300 * km
 // offshoreFloor is the depth of the sea, read within offshoreReach of the
 // land.
 func offshoreFloor(g *Grid) ([]float64, func(i int) bool) {
-	near := distanceFrom(g, func(i int) bool { return !g.underSea(i) })
+	near := g.awayFrom(func(i int) bool { return !g.underSea(i) })
 	reach := tilesAcross(offshoreReach, deepSpan(g))
 	f := make([]float64, len(g.Tiles))
 	for i := range f {
@@ -673,8 +588,8 @@ func shelvesOf(gs []*Grid) shelfReading {
 		var all, active, quiet []float64
 		for _, g := range gs {
 			span := deepSpan(g)
-			deep := distanceFrom(g, func(i int) bool { return g.underSea(i) && g.sea-g.Height[i] >= shelfBreak })
-			seam := distanceFrom(g, func(i int) bool {
+			deep := g.awayFrom(func(i int) bool { return g.underSea(i) && g.sea-g.Height[i] >= shelfBreak })
+			seam := g.awayFrom(func(i int) bool {
 				on := false
 				g.eachNear(i, func(j int) { on = on || g.Tiles[j].Plate != g.Tiles[i].Plate })
 				return on
@@ -967,6 +882,54 @@ func TestTheShapeMeasuresReadDrawnShapes(t *testing.T) {
 		}
 		c1, _ := traceMoments(fields, side)
 		near(fmt.Sprintf("a lognormal cascade of sigma %.1f's C1", sigma), c1, sigma*sigma/(2*math.Ln2), 0.015)
+	}
+}
+
+// The sea floor is laid at the distances awayFrom reads, and those are the
+// distances: from any tile to the nearest of a scatter, straight across and
+// round the seam, as Pythagoras has it. And round coasts that lean to
+// neither the map's axes nor its diagonals - a Brownian relief's - a floor
+// laid at them leans no more than its coast does. Laid at a walk to the
+// eight tiles round each, which counted a diagonal step as one, it leaned to
+// the grid by 0.22 to 0.25 round coasts that read 0.014 to 0.067.
+func TestTheFloorLeansAsItsCoastDoes(t *testing.T) {
+	r := rand.New(rand.NewPCG(5, 5))
+	g := NewGrid(61, 23)
+	g.Wrap = true
+	var at []int
+	for range 7 {
+		at = append(at, r.IntN(len(g.Tiles)))
+	}
+	away := g.awayFrom(func(i int) bool { return slices.Contains(at, i) })
+	for i := range g.Tiles {
+		want := math.Inf(1)
+		for _, j := range at {
+			dx := math.Abs(float64(i%g.W - j%g.W))
+			dx = math.Min(dx, float64(g.W)-dx)
+			want = math.Min(want, math.Hypot(dx, float64(i/g.W-j/g.W)))
+		}
+		if math.Abs(away[i]-want) > 1e-9 {
+			t.Fatalf("tile %d is %.4f tiles from the nearest, and awayFrom says %.4f", i, want, away[i])
+		}
+	}
+
+	for _, hurst := range []float64{0.5, 0.8} {
+		f := fbmField(1024, 512, hurst, 3)
+		g := drawnHeights(1024, 512, f, quantile(f, 0.7))
+		near := g.awayFrom(func(i int) bool { return !g.underSea(i) })
+		floor := func(*Grid) ([]float64, func(i int) bool) {
+			depth := make([]float64, len(g.Tiles))
+			for i := range depth {
+				if g.underSea(i) {
+					depth[i] = 4000 * smooth(clamp01((near[i]-2)/4))
+				}
+			}
+			return depth, func(i int) bool { return g.underSea(i) && near[i] <= 8 }
+		}
+		coast, sea := gridLock([]*Grid{g}, landEdge), gridLock([]*Grid{g}, floor)
+		if !(sea <= coast+0.02) {
+			t.Errorf("round Brownian coasts of H %.1f that lean %.3f to the grid, the floor leans %.3f", hurst, coast, sea)
+		}
 	}
 }
 
