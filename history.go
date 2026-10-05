@@ -1100,14 +1100,16 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	}
 
 	// The ages of the floor and how fast the ground is rising are read while
-	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
+	// the tiles are still pieces of a planet, and once the plates are kept,
+	// since how wide a shelf is depends on which plate the continent beside it
+	// has become part of. See floorDepths and upliftOf.
+	g.keepPlates(plates)
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
 		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
-	g.keepPlates(plates)
 	g.settleRock(book, cr.ocean)
 	if g.planet > 0 {
 		d.book = book // the foot of every pile is laid on the map
