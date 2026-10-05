@@ -402,7 +402,7 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 				continue
 			}
 			away := g.awayFrom(func(i int) bool { return math.IsNaN(g.floorAge[i]) })
-			margin := tilesAcross(shelfWidth+slopeWidth, deepSpan(g))
+			margin := tilesAcross(quietShelf+slopeWidth, deepSpan(g))
 			for i := range g.Tiles {
 				if g.sea-g.Height[i] < shelfBreak || math.IsNaN(g.floorAge[i]) || away[i] < margin {
 					continue

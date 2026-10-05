@@ -111,21 +111,19 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014 (Geomorphology of the oceans): shelves are 57 km wide on the mean over all the oceans, 37 in the Indian Ocean to 110 in the South Pacific. Read here from each coast to the nearest floor deeper than 200 m",
 		measure: func() float64 { return shelvesOf(threeGlobes()).mean },
 	},
-		gap: "known gap: K - every coast is given the same shelf, shelfWidth out from the edge of the continental crust, which puts the first floor under 200 m three tiles out, 94 km; and an eighth of the coasts read are shores of hollows in the continents below the sea, with no deep floor anywhere in them, 1000 km and more: 279 km; 149, 411 and 266 globe by globe",
+		gap: "known gap: K - a shelf is laid a tile and a half wide at the least, 56 km, and a quiet margin's is 88, so the first floor under 200 m is two tiles out of an active coast and three out of a quiet one; and an eighth of the coasts read are shores of hollows in the continents below the sea, with no deep floor anywhere in them, 1000 km and more: 292 km; 151, 434 and 277 globe by globe",
 	},
 	{yardstick: yardstick{
 		name: "shelf width, quiet margins over active, three globes", unit: "x", scale: "ground", lo: 1.8, hi: 4.5, slow: true,
-		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
+		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast. It reads 1.88, near the floor of the band and pooled over globes that read 1.18, 3.58 and 1.06: an active shelf is laid no narrower than a tile and a half, 56 km",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
-	},
-		gap: "known gap: K - shelfWidth is one width for every margin, active or quiet, and the quiet margins come out wider on globe 2 alone, for the hollows on them: 1.67; 1.02, 3.03 and 0.98 globe by globe",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
 		source:  "the floor's slope within 300 km of a coast leans no more to the map's axes and diagonals than the coast does to the earth's lines of latitude; fractional Brownian relief drawn on this map reads within 0.025 of nothing. The band is not a measured figure",
 		measure: func() float64 { return gridLock(threeGlobes(), offshoreFloor) },
 	},
-		gap: "known gap: K - the floor is laid at the true distance from the edge of the continental crust and leans as that edge does, and the coasts lean to the map's diagonals by 0.087, which their own yardstick allows: 0.082",
+		gap: "known gap: K - the floor is laid at the true distance from the edge of the continental crust and leans as that edge does, and the coasts lean to the map's diagonals by 0.085, which their own yardstick allows: 0.084",
 	},
 
 	// 15. The relief. The earth's heights are rough in the same way at every

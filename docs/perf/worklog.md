@@ -6,6 +6,107 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-05 - A shelf is as wide as its margin is quiet
+
+**What this is.** On `claude/shelf-margins`, on top of
+`claude/floor-exact-distance`. Every margin was given one shelf,
+`shelfWidth`, 80 km, and the K gap "shelf width, quiet margins over active"
+read 1.67 against the earth's 2.85 (Harris and others 2014: 88.2 km on
+passive margins, 31 on active ones). A margin is now passive where the
+continent and the ocean floor beside it ride one plate - the textbook
+definition, the Atlantic's margins - and active where the floor is another
+plate's, going down a trench or grinding past. `floorDepths` finds the
+nearest continental tile to each tile of floor (`nearestTo`, the same
+transform as `awayFrom`, keeping where each parabola stood), and lays the
+shelf `quietShelf`, 88.2 km, or `activeShelf`, 31 km, by whether the two
+tiles' plates are one once welds are followed (`rootPlate`; `keepPlates`
+now runs before `floorDepths` for it).
+
+**How narrow an active shelf can be.** 31 km is under a tile of a full globe,
+37.5 km, and a shelf is laid no narrower than `shelfLeast`, a tile and a half
+(see the entry below): the deep floor laid inside the ring of eight round a
+coast is land graded under the sea. So on a full globe an active shelf is a
+tile and a half and a quiet one two and a third, and the first floor under
+200 m is two tiles out of an active coast and three out of a quiet one. On a
+small globe, a tile of 150 km, both are the least there is, and nothing
+changes: small globes, double globes and the digest's worlds are the worlds
+they were to the bit (`TERRA_DIGEST=write` leaves `digest.json` as it was).
+Only maps whose tile is under 59 km - 88.2 km over a tile and a half - see
+this change, which on the presets is the full globe.
+
+**The shaping that was proposed with it, and was not needed.** The plan was
+to let the active shelf go to a tile, and have `shape` grade the land over
+the water and not the floor under it (`laidHeight`), which keeps a full
+globe's coasts where the floor comes beside them: globe 1 had 0.2249 of its
+surface dry when the sea was poured and 0.2231 when it was made, against
+0.2232 with the floor kept back. It was measured both ways over every
+yardstick:
+
+| | floor kept a tile and a half away (taken) | a tile, and shaped over the water |
+| --- | --- | --- |
+| quiet over active, three globes | 1.88 | 2.04 |
+| mean shelf width | 292 km | 286 km |
+| channel concavity, small globe | 0.353 | **0.312**, out of 0.35-0.6 |
+| discharge exceedance exponent, small globe | 0.464, out of 0.40-0.46 as on the base | 0.435 |
+| drainage area exceedance exponent, small globe | 0.421 | 0.395 |
+| Horton bifurcation ratio, small globe | 3.25 | 3.70 |
+
+A shelf of one tile puts the deep floor beside the corners of every small
+globe's coast, and the small globes' rivers move: one yardstick out and one
+in, for a full globe's ratio a little further inside. Not taken; the gap
+closes without it.
+
+**What the globes read.** Seeds 1-3:
+
+| | before (exact distance) | after |
+| --- | --- | --- |
+| shelf, quiet over active | 1.67 (1.02, 3.03, 0.98) | **1.88** (1.18, 3.58, 1.06) |
+| mean shelf width | 279 km (149, 411, 266) | 292 km (151, 434, 277) |
+| sea floor within 200 m | 0.094 | 0.097 |
+| grid lock of the floor off the coasts | 0.082 | 0.084 |
+
+The quiet-over-active gap has closed and its marker is off: 1.88 is inside
+1.8-4.5, near the floor of the band, and pooled over globes that read 1.18,
+3.58 and 1.06. The yardstick reads a coast as active where a seam runs within
+150 km of it, and most such coasts are not active margins as laid: 1048 of
+7041 on globe 1, 1251 of 4712 on globe 2, 1056 of 5554 on globe 3. The rest
+are quiet margins with a seam near them, inland or offshore past a strip of
+their own plate's floor, and they read as quiet shelves in the active column.
+The mean
+width goes the wrong way, 279 -> 292 km: the quiet shelves, most of the
+coast, are Harris's 88 km now where they were 80, and the active ones narrow
+from 80 to 56 at most. It was never the mean's cause: an eighth of the coasts
+it reads are shores of hollows inside the continents with no deep floor in
+them (see the gap message).
+
+**The sea floor's yardsticks** read beyond a quiet shelf and a slope, now
+`quietShelf+slopeWidth`, and do not move: ridge 2.772 km, subsidence 317.4,
+flattening 0.207, the modes as they were. The full globe's networks:
+drainage area 0.388 -> 0.395, Hack 0.584 -> 0.582, Horton 4.46 -> 4.20.
+`TestThePolarSeaIsIce` passes.
+
+**Tests.** `TestAShelfIsWideWhereItsMarginIsQuiet`: a strip of continent
+with its own plate's floor to the west and another's to the east; the floor
+goes down two tiles out of the east coast and three out of the west, and
+welded, the east is three too.
+
+**Heap and time.** `TestWorldCreationBudget` passes and is not rewritten
+(ancient +10 allocations, which the valley, untouched, wanders by too;
+globe128 +5; bytes +0.05%). `nearestTo` keeps two more `int32` maps for the
+one call that asks. Timing against the base, twelve runs each, turn about:
+valley and globe256 within noise, ancient -5.2% (p 0.014) on a world that is
+the base's to the bit, so drift; `scripts/perf.sh check` fails against
+`2026-09-16-0718-small` here as on the base (see the entry below).
+
+**The yardsticks.** The whole suite, `go test -timeout 60m .`, fails the
+base's six yardsticks (midlatitude over subtropical rain; Aridisols and
+Gelisols; the small globe's hypsometric integral, discharge exponent and
+ridge-valley wavelength) and two tests that fail on the base (cc67797) as
+well: `TestTheTideLaysFlatsOnlyWhereItReaches`, small globe 2 has no flats,
+and `TestAGlobeHasASeaItsRiversReach`, the globe 0.73 water. Nothing new.
+
+---
+
 ## 2026-10-05 - The sea floor is laid at the true distance from the continents
 
 **What this is.** On `claude/floor-exact-distance`, on top of
