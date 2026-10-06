@@ -46,7 +46,7 @@ The model has gaps of its own besides, which the entities will make plain:
 ```
 O1 keep the fields ──► O2 currents as features ──► O3 relations and Why
         │
-        └────────────► O4 physics gaps (parallel with O2, world-moving)
+        └────────────► M track (docs/ocean-model-plan.md), world-moving
 ```
 
 O1 changes no world and goes first, alone. O2 and O4 run side by side on
@@ -147,33 +147,10 @@ a drift whose `Feeds` chain reaches back to a western boundary current.
 
 ## O4. The physics the currents are missing
 
-Branch `claude/ocean-physics`, on O1, alongside O2. Digest: **rewritten**:
-this moves the world, and the yardsticks say whether it moved the right
-way. Each item its own commit, each with its reading before and after.
-
-1. **Equatorial currents.** Within `gyreCalm` the trades drive the water
-   west and it piles against the western shore and runs back east under
-   them: the North and South Equatorial Currents and the countercurrent
-   between, near the doldrums. An equatorial beta-plane balance, not the
-   gyres' Sverdrup one.
-2. **The circumpolar current.** An ocean that runs all the way round is
-   driven east by the westerlies over it with no shore to stop it; give it
-   the zonal flow the wind stress and a bottom drag balance, rather than
-   only Ekman drift.
-3. **The sea's freeze off the water.** `docs/climate-next-steps.md` step
-   2's first option: freeze where O1's `SeaTemp`, through the coldest
-   phase, falls under `SeaFreeze`. Sea ice is then a thing the currents
-   make, and a warm current keeps a sea open (the Barents, Norway's coast).
-4. **Overturning, as a reading first.** Where the water is cold and the
-   winter mixed layer deep, mark where deep water would form; whether it
-   then draws the western current further north (the Atlantic's extra
-   warmth) is a decision for after the reading, not a default.
-
-Yardsticks to add (`realism_test.go` style, readings from a source):
-equatorial SST west-east contrast (Pacific warm pool against the cold
-tongue, some 4-6 °C), sea-ice extent as an area-weighted share of the map
-(about 5%, NSIDC), the warmest current's anomaly at 45-60° (8-10 °C over
-the water beside it at the Grand Banks).
+Superseded by `docs/ocean-model-plan.md`, the M track: the flow in two
+dimensions, the thermocline, the heat the sea carries into the energy
+balance, salt, the overturning, the sea's year and sea ice. Its first step,
+M1, starts after O1 and runs alongside O2.
 
 ## Not in this plan
 
