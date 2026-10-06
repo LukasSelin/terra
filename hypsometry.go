@@ -37,9 +37,8 @@ import (
 // the sea, at the history's span, where a kilometre between two tiles is a
 // gentle fall. The map's ground is the detail below the history's grid and
 // stands on the country; a tile's elevation is the two together (Elevation),
-// and that is what the air reads its warmth, its rain and its winds off,
-// since a glacier on a range four kilometres high is there for the height and
-// not for the slope.
+// and that is what the air reads its warmth off, since a glacier on a range
+// four kilometres high is there for the height and not for the slope.
 //
 // What the country is. Read straight off the history - a planet's metres to
 // the map's metres, one for one - it is not a planet's land. On the first
@@ -80,21 +79,23 @@ import (
 // globe-only).
 //
 // What the air makes of it. The lapse takes the warmth off the high country,
-// six and a half degrees a kilometre; the winds are turned and channelled by
-// ranges they cannot climb; and the ranges wring rain out of the air that
-// climbs them, by Smith and Barstad's linear theory read at the air's own
-// span, which is a planet's (see internal/atmos/orographic.go). That last is
-// most of what moves. On the first globe the land's mean rain went from
-// 1075 mm a year to 1326, and its horse latitudes' from 747 to 1232 against
-// the westerlies' 712 to 969: the subtropics' ranges rain on the trades,
-// which carry the most water and have nothing here to cap them - the
-// earth's trade inversion, which keeps Hawaii's lee and the Atacama dry, is
-// no part of this air. Blurring the country eight times before the air reads
-// it took the globe's land rain only to 1185, so it is the ranges and not
-// the steps between tiles. With the air reading the country for its warmth
-// alone, the rain is within a few millimetres of what it was. That is the
-// air's to answer for (the rain's lift, A3, and its cap) and is logged in
-// docs/perf/worklog.md with the yardsticks it moved.
+// six and a half degrees a kilometre: the year, the frost, the tree line,
+// the warmth the soil forms under and the warmth PET is read at all read the
+// elevation (lapseHeight). The winds' ground and the rain's lift do not: they
+// read the map's ground, as they did before there was a country.
+//
+// They were tried on it. Read off the country, the ranges wring rain out of
+// the air that climbs them by Smith and Barstad's linear theory at the air's
+// own span, which is a planet's (internal/atmos/orographic.go), and the first
+// globe's land rain went from 1075 mm a year to 1326 - the earth's land has
+// some 800 - its horse latitudes' from 747 to 1232 against the westerlies'
+// 712 to 969: the subtropics' ranges rain on the trades, which carry the
+// most water and have nothing in this air to cap them, as the earth's trade
+// inversion keeps Hawaii's lee and the Atacama dry. Blurring the country
+// eight passes took it only to 1185, so it is the ranges and not the steps
+// between tiles. Five yardsticks of the rivers and the soil moved out of
+// their bands with it. The cap is the air's work (A2 and A3), and until it is
+// there the ranges' rain waits for it.
 
 // earthHeights is the earth's land by height: the share of the land above the
 // sea that stands lower than each height, in metres. It is ETOPO5's (NOAA
@@ -196,10 +197,11 @@ func (g *Grid) countryAt(i int) float64 {
 	return g.country[i]
 }
 
-// airHeight is the height the air reads at tile i: the ground as the weather
-// stands on it (see laidHeight), on the country it lies in. It is what the
-// lapse takes the warmth down by, and what the winds and the rain rise over.
-func (g *Grid) airHeight(i int) float64 { return g.laidHeight(i) + g.countryAt(i) }
+// lapseHeight is the height the air's warmth is read at on tile i: the ground
+// as the weather stands on it (see laidHeight), on the country it lies in. It
+// is what the lapse takes the warmth down by. The winds and the rain rise
+// over laidHeight alone: see above.
+func (g *Grid) lapseHeight(i int) float64 { return g.laidHeight(i) + g.countryAt(i) }
 
 // Elevation is how high tile i stands, in metres on the map's scale of
 // Height, with the country it lies in: on a globe, the planet's height of

@@ -179,7 +179,7 @@ func (g *Grid) Recount() {
 	g.landmarks.moved()
 	g.wet()
 	for i := range g.Tiles {
-		g.Chunks[g.ChunkOf(i)].Height += g.airHeight(i) // as the air reads it: see airHeight
+		g.Chunks[g.ChunkOf(i)].Height += g.lapseHeight(i) // with the country under it: see lapseHeight
 		g.Chunks[g.ChunkOf(i)].count(&g.Tiles[i], 1)
 		if lends(&g.Tiles[i]) {
 			g.lend(i, 1)

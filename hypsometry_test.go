@@ -31,7 +31,7 @@ func TestAValleyStandsOnNoCountry(t *testing.T) {
 		t.Fatal("a valley was given a country")
 	}
 	for i := range g.Tiles {
-		if g.Elevation(i) != g.Height[i] || g.airHeight(i) != g.laidHeight(i) {
+		if g.Elevation(i) != g.Height[i] || g.lapseHeight(i) != g.laidHeight(i) {
 			t.Fatalf("tile %d stands at %.2f m on a valley whose ground is %.2f m", i, g.Elevation(i), g.Height[i])
 		}
 	}
@@ -158,6 +158,63 @@ func TestTheGlobeStandsAtTheEarthsHeights(t *testing.T) {
 			t.Errorf("%s: half the land stands under %.0f m, where the earth's is under %.0f", r.name, r.middle, earthHeightAt(0.5))
 		}
 	}
+}
+
+// The rivers are graded on Height, which is the map's ground, and the
+// country is laid in the history's order, which is not the shaping's: so a
+// river's step from one tile to the next can climb in Elevation where it falls
+// in Height. How often it does is logged, as a share of the steps the
+// water takes over dry land, of every tile's and of the rivers' - the tiles
+// carrying meanderFlow and more - beside the same share in Height, which is
+// the grading's own (a step into a lake's hollow, or along its flat, can
+// climb there). It is not held: the country is not graded, and a reading of
+// it is what a later change to it would be held against.
+func TestHowOftenARiverClimbsTheCountry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("makes globes")
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%-10s %10s %12s %12s %12s %12s", "", "steps", "climb, all", "in Height", "rivers", "in Height")
+	for _, c := range []struct {
+		name  string
+		seed  uint64
+		terms Terms
+	}{{"globe", 1, GlobeTerms()}, {"globe", 2, GlobeTerms()}, {"globe", 3, GlobeTerms()}, {"small", 1, smallGlobe()}, {"small", 2, smallGlobe()}} {
+		g := yardWorld(c.name, c.seed, c.terms)
+		var steps, climbs, heightClimbs, rivers, riverClimbs, riverHeightClimbs int
+		for i := range g.Tiles {
+			if g.Tiles[i].Wet() || g.sunk(i) {
+				continue
+			}
+			q, ok := g.Downstream(g.PosOf(i))
+			if !ok {
+				continue
+			}
+			j := g.Index(q)
+			up := g.Elevation(j) > g.Elevation(i)
+			upHeight := g.Height[j] > g.Height[i]
+			steps++
+			if up {
+				climbs++
+			}
+			if upHeight {
+				heightClimbs++
+			}
+			if g.Flow[i] >= meanderFlow {
+				rivers++
+				if up {
+					riverClimbs++
+				}
+				if upHeight {
+					riverHeightClimbs++
+				}
+			}
+		}
+		share := func(k, n int) float64 { return float64(k) / math.Max(1, float64(n)) }
+		fmt.Fprintf(&b, "\n%-10s %10d %12.4f %12.4f %12.4f %12.4f", fmt.Sprintf("%s %d", c.name, c.seed), steps,
+			share(climbs, steps), share(heightClimbs, steps), share(riverClimbs, rivers), share(riverHeightClimbs, rivers))
+	}
+	t.Logf("the share of the water's steps over dry land that climb in Elevation, and in Height:\n%s", b.String())
 }
 
 // earthShareUnder is the share of the earth's land under h metres.

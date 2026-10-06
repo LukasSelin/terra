@@ -10,16 +10,6 @@ import (
 // Rain falls in belts: most under the equator, least in the horse latitudes
 // where the air sinks, and more again in the westerlies. On land, which is
 // where anyone would notice.
-//
-// The horse latitudes are held under the tropics and not under the
-// westerlies. On this globe they were under both, 409 mm against 492, until
-// the air read the country the land stands on (hypsometry.go): the
-// subtropics' ranges rain on the trades, kilometres up, and the horse
-// latitudes' land came to 646 mm against the westerlies' 529. Read on the
-// ground under 500 m it is 662 against 606, so it is not the ranges' own
-// slopes alone. The earth's own figure for it is the yardstick
-// "midlatitude over subtropical rain, globe", which fails on main as well;
-// the order is logged here, and held there.
 func TestRainFallsInBelts(t *testing.T) {
 	g := yardWorld("small", 1, smallGlobe()) // read only, so shared
 	band := func(lo, hi float64) float64 {
@@ -37,12 +27,9 @@ func TestRainFallsInBelts(t *testing.T) {
 		return sum / n
 	}
 	tropics, horse, westerlies, polar := band(0, 10), band(20, 30), band(40, 55), band(70, 90)
-	if !(tropics > westerlies && tropics > horse && westerlies > polar) {
+	if !(tropics > westerlies && westerlies > horse && westerlies > polar) {
 		t.Errorf("rain on land by latitude: tropics %.0f, horse latitudes %.0f, westerlies %.0f, polar %.0f mm",
 			tropics, horse, westerlies, polar)
-	}
-	if horse >= westerlies {
-		t.Logf("known gap: the horse latitudes' land rains %.0f mm against the westerlies' %.0f (see the comment above)", horse, westerlies)
 	}
 }
 

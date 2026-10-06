@@ -17,10 +17,11 @@ land height at each place in that order (`earthHeights`, ETOPO5's land in
 500 m bands, the curve Cogley 1984 draws), less what the map's own drawn
 ground already stands to at that rank. `Height` is unchanged and is still
 what every slope is read off; `Grid.Elevation` (and `TileView.Elevation`)
-is the two together, and the air reads it (`airHeight`): the lapse, the
-winds' ground, the rain's lift, PET, the year, the frost, the tree line,
-the soil's warmth. Valleys keep their drawn spread: no country is laid on a
-map that is not a wrapped, poured world.
+is the two together. The air's warmth reads it (`lapseHeight`): the lapse,
+the year, the frost, the tree line, the soil's warmth, and the warmth PET
+is read at. The winds' ground and the rain's lift read the map's ground, as
+on main. Valleys keep their drawn spread: no country is laid on a map that
+is not a wrapped, poured world.
 
 **Why the earth's spread and not the history's.** The history's metres are
 a planet's (real rates, the real 4.5 km freeboard), and the metre upright is
@@ -48,11 +49,11 @@ land:
 | m | 5% | 10% | 25% | 50% | 75% | 90% | 95% | 99% | 99.9% | top |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | earth | 36 | 71 | 179 | 461 | 1106 | 2240 | 3026 | 4748 | 5600 | 8000 |
-| globe 1 | 50 | 95 | 239 | 535 | 1042 | 1579 | 2052 | 3146 | 4928 | 7323 |
-| globe 2 | 52 | 100 | 238 | 540 | 1141 | 2352 | 3098 | 4771 | 5554 | 7336 |
-| globe 3 | 59 | 97 | 221 | 478 | 1035 | 2075 | 2899 | 4627 | 5546 | 7531 |
-| small 1 | 51 | 94 | 227 | 516 | 1119 | 2094 | 2889 | 4433 | 5340 | 6267 |
-| small 2 | 42 | 75 | 202 | 486 | 1266 | 2458 | 3153 | 4815 | 5627 | 6188 |
+| globe 1 | 49 | 93 | 234 | 529 | 1043 | 1583 | 2072 | 3200 | 4959 | 7327 |
+| globe 2 | 54 | 100 | 239 | 546 | 1140 | 2370 | 3128 | 4784 | 5558 | 7336 |
+| globe 3 | 61 | 100 | 215 | 474 | 1040 | 2097 | 2914 | 4644 | 5544 | 7551 |
+| small 1 | 52 | 95 | 228 | 522 | 1125 | 2093 | 2895 | 4425 | 5339 | 6263 |
+| small 2 | 45 | 85 | 209 | 498 | 1240 | 2436 | 3143 | 4805 | 5631 | 6184 |
 
 On main the same globes' land stood a few hundred metres over the sea at
 the most. The shaping lays the map's ground again in its own order, so the
@@ -60,63 +61,69 @@ sum is the earth's curve as near as that leaves it: some 60 m high in the
 lowlands, and globe 1 short in its upper tenth. The continental mode is
 still the 0-250 m bin (+0.125 km).
 
-**What moved, and why.** The air. Most of it is the ranges' own rain
-(Smith and Barstad, read at the air's planetary span): globe 1's land rain
-1075 -> 1326 mm a year, its horse latitudes' 747 -> 1232 against the
-westerlies' 712 -> 969. With the air reading the country for its warmth
-only, small globes 1 and 2 rain within 5 mm of main in every belt; with
-the rain's lift or the winds' ground reading it, the subtropics are wet.
-Blurring the country eight passes took globe 1 only to 1185 mm, so it is
-the ranges and not the steps between tiles. The subtropics have nothing to
-cap the trades' rain (no trade inversion): the air lane's to answer.
+**The rivers across the country.** `TestHowOftenARiverClimbsTheCountry`
+logs the share of the water's steps over dry land that climb in
+`Elevation`: 0.10-0.12 of all steps on the five globes and 0.09-0.13 of
+the rivers' (tiles carrying `meanderFlow`), against 0.003-0.014 and
+0-0.032 in `Height`, which is the grading's own (lake hollows and flats).
+The country is in the history's order and the network in the shaping's;
+it is logged and not held.
+
+**The air, tried whole and taken back.** Read by the winds and the rain's
+lift as well, the country rained: Smith and Barstad's lift at the air's
+planetary span on ranges kilometres high, with nothing to cap the trades
+(no trade inversion), took globe 1's land rain from 1075 mm a year to 1326
+(the earth's land has some 800), its horse latitudes' from 747 to 1232
+against the westerlies' 712 to 969, and put five more yardsticks out of
+their bands. Blurring the country eight passes took it only to 1185, so it
+is the ranges and not the tile steps. That is the air's to answer (A2/A3,
+the follow-up issue); here the air reads the country for its warmth only,
+and the rain is main's: globe 1's land 1076 mm, horse latitudes 747,
+westerlies 711; small globe 1 576 (main 577), small globe 2 896 (main 890).
 
 **Yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout
-60m .` on main (2c51bea) and here, the failures and what moved across a
-line:
+60m .` on main (2c51bea) and here:
 
 | yardstick | main | here | |
 | --- | --- | --- | --- |
-| channel concavity, small globe | 0.2455 | 0.2913 | fails both |
-| midlatitude over subtropical rain, globe | 0.904 | 0.806 | fails both: the subtropics' ranges rain |
-| mean land rain, 2x over 1x, small globe | 1.246 | 1.424 | fails both: more of the rain is the ranges' |
-| land share of Aridisols | 0.059 | 0.025 | fails both: a wetter land |
-| drainage area exceedance exponent, small globe | 0.4863 | 0.4779 | fails both |
-| hypsometric integral, small globe | 0.3055 | 0.3899 | now inside |
-| discharge exceedance exponent, small globe | 0.4622 | 0.443 | now inside |
-| land share of Gelisols | 0.1295 | 0.1046 | now inside |
-| equatorial over subtropical rain, globe | 4.892 | 3.991 | gap closed, marker off: the subtropics wetter, not the ITCZ wider |
-| valley floor over hillslope soil depth, small globe | 2.373 | 3.799 | gap closed, marker off: floors 0.55 -> 0.82 m |
-| Flint's law fit R2, small globe | 0.884 | 0.825 | new: the networks moved with the rain |
-| meander wavelength, small globe | 13.0 | 14.87 | new: the rivers carry more |
-| channel concavity, 2x less 1x, small globe | 0.057 | 0.107 | new: the two resolutions' rain moved apart (above) |
-| Hack exponent, globe | 0.578 | 0.6012 | new, by 0.0012; main read 0.6005 at 337a047 |
-| land share of Mollisols | 0.083 | 0.204 | new: the high country is cool and keeps its carbon |
+| channel concavity, small globe | 0.2455 | 0.2567 | fails both |
+| midlatitude over subtropical rain, globe | 0.9042 | 0.9039 | fails both |
+| mean land rain, 2x over 1x, small globe | 1.246 | 1.246 | fails both |
+| land share of Aridisols | 0.059 | 0.042 | fails both |
+| land share of Gelisols | 0.1295 | 0.1257 | fails both |
+| hypsometric integral, small globe | 0.3055 | 0.3197 | fails both (floor 0.32) |
+| drainage area exceedance exponent, small globe | 0.4863 | 0.4878 | fails both |
+| discharge exceedance exponent, small globe | 0.4622 | 0.4569 | now inside |
+| Horton bifurcation ratio, small globe | 4.022 | 5.051 | new: runoff (below) |
+| Horton bifurcation ratio, globe | 4.489 | 5.129 | new: runoff (below) |
+| meander wavelength, small globe | 13.0 | 15.65 | new: runoff (below) |
+| mean hillslope soil depth, small globe | 0.2312 | 0.1753 | new: colder high slopes make soil slower |
+| land share of Mollisols | 0.083 | 0.186 | new: the cool high country keeps its carbon |
 
-The rivers move through the rain. The shaping roots its closed basins by
-whether the air takes off a hollow what its catchment sends it, and the
-cutting and the channels read the discharge: over the eight network small
-globes the closed lakes went 74 -> 40. Nothing in the shaping's or the
-cutting's code changed.
-
-**Short tier.** `TestRainFallsInBelts` read small globe 1's horse latitudes
-under its westerlies, 409 against 492 mm; now 646 against 529. The
-westerlies-over-horse clause is logged as a known gap and held by the
-realism yardstick, which fails on main as well; the other clauses stand.
-`go test -short -timeout 60m ./...` passes.
+The warmth is the whole of the change, and it moves the rivers through the
+runoff: the high country is colder, so the air takes less of its rain back
+(PET read at its elevation), and over the eight network small globes the
+land's mean runoff went 212.5 -> 264.5 mm a year with the rain unchanged,
+and the closed lakes 74 -> 65. More water cuts more channels and wider
+ones, which is the bifurcation ratios and the meanders measured in widths.
+The soil's production and carbon read the warmth (`meanTempOf`): a
+Mollisol is cool, deep in carbon and not leached, which the high country
+now is, and the hillslopes' soil is made slower in the cold. Nothing in
+the shaping's or the cutting's code changed.
 
 **The world.** Moved: `TERRA_DIGEST=write` rewrote globe128 only
-(f92adf079b762dca -> a75782f602117679); the valley and the ancient valley
+(f92adf079b762dca -> c8451b0740edc38a); the valley and the ancient valley
 check as they were, which is the valleys keeping their drawn spread.
 
-**The heap.** globe128 412.98 -> 397.70 MB (-3.70%) and 29301 -> 28242
-allocations (-3.6%), under budget, so its entry is rewritten; the
-country's 8 B a tile is less than the fewer closed hollows save. The valley
-and the ancient valley are left as they were.
+**The heap.** globe128 412.98 -> 413.00 MB, inside the budget, which is
+left as it was. The country is 8 B a tile on a globe.
 
-**Timing.** Interleaved on a loaded machine, main's test binary and this
-one turn and turn about, globe256, six each, `TERRA_PHASES=1`:
+**Timing.** Taken on the first version of this branch, whose air read the
+country for its winds and rain as well (more work than this one does);
+interleaved on a loaded machine, main's test binary and the branch's turn
+and turn about, globe256, six each, `TERRA_PHASES=1`:
 
-| globe256 | main | here | |
+| globe256 | main | branch | |
 | --- | --- | --- | --- |
 | sec/op | 4.140 ± 22% | 4.198 ± 19% | ~ (p=0.699) |
 | stage.sea | 2.6 ms | 4.4 ms | +66% (p=0.009): the sort in layCountry |
@@ -128,10 +135,10 @@ one turn and turn about, globe256, six each, `TERRA_PHASES=1`:
 No time to be seen beyond the sea stage's 1.7 ms. A quiet-machine
 `scripts/perf.sh check` is still owed before merging.
 
-**Open.** Rivers are graded on `Height`; across `Elevation` a river is not
-checked to fall (the country is in the history's order and the network in
-the shaping's). `cmd/unreal`, `cmd/zarr` and `cmd/overview` still export
-`Height`. The terrain classes by height quantile read `Height`.
+**Open.** Rivers are graded on `Height`, and climb in `Elevation` on a
+tenth of their steps (above). `cmd/unreal`, `cmd/zarr` and `cmd/overview`
+still export and draw `Height`, and the terrain classes by height quantile
+read `Height`. The ranges' rain waits for the air (the follow-up issue).
 
 ---
 

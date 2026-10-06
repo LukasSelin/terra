@@ -175,13 +175,9 @@ var realYardsticks = []realYardstick{
 		name: "equatorial over subtropical rain, globe", unit: "x", scale: "water", lo: 1.8, hi: 4, slow: true,
 		source:  "Adler et al. 2003 (GPCP): zonal rain ~5.5 mm/d under the ITCZ against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 0, 10) / zonalRain(globes(), 20, 30) },
-		// It carried a gap, G: the column budget gathers the trades' water
-		// into a narrow ITCZ under a mean wind with no transient convection
-		// spreading it, 4.89x. It closed when the air was given the country
-		// the land stands on (hypsometry.go), at 3.99x, and not by the ITCZ
-		// spreading: the subtropics' ranges rain, and the ratio is barely
-		// inside. A change that puts it back over four has reopened the gap.
-	}},
+	},
+		gap: "known gap: G - the column budget gathers the trades' water into a narrow ITCZ under a mean wind with no transient convection spreading it: 5x the subtropics, not 2-3x",
+	},
 	{yardstick: yardstick{
 		name: "midlatitude over subtropical rain, globe", unit: "x", scale: "water", lo: 1.1, hi: 2, slow: true,
 		source:  "Adler et al. 2003 (GPCP): the storm tracks at 40-60 deg rain ~2.8 mm/d against ~2.2 mm/d at 20-30 deg",

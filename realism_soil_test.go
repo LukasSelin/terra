@@ -55,15 +55,9 @@ var soilYardsticks = []realYardstick{
 		name: "valley floor over hillslope soil depth, small globe", unit: "x", scale: "ground", lo: 3, hi: 50, slow: true,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
-		// It carried a gap, I: the floors' soil is capped with the
-		// hillslopes' by production (see the floor depth yardstick), so they
-		// stood only a few times deeper, 3.015x and then 2.11x once the land's
-		// winters softened, and 2.37x before the air read the country the
-		// land stands on (hypsometry.go). With it, 3.80x: the floors went
-		// from 0.55 m to 0.82 m under a wetter land and the slopes stayed
-		// at some 0.22 m, so the floors are still under a metre and the
-		// ratio is not the depth Pelletier has.
-	}},
+	},
+		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only a few times deeper: 3.015x on main, 2.11x once the land's winters softened",
+	},
 
 	// 10. Clay against the climate. On the same rock a soil formed warm holds
 	// more clay than one formed cold, and a wet one more than a dry one: the
