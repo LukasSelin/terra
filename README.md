@@ -22,7 +22,9 @@ for day := 0; ; day++ {
 
 ## What it knows
 
-The ground - height, the water running over it in cubic metres a second,
+The ground - height, and on a globe the height of the country it lies in,
+its lowlands and its ranges kilometres up (`Elevation`); the water running
+over it in cubic metres a second,
 drainage, the rock under it and the sand and clay over that, which plate it
 rides and which age its rock dates from. The lakes standing in its hollows:
 full and running over where the rain keeps them so, salt and shrunk back, or

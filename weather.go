@@ -144,7 +144,7 @@ func (g *Grid) airedGround(into []float32) []float32 {
 	for i := range g.Tiles {
 		into[i] = -1
 		if !g.sunk(i) {
-			into[i] = float32(math.Max(0, g.laidHeight(i)-base)) // see laidHeight
+			into[i] = float32(math.Max(0, g.airHeight(i)-base)) // see airHeight
 		}
 	}
 	return into
@@ -171,7 +171,7 @@ func (g *Grid) airGround() ([]float64, []float64) {
 	g.EachRow(func(y int) {
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
-			above[i] = math.Max(0, g.laidHeight(i)-base) // see laidHeight
+			above[i] = math.Max(0, g.airHeight(i)-base) // see airHeight
 			if g.sunk(i) {
 				wet[i] = 1
 			}
@@ -199,7 +199,7 @@ func (g *Grid) weatherStale() bool {
 		if was < 0 {
 			continue
 		}
-		h := math.Max(0, g.laidHeight(i)-base)
+		h := math.Max(0, g.airHeight(i)-base)
 		moved += math.Abs(h - float64(was))
 		stood += h
 	}
@@ -219,7 +219,7 @@ func (g *Grid) rainOn() {
 	ground := make([]float64, len(g.Tiles))
 	for i := range ground {
 		if !g.sunk(i) {
-			ground[i] = math.Max(0, g.laidHeight(i)-base) // see laidHeight
+			ground[i] = math.Max(0, g.airHeight(i)-base) // see airHeight
 		}
 	}
 
@@ -255,7 +255,7 @@ func (g *Grid) rainOn() {
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
-				t := a.Mean[y] - Lapse*g.laidHeight(i)
+				t := a.Mean[y] - Lapse*g.airHeight(i)
 				pe := atmos.PetAt(a.PET[y], t)
 				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
 				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
@@ -292,7 +292,7 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.airHeight(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}

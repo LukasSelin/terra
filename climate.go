@@ -229,7 +229,7 @@ func SeasonOf(tick int) clock.Quarter { return clock.SeasonOf(tick) }
 // temperature for everywhere - see Climate - and is left to its own spells.
 func (w *Land) TempAt(p geom.Pos) float64 {
 	g, c := w.Grid, w.Climate
-	h := g.laidHeight(g.Index(p)) // the sea's surface over the deep floor: see laidHeight
+	h := g.airHeight(g.Index(p)) // as the air reads it: see airHeight
 	if !c.globe {
 		t := c.TempAt(p.Y) - Lapse*h
 		if g.Wrap {
@@ -257,7 +257,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 func (w *Land) yearAt(i int) (mean, swing float64) {
 	g, c := w.Grid, w.Climate
 	y := i / g.W
-	mean = c.MeanAt(y) - Lapse*g.laidHeight(i)
+	mean = c.MeanAt(y) - Lapse*g.airHeight(i)
 	if !c.globe {
 		return mean, Swing
 	}
