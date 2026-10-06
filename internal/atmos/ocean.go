@@ -1,7 +1,10 @@
 package atmos
 
 import (
+	"fmt"
 	"math"
+	"os"
+	"time"
 
 	"github.com/LukasSelin/terra/internal/phase"
 )
@@ -54,15 +57,12 @@ const (
 	// stressDrag is the drag of the sea surface on the wind over it: the
 	// ordinary bulk figure for a moderate wind (Large and Pond).
 	stressDrag = 1.3e-3
-	// westWall is how wide, in metres, the current against an ocean's western
-	// shore is. The Gulf Stream off Carolina is a hundred kilometres across
-	// and the Kuroshio a little more; it is never narrower than a cell.
-	westWall = 150e3
 	// gyreDepth is how deep, in metres, the water driven round a gyre goes: its
 	// transport over this is how fast the surface of it goes. Thirty million
 	// cubic metres a second in a current a hundred and fifty kilometres wide
 	// comes to some seventy centimetres a second, which is what the Gulf
-	// Stream's surface runs at off the Carolinas.
+	// Stream's surface runs at off the Carolinas. The thermocline's depth will
+	// take its place (docs/ocean-model-plan.md, M2).
 	gyreDepth = 300.0
 	// ekmanDepth is how deep, in metres, the water the wind drives straight
 	// off is: the Ekman layer, some fifty metres. What it carries goes a
@@ -100,24 +100,14 @@ const (
 	// latitude: the Gulf Stream at the Grand Banks, some eight or ten over the
 	// water beside it, is about the most the real world has.
 	seaWarmMost = 10.0
-	// gyreCalm is how near the equator, in degrees, the gyres are not worked
-	// out: the turning of the planet that holds them to their balance goes to
-	// nothing there. And gyreCap is how near the pole.
-	gyreCalm = 5.0
-	gyreCap  = 80.0
+	// upwellCalm is how near the equator, in degrees, a coast has no
+	// upwelling of its own: the turning of the planet that sends the water
+	// the wind drives off a shore goes to nothing there.
+	upwellCalm = 5.0
 	// upwellLow is how far from the equator, in degrees, a coast's upwelling
 	// comes into its own: the Benguela and the Humboldt are strongest from
 	// fifteen degrees to thirty.
 	upwellLow = 15.0
-	// cornerReach is how far along a row, in metres, a current running up or
-	// down a coast that slants looks for the water it came from.
-	cornerReach = 600e3
-	// gyreRows is how many rows of cells either way the gyres' currents are
-	// taken over.
-	gyreRows = 2
-	// gyreOpen is how much of the way round a parallel a stretch of sea has to
-	// run for its shores not to close a gyre.
-	gyreOpen = 0.8
 	// coastReach is how far round a place on land, in kilometres, the water
 	// off its coast is felt: a sea breeze's reach and a little more.
 	coastReach = 300.0
@@ -167,142 +157,28 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		return ty[i] / (SeaDensity * f), -tx[i] / (SeaDensity * f)
 	}
 
-	// The gyres. On each row, each stretch of sea between shores is driven
-	// toward the equator or the pole by the turning of the wind's stress, and
-	// what that takes one way comes back the other against the western shore.
+	// The gyres: the transport the wind drives round each ocean, ψ, and the
+	// current it makes over the depth the gyres go to. See flow.go.
+	psi := e.gyres(tx, ty)
 	for cy := 0; cy < e.H; cy++ {
-		lat := e.lat[cy]
-		a := math.Abs(lat)
-		if a < gyreCalm || a > gyreCap {
-			continue
+		up, down, dy := cy-1, cy+1, 2*e.Dy
+		if up < 0 {
+			up, dy = cy, e.Dy
 		}
-		beta := 2 * omega * math.Cos(lat*math.Pi/180) / planetRadius
-		row := cy * e.W
-		// Where the row's first shore is: the eastern end of a stretch of land,
-		// from which the stretches of sea can be walked eastward round the
-		// seam. A row with no land has no shore.
-		start := -1
-		for cx := 0; cx < e.W; cx++ {
-			if !wet(row+cx) && wet(e.at(cx+1, cy)) {
-				start = cx + 1
-				break
-			}
-		}
-		if start < 0 {
-			continue
-		}
-		if !e.Wrap {
-			start = 0
+		if down >= e.H {
+			down, dy = cy, e.Dy
 		}
 		dx := e.Dx[cy]
-		wall := max(1, int(math.Round(westWall/dx)))
-		span := e.W
-		for k := 0; k < span; {
-			i := e.at(start+k, cy)
-			if !wet(i) {
-				k++
-				continue
-			}
-			// A stretch of sea, from its western shore to its eastern.
-			first := k
-			for k < span && wet(e.at(start+k, cy)) {
-				k++
-			}
-			last := k - 1
-			if !e.Wrap && (first == 0 || last == span-1) {
-				// A valley's sea runs off the map, and the map has no say in
-				// where its gyre closes.
-				continue
-			}
-			if last-first+1 <= wall || float64(last-first+1) > gyreOpen*float64(e.W) {
-				// Too narrow to turn in, or an ocean so nearly all the way
-				// round that the islands in it do not close it: the Southern
-				// Ocean's current goes round Drake Passage, not back up it.
-				continue
-			}
-			var interior float64
-			for j := first + wall; j <= last; j++ {
-				c := e.at(start+j, cy)
-				cx := c - row
-				curl := (ty[e.at(cx+1, cy)]-ty[e.at(cx-1, cy)])/(2*dx) -
-					(tx[e.at(cx, cy-1)]-tx[e.at(cx, cy+1)])/(2*e.Dy)
-				flow := curl / (SeaDensity * beta)
-				cv[c] = flow / gyreDepth
-				interior += flow * dx
-			}
-			back := -interior / (float64(wall) * dx) / gyreDepth
-			for j := first; j < first+wall; j++ {
-				cv[e.at(start+j, cy)] = back
-			}
-		}
-	}
-	// Each row's balance is its own, and a ragged coast gives neighbouring rows
-	// oceans of different breadths and currents that differ row by row far
-	// more than the water does: the currents are taken over gyreRows rows of
-	// sea either way.
-	{
-		mask := make([]float64, n)
-		for i := range mask {
-			if wet(i) {
-				mask[i] = 1
-			}
-		}
-		flat := make([]int, e.H)
-		held, share := e.box(cv, flat, gyreRows), e.box(mask, flat, gyreRows)
-		for i := range cv {
-			if wet(i) && share[i] > 0 {
-				cv[i] = held[i] / share[i]
-			}
-		}
-	}
-	// And the water the gyres drive north and south has to go east and west to
-	// get there: none of it goes through an eastern shore, so what leaves each
-	// cell toward the poles or the equator is made up from the cell east of
-	// it. This is what takes the western current across the ocean where the
-	// gyre it runs round ends, the Gulf Stream into the North Atlantic Drift.
-	gu := make([]float64, n)
-	for cy := 0; cy < e.H; cy++ {
-		nr, sr := max(cy-1, 0), min(cy+1, e.H-1)
-		row := cy * e.W
-		dx := e.Dx[cy]
-		// Walked westward from each eastern shore, round the seam on a globe.
-		start := -1
 		for cx := 0; cx < e.W; cx++ {
-			if !wet(row+cx) && wet(e.at(cx-1, cy)) {
-				start = (cx - 1 + e.W) % e.W
-				break
-			}
-		}
-		if start < 0 {
-			continue
-		}
-		// The next row's ocean is not the same breadth as this one's, and
-		// what is left over at the western shore is shared back across the
-		// stretch rather than run into the land.
-		var flow float64
-		var stretch []int
-		shut := func() {
-			for k, i := range stretch {
-				gu[i] -= flow * float64(k+1) / float64(len(stretch))
-			}
-			flow, stretch = 0, stretch[:0]
-		}
-		for k := 0; k <= e.W; k++ {
-			cx := ((start-k)%e.W + e.W) % e.W
-			i := row + cx
-			if !wet(i) || k == e.W {
-				shut()
-				continue
-			}
-			north := (cv[nr*e.W+cx] - cv[sr*e.W+cx]) / (2 * e.Dy)
-			flow += north * dx
-			gu[i] = flow
-			stretch = append(stretch, i)
+			i := cy*e.W + cx
+			cu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / gyreDepth
+			cv[i] = (psi[e.at(cx+1, cy)] - psi[e.at(cx-1, cy)]) / (2 * dx) / gyreDepth
 		}
 	}
+	e.Psi = narrow(psi)
 	for i := range n {
 		mx, my := ekman(i, i/e.W)
-		cu[i] += gu[i] + mx/ekmanDepth
+		cu[i] += mx / ekmanDepth
 		cv[i] += my / ekmanDepth
 		if !wet(i) {
 			cu[i], cv[i] = 0, 0
@@ -325,7 +201,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
 			deep[i] = e.Mean[cy] - upwellContrast*c*c
-			if !wet(i) || math.Abs(lat) < gyreCalm {
+			if !wet(i) || math.Abs(lat) < upwellCalm {
 				continue
 			}
 			gx, gy := e.grad(land, cx, cy)
@@ -343,7 +219,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			// shore goes to nothing, and what sends it there instead is the
 			// open ocean's business rather than a coast's.
 			if off > 0 {
-				rise[i] = off / math.Min(e.Dx[cy], e.Dy) * smoothstep(gyreCalm, upwellLow, math.Abs(lat))
+				rise[i] = off / math.Min(e.Dx[cy], e.Dy) * smoothstep(upwellCalm, upwellLow, math.Abs(lat))
 			}
 		}
 	}
@@ -368,7 +244,11 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// under, the cell upstream along the row, and the nearest sea upstream down
 	// the column. Land takes nothing.
 	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
-	sea.gaussSeidel(temp)
+	tg := time.Now()
+	rounds := sea.gaussSeidel(temp)
+	if os.Getenv("FLOWDEBUG") != "" {
+		fmt.Fprintln(os.Stderr, "gaussSeidel", time.Since(tg), rounds)
+	}
 	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
 
 	warm := make([]float64, n)
@@ -483,23 +363,19 @@ func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
 				}
 			}
 			// Toward the north is up the map, so water going north comes from
-			// the row below. A current running along a coast that does not run
-			// due north and south comes in round the corner of it: from the
-			// nearest sea along the row behind it, within cornerReach.
+			// the row below. The current runs along the coast, so where the cell
+			// behind it in the column is land, the water came round the corner:
+			// from the cell behind it across the diagonal, on the side the
+			// current comes from along the row.
 			if b > 0 {
 				if uy := cy + int(math.Copysign(1, cvi)); uy >= 0 && uy < e.H {
-					reach := int(math.Ceil(cornerReach / e.Dx[uy]))
-					for side := 0; side <= reach; side++ {
-						if j := e.at(cx+side, uy); e.Sea[j] > 0.5 {
-							take += b
-							l.jb[i], l.wb[i] = int32(j), b
-							break
-						}
-						if j := e.at(cx-side, uy); side > 0 && e.Sea[j] > 0.5 {
-							take += b
-							l.jb[i], l.wb[i] = int32(j), b
-							break
-						}
+					j := e.at(cx, uy)
+					if e.Sea[j] <= 0.5 && cu[i] != 0 {
+						j = e.at(cx-int(math.Copysign(1, cu[i])), uy)
+					}
+					if e.Sea[j] > 0.5 {
+						take += b
+						l.jb[i], l.wb[i] = int32(j), b
 					}
 				}
 			}
@@ -528,7 +404,7 @@ func (l *seaLinks) at(i int, t []float64) float64 {
 // spread over goroutines and vectors, the warmth moves a cell a round: on a
 // quarter globe that took 4.7 times the sweeps, was slower all told, and
 // settled on warmths up to 7.6 degrees apart. See docs/perf/worklog.md.
-func (l *seaLinks) gaussSeidel(t []float64) {
+func (l *seaLinks) gaussSeidel(t []float64) int {
 	type order struct{ x0, x1, dx, y0, y1, dy int }
 	orders := [4]order{
 		{0, l.w, 1, 0, l.h, 1}, {l.w - 1, -1, -1, 0, l.h, 1},
@@ -536,6 +412,7 @@ func (l *seaLinks) gaussSeidel(t []float64) {
 	}
 	for round := 0; round < seaRounds; round++ {
 		most := 0.0
+		where := 0
 		for _, o := range orders {
 			for cy := o.y0; cy != o.y1; cy += o.dy {
 				row := cy * l.w
@@ -547,15 +424,20 @@ func (l *seaLinks) gaussSeidel(t []float64) {
 					next := l.at(i, t)
 					if d := math.Abs(next - t[i]); d > most {
 						most = d
+						where = i
 					}
 					t[i] = next
 				}
 			}
 		}
 		if most < seaSettled {
-			return
+			return round + 1
+		}
+		if round == seaRounds-1 && os.Getenv("FLOWDEBUG") != "" {
+			fmt.Fprintf(os.Stderr, "unsettled %.3g at %d,%d take %.3g wa %.3g wb %.3g\n", most, where%l.w, where/l.w, l.take[where], l.wa[where], l.wb[where])
 		}
 	}
+	return seaRounds
 }
 
 // coastal is the sea's warmth as the country round each cell feels it: the
