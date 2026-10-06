@@ -803,7 +803,7 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 			continue
 		}
 		c.edge[i] = base
-		c.f[i] = years * Erodibility * math.Sqrt(g.Flow[i]) * rockErodibility(t) / g.span()
+		c.f[i] = years * Erodibility * math.Sqrt(max(0, g.Flow[i])) * rockErodibility(t) / g.span() // see waterStep
 	}
 }
 

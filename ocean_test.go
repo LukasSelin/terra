@@ -152,7 +152,8 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // Warm and Coast on twoOceans. It was taken on 53eb8bf, before they were
 // kept, and taken again when the gyres were solved in two dimensions
 // (docs/ocean-model-plan.md, M1), which moves them on purpose. And the warmth
-// is the kept temperature over its latitude's mean, held to seaWarmMost.
+// is the kept temperature over its latitude's mean, held to seaWarmMost, and
+// nothing where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -171,6 +172,13 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	const most = 10 // atmos.seaWarmMost
 	for i, w := range e.Warm {
 		if e.Sea[i] <= 0.5 {
+			continue
+		}
+		if float64(e.WaterTemp[i]) < SeaFreeze {
+			// Under ice: the air over it takes nothing from the water.
+			if w != 0 {
+				t.Fatalf("cell %d: water at %.2f degrees, under ice, warms the air %+.2f", i, e.WaterTemp[i], w)
+			}
 			continue
 		}
 		over := float64(e.WaterTemp[i]) - e.Mean[i/e.W]

@@ -104,6 +104,12 @@ const (
 	// upwelling of its own: the turning of the planet that sends the water
 	// the wind drives off a shore goes to nothing there.
 	upwellCalm = 5.0
+	// seaIce is the temperature, in degrees, sea water freezes at
+	// (terra.SeaFreeze).
+	seaIce = -1.8
+	// polarReach is the latitude, in degrees, whose cells' breadth is the
+	// least the current toward the poles is read across: see currents.
+	polarReach = 60.0
 	// upwellLow is how far from the equator, in degrees, a coast's upwelling
 	// comes into its own: the Benguela and the Humboldt are strongest from
 	// fifteen degrees to thirty.
@@ -158,8 +164,19 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	}
 
 	// The gyres: the transport the wind drives round each ocean, ψ, and the
-	// current it makes over the depth the gyres go to. See flow.go.
+	// current it makes over the depth the gyres go to. See flow.go. The
+	// current toward the pole or the equator is ψ's rise toward the east
+	// across a reach of the row never narrower than a cell is at polarReach
+	// degrees: toward a pole the cells narrow to a few hundred metres, and
+	// a tenth of a sverdrup of the solve's error across one of them would
+	// read as a current of metres a second. The models of the ocean and the
+	// air on a grid of parallels filter their rows near the poles for the
+	// same reason (Arakawa and Lamb, 1977).
 	psi := e.gyres(tx, ty)
+	widest := 0.0
+	for _, dx := range e.Dx {
+		widest = math.Max(widest, dx)
+	}
 	for cy := 0; cy < e.H; cy++ {
 		up, down, dy := cy-1, cy+1, 2*e.Dy
 		if up < 0 {
@@ -169,10 +186,12 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			down, dy = cy, e.Dy
 		}
 		dx := e.Dx[cy]
+		reach := max(1, int(math.Round(widest*math.Cos(polarReach*math.Pi/180)/dx)))
+		reach = min(reach, e.W/4)
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
 			cu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / gyreDepth
-			cv[i] = (psi[e.at(cx+1, cy)] - psi[e.at(cx-1, cy)]) / (2 * dx) / gyreDepth
+			cv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / gyreDepth
 		}
 	}
 	e.Psi = make([]float32, n)
@@ -250,9 +269,16 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	sea.gaussSeidel(temp)
 	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
 
+	// Water colder than seaIce is under ice, and the air over ice is not
+	// warmed or chilled by the water under it: its warmth counts for nothing
+	// there. Without it the gyres, which now reach the poles, carried water
+	// a few degrees warmer than the air into the polar seas, and the polar
+	// lands beside them came out four degrees milder than their latitude
+	// under a sea that was ice (see terra.Grid.Freezing, which reads the same
+	// mean). The sea's own ice is M7's (docs/ocean-model-plan.md).
 	warm := make([]float64, n)
 	for i := range warm {
-		if wet(i) {
+		if wet(i) && temp[i] >= seaIce {
 			warm[i] = math.Max(-seaWarmMost, math.Min(seaWarmMost, temp[i]-e.Mean[i/e.W]))
 		}
 	}
