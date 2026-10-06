@@ -252,11 +252,11 @@ type Env struct {
 	// temperature of the sea beside it, and the land away from the sea its
 	// latitude's mean. All are nil on a valley.
 	Cu, Cv, Rise, WaterTemp []float32
-	// Psi is the transport streamfunction the gyres are read off, cubic
-	// metres a second: the water between two cells flows past them at the
-	// difference of their Psi, with the higher on its right. On land it is
-	// the level of the landmass, nought on the largest. See flow.go. Nil on
-	// a valley.
+	// Psi is the transport streamfunction the gyres are read off, in
+	// sverdrups: the water between two cells flows past them at the
+	// difference of their Psi, with the higher on its right, and a gyre is
+	// a closed contour of it. On land it is the level of the landmass,
+	// nought on the largest. See flow.go. Nil on a valley.
 	Psi []float32
 }
 

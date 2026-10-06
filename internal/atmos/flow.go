@@ -1,11 +1,8 @@
 package atmos
 
 import (
-	"fmt"
 	"math"
-	"os"
 	"slices"
-	"time"
 )
 
 // The gyres in two dimensions.
@@ -89,7 +86,7 @@ const (
 	// share of their forcing; flowRestart how many directions GMRES keeps
 	// before it starts again from where it got, and flowMost how many it
 	// takes at most all told.
-	flowSettled = 1e-4
+	flowSettled = 1e-3
 	flowRestart = 30
 	flowMost    = 300
 	// coarsestSweeps is how many times the single row the multigrid comes
@@ -97,7 +94,7 @@ const (
 	coarsestSweeps = 4
 	// spreadFlow is how many unknowns a level has before its sweeps are
 	// spread over goroutines.
-	spreadFlow = 4096
+	spreadFlow = 1024
 )
 
 // flow is the vorticity equation over the sea of a map, written down once
@@ -148,16 +145,8 @@ type level struct {
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
 // it is the level of the landmass. It is for a globe only.
 func (e *Env) gyres(tx, ty []float64) []float64 {
-	t0 := time.Now()
 	f := e.newFlow()
-	t1 := time.Now()
 	x := f.solve(f.forcing(tx, ty))
-	if os.Getenv("FLOWDEBUG") != "" {
-		fmt.Fprintf(os.Stderr, "flow setup %v solve %v prec %v apply %v\n", t1.Sub(t0), time.Since(t1), precT, applyT)
-		precT, applyT = 0, 0
-		fmt.Fprintln(os.Stderr, "levels", levT, "n", f.levels[0].n, f.levels[1].n)
-		levT = [12]time.Duration{}
-	}
 	return f.spread(x)
 }
 
@@ -368,9 +357,20 @@ func (f *flow) finest() *level {
 			rb.flush(l)
 		}
 	}
-	for _, cells := range f.islands {
+	for k, cells := range f.islands {
+		mine := int32(k + 1)
 		for _, c := range cells {
-			f.stencil(int(c), add)
+			// A cell whose equation reaches only its own island adds
+			// nothing to the island's: the coefficients sum to nought.
+			inland := true
+			f.stencil(int(c), func(j int, _ float64) {
+				if f.mass[j] != mine {
+					inland = false
+				}
+			})
+			if !inland {
+				f.stencil(int(c), add)
+			}
 		}
 		rb.flush(l)
 	}
@@ -406,6 +406,8 @@ func (l *level) coarser() *level {
 	}
 	c.n = c.cells + isl
 	c.start = append(make([]int32, 0, c.n+1), 0)
+	c.col = make([]int32, 0, len(l.col)*3/4)
+	c.val = make([]float64, 0, len(l.col)*3/4)
 	rb := newRowBuilder(c.n)
 	from := func(u int32) {
 		for e := l.start[u]; e < l.start[u+1]; e++ {
@@ -608,11 +610,7 @@ func (f *flow) cycle(k int) {
 		}
 		return
 	}
-	t0 := time.Now()
-	for range dbgPre {
-		l.relax(true)
-	}
-	levT[k] += time.Since(t0)
+	l.relax(true)
 	c := f.levels[k+1]
 	clear(c.b)
 	l.residuals()
@@ -621,26 +619,9 @@ func (f *flow) cycle(k int) {
 	}
 	f.cycle(k + 1)
 	for u, d := range l.down {
-		l.x[u] += dbgAlpha * c.x[d]
+		l.x[u] += c.x[d]
 	}
-	t0 = time.Now()
-	for range dbgPost {
-		l.relax(false)
-	}
-	levT[k] += time.Since(t0)
-}
-
-var levT [12]time.Duration
-
-var dbgAlpha = float64(envInt("FLOWALPHA10", 10)) / 10
-
-var dbgPre, dbgPost = envInt("FLOWPRE", 1), envInt("FLOWPOST", 1)
-
-func envInt(k string, d int) int {
-	if s := os.Getenv(k); s != "" {
-		fmt.Sscan(s, &d)
-	}
-	return d
+	l.relax(false)
 }
 
 // apply is the finest equations' left side at x, written to out.
@@ -717,128 +698,15 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 	return b
 }
 
-// solve is GMRES, preconditioned on the right and started again every
-// flowRestart directions, from nought: x with A x = b to flowSettled of b.
+// solve is x with A x = b, to flowSettled of b.
 func (f *flow) solve(b []float64) []float64 {
-	n := len(b)
-	x := make([]float64, n)
-	bn := norm(b)
-	settled := flowSettled
-	if s := os.Getenv("FLOWTOL"); s != "" {
-		fmt.Sscan(s, &settled)
-	}
-	if bn == 0 {
-		return x
-	}
-	m := flowRestart
-	v := make([][]float64, m+1)
-	for k := range v {
-		v[k] = make([]float64, n)
-	}
-	hess := make([][]float64, m+1)
-	for k := range hess {
-		hess[k] = make([]float64, m)
-	}
-	cs, sn, g := make([]float64, m), make([]float64, m), make([]float64, m+1)
-	z, t, r := make([]float64, n), make([]float64, n), make([]float64, n)
-	copy(r, b)
-	done := 0
-	for done < flowMost {
-		beta := norm(r)
-		if beta <= settled*bn {
-			break
-		}
-		for k := range v[0] {
-			v[0][k] = r[k] / beta
-		}
-		clear(g)
-		g[0] = beta
-		k := 0
-		for k < m && done < flowMost {
-			tp := time.Now()
-			f.precondition(v[k], z)
-			precT += time.Since(tp)
-			tp = time.Now()
-			wv := v[k+1]
-			f.apply(z, wv)
-			applyT += time.Since(tp)
-			for j := 0; j <= k; j++ {
-				hj := dot(wv, v[j])
-				hess[j][k] = hj
-				for q := range wv {
-					wv[q] -= hj * v[j][q]
-				}
-			}
-			hk := norm(wv)
-			hess[k+1][k] = hk
-			if hk != 0 {
-				for q := range wv {
-					wv[q] /= hk
-				}
-			}
-			for j := 0; j < k; j++ {
-				a, c := hess[j][k], hess[j+1][k]
-				hess[j][k] = cs[j]*a + sn[j]*c
-				hess[j+1][k] = -sn[j]*a + cs[j]*c
-			}
-			a, c := hess[k][k], hess[k+1][k]
-			d := math.Hypot(a, c)
-			cs[k], sn[k] = a/d, c/d
-			hess[k][k], hess[k+1][k] = d, 0
-			g[k+1] = -sn[k] * g[k]
-			g[k] = cs[k] * g[k]
-			k++
-			done++
-			if math.Abs(g[k]) <= settled*bn || hk == 0 {
-				break
-			}
-		}
-		// The combination of the directions that leaves the least residual,
-		// and back through the preconditioner to the unknowns.
-		y := make([]float64, k)
-		for j := k - 1; j >= 0; j-- {
-			s := g[j]
-			for q := j + 1; q < k; q++ {
-				s -= hess[j][q] * y[q]
-			}
-			y[j] = s / hess[j][j]
-		}
-		clear(t)
-		for j := range k {
-			for q := range t {
-				t[q] += y[j] * v[j][q]
-			}
-		}
-		f.precondition(t, z)
-		for q := range x {
-			x[q] += z[q]
-		}
-		f.apply(x, r)
-		for q := range r {
-			r[q] = b[q] - r[q]
-		}
-	}
+	x, done, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
 	flowIterations = done
-	if os.Getenv("FLOWDEBUG") != "" {
-		fmt.Fprintf(os.Stderr, "flow %dx%d islands %d levels %d iterations %d residual %.3g\n", f.w, f.h, len(f.islands), len(f.levels), done, norm(r)/bn)
-	}
 	return x
 }
 
 // flowIterations is how many directions the last solve took: for the tests.
 var flowIterations int
-
-var precT, applyT time.Duration
-
-func dot(a, b []float64) float64 {
-	var s float64
-	for i, x := range a {
-		s += x * b[i]
-	}
-	return s
-}
-
-func norm(a []float64) float64 { return math.Sqrt(dot(a, a)) }
 
 // chain is a line of cells and the operator between them, a band of two
 // either side of the diagonal, factored for solving: L U without exchanging

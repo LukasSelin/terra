@@ -1,10 +1,7 @@
 package atmos
 
 import (
-	"fmt"
 	"math"
-	"os"
-	"time"
 
 	"github.com/LukasSelin/terra/internal/phase"
 )
@@ -31,13 +28,13 @@ import (
 //     other - the water across an ocean is driven toward the equator or the
 //     pole by Sverdrup's balance, and what is driven one way across the
 //     breadth of the ocean comes back the other in a narrow current against
-//     its western shore (Stommel, 1948; Munk, 1950). A parallel with no land
-//     on it has no shore to turn at, and no gyre.
-//   - The water the gyres drive toward the poles and the equator has to come
-//     from somewhere, and goes east and west to get there: this is what takes
-//     the western current out across the ocean where its gyre ends, the Gulf
-//     Stream into the North Atlantic Drift. On top of it the surface water
-//     drifts a few hundredths of the speed of the wind over it.
+//     its western shore (Stommel, 1948; Munk, 1950). The water goes round the
+//     whole ocean at once, so the western current turns out across the ocean
+//     where its gyre ends, the Gulf Stream into the North Atlantic Drift; it
+//     goes round islands and through the straits between them, and where the
+//     sea runs all the way round the planet, round the planet. See flow.go.
+//     On top of it the surface water drifts a few hundredths of the speed of
+//     the wind over it.
 //   - Upwelling. The water the wind drives goes to the right of it in the
 //     north and the left in the south (Ekman, 1905), and where that takes it
 //     off a shore, cold water comes up from under to take its place.
@@ -52,6 +49,9 @@ import (
 const (
 	// SeaDensity is the density of sea water, kg a cubic metre.
 	SeaDensity = 1025.0
+	// Sverdrup is a million cubic metres a second, the ocean's measure of
+	// the water a current carries.
+	Sverdrup = 1e6
 	// planetRadius is the planet's radius, in metres.
 	planetRadius = 6.371e6
 	// stressDrag is the drag of the sea surface on the wind over it: the
@@ -175,7 +175,10 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			cv[i] = (psi[e.at(cx+1, cy)] - psi[e.at(cx-1, cy)]) / (2 * dx) / gyreDepth
 		}
 	}
-	e.Psi = narrow(psi)
+	e.Psi = make([]float32, n)
+	for i, p := range psi {
+		e.Psi[i] = float32(p / Sverdrup)
+	}
 	for i := range n {
 		mx, my := ekman(i, i/e.W)
 		cu[i] += mx / ekmanDepth
@@ -241,14 +244,10 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// Each cell's equation does not change while it is solved - the currents,
 	// the coast and the upwelling are what they are - so where its water comes
 	// from and how hard is found once: the pull toward the latitude and up from
-	// under, the cell upstream along the row, and the nearest sea upstream down
-	// the column. Land takes nothing.
+	// under, the cell upstream along the row, and the cell upstream down the
+	// column, or across the diagonal where that is land. Land takes nothing.
 	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
-	tg := time.Now()
-	rounds := sea.gaussSeidel(temp)
-	if os.Getenv("FLOWDEBUG") != "" {
-		fmt.Fprintln(os.Stderr, "gaussSeidel", time.Since(tg), rounds)
-	}
+	sea.gaussSeidel(temp)
 	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
 
 	warm := make([]float64, n)
@@ -305,10 +304,17 @@ func narrow(v []float64) []float32 {
 	return out
 }
 
-// seaRounds is the most rounds of the four sweeps the water's warmth is given
-// to settle, and seaSettled the change in degrees in a round that is settled.
-// A western current carries its warmth the length of an ocean in a round; the
-// slow drift across the interior takes more.
+// seaRounds is the most rounds of sweeps, down the rows and back, the water's
+// warmth is given to settle, and seaSettled the change in degrees in a round
+// that is settled. A current along the rows carries its warmth the length of
+// an ocean, or round the planet, in a sweep; one across them a row a sweep.
+// Near the poles, where the air's pull on three hundred metres of water takes
+// more than a year and the currents go round in a few months, the warmth goes
+// round its gyre many times before it settles, and on a globe that has made
+// its history the rounds run out first, a hundredth of a degree or so short,
+// as they did before the gyres were solved in two dimensions. GMRES on the
+// equations, with the sweeps its preconditioner, took three times as long to
+// settle it.
 const (
 	seaRounds  = 40
 	seaSettled = 1e-3
@@ -385,59 +391,106 @@ func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
 	return l
 }
 
-// at is cell i's warmth from the warmths t round it.
-func (l *seaLinks) at(i int, t []float64) float64 {
-	sum := l.base[i]
-	if j := l.ja[i]; j >= 0 {
-		sum += l.wa[i] * t[j]
-	}
-	if j := l.jb[i]; j >= 0 {
-		sum += l.wb[i] * t[j]
-	}
-	return sum / l.take[i]
-}
-
-// gaussSeidel settles t in place, swept in the four orders a current can run
-// in, each cell reading the warmth its neighbours were given earlier in the
-// same sweep: a western current carries its warmth the length of an ocean in
-// one. Read from the round before instead (Jacobi), so that a round could be
-// spread over goroutines and vectors, the warmth moves a cell a round: on a
-// quarter globe that took 4.7 times the sweeps, was slower all told, and
-// settled on warmths up to 7.6 degrees apart. See docs/perf/worklog.md.
-func (l *seaLinks) gaussSeidel(t []float64) int {
-	type order struct{ x0, x1, dx, y0, y1, dy int }
-	orders := [4]order{
-		{0, l.w, 1, 0, l.h, 1}, {l.w - 1, -1, -1, 0, l.h, 1},
-		{0, l.w, 1, l.h - 1, -1, -1}, {l.w - 1, -1, -1, l.h - 1, -1, -1},
-	}
+// gaussSeidel settles t in place, a row at a time, the rows swept north to
+// south and back. Along its row each cell's water comes from the cell east or
+// west of it, so the row's warmths given the rows either side are a chain, or
+// a ring of chains all the way round a parallel, solved exactly in one pass:
+// a current carries its warmth the length of an ocean, or round the planet,
+// in one, where swept a cell at a time in the four orders a current can run
+// in, the water going round a ring of sea took a round for each time round
+// it. Read from the round before (Jacobi), so that a round
+// could be spread over goroutines and vectors, the warmth moved a cell a
+// round: on a quarter globe that took 4.7 times the sweeps, was slower all
+// told, and settled on warmths up to 7.6 degrees apart. See
+// docs/perf/worklog.md.
+func (l *seaLinks) gaussSeidel(t []float64) {
+	c, g := make([]float64, l.w), make([]float64, l.w)
+	state := make([]int8, l.w)
+	stack := make([]int, 0, l.w)
 	for round := 0; round < seaRounds; round++ {
 		most := 0.0
-		where := 0
-		for _, o := range orders {
-			for cy := o.y0; cy != o.y1; cy += o.dy {
-				row := cy * l.w
-				for cx := o.x0; cx != o.x1; cx += o.dx {
-					i := row + cx
-					if l.take[i] == 0 {
-						continue
-					}
-					next := l.at(i, t)
-					if d := math.Abs(next - t[i]); d > most {
-						most = d
-						where = i
-					}
-					t[i] = next
-				}
+		for k := 0; k < 2*l.h; k++ {
+			cy := k
+			if k >= l.h {
+				cy = 2*l.h - 1 - k
 			}
+			most = math.Max(most, l.row(cy, t, c, g, state, stack))
 		}
 		if most < seaSettled {
-			return round + 1
-		}
-		if round == seaRounds-1 && os.Getenv("FLOWDEBUG") != "" {
-			fmt.Fprintf(os.Stderr, "unsettled %.3g at %d,%d take %.3g wa %.3g wb %.3g\n", most, where%l.w, where/l.w, l.take[where], l.wa[where], l.wb[where])
+			return
 		}
 	}
-	return seaRounds
+}
+
+// row solves row cy's warmths exactly for the warmths of the rows either
+// side, and is the most any of them changed. Each cell's is c + g times the
+// warmth of the cell upstream of it along the row: each is found by walking
+// upstream to a cell already found, or to where no water comes in along the
+// row, or round a ring back to itself, where the ring's warmth is the one
+// that comes back to itself.
+func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) float64 {
+	row := cy * l.w
+	up := func(x int) int {
+		if j := l.ja[row+x]; j >= 0 {
+			return int(j) - row
+		}
+		return -1
+	}
+	for x := range l.w {
+		i := row + x
+		state[x] = 0
+		if l.take[i] == 0 {
+			state[x] = 2
+			continue
+		}
+		s := l.base[i]
+		if j := l.jb[i]; j >= 0 {
+			s += l.wb[i] * t[j]
+		}
+		c[x], g[x] = s/l.take[i], l.wa[i]/l.take[i]
+	}
+	most := 0.0
+	set := func(x int, v float64) {
+		if d := math.Abs(v - t[row+x]); d > most {
+			most = d
+		}
+		t[row+x] = v
+		state[x] = 2
+	}
+	for x0 := range l.w {
+		if state[x0] == 2 {
+			continue
+		}
+		stack = stack[:0]
+		x := x0
+		for x >= 0 && state[x] == 0 {
+			state[x] = 1
+			stack = append(stack, x)
+			x = up(x)
+		}
+		if x >= 0 && state[x] == 1 {
+			// A ring: the warmth at x, carried round it, comes back as
+			// a + b times itself.
+			a, b := c[x], g[x]
+			for y := up(x); y != x; y = up(y) {
+				a += b * c[y]
+				b *= g[y]
+			}
+			set(x, a/(1-b))
+		}
+		for k := len(stack) - 1; k >= 0; k-- {
+			y := stack[k]
+			if state[y] == 2 {
+				continue
+			}
+			v := c[y]
+			if u := up(y); u >= 0 {
+				v += g[y] * t[row+u]
+			}
+			set(y, v)
+		}
+	}
+	return most
 }
 
 // coastal is the sea's warmth as the country round each cell feels it: the
