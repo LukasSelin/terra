@@ -99,12 +99,6 @@ func beltPressure(lat, sinT float64) float64 {
 
 // What warmth does to the pressure.
 const (
-	// swingSea and swingLand are how much of the year's swing air over the
-	// open sea and air deep inside a continent have. Over the ocean the
-	// year's range is a few degrees; in the middle of Asia it is fifty, which
-	// is some twice the swing the default valley has.
-	swingSea  = 0.35
-	swingLand = 1.6
 	// contReach is how far round a place, in kilometres, the land is counted
 	// that makes its climate continental.
 	contReach = 750.0
@@ -221,12 +215,18 @@ type Env struct {
 	Cell, W, H int // tiles to a cell's side, and cells across and down
 	Wrap       bool
 
-	lat  []float64 // the latitude of each row of cells on the planet, degrees
-	hemi []float64 // how much of the temperate year's swing a row's air has, signed by hemisphere
-	Mean []float64 // the year's mean temperature at sea level on each row
-	Dx   []float64 // metres across a cell along each row
-	Dy   float64   // and down one
-	f    []float64 // the Coriolis parameter on each row, per second
+	lat []float64 // the latitude of each row of cells on the planet, degrees
+	// swingSea and swingLand are the energy balance's swing on each row over
+	// the open sea and deep inside a continent, signed by hemisphere: see
+	// seasonTemp.
+	swingSea, swingLand []float64
+	// forcing is the one the air's year is worked out under: the map's, or
+	// today's on a valley.
+	forcing Forcing
+	Mean    []float64 // the year's mean temperature at sea level on each row
+	Dx      []float64 // metres across a cell along each row
+	Dy      float64   // and down one
+	f       []float64 // the Coriolis parameter on each row, per second
 
 	Sea    []float64 // how much of each cell lies under the water the air takes its fill from
 	Cont   []float64 // how much of the country round each cell is land
@@ -277,9 +277,10 @@ const airLeast = 16
 // it is not.
 func NewEnv(m *geom.Map, a *Air, above, wet []float64) *Env {
 	cell := airCell(m, a)
-	e := &Env{Cell: cell, W: m.W / cell, H: m.H / cell, Wrap: m.Wrap}
+	e := &Env{Cell: cell, W: m.W / cell, H: m.H / cell, Wrap: m.Wrap, forcing: a.Forcing.OrDefault()}
 	n := e.W * e.H
-	e.lat, e.hemi, e.Mean, e.Dx, e.f = make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H)
+	e.lat, e.Mean, e.Dx, e.f = make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H)
+	e.swingSea, e.swingLand = make([]float64, e.H), make([]float64, e.H)
 	e.Dy = a.Dy * 1000 * float64(cell)
 	for cy := 0; cy < e.H; cy++ {
 		var lat, mean, dx float64
@@ -290,15 +291,10 @@ func NewEnv(m *geom.Map, a *Air, above, wet []float64) *Env {
 		}
 		k := float64(cell)
 		lat, mean, dx = lat/k, mean/k, dx/k
-		// The wind keeps the year its rivers were calibrated on, the temperate
-		// swing capped at Temperate's, and not solarSwing's: read at the
-		// growing swing, the high latitudes' continents drove thermal lows
-		// hard enough to move the rain, and the small globe at twice the
-		// resolution cut its channels to a concavity of 0.14 against 0.24,
-		// breaking the resolution yardstick. The ground's year and the air's
-		// share seasonTemp and differ only in this factor poleward of
-		// Temperate; bringing them together is a question for the water.
-		e.hemi[cy] = math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
+		// The air's year is the ground's: the energy balance's at the row's
+		// latitude, under the map's forcing. See seasonTemp.
+		e.swingSea[cy] = SwingUnder(e.forcing, lat, 0)
+		e.swingLand[cy] = SwingUnder(e.forcing, lat, 1)
 		if !m.Wrap {
 			// A valley is one latitude's weather, but the planet under it
 			// is still round: the pressure the belts lay down still falls
@@ -582,7 +578,7 @@ func (e *Env) AirTemp(sinT float64) []float64 {
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			temp[i] = e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, e.Cont[i])
+			temp[i] = e.Mean[cy] + e.seasonTemp(cy, sinT, e.Cont[i])
 		}
 	}
 	return temp
@@ -599,10 +595,28 @@ func (e *Env) airTempOn(day int) []float64 {
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			temp[i] = e.Mean[cy] + seasonTemp(e.hemi[cy], SeasonAt(day, LagAt(e.Cont[i])), e.Cont[i])
+			temp[i] = e.Mean[cy] + e.seasonTemp(cy, SeasonAt(day, LagUnder(e.forcing, e.Cont[i])), e.Cont[i])
 		}
 	}
 	return temp
+}
+
+// seasonTemp is what the year adds to the mean on row cy, phase of the way
+// from its mean to its crest, over ground cont continental: the swing the
+// wind, the storms and the evaporation read, which is the ground's - SwingAt's,
+// the energy balance's sea and land at the row's latitude, between in
+// proportion.
+//
+// It used to be a swing of its own: the valley's twelve degrees, times the
+// share of the temperate latitude's the row had - growing as the latitude
+// and stopping at Temperate - times a third over the open sea and one and
+// three fifths deep in a continent. That kept the air at forty-five's year all
+// the way to the pole while the ground under it swung the balance's, and the
+// sea's year at four degrees where the balance's mixed layer gives three at
+// forty-five and ten at sixty-five, where the ice comes and goes.
+func (e *Env) seasonTemp(cy int, phase, cont float64) float64 {
+	sea := e.swingSea[cy]
+	return phase * (sea + (e.swingLand[cy]-sea)*cont)
 }
 
 // hypsometric is how many hPa a layer depth metres deep over ground at p hPa

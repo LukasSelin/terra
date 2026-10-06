@@ -150,7 +150,9 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // The current, the upwelling and the water's temperature are kept beside the
 // warmth they make, and keeping them changes it not at all: the hash is of
 // Warm and Coast on twoOceans as main made them before they were kept
-// (53eb8bf). And the warmth is the kept temperature over its latitude's
+// (53eb8bf), taken again when the air came to swing the energy balance's year
+// (see atmos.Env.seasonTemp), which moves the wind the currents are driven
+// by. And the warmth is the kept temperature over its latitude's
 // mean, held to seaWarmMost.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
@@ -164,7 +166,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xafdf8947c074a07c); got != want {
+	if got, want := h.Sum64(), uint64(0x5c27094618a35742); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost

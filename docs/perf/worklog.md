@@ -6,6 +6,98 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Air A1: one calendar and one seasonal swing (#33)
+
+**What this is.** On `claude/air-calendar`, stacked on `claude/air-forcings`
+(A0, #65) at 1b4ef76. The energy balance steps the clock's year: 360 days
+from the spring equinox, each a 360th of a real year (`secondsPerYear` is
+unchanged), so its lags are calendar days and the daily sun's declination
+crosses the equator on tick zero. Today's forcing is the 1950 orbit
+(`OrbitBefore(0)`), not FAO-56's rounding of it. The wind's thermal swing
+and the evaporation's seasonal swing read the balance's sea and land swing
+at each row's latitude, between in proportion to the cell's continentality,
+as `SwingAt` does for the ground; `swingSea`/`swingLand` (0.35 and 1.6 of
+`Swing`) and the cap at Temperate's are gone. `PetTable` reads the
+forcing's sun, the swing and the lag, on three continentalities (sea,
+middle, continent) that `PetAt` reads between; the seasonal share of the
+evaporation reads the forcing's sun. The lags read the forcing
+(`LagUnder`). A valley's evaporation reads its ground's year (`Swing` at
+`ContMiddling`); its wind reads the balance at Temperate. `Fu` is held
+under min(P, PET): with the new PET a runoff a rounding under nothing on one
+tile of the doubled small globe sent its ground to NaN.
+
+**The digest.** Rewritten, as meant: valley abdcc91960ba951d, ancient
+2826cb480d2ca6e1, globe128 d74e8635d01b38cd.
+
+**The heap.** `TestWorldCreationBudget` passes unmoved within its
+tolerance: valley 10.0 MiB in 1296 allocations (budget 1330: a valley's rows
+share one evaporation table now), ancient 56.1 MiB in 8729 (8700), globe128
+393.9 MiB in 29330 (29301). No budget diff is committed. The full globe
+allocates 11.22 GB against 10.91 (+3%), which is the moved world's lakes and
+ages and not the tables, which globe128 would show.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, three runs each, with other
+sessions on the machine: Generate 49.3/49.7/49.4 s on 1b4ef76 against
+49.8/52.7/50.6 here; history 37.5 against 38.1 (mean); weather 12.7
+against 13.3; rainOn 9.9 against 10.5 (+5%: two tables read a tile and the
+tile's continentality sampled for its evaporation); windsFor 2.70 against
+2.79; airEnv.currents 1.66 against 1.70. Under load; `scripts/perf.sh check`
+was not run on a quiet machine.
+
+**What it reads.** The balance on the calendar: land lag at Temperate 29.4
+calendar days (30.1 of 365.25 before, 29.7 in the calendar's), sea 87.9
+(89.5); swings at 45 degrees 16.2 land and 3.3 sea, as before; global mean
+16.24 C, as before. The air's swing, sea/land, against what it was: 10
+degrees 0.5/2.4 (0.9/4.3), 20 degrees 1.2/6.0 (1.9/8.5), 30 2.0/9.8
+(2.8/12.8), 45 3.3/16.2 (4.2/19.2), 55 5.0/21.5 (4.2/19.2), 65 10.6/17.3
+(4.2/19.2), 75 14.9/16.4 (4.2/19.2): smaller in the tropics, larger over
+the high seas where the ice comes and goes. The valley's land rain falls
+some seven parts in a hundred (seed 1: 1191 to 1111 mm), its evaporation
+from 774 to 727 mm; the small globes' mean land rain 594 to 573 mm.
+
+The yardsticks, `TestRealNumbers|TestTheRealWorld`, 1b4ef76 against this:
+
+| yardstick | 1b4ef76 | A1 | real |
+|---|---|---|---|
+| channel concavity, small globe | 0.2455 fail | 0.3499 fail | 0.35-0.6 |
+| midlatitude over subtropical rain, globe | 0.904 fail | 0.959 fail | 1.1-2 |
+| mean land rain, 2x over 1x | 1.246 fail | 1.260 fail | 0.85-1.15 |
+| land share of Aridisols | 0.059 fail | 0.065 fail | 0.09-0.15 |
+| land share of Gelisols | 0.130 fail | 0.117 fail | 0.06-0.11 |
+| drainage area exceedance, small globe | 0.486 fail | 0.500 fail | 0.39-0.46 |
+| discharge exceedance, small globe | 0.462 fail | 0.480 fail | 0.40-0.46 |
+| hypsometric integral, small globe | 0.3055 fail | 0.3583 pass | 0.32-0.6 |
+| hypsometric integral, 2x less 1x | +0.038 pass | -0.070 fail | -0.05-0.05 |
+| ridge-valley wavelength, small globe | 133 m pass | 400 m fail | 24-224 |
+| land relief intermittency C1 (gap K) | 0.075 gap | 0.087 closed | 0.08-0.18 |
+
+Three new failures, none tuned away. The hypsometric integral is the mean
+over the highest tile, globe by globe: the 1x globes' rose (0.31, 0.28,
+0.33, 0.33 to 0.41, 0.30, 0.37, 0.37) and the 2x globes' fell (0.38, 0.38,
+0.33, 0.31 to 0.34, 0.29, 0.29, 0.24) as their highest tiles moved, and the
+difference crossed the band's lower edge. The ridge-valley wavelength is
+the strongest residual peak of the pooled spectrum, a whole number of
+windows: the three globes read 320, 55 and 145 m one by one (133, 107, 133
+before), and pooled, the first one's long wave wins at k = 2, the longest
+the window has. The C1 gap closed with nothing in the shaping changed; its
+marker is off, and it sits near the floor.
+
+**The tests it moved.** Fixtures and golden readings, each saying so where
+it stands: the step lakes' dry window is 0.97-1.01 of the valley's rain and
+the wet case reads 1.1 (`lake_test.go`); the ocean's warmth hash is taken
+again; the flats are read on small globe 3, since globe 1 has none; the
+ancient chain reads tile 1307, since lime was laid over 987's pluton; the
+pole test reads both pole rows for wood and crops instead of one tile for
+rock or ice, which was open ground on 1b4ef76 three and nine hundred tiles
+along; the ice edge allows three of six poles on one row (61, 59, 64, 58,
+58, 58 here). One is a real loss: the hot continent's summer wind at its
+south coast is offshore, -0.8 m/s (0.5 before), because the balance's land
+between five and fifteen degrees swings under four degrees where the air
+swung up to six. The turn from winter to summer is still held; the onshore
+summer is logged as a gap for A3's monsoon (#35).
+
+---
+
 ## 2026-10-06 - Air A0: the forcings as variables (#32)
 
 **What this is.** On `claude/air-forcings`, from `main` at 2c51bea. The

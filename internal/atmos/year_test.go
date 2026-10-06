@@ -46,17 +46,21 @@ func TestTheTreeLineIsTheSummers(t *testing.T) {
 }
 
 // The seasons lag the sun by a month on land and two at sea, and the swing
-// grows toward the poles and inland. The temperate latitude keeps exactly the
-// swing the valley was tuned on.
+// grows toward the poles and inland. The temperate latitude on middling
+// ground keeps exactly the swing the valley was tuned on.
 func TestTheYearLagsAndSwingsByPlace(t *testing.T) {
-	if got, want := LagAt(1), lagLand*Year/365.25; math.Abs(got-want) > 1e-9 {
-		t.Errorf("land lags %.2f days, want %.2f", got, want)
+	e := ebm()
+	if got, want := LagAt(1), e.at(&e.lagL, Temperate); math.Abs(got-want) > 1e-9 {
+		t.Errorf("land lags %.2f days, want the balance's %.2f", got, want)
 	}
-	if got, want := LagAt(0), lagSea*Year/365.25; math.Abs(got-want) > 1e-9 {
-		t.Errorf("sea lags %.2f days, want %.2f", got, want)
+	if got, want := LagAt(0), e.at(&e.lagS, Temperate); math.Abs(got-want) > 1e-9 {
+		t.Errorf("sea lags %.2f days, want the balance's %.2f", got, want)
 	}
-	if solarSwing(Temperate) != 1 || math.Abs(SwingAt(Temperate, ContMiddling)-Swing) > 1e-9 {
-		t.Fatalf("the temperate latitude swings %.4f of the sun's and %.4f degrees", solarSwing(Temperate), SwingAt(Temperate, ContMiddling))
+	if mid := LagAt(0.5); mid <= LagAt(1) || mid >= LagAt(0) {
+		t.Errorf("half land lags %.2f days, between %.2f and %.2f", mid, LagAt(1), LagAt(0))
+	}
+	if math.Abs(SwingAt(Temperate, ContMiddling)-Swing) > 1e-9 {
+		t.Fatalf("the temperate latitude on middling ground swings %.4f degrees", SwingAt(Temperate, ContMiddling))
 	}
 	if !(SwingAt(70, 0.5) > SwingAt(45, 0.5) && SwingAt(45, 0.5) > SwingAt(10, 0.5)) {
 		t.Error("the swing does not grow toward the pole")

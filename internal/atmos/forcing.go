@@ -37,32 +37,29 @@ type Forcing struct {
 	// vernal equinox, in radians, as Berger (1978) tabulates it: the
 	// heliocentric one, so that the sun stands at Perihelion plus π, seen
 	// from the ground, on the day the planet is nearest it. Today's is some
-	// 102 degrees, which puts perihelion in early January.
+	// 102 degrees, which puts perihelion in early January: see insolation
+	// for how it falls in the calendar.
 	Perihelion float64
 	// Solar is the sun's flux at the planet's mean distance, W/m².
 	Solar float64
 }
 
-// Today's forcing, as the balance has always been worked out under. Each is
-// the figure ebm.go wrote down before there was a Forcing, so that a world
-// made under Today is the world made before it to the bit.
+// Today's forcing: the orbit of 1950, from Berger's (1978) series, and the
+// sun of Kopp and Lean. Before the calendar was one (see insolation) they
+// were FAO-56's rounding of it - an obliquity of 0.409 radians, an
+// eccentricity of 0.0165 and perihelion on the first of January - kept so
+// that the world stayed what it was to the bit. The world moved with the
+// calendar, and today's orbit is the real one; Today().OrbitBefore(0) is
+// Today's to the last few digits of the series.
 const (
-	// todayObliquity is the 0.409 radians of FAO-56's declination, 23.43
-	// degrees: the real tilt of the 2000s (23.44) to the figures it gives.
-	todayObliquity = 0.409
-	// todayEccentricity is half FAO-56's 0.033, which is 2e to first order.
-	// The real orbit's is 0.0167 (Berger and Loutre, 1991, at 1950); the
-	// rounding is FAO's, and is kept so that today's sun stays what it was.
-	todayEccentricity = 0.0165
-	// todayPerihelion is the longitude of perihelion FAO-56's form puts the
-	// planet's nearest day on the first of January at: its declination
-	// crosses the equator 1.39 radians into the calendar's year, and its
-	// distance is least at the calendar's start, so the sun stands at
-	// 2π - 1.39 radians from the equinox at perihelion, and the planet at π
-	// less that. That is 100.36 degrees, where the real one is 102.04 at 1950
-	// (Berger and Loutre, 1991) and the real perihelion falls on the third of
-	// January.
-	todayPerihelion = math.Pi - 1.39
+	// todayObliquity is 23.446 degrees.
+	todayObliquity = 0.409214631315809
+	// todayEccentricity is the orbit's eccentricity in 1950.
+	todayEccentricity = 0.0167239329967327
+	// todayPerihelion is the longitude of perihelion in 1950, 102.04
+	// degrees: the planet nearest the sun some seventy-eight days of the
+	// calendar before the spring equinox, in early January.
+	todayPerihelion = 1.78091737968827
 	// co2Reference is the air Budyko's line was fitted under: North and
 	// Coakley's A and B are from the satellites of the 1970s (Ellis and Vonder
 	// Haar, 1976), when the air held some 330 parts per million (Keeling's
@@ -74,8 +71,9 @@ const (
 	co2Forcing = 5.35
 )
 
-// Today is the forcing the world has always been made under: today's sun and
-// orbit, and the air Budyko's line was fitted to. See the constants above.
+// Today is the forcing a world is made under when its terms ask for none:
+// today's sun and orbit, and the air Budyko's line was fitted to. See the
+// constants above.
 func Today() Forcing {
 	return Forcing{
 		CO2:          co2Reference,

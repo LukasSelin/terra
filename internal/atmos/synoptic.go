@@ -378,7 +378,7 @@ func (e *Env) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e.H-
 func (e *Env) seaTempAt(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
 	cont := e.Sample(e.Cont, fx, fy)
-	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, cont)
+	t := e.Mean[cy] + e.seasonTemp(cy, sinT, cont)
 	if e.Coast != nil {
 		t += e.Sample(e.Coast, fx, fy)
 	}
@@ -389,7 +389,7 @@ func (e *Env) seaTempAt(fx, fy, sinT float64) float64 {
 // it, with the sea's own small swing and what the currents have brought.
 func (e *Env) SeaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, 0) + seaOverAir
+	t := e.Mean[cy] + e.seasonTemp(cy, sinT, 0) + seaOverAir
 	if e.Warm != nil {
 		t += e.Sample(e.Warm, fx, fy)
 	}
