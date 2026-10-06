@@ -40,6 +40,356 @@ tests with the same messages, but for the H 0.8 spectrum above.
 
 ---
 
+## 2026-10-06 - The fractures bend by the plate, and the continents are less square
+
+**What this is.** On `claude/fracture-bend`, from `main`. The globes'
+continents came out cut in rectangles: long straight coasts meeting at
+corners near a right angle. How far a fracture's bearing wanders was
+`fractureCreep`, 0.05 radians a tile, which over the spacing between plate
+middles is 0.14 on a small globe (sixteen plates, 45 tiles apart), 0.23 on
+a full one (32 plates, 128 tiles apart) and 0.10 on the ancient valley. It
+is now `fractureBend`, the spread over a spacing, which is what
+`fractureLong` and `fractureShort` are quoted in, at 0.3: the full globe's
+faults bend a third more than they did and every map's bend alike.
+
+**The reading.** `cornerLock`, a new yardstick, "right angles of the
+continents' coasts": for each continent, |<e^{4iθ}>| of the directions its
+eased coast faces, which is high for a rectangle whichever way it is turned
+and low for anything with its corners at other angles, averaged over the
+continents by size within 60 degrees of the equator. Off drawn shapes, a
+square and a diamond read 1, a hexagon and a disc nothing, and Brownian
+coasts 0.02-0.07 (eight of them; a continent's few long runs of rough coast
+read that much by chance). No figure for the earth's has been read this
+way, so the band, 0-0.15, is not a measured one.
+
+| | globe 1 | globe 2 | globe 3 | three |
+| --- | --- | --- | --- | --- |
+| before | 0.239 | 0.145 | 0.181 | 0.181 |
+| after | 0.208 | 0.053 | 0.113 | **0.125** |
+
+On the continental crust at the end of the history, over five globes, 0.176
+-> 0.128.
+
+**The search.** Bends in radians over a spacing, and the fracture's wall;
+the full globes' continents (crust at the end of the history), and the plate
+tests on the small globes, which are where the straight walls of the
+2026-09-19 entry are held:
+
+| bend, wall | continents, globes 1/2/3 | straight wall (1.05 and over) | plate area exponent, three | plate tests |
+| --- | --- | --- | --- | --- |
+| as made (0.23, 6.5) | 0.29 / 0.17 / 0.20 | 1.167 | 0.341 | pass |
+| 0.23, 6.5 | 0.19 / 0.17 / 0.16 | 1.215 | 0.253 | pass |
+| **0.3, 6.5** | 0.18 / 0.07 / 0.16 | 1.159 | 0.383 | pass |
+| 0.35, 6.5 | 0.05 / 0.09 / 0.15 | 1.094 | 0.217 | a plate of 0.38 of the world |
+| 0.4, 6.5 | 0.14 / 0.08 / 0.12 | 0.961 | 0.206 | wall |
+| 0.6, 6.5 | 0.18 / 0.17 / 0.16 | 0.957 | 0.304 | wall; a plate of 0.36 |
+| 0.9, 6.5 | 0.08 / 0.11 / 0.15 | 0.924 | 0.280 | wall |
+| 0.6, 5 | 0.12 / 0.11 / 0.12 | 1.027 | 0.476 | wall; a plate of 0.35 |
+| 0.9, 5 | 0.07 / 0.17 / 0.10 | 0.949 | 0.319 | wall |
+
+The 0.23 row bends the full globe as it was bent and still reads
+differently: one globe's continents move by a tenth with any change to where
+the fractures run, so only what holds over several is a reading. Past 0.35 the
+straight walls go before the right angles do: a straight wall is what a
+right angle is made of, and the right angles are not the fractures' own -
+three sets a sixth of a turn apart make sixty degrees - but grow over the
+history. 0.3 is the most bend that keeps the walls, over eight small globes
+1.080 against 1.182 before.
+
+Kept a rate a tile and raised by the same third (0.065), the full globe gets
+the same bend and the small worlds a third more and not twice as much; it
+failed fourteen tests and yardsticks to this one's thirteen, among them the
+right angles themselves (0.158).
+
+**The plate area exponent** is read over eight small globes and not three.
+The suite makes small globes 1-16 for its rivers, so it costs nothing, and
+over three it read anywhere from 0.21 to 0.48 across the settings above;
+over eight it is 0.354 before (out of 0.15-0.35 by a hair, where three read
+0.341) and 0.296 after.
+
+**What else moved.** Every made world's plates are different plates. The
+whole suite against `main` with the shelves of the two entries below:
+
+- In now: ridge-valley wavelength, small globe, 533 -> 133 m;
+  `TestAGlobeHasASeaItsRiversReach`, the globe 0.67 water; the plate area
+  exponent, over eight; the floor's grid lock off the coasts, 0.084 ->
+  0.015, its marker off, since the coasts lean less to the diagonals (0.085
+  -> 0.040) and the floor is laid at the true distance from them; and the
+  land share, furthest of three globes, 0.449 -> 0.377 (0.33, 0.38, 0.37).
+  That last is the draw's luck and not a fix - the crust is still drawn at
+  45% continent within crustSlack - but a gap that closes takes its marker
+  off.
+- Out now: channel concavity, small globe, 0.353 -> 0.246; drainage area
+  exceedance exponent, small globe, 0.421 -> 0.486; mean land rain, 2x over
+  1x, 1.13 -> 1.25; and shelf width, quiet margins over active, 1.88 ->
+  1.24 (2.00, 0.94, 1.23), which takes its marker back: most coasts with a
+  seam within 150 km are quiet margins as laid, so which side of 1.8 it
+  reads is where the seams fall.
+- Three tests that read one seed or one storm: the ancient valley stands
+  49% on more than one bed (`TestAHistoryLeavesItsBedsInLayers`, 50%); made
+  valley 8 has 310 tiles of water against its drawn twin's 80
+  (`TestAHistoryLeavesAMapTheSettlementCanUse`, three times); and a storm on
+  small globe 3 deepens to 866 hPa (`TestTheWeatherChangesFromDayToDay`,
+  870, Typhoon Tip). Each is the draw on the seed it reads.
+- Still out as on `main`: midlatitude over subtropical rain, Aridisols,
+  Gelisols, the small globe's hypsometric integral (0.305) and discharge
+  exponent (0.462).
+- The other K gaps: C1 0.053 -> 0.075, mean shelf 292 -> 276 km.
+  `TestThePolarSeaIsIce` passes.
+- `TestTheChainForOneTileOfTheAncientValley`, the golden test, moves from
+  tile 2628 to 987, raised by an arc in the first epoch by some 12 km.
+
+**Digest, budget, time.** `TERRA_DIGEST=write`: `ancient` and `globe128`
+move, `valley` does not. `globe128` came in under its budget and the budget
+is rewritten: 32056 -> 29149 allocations and 440 -> 406 MB, peak as it was;
+`ancient` 8848 -> 8700. `main` against this, before the shelves merged, two
+rounds of six turn about:
+no significant change on any world (valley +18%, ancient +11%, globe256 -1%,
+all p > 0.2; the valley's world is not touched by this and it moved the most,
+which is the machine's load). `scripts/perf.sh check` is still not readable
+against `2026-09-16-0718-small` (see the shelf entries on
+`claude/floor-exact-distance`).
+
+---
+
+## 2026-10-06 - How square the plates are
+
+**What this is.** On `claude/relief-intermittency`. The globes' continents
+look cut out in rectangles: long straight sides meeting at corners near a
+right angle. This reads how square they are and what makes them so, and
+changes nothing in the making.
+
+**The reading.** For each plate or piece of continent of 2000 tiles and
+more, how strongly its edges gather at four bearings and at six: c4 =
+|<e^{4iθ}>| and c6 = |<e^{6iθ}>| of the direction its eased edge faces,
+weighted by the edge, then averaged over the pieces by their size. It does
+not care which way a piece is turned. Off drawn shapes:
+
+| shape | c4 | c6 |
+| --- | --- | --- |
+| square | 0.92 | 0.00 |
+| rectangle 2:1 | 0.97 | 0.32 |
+| hexagon, triangle | 0.02 | 0.91 |
+| disc | 0.01 | 0.00 |
+| Voronoi of 24 middles | 0.45 | 0.45 |
+| the land of Brownian reliefs, H 0.5 and 0.8 | 0.01 | 0.01 |
+
+**The globes.** Seeds 1 and 3, through a history:
+
+| | first plates | plates at the end | first continents | continents at the end |
+| --- | --- | --- | --- | --- |
+| globe 1, c4 / c6 | 0.29 / 0.22 | 0.21 / 0.12 | 0.38 / 0.31 | 0.29 / 0.19 |
+| globe 3, c4 / c6 | 0.27 / 0.26 | 0.28 / 0.15 | 0.14 / 0.24 | 0.20 / 0.15 |
+
+The continents end twenty times as polygonal as a Brownian coast, and more
+at right angles than at sixty degrees. The three fracture sets stand a sixth
+of a turn apart, which makes sixty degrees, and that fades over the history
+while the right angles hold or grow. That is what plates carried whole
+would do - part across the way they go and slide along it, the two meeting
+square - though nothing here has taken that apart from the rest of the
+history.
+
+**What moves it.** Probes, the continents at the end, seeds 1 and 3:
+
+| | c4 | c6 |
+| --- | --- | --- |
+| as made | 0.29, 0.20 | 0.19, 0.15 |
+| `fractureCreep` 0.05 -> 0.2 | 0.11, 0.12 | 0.08, 0.12 |
+| `fractureWall` 6.5 -> 4 | 0.11, 0.16 | 0.15, 0.23 |
+| the floods over sixteen neighbours | 0.16, 0.16 | 0.17, 0.20 |
+| `fractureCreep` 1.0 | 0.06, 0.06 | 0.07, 0.04 |
+
+How straight the fractures run is most of it; how the floods step is
+little. But the creep is in radians a tile and not a kilometre, so it bends
+a small globe's faults differently from a full one's, and the plate tests
+are read on the small globes:
+
+| `fractureCreep` | `TestAPlatesWallRunsStraight` (1.05 and over) | the other plate tests |
+| --- | --- | --- |
+| 0.05 | 1.167 | pass |
+| 0.10 | 1.056 | pass |
+| 0.15 | 1.003 | a plate of 0.39 of the world against a ceiling of 0.22 |
+| 0.20 | 1.085 | a plate of 0.35; the plate area exponent 0.436, out of 0.15-0.35 |
+
+Squaring the continents less is a search of the fractures' bend, read per
+kilometre, and their wall, against the plate tests, not a change of one
+constant.
+
+That search is the entry above: the bend is now quoted per plate spacing
+(`fractureBend`), and `cornerLock` holds the right angles.
+
+---
+
+## 2026-10-06 - What decides the land share
+
+**What this is.** On `claude/relief-intermittency`. The K gap "land share
+of the surface, furthest of three globes" reads 0.449 against the earth's
+0.292. This finds what sets a globe's land and what moving it would cost,
+and changes nothing but the gap's message.
+
+**The land is the crust.** Globes 1-3 have 0.225, 0.441 and 0.462 of the
+sphere in continental crust and 0.223, 0.431 and 0.449 in land: the sea
+stands at 20.29, 22.57 and 24.77 m on basins 20 m deep and covers almost
+nothing of the continents. The shelves are laid on the ocean crust beside
+them (`floorDepths`), so a globe's continental crust is what the earth's
+land is, not the four tenths the earth's continental crust is with its
+shelves. The crust is the first plates' draw, at `oceanFloor` +
+`oceanPerSea` x `SeaShare` = 0.55 ocean on `GlobeTerms`, and put right only
+past `crustSlack`, 0.15, counted in tiles of the cylinder: drawn, the three
+are 0.311, 0.448 and 0.546 continent by tile and 0.227, 0.504 and 0.492 by
+area, and the history takes them to 0.225, 0.441 and 0.462 by area.
+
+**The sea is the wrong lever.** The continents stand all but flat over the
+sea, and unevenly from one globe to the next. Raised over the ground as the
+history left it:
+
+| | land, globes 1/2/3 | water it takes, m |
+| --- | --- | --- |
+| as poured | 0.225 / 0.440 / 0.455 | 7.5 |
+| 10 m higher | 0.207 / 0.384 / 0.360 | 14.9 / 13.6 / 13.0 |
+| 20 m higher | 0.134 / 0.220 / 0.215 | 22.6 / 20.7 / 20.0 |
+
+**The crust, drawn as the earth's.** Probes, the shape yardsticks over the
+three globes, the crust balanced by area on the sphere within 0.05:
+
+| | land, globes 1/2/3 | remoteness |
+| --- | --- | --- |
+| as made | 0.223 / 0.431 / 0.449 | 0.520 |
+| balanced to 0.70 ocean, drawn as before | 0.262 / 0.289 / 0.357 | 0.312 |
+| drawn and balanced at 0.70 ocean | 0.257 / 0.312 / 0.310 | 0.438 |
+| drawn and balanced at 0.66 ocean | 0.257 / 0.378 / 0.380 | 0.543 |
+
+The remoteness that fell with the balance alone was five continents read,
+the rest touching a pole.
+
+**The water has to fill the basins it is given.** `DefaultWater` was
+chosen to all but fill basins of half to three fifths of the map. With
+seven tenths of floor it does not: small globe 3, 0.764 of its tiles ocean
+crust, had its coasts stand beside the deep floor, the shaping laid its land
+kilometres down, and the sea poured again stood at -2782 m. The first globe
+as made is 0.731 ocean crust by tile and already has 229 dry tiles beside the
+deep floor. At 9 m the sea stands 1.8 to 3.2 m over the basins on every
+seed, as 7.5 m stood it on the crust it was chosen for.
+
+**What it buys and costs.** Drawn and balanced at 0.70 ocean, with 9 m of
+water, every yardstick against the base:
+
+| | base | crust and water |
+| --- | --- | --- |
+| land share, furthest of three globes | 0.449 | **0.253** (0.253 / 0.308 / 0.306) |
+| hypsometric integral, small globe | 0.312, out | **0.362** |
+| discharge exceedance exponent, small globe | 0.464, out | **0.436** |
+| valley floor over hillslope soil depth, small globe | 1.71, gap | **3.49**, in |
+| remoteness, islands, coast dimension, coast lock | 0.52, 0.68, 1.13, 0.084 | 0.42, 0.82, 1.12, 0.060 |
+| plate area cumulative exponent | 0.341 | **0.454**, out of 0.15-0.35 |
+| meander wavelength, small globe | 11.7 | **14.1**, out of 10-14 |
+| mean land rain, 2x over 1x | 1.13 | **1.36**, out of 0.85-1.15 |
+| channel concavity, 2x less 1x | -0.07 | **0.18**, out of -0.1-0.1 |
+
+With the slack left at 0.15 the third globe comes out 0.417 and the same
+four go out, with Flint's R2 besides, so it is the ocean and not the
+balancing. And
+`TestAGlobeHasASeaItsRiversReach` holds a globe's sea to 0.4-0.7 by tile and
+one tile of the pole bare, both of which an earth's crust moves.
+
+---
+
+## 2026-10-06 - Where the relief's intermittency goes
+
+**What this is.** On `claude/relief-intermittency`, on top of
+`claude/statistical-output-verification`. The K gap "land relief
+intermittency C1" reads 0.053 against the earth's 0.12. This finds where a
+globe loses it and what closing it would cost, and changes nothing but the
+gap's message: `TERRA_DIGEST=check` passes.
+
+**Where it goes.** Globes 1-3, read on the same land windows at every step,
+and the land cut into boxes of 8 tiles, each with its mean |grad h|:
+
+| step | C1 | boxes, q90 over q10 | boxes ranked against the shaping's input |
+| --- | --- | --- | --- |
+| the history's heights, before `basins` | 0.154 | | |
+| as the shaping takes them up (after `basins`) | 0.175 | 98 | 1.00 |
+| graded, before the rescale | 0.059 | 2.0 | 0.04 |
+| rescaled to the map's spread | 0.065 | 3.0 | 0.03 |
+| after `texture` and `denude` | 0.068 | 2.9 | 0.05 |
+| after the stage's slides | 0.053 | 2.6 | -0.02 |
+| the finished globe | 0.053 | | |
+
+`basins`' rank mapping keeps the gathering; the shape stage loses it, and
+not only its strength but its place: after the grading, how rough a box is
+says nothing about how rough it was. The cut, coast and cover stages change
+nothing after it.
+
+**Why.** Three things, each measured:
+
+- The grading lays every tile off the rivers as a hillslope of one fall. The
+  drop to the steepest neighbour is 7.1 m a tile at the median and 8.5 at
+  the ninetieth centile, and ranks with the uplift at 0.06. The uplift it
+  grades by is the history's rate by rank onto `shapeFloor`..1, 1.55 times
+  end to end, less than the rock's hardness moves a fall; and the rate is
+  not gathered to begin with - 0.21 mm/yr over the land at the median, 0.27
+  to 0.39 at the ninetieth centile, 1.2 to 1.4 at the ninety-ninth. The
+  history's heights are what is gathered.
+- The lift, 1-(1-x)^`shapeLift`, steepens low ground up to 2.65 times and
+  flattens the tops of ranges.
+- The slides at the stage's end hold what is steep at one threshold, 0.068
+  -> 0.053: the globe's land stands at a median fall of 0.5 at `TileSpan`,
+  much of it near `Critical`.
+
+**What closing it would take.** Probes, C1 at the end of the shape stage on
+the same windows; none is kept:
+
+| the grading's uplift | lift | C1 |
+| --- | --- | --- |
+| as made | 2.65 | 0.053 |
+| by rank, floor 0.1 | 2.65 | 0.052 |
+| by rank, floor 0.1 | 1 | 0.064 |
+| the rate over its 99th centile, floor 0.1 | 2.65 | 0.052 |
+| by rank, floor 0.1, the graded height scaled by the history's | 1 | 0.080 |
+| the history's local relief within 2 tiles (Ahnert 1970), floor 0.1 | 2.65 | 0.062 |
+| the same | 1 | 0.087 |
+| the same, floor 0.3 | 2.65 | 0.050 |
+
+The last but one, taken through every stage with the rivers graded from the
+sea's level (below), gives the finished globes 0.077 and moves the small
+globes' rivers. Against the base, every yardstick:
+
+| | base | relief uplift |
+| --- | --- | --- |
+| land relief intermittency C1 | 0.053 | 0.077 |
+| Hack exponent, small globe | 0.581 | **0.620**, out of 0.54-0.60 |
+| channel concavity, 2x less 1x, small globe | -0.075 | **0.225**, out of -0.1-0.1 |
+| land share of Mollisols | 0.078 | **0.119**, out of 0.05-0.09 |
+| hypsometric integral, small globe | 0.312, out | 0.234 |
+| discharge exceedance exponent, small globe | 0.464, out | 0.473 |
+| chi-plot linearity, small globe | 0.960 | 0.990 |
+| Horton bifurcation, small globe | 3.25 | 4.37 |
+| land share, remoteness, coasts, sea floor | | within a few hundredths |
+
+Read over 150 km rather than two tiles, so that a small globe at twice the
+resolution reads the same ground, the relief uplift gives C1 0.058 at a
+floor of 0.1 and 0.053 at 0.2: the gathering the yardstick reads lies within
+one to four tiles of a full globe, which is less than a tile of a small one.
+
+**The sea under the coast.** `shape` grades each tile up from the height of
+the root its water ends in, and for the sea that is the floor under the
+coast, a few metres below the surface. It does no harm while every hillslope
+falls seven metres a tile. With the plains graded gentle it laid much of the
+land under the sea: the land share's reading, the globe furthest from the
+earth's, went from 0.449 to 0.167. Any
+change that makes plains gentle needs the grading to start at the sea's
+level.
+
+**Two conflicts in the yardsticks.** The hypsometric integral is read over
+each whole map, against Strahler's band for single drainage basins; a
+continent with its relief gathered into ranges reads low over the whole of
+it (the earth's land, 840 m on the mean against 8848 at the top, about 0.1),
+so any closing of this gap lowers it. And the shaping's constants were
+searched against the small globes' rivers with an uplift all but even:
+gathering it is a search of its own, not a change.
+
+---
+
 ## 2026-10-05 - A shelf is as wide as its margin is quiet
 
 **What this is.** On `claude/shelf-margins`, on top of
