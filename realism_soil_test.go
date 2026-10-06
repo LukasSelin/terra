@@ -135,7 +135,7 @@ type soilDepthReading struct{ hillslope, floor float64 }
 // reach of the water it drains into (FloodDepth), which is what the map itself
 // calls a valley floor. Outcrops count, at nothing, as they would in a survey.
 func soilDepths(gs []*Grid) soilDepthReading {
-	return remember(fmt.Sprintf("soildepth/%p/%d", gs[0], len(gs)), func() soilDepthReading {
+	return remember("soildepth", gs, func() soilDepthReading {
 		var hs, hn, fs, fn float64
 		for _, g := range gs {
 			for i := range g.Tiles {
@@ -169,7 +169,7 @@ func soilDepths(gs []*Grid) soilDepthReading {
 // and the ratios averaged by how many tiles each rock has. A rock with too few
 // tiles to split is left out.
 func clayByClimate(gs []*Grid, wet bool) float64 {
-	return remember(fmt.Sprintf("clayclimate/%p/%d/%v", gs[0], len(gs), wet), func() float64 {
+	return remember(fmt.Sprintf("clayclimate/%v", wet), gs, func() float64 {
 		type sample struct{ key, clay float64 }
 		byRock := map[Bedrock][]sample{}
 		for _, g := range gs {
@@ -228,7 +228,7 @@ type carbonReading struct{ land, forestOverDesert, tundraOverDesert float64 }
 // aridity (PET over rain, as forestByAridity reads it) passes five, as ratios
 // to the desert's.
 func carbonByBiome(gs []*Grid) carbonReading {
-	return remember(fmt.Sprintf("carbonbiome/%p/%d", gs[0], len(gs)), func() carbonReading {
+	return remember("carbonbiome", gs, func() carbonReading {
 		var ls, ln, fs, fn, ts, tn, ds, dn float64
 		for _, g := range gs {
 			if g.air == nil {
@@ -280,7 +280,7 @@ func carbonByBiome(gs []*Grid) carbonReading {
 // of order o. Ground with no soil counts, as the rock and the shifting sand do
 // on the USDA's map.
 func soilOrderShare(gs []*Grid, o SoilOrder) float64 {
-	shares := remember(fmt.Sprintf("soilorders/%p/%d", gs[0], len(gs)), func() [SoilOrderCount]float64 {
+	shares := remember("soilorders", gs, func() [SoilOrderCount]float64 {
 		var s [SoilOrderCount]float64
 		var land float64
 		for _, g := range gs {

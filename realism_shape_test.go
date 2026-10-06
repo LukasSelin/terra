@@ -61,7 +61,7 @@ var shapeYardsticks = []realYardstick{
 	// coasts round all of them rough at every scale they have been measured at.
 	{yardstick: yardstick{
 		name: "land share of the surface, furthest of three globes", unit: "", scale: "ground", lo: 0.2, hi: 0.4, slow: true,
-		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure",
+		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure. These three globes come out in the band by the luck of their first plates' draw, 0.33, 0.38 and 0.37: a globe's land is its continental crust, 97 to 99 hundredths of it above the sea, and the crust is drawn at 45% continent and put right only past crustSlack, counting tiles and not the sphere's area",
 		measure: func() float64 {
 			far := math.NaN()
 			for _, g := range threeGlobes() {
@@ -72,9 +72,7 @@ var shapeYardsticks = []realYardstick{
 			}
 			return far
 		},
-	},
-		gap: "known gap: K - the crust is drawn within crustSlack of four tenths continent and the water floods what the crust leaves dry, so a world's land is its own luck: globes 2 and 3 come out 0.43 and 0.45 land: 0.449",
-	},
+	}},
 	{yardstick: yardstick{
 		name: "remoteness of the continents, three globes", unit: "", scale: "ground", lo: 0.4, hi: 0.7, slow: true,
 		source:  "Garcia-Castellanos & Lombardo 2007: the continental poles of inaccessibility lie 2510 km from the sea in Eurasia, 1814 Africa, 1650 North America, 1504 South America, 920 Australia - 0.58-0.65 of the radius of a disc of each one's area; 0.48 and 0.45 for Afro-Eurasia and the Americas, joined at Suez and Panama as a map at this scale joins them. A disc reads 1, a square 0.89",
@@ -95,6 +93,11 @@ var shapeYardsticks = []realYardstick{
 		source:  "a coast does not know which way the survey's grid runs: how far the directions of the coast lean to the map's axes or its diagonals, the larger of |<cos 4θ>| and |<cos 8θ>|, is nothing on the earth's own ground. A drawn square reads 0.99; fractional Brownian coasts drawn on this map, up to 0.07",
 		measure: func() float64 { return gridLock(threeGlobes(), landEdge) },
 	}},
+	{yardstick: yardstick{
+		name: "right angles of the continents' coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.15, slow: true,
+		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
+		measure: func() float64 { return cornerLock(threeGlobes()) },
+	}},
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own
@@ -111,20 +114,20 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014 (Geomorphology of the oceans): shelves are 57 km wide on the mean over all the oceans, 37 in the Indian Ocean to 110 in the South Pacific. Read here from each coast to the nearest floor deeper than 200 m",
 		measure: func() float64 { return shelvesOf(threeGlobes()).mean },
 	},
-		gap: "known gap: K - a shelf is laid a tile and a half wide at the least, 56 km, and a quiet margin's is 88, so the first floor under 200 m is two tiles out of an active coast and three out of a quiet one; and an eighth of the coasts read are shores of hollows in the continents below the sea, with no deep floor anywhere in them, 1000 km and more: 292 km; 151, 434 and 277 globe by globe",
+		gap: "known gap: K - a shelf is laid a tile and a half wide at the least, 56 km, and a quiet margin's is 88, so the first floor under 200 m is two tiles out of an active coast and three out of a quiet one; and an eighth of the coasts read are shores of hollows in the continents below the sea, with no deep floor anywhere in them, 1000 km and more: 276 km; 223, 251 and 332 globe by globe",
 	},
 	{yardstick: yardstick{
 		name: "shelf width, quiet margins over active, three globes", unit: "x", scale: "ground", lo: 1.8, hi: 4.5, slow: true,
-		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast. It reads 1.88, near the floor of the band and pooled over globes that read 1.18, 3.58 and 1.06: an active shelf is laid no narrower than a tile and a half, 56 km",
+		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
-	}},
+	},
+		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: it read 1.88 until the fractures bent by the plate moved every coast: 1.24; 2.00, 0.94 and 1.23 globe by globe",
+	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
 		source:  "the floor's slope within 300 km of a coast leans no more to the map's axes and diagonals than the coast does to the earth's lines of latitude; fractional Brownian relief drawn on this map reads within 0.025 of nothing. The band is not a measured figure",
 		measure: func() float64 { return gridLock(threeGlobes(), offshoreFloor) },
-	},
-		gap: "known gap: K - the floor is laid at the true distance from the edge of the continental crust and leans as that edge does, and the coasts lean to the map's diagonals by 0.085, which their own yardstick allows: 0.084",
-	},
+	}},
 
 	// 15. The relief. The earth's heights are rough in the same way at every
 	// scale from a hillside to a hemisphere, and that roughness is gathered:
@@ -140,7 +143,7 @@ var shapeYardsticks = []realYardstick{
 		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
 		measure: func() float64 { c1, _ := reliefIntermittency(threeGlobes()); return c1 },
 	},
-		gap: "known gap: K - the land is as rough in its plains as in its ranges, near the 0.037 a relief rough everywhere alike reads: 0.053",
+		gap: "known gap: K - the history leaves its relief gathered, 0.175 as the shaping takes it up, and the shaping lays it again as one hillslope on every tile off the rivers: the uplift it grades by spans 1.55 times (shapeFloor), shapeLift flattens the ranges and the slides hold what is steep at one threshold: 0.075",
 	},
 }
 
@@ -159,7 +162,7 @@ type landmasses struct {
 }
 
 func landOf(g *Grid) landmasses {
-	return remember(fmt.Sprintf("landmasses/%p", g), func() landmasses {
+	return remember("landmasses", []*Grid{g}, func() landmasses {
 		n := len(g.Tiles)
 		r := landmasses{of: make([]int32, n)}
 		for i := range r.of {
@@ -491,6 +494,63 @@ func gridLock(gs []*Grid, field lockField) float64 {
 	return math.Max(math.Abs(s4/sw), math.Abs(s8/sw))
 }
 
+// cornerLock is how strongly the continents' coasts gather at four bearings a
+// right angle apart, whichever way each continent is turned: |<e^{4iθ}>| of
+// the directions its eased edge faces, weighted by the edge, averaged over
+// the continents by their size. Where gridLock asks whether the coasts know
+// which way the map runs, this asks whether a continent is a rectangle. A
+// square reads 1 and a rectangle near enough as much, whichever way it is
+// turned; a hexagon or a triangle 0.02, its corners being sixty degrees; a
+// disc 0.01; the cells of a Voronoi 0.45; and the coasts of a Brownian relief
+// 0.02 to 0.07, which is how far from nothing a continent's few long runs of
+// rough coast come by chance. It is read, as gridLock is, within
+// lockLatitude of the equator.
+func cornerLock(gs []*Grid) float64 {
+	const least = 0.05
+	var sum, area float64
+	for _, g := range gs {
+		lm := landOf(g)
+		for c, n := range lm.tiles {
+			if n < continentLeast*lm.land {
+				continue
+			}
+			f := make([]float64, len(g.Tiles))
+			for i, k := range lm.of {
+				if k == int32(c) {
+					f[i] = 1
+				}
+			}
+			f = blur(g, f, 1.5)
+			var re, im, w float64
+			for y := 1; y < g.H-1; y++ {
+				if math.Abs(latitudeOf(g, y)) > lockLatitude {
+					continue
+				}
+				for x := 0; x < g.W; x++ {
+					if !g.Wrap && (x == 0 || x == g.W-1) {
+						continue
+					}
+					i := y*g.W + x
+					gx := (f[y*g.W+g.WrapX(x+1)] - f[y*g.W+g.WrapX(x-1)]) / 2
+					gy := (f[i+g.W] - f[i-g.W]) / 2
+					if m := math.Hypot(gx, gy); m >= least {
+						th := 4 * math.Atan2(gy, gx)
+						re, im, w = re+m*math.Cos(th), im+m*math.Sin(th), w+m
+					}
+				}
+			}
+			if w > 0 {
+				sum += n * math.Hypot(re, im) / w
+				area += n
+			}
+		}
+	}
+	if area == 0 {
+		return math.NaN()
+	}
+	return sum / area
+}
+
 // lockField is a field gridLock reads the slope of, and the tiles it reads it
 // on, or nil for all of them.
 type lockField func(g *Grid) (f []float64, at func(i int) bool)
@@ -581,7 +641,7 @@ const activeReach = 150 * km
 // land beside the sea, and a margin is active where a tile beside a tile of
 // another plate lies within activeReach of it.
 func shelvesOf(gs []*Grid) shelfReading {
-	return remember(fmt.Sprintf("shelves/%p/%d", gs[0], len(gs)), func() shelfReading {
+	return remember("shelves", gs, func() shelfReading {
 		var shallow, sea float64
 		var all, active, quiet []float64
 		for _, g := range gs {
@@ -649,7 +709,7 @@ func landWindows(g *Grid, n int) [][2]int {
 // shape.go cuts at TileSpan stand above the line, as Perron found real
 // valleys do (see valleyWavelength).
 func reliefSpectrum(gs []*Grid) float64 {
-	return remember(fmt.Sprintf("spectrum/%p/%d", gs[0], len(gs)), func() float64 {
+	return remember("spectrum", gs, func() float64 {
 		const n = 64
 		power := make([]float64, n/4+1)
 		hann := make([]float64, n)
@@ -704,7 +764,7 @@ const intermittencyWindow = 32
 // moments read by traceMoments.
 func reliefIntermittency(gs []*Grid) (c1, alpha float64) {
 	type ca struct{ c1, alpha float64 }
-	r := remember(fmt.Sprintf("intermittency/%p/%d", gs[0], len(gs)), func() ca {
+	r := remember("intermittency", gs, func() ca {
 		const n = intermittencyWindow
 		var fields [][]float64
 		for _, g := range gs {
@@ -838,6 +898,19 @@ func TestTheShapeMeasuresReadDrawnShapes(t *testing.T) {
 	near("a disc's grid lock", gridLock([]*Grid{disc}, landEdge), 0, 0.03)
 	near("a square's grid lock", gridLock([]*Grid{square}, landEdge), 1, 0.05)
 	near("a diamond's grid lock", gridLock([]*Grid{diamond}, landEdge), 1, 0.05)
+	hexIn := polygonFill(n, n, func() [][2]float64 {
+		var p [][2]float64
+		for k := range 6 {
+			a := 0.3 + math.Pi*float64(k)/3
+			p = append(p, [2]float64{mid + 160*math.Cos(a), mid + 160*math.Sin(a)})
+		}
+		return p
+	}())
+	hexagon := drawnLand(n, n, func(x, y float64) bool { return hexIn[int(y)*n+int(x)] })
+	near("a square's right angles", cornerLock([]*Grid{square}), 1, 0.05)
+	near("a diamond's right angles", cornerLock([]*Grid{diamond}), 1, 0.05)
+	near("a hexagon's right angles", cornerLock([]*Grid{hexagon}), 0, 0.05)
+	near("a disc's right angles", cornerLock([]*Grid{disc}), 0, 0.03)
 
 	for _, hurst := range []float64{0.5, 0.8} {
 		f := fbmField(1024, 512, hurst, 1)
@@ -852,6 +925,9 @@ func TestTheShapeMeasuresReadDrawnShapes(t *testing.T) {
 		g = drawnHeights(1024, 512, f, quantile(f, 0.7))
 		if lock := gridLock([]*Grid{g}, landEdge); !(lock < 0.1) {
 			t.Errorf("the coasts of a Brownian relief of H %.1f lean %.3f to the grid", hurst, lock)
+		}
+		if corners := cornerLock([]*Grid{g}); !(corners < 0.1) {
+			t.Errorf("the continents of a Brownian relief of H %.1f gather %.3f at right angles", hurst, corners)
 		}
 	}
 
