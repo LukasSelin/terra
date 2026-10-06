@@ -807,6 +807,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 			},
 		},
 		currentsDrawing(g),
+		seaFeaturesDrawing(g),
 		{
 			file: "woods", title: "Woods",
 			about: "How well each tile suits trees (WoodsAt), with the woods standing now outlined dark.",
@@ -867,6 +868,116 @@ func currentsDrawing(g *terra.Grid) drawing {
 			return c
 		},
 		overlay: func(img *image.RGBA, px int) { streamlines(img, f, px) },
+	}
+}
+
+// seaClassColour is how each kind of current, and each kind of gyre, is
+// drawn on the map of the sea's features.
+var seaClassColour = map[terra.SeaClass]color.RGBA{
+	terra.WesternBoundary: {214, 48, 30, 255},
+	terra.EasternBoundary: {40, 110, 220, 255},
+	terra.Drift:           {120, 120, 120, 255},
+	terra.Equatorial:      {200, 160, 20, 255},
+	terra.Circumpolar:     {120, 40, 160, 255},
+	terra.Throughflow:     {20, 160, 150, 255},
+	terra.Subtropical:     {246, 222, 206, 255},
+	terra.Subpolar:        {208, 222, 244, 255},
+	terra.Tropical:        {236, 236, 200, 255},
+}
+
+// upwellColour is the upwellings on the same map.
+var upwellColour = color.RGBA{30, 150, 60, 255}
+
+// seaFeaturesDrawing is a map of the sea's features: its currents by their
+// class, its gyres by theirs under them, and where the water comes up, with
+// each current's path and each gyre's centre.
+func seaFeaturesDrawing(g *terra.Grid) drawing {
+	f := g.Features()
+	var legend []share
+	kinds, tiles := map[terra.SeaClass]int{}, map[terra.SeaClass]int{}
+	ups, upTiles, sea := 0, 0, 0
+	for i := range g.Tiles {
+		if isSea(g, i) {
+			sea++
+		}
+	}
+	var paths [][]int32
+	var centres []int32
+	if f != nil {
+		for k := range f.All {
+			fe := &f.All[k]
+			switch fe.Kind {
+			case terra.SeaCurrent:
+				kinds[fe.Class]++
+				tiles[fe.Class] += fe.Count
+				paths = append(paths, fe.Path)
+			case terra.Gyre:
+				kinds[fe.Class]++
+				tiles[fe.Class] += fe.Count
+				centres = append(centres, fe.Centre)
+			case terra.Upwelling:
+				ups++
+				upTiles += fe.Count
+			}
+		}
+	}
+	for c := terra.WesternBoundary; c <= terra.Tropical; c++ {
+		if kinds[c] == 0 {
+			continue
+		}
+		word := " current"
+		if c >= terra.Subtropical {
+			word = " gyre"
+		}
+		legend = append(legend, shareOf(fmt.Sprintf("%d %s%s", kinds[c], c, word), tiles[c], sea, hex(seaClassColour[c])))
+	}
+	if ups > 0 {
+		legend = append(legend, shareOf(fmt.Sprintf("%d upwelling", ups), upTiles, sea, hex(upwellColour)))
+	}
+	return drawing{
+		file: "sea-features", title: "The sea's features",
+		about:  "The sea's features (SeaCurrent, Gyre and Upwelling in the registry): each current coloured by its class, with its path dark along it; under them each gyre by its class, its centre a cross; and where the water comes up. Read off the currents alone. Each is given with the share of the sea it covers. Land grey; a valley has none.",
+		legend: legend,
+		color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+			if !isSea(g, i) {
+				return color.RGBA{200, 198, 190, 255}
+			}
+			c := color.RGBA{250, 250, 248, 255}
+			if fe := g.Feature(g.FeatureOf(i, terra.Gyre)); fe != nil {
+				c = seaClassColour[fe.Class]
+			}
+			if fe := g.Feature(g.FeatureOf(i, terra.SeaCurrent)); fe != nil {
+				c = seaClassColour[fe.Class]
+			}
+			if g.FeatureOf(i, terra.Upwelling) != 0 {
+				c = upwellColour
+			}
+			return c
+		},
+		overlay: func(img *image.RGBA, px int) {
+			dot := func(t int32, c color.RGBA) {
+				x, y := int(t)%g.W*px, int(t)/g.W*px
+				for dy := 0; dy < px; dy++ {
+					for dx := 0; dx < px; dx++ {
+						img.SetRGBA(x+dx, y+dy, c)
+					}
+				}
+			}
+			for _, path := range paths {
+				for _, t := range path {
+					dot(t, color.RGBA{40, 20, 20, 255})
+				}
+			}
+			for _, t := range centres {
+				x, y := int(t)%g.W, int(t)/g.W
+				for d := -4; d <= 4; d++ {
+					dot(int32(y*g.W+(x+d+g.W)%g.W), color.RGBA{0, 0, 0, 255})
+					if yy := y + d; yy >= 0 && yy < g.H {
+						dot(int32(yy*g.W+x), color.RGBA{0, 0, 0, 255})
+					}
+				}
+			}
+		},
 	}
 }
 

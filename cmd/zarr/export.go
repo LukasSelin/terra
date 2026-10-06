@@ -32,7 +32,8 @@ import (
 //	strata/           count; top, rock, formed, sand by bed
 //	book/             lift, worn, plate_a, plate_b, meeting, epoch,
 //	                  burial, buried_in                            (made worlds)
-//	features/         belt, basin, lake, plate, climate: each tile's feature id
+//	features/         belt, basin, lake, plate, climate, current, gyre,
+//	                  upwelling: each tile's feature id
 //	features/table/   one entry a feature, dimension "feature", coordinate id
 //
 // Elements are kept in the types the world keeps them in, so what is read
@@ -490,7 +491,8 @@ var (
 	bedrockCodes = enum(int(terra.BedrockCount), terra.Bedrock.String)
 	meetingCodes = enum(int(terra.Hotspot)+1, terra.MeetingKind.String)
 	burialCodes  = enum(int(terra.BuriedByLava)+1, terra.Burial.String)
-	kindCodes    = enum(int(terra.ClimateRegion)+1, terra.FeatureKind.String)
+	kindCodes    = enum(int(terra.Upwelling)+1, terra.FeatureKind.String)
+	seaCodes     = enum(int(terra.Tropical)+1, terra.SeaClass.String)
 	groupCodes   = codes{values: []int{0, 'A', 'B', 'C', 'D', 'E'}, meanings: []string{"none", "A", "B", "C", "D", "E"}}
 )
 
@@ -663,6 +665,9 @@ func (e *exporter) features(grp *zarr.Group, f *terra.Features, table *zarr.Grou
 		{"lake", terra.StandingLake},
 		{"plate", terra.CrustPlate},
 		{"climate", terra.ClimateRegion},
+		{"current", terra.SeaCurrent},
+		{"gyre", terra.Gyre},
+		{"upwelling", terra.Upwelling},
 	} {
 		put(e, grp, field{name: k.name, about: "the " + k.kind.String() + " the tile belongs to, by feature id; 0 is none"},
 			func() []int32 { return tiles(n, func(i int) int32 { return int32(g.FeatureOf(i, k.kind)) }) })
@@ -682,8 +687,15 @@ func (e *exporter) features(grp *zarr.Group, f *terra.Features, table *zarr.Grou
 	put1(e, table, field{name: "top", about: "a belt's highest tile, y*width+x"}, "feature", col(func(i int) int32 { return all[i].Top }))
 	put1(e, table, field{name: "height", units: "m", about: "a belt's highest tile's height"}, "feature", tiles(len(all), func(i int) float64 { return all[i].Height }))
 	put1(e, table, field{name: "outlet", about: "the tile a basin's water leaves by, y*width+x"}, "feature", col(func(i int) int32 { return all[i].Outlet }))
-	put1(e, table, field{name: "flow", units: "m3 s-1", about: "the water at a basin's outlet"}, "feature", tiles(len(all), func(i int) float64 { return all[i].Flow }))
+	put1(e, table, field{name: "flow", units: "m3 s-1", about: "the water at a basin's outlet; a current's strongest speed and an upwelling's rise, in m s-1, are kept here too"}, "feature", tiles(len(all), func(i int) float64 { return all[i].Flow }))
 	put1(e, table, field{name: "lake", about: "a lake's index among the map's lakes"}, "feature", col(func(i int) int32 { return all[i].Lake }))
 	put1(e, table, field{name: "number", about: "a plate's number"}, "feature", tiles(len(all), func(i int) uint8 { return all[i].Number }))
 	put1(e, table, field{name: "group", about: "a climate region's Köppen letter, as its character code", codes: &groupCodes}, "feature", tiles(len(all), func(i int) uint8 { return all[i].Group }))
+	put1(e, table, field{name: "class", about: "a current's or a gyre's class", codes: &seaCodes}, "feature", tiles(len(all), func(i int) uint8 { return uint8(all[i].Class) }))
+	put1(e, table, field{name: "sense", about: "which way a gyre turns, seen from above: 1 anticlockwise, -1 clockwise"}, "feature", tiles(len(all), func(i int) int8 { return all[i].Sense }))
+	put1(e, table, field{name: "heading", units: "degree", about: "the way a current's water runs on the whole, clockwise from north"}, "feature", tiles(len(all), func(i int) float32 { return all[i].Heading }))
+	put1(e, table, field{name: "transport", units: "Sv", about: "the water a current carries across its narrowest section, or a gyre turns round"}, "feature", tiles(len(all), func(i int) float32 { return all[i].Transport }))
+	put1(e, table, field{name: "warmth", units: "degC", about: "how many degrees a current's, a gyre's or an upwelling's water stands over its latitude's mean"}, "feature", tiles(len(all), func(i int) float32 { return all[i].Warmth }))
+	put1(e, table, field{name: "centre", about: "the tile a gyre turns round, y*width+x"}, "feature", col(func(i int) int32 { return all[i].Centre }))
+	put1(e, table, field{name: "gyre", about: "the gyre a current runs round, by feature id; 0 is none"}, "feature", col(func(i int) int32 { return int32(all[i].Gyre) }))
 }

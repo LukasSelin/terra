@@ -6,6 +6,39 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The sea's currents, gyres and upwellings are features
+
+**What this is.** On `claude/ocean-features`, from `main` (7e17754, which
+has O1 merged): workstream O2 of the ocean-currents plan (#18). Three new
+kinds in the registry, `SeaCurrent`, `Gyre` and `Upwelling`, read off O1's
+fields in `readSea` (`features_sea.go`) at the end of `readFeatures`. The
+gyres are the hills and hollows of a streamfunction solved from the
+current's own vorticity (`(*Env).Stream`, `internal/atmos/stream.go`: SOR on
+cells of up to 200 km, the air's two by two on the globe, started from two
+coarser lattices), so nothing is read off the row-by-row gyre solve that M1
+replaces. Each tile keeps its place among each sea kind's features as a
+`uint16`, not a `FeatureID`: 3 × 2 B a tile, nil on a valley.
+
+**The world.** Unchanged: the registry is a reading. `TERRA_DIGEST=write`
+on 7e17754 left `docs/perf/digest.json` as committed, and
+`TERRA_DIGEST=check` passes after.
+
+**The heap.** globe128 allocates 393.8 -> 394.5 MiB (+0.18%) in 29301 ->
+29323 allocations: inside the slack, and the budget is not rewritten. The
+valleys have no currents and do not move.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, loaded machine: `readSea` 0.16 s of
+`readFeatures` 0.29 s (so `readFeatures` was some 0.13 s before), against
+`weather` 1.18 s. Of `readSea`, about 0.1 s is the streamfunction; solving
+it on the air's own cells was 0.9 s, on cells twice the size 0.12 s with a
+mean difference of 0.8% of the largest ψ and no change of sign where ψ is
+over a tenth of it. It settles to 1e-4 of the largest ψ; 1e-5 found the same
+gyres and currents but for a handful of tiles. `airEnv.currents`
+is 0.13 s before and after: its code is untouched.
+
+---
+
 ## 2026-10-06 - The sea keeps its currents
 
 **What this is.** On `claude/ocean-fields`, from `main` (53eb8bf):

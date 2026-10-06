@@ -642,3 +642,17 @@ func (w *Winds) WaterTempAt(i int) float64 {
 	fx, fy := w.CellAt(i)
 	return w.Sample32(w.WaterTemp, fx, fy)
 }
+
+// WaterWarmth is how many degrees the water over tile i stands over the mean
+// of its latitude: SeaWarmth before it is held to seaWarmMost. It is nothing
+// where there is no water worked out.
+func (w *Winds) WaterWarmth(i int) float64 {
+	if w.WaterTemp == nil {
+		return 0
+	}
+	fx, fy := w.CellAt(i)
+	y0 := math.Floor(fy)
+	t := fy - y0
+	a, b := min(max(int(y0), 0), w.H-1), min(max(int(y0)+1, 0), w.H-1)
+	return w.Sample32(w.WaterTemp, fx, fy) - (w.Mean[a] + (w.Mean[b]-w.Mean[a])*t)
+}

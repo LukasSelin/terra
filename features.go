@@ -20,8 +20,10 @@ import (
 // Nothing here is a second reading of the world. A belt is the tiles the
 // book says one meeting raised; a basin is the tree the water's own way
 // down makes; a lake is the lake the drainage found; a plate is the plate
-// the history left; a climate region is a run of Köppen's one letter. The
-// registry joins, and invents nothing.
+// the history left; a climate region is a run of Köppen's one letter; a
+// current, a gyre and an upwelling are the sea's own current, the way it
+// turns and where it comes up, as the weather worked them out (see
+// features_sea.go). The registry joins, and invents nothing.
 //
 // Ids are deterministic: each kind's features are numbered in the order of
 // their lowest tile, kind by kind in the order of FeatureKind, so the same
@@ -50,10 +52,21 @@ const (
 	// ClimateRegion is connected dry land of one Köppen group: A, B, C, D
 	// or E.
 	ClimateRegion
+	// SeaCurrent is connected sea whose current runs faster than a floor and
+	// the same way: the Gulf Stream, the Canary current, the North Atlantic
+	// Drift. Globes only, as the currents are. See features_sea.go.
+	SeaCurrent
+	// Gyre is connected sea the current goes round one way, round one
+	// centre: an ocean's subtropical or subpolar gyre.
+	Gyre
+	// Upwelling is a run of coast where cold water comes up from under the
+	// sea faster than a floor: the Humboldt off Peru, the Benguela off
+	// Namibia.
+	Upwelling
 	featureKinds
 )
 
-var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region"}
+var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region", "sea current", "gyre", "upwelling"}
 
 func (k FeatureKind) String() string {
 	if int(k) < len(featureKindNames) {
@@ -110,6 +123,30 @@ type Feature struct {
 
 	// A climate region: Group is Köppen's letter.
 	Group byte
+
+	// The sea's: Class is what kind of current or gyre it is, and Sense which
+	// way a gyre turns, seen from above: +1 anticlockwise, -1 clockwise.
+	Class SeaClass
+	Sense int8
+	// A current: Flow (above) is its strongest speed, in metres a second;
+	// Heading the way its water runs on the whole, in degrees clockwise from
+	// north; Transport the water it carries across its narrowest section, in
+	// sverdrups (millions of cubic metres a second); Warmth how many degrees
+	// its water stands over its latitude's mean on the whole, which is what
+	// says it is warm or cold; Gyre the gyre it runs in or beside, or 0;
+	// Path its centre line from its head downstream, the way a basin carries
+	// its Trunk.
+	//
+	// A gyre: Transport is the water it turns round, in sverdrups; Warmth
+	// its water's, the same way; Centre the tile it turns round.
+	//
+	// An upwelling: Flow is how fast the water comes up, in metres a second,
+	// on the whole; Warmth how many degrees over its latitude's mean the
+	// water it brings up leaves the sea, below nought.
+	Heading, Transport, Warmth float32
+	Centre                     int32
+	Gyre                       FeatureID
+	Path                       []int32
 }
 
 // Features is a map's registry: every feature by id, and which feature of
@@ -123,8 +160,15 @@ type Features struct {
 	belt, basin, climate []FeatureID
 	lake                 []FeatureID
 	plate                [plateCap]FeatureID
+	// current, gyre and upwell are each tile's feature of those kinds as its
+	// place among its kind's features, from 1, or 0; its id is that place
+	// past the kind's seaBase. The sea's features are few, and a place is
+	// half an id's room on every tile of the map. Nil where there is no sea
+	// worked out.
+	current, gyre, upwell []uint16
+	seaBase               [3]FeatureID
 	// tiles and trunks back every feature's Tiles and Trunk, one slice each
-	// rather than one a feature.
+	// rather than one a feature; the currents' Paths have one of their own.
 	tiles, trunks []int32
 }
 
@@ -152,8 +196,9 @@ func (g *Grid) Feature(id FeatureID) *Feature {
 }
 
 // FeaturesAt is every feature the tile at p is part of: its belt, its
-// basin, its lake, its plate and its climate region, in that order, each
-// only where it has one.
+// basin, its lake, its plate, its climate region, and the current, the gyre
+// and the upwelling of the sea over it, in that order, each only where it
+// has one.
 func (g *Grid) FeaturesAt(p geom.Pos) []FeatureID {
 	if g.features == nil || !g.In(p) {
 		return nil
@@ -194,6 +239,10 @@ func (g *Grid) featureAt(i int, k FeatureKind) FeatureID {
 	case ClimateRegion:
 		if i < len(f.climate) {
 			return f.climate[i]
+		}
+	case SeaCurrent, Gyre, Upwelling:
+		if at := f.seaLabel(k); i < len(at) && at[i] > 0 {
+			return f.seaBase[k-SeaCurrent] + FeatureID(at[i])
 		}
 	}
 	return 0
@@ -317,6 +366,10 @@ func (g *Grid) readFeatures() {
 		})
 	}
 
+	// The sea's currents, gyres and upwellings, read off the currents the
+	// weather worked out. See features_sea.go.
+	f.All, stack = g.readSea(f, f.All, stack, g.winds)
+
 	// Every feature's tiles, lowest first, out of one slice. A plate's are
 	// not listed.
 	for id := range f.All {
@@ -334,6 +387,7 @@ func (g *Grid) readFeatures() {
 	each(f.belt, tally)
 	each(f.basin, tally)
 	each(f.climate, tally)
+	f.eachSea(tally)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			counts[f.lake[k]]++
@@ -359,6 +413,7 @@ func (g *Grid) readFeatures() {
 	each(f.belt, fill)
 	each(f.basin, fill)
 	each(f.climate, fill)
+	f.eachSea(fill)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			fill(f.lake[k], i)

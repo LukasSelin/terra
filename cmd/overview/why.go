@@ -68,7 +68,7 @@ func whyPlaces(g *terra.Grid) []whyPlace {
 	add("The driest land", driest)
 
 	// The largest lake's shore: the lowest-numbered dry tile beside it.
-	var lake, river *terra.Feature
+	var lake, river, current *terra.Feature
 	if f := g.Features(); f != nil {
 		for k := range f.All {
 			fe := &f.All[k]
@@ -80,6 +80,10 @@ func whyPlaces(g *terra.Grid) []whyPlace {
 			case terra.DrainageBasin:
 				if river == nil || fe.Flow > river.Flow {
 					river = fe
+				}
+			case terra.SeaCurrent:
+				if fe.Class == terra.WesternBoundary && fe.Warmth > 0 && (current == nil || fe.Transport > current.Transport) {
+					current = fe
 				}
 			}
 		}
@@ -113,6 +117,10 @@ func whyPlaces(g *terra.Grid) []whyPlace {
 			}
 		}
 		add("The mouth of the largest river", mouth)
+	}
+	// The middle of the warm western current that carries the most water.
+	if current != nil && len(current.Path) > 0 {
+		add("The strongest warm western current", int(current.Path[len(current.Path)/2]))
 	}
 	// Four spread evenly across the middle row, each moved to the nearest
 	// dry land.
