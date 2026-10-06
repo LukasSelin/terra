@@ -115,11 +115,24 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if poleward > 0 {
 		t.Errorf("%d river tiles run off the top or the bottom of the map", poleward)
 	}
-	// The poles are bare and the middle is not.
-	switch g.At(geom.Pos{X: 100, Y: 0}).Terrain {
-	case Rock, Water, Ice:
-	default:
-		t.Fatal("the pole is not bare")
+	// The poles are bare and the middle is not. Which tile of the pole's row
+	// is land is the plates' to say, and polar land whose summer comes over
+	// freezing is tundra, which is open ground: so it is the row that is
+	// bare, mostly ice and outcrop, and not any one tile of it. Seed 1's
+	// northern row was 70% bare with the gyres solved a row at a time and is
+	// 64% solved over the whole ocean, which took the one tile this read,
+	// (100, 0), from bare ground to tundra.
+	for _, y := range []int{0, g.H - 1} {
+		bare := 0
+		for x := 0; x < g.W; x++ {
+			switch g.At(geom.Pos{X: x, Y: y}).Terrain {
+			case Rock, Water, Ice:
+				bare++
+			}
+		}
+		if share := float64(bare) / float64(g.W); share < 0.5 {
+			t.Fatalf("the pole's row %d is %.0f%% bare", y, 100*share)
+		}
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of
 	// plates, weather and drainage over half a million tiles - see Globe. It

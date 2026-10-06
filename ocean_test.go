@@ -153,7 +153,7 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // kept, and taken again when the gyres were solved in two dimensions
 // (docs/ocean-model-plan.md, M1), which moves them on purpose. And the warmth
 // is the kept temperature over its latitude's mean, held to seaWarmMost, and
-// nothing where the water is under ice.
+// to nothing over it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -166,7 +166,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xf475ac6e8056c45f); got != want {
+	if got, want := h.Sum64(), uint64(0xf191cc42ca5fa1a8); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost
@@ -174,14 +174,11 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 		if e.Sea[i] <= 0.5 {
 			continue
 		}
-		if float64(e.WaterTemp[i]) < SeaFreeze {
-			// Under ice: the air over it takes nothing from the water.
-			if w != 0 {
-				t.Fatalf("cell %d: water at %.2f degrees, under ice, warms the air %+.2f", i, e.WaterTemp[i], w)
-			}
-			continue
-		}
 		over := float64(e.WaterTemp[i]) - e.Mean[i/e.W]
+		if float64(e.WaterTemp[i]) < SeaFreeze {
+			// Under ice: the air over it takes none of the water's warmth.
+			over = math.Min(0, over)
+		}
 		if math.Abs(over) >= most {
 			over = math.Copysign(most, over)
 		}

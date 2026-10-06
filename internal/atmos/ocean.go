@@ -270,16 +270,20 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
 
 	// Water colder than seaIce is under ice, and the air over ice is not
-	// warmed or chilled by the water under it: its warmth counts for nothing
-	// there. Without it the gyres, which now reach the poles, carried water
-	// a few degrees warmer than the air into the polar seas, and the polar
-	// lands beside them came out four degrees milder than their latitude
-	// under a sea that was ice (see terra.Grid.Freezing, which reads the same
-	// mean). The sea's own ice is M7's (docs/ocean-model-plan.md).
+	// warmed by the water under it: there the sea is worth no more than its
+	// latitude, though its cold still counts. Without it the gyres, which
+	// now reach the poles, carried water a few degrees warmer than the air
+	// into the polar seas, and the polar lands beside them came out four
+	// degrees milder than their latitude under a sea that was ice (see
+	// terra.Grid.Freezing, which reads the same mean). The sea's own ice is
+	// M7's (docs/ocean-model-plan.md).
 	warm := make([]float64, n)
 	for i := range warm {
-		if wet(i) && temp[i] >= seaIce {
+		if wet(i) {
 			warm[i] = math.Max(-seaWarmMost, math.Min(seaWarmMost, temp[i]-e.Mean[i/e.W]))
+			if temp[i] < seaIce {
+				warm[i] = math.Min(0, warm[i])
+			}
 		}
 	}
 	// The land along a shore is given the warmth of the sea beside it, so
