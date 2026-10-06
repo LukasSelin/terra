@@ -6,6 +6,145 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - How square the plates are
+
+**What this is.** On `claude/relief-intermittency`. The globes' continents
+look cut out in rectangles: long straight sides meeting at corners near a
+right angle. This reads how square they are and what makes them so, and
+changes nothing in the making.
+
+**The reading.** For each plate or piece of continent of 2000 tiles and
+more, how strongly its edges gather at four bearings and at six: c4 =
+|<e^{4iθ}>| and c6 = |<e^{6iθ}>| of the direction its eased edge faces,
+weighted by the edge, then averaged over the pieces by their size. It does
+not care which way a piece is turned. Off drawn shapes:
+
+| shape | c4 | c6 |
+| --- | --- | --- |
+| square | 0.92 | 0.00 |
+| rectangle 2:1 | 0.97 | 0.32 |
+| hexagon, triangle | 0.02 | 0.91 |
+| disc | 0.01 | 0.00 |
+| Voronoi of 24 middles | 0.45 | 0.45 |
+| the land of Brownian reliefs, H 0.5 and 0.8 | 0.01 | 0.01 |
+
+**The globes.** Seeds 1 and 3, through a history:
+
+| | first plates | plates at the end | first continents | continents at the end |
+| --- | --- | --- | --- | --- |
+| globe 1, c4 / c6 | 0.29 / 0.22 | 0.21 / 0.12 | 0.38 / 0.31 | 0.29 / 0.19 |
+| globe 3, c4 / c6 | 0.27 / 0.26 | 0.28 / 0.15 | 0.14 / 0.24 | 0.20 / 0.15 |
+
+The continents end twenty times as polygonal as a Brownian coast, and more
+at right angles than at sixty degrees. The three fracture sets stand a sixth
+of a turn apart, which makes sixty degrees, and that fades over the history
+while the right angles hold or grow. That is what plates carried whole
+would do - part across the way they go and slide along it, the two meeting
+square - though nothing here has taken that apart from the rest of the
+history.
+
+**What moves it.** Probes, the continents at the end, seeds 1 and 3:
+
+| | c4 | c6 |
+| --- | --- | --- |
+| as made | 0.29, 0.20 | 0.19, 0.15 |
+| `fractureCreep` 0.05 -> 0.2 | 0.11, 0.12 | 0.08, 0.12 |
+| `fractureWall` 6.5 -> 4 | 0.11, 0.16 | 0.15, 0.23 |
+| the floods over sixteen neighbours | 0.16, 0.16 | 0.17, 0.20 |
+| `fractureCreep` 1.0 | 0.06, 0.06 | 0.07, 0.04 |
+
+How straight the fractures run is most of it; how the floods step is
+little. But the creep is in radians a tile and not a kilometre, so it bends
+a small globe's faults differently from a full one's, and the plate tests
+are read on the small globes:
+
+| `fractureCreep` | `TestAPlatesWallRunsStraight` (1.05 and over) | the other plate tests |
+| --- | --- | --- |
+| 0.05 | 1.167 | pass |
+| 0.10 | 1.056 | pass |
+| 0.15 | 1.003 | a plate of 0.39 of the world against a ceiling of 0.22 |
+| 0.20 | 1.085 | a plate of 0.35; the plate area exponent 0.436, out of 0.15-0.35 |
+
+Squaring the continents less is a search of the fractures' bend, read per
+kilometre, and their wall, against the plate tests, not a change of one
+constant.
+
+---
+
+## 2026-10-06 - What decides the land share
+
+**What this is.** On `claude/relief-intermittency`. The K gap "land share
+of the surface, furthest of three globes" reads 0.449 against the earth's
+0.292. This finds what sets a globe's land and what moving it would cost,
+and changes nothing but the gap's message.
+
+**The land is the crust.** Globes 1-3 have 0.225, 0.441 and 0.462 of the
+sphere in continental crust and 0.223, 0.431 and 0.449 in land: the sea
+stands at 20.29, 22.57 and 24.77 m on basins 20 m deep and covers almost
+nothing of the continents. The shelves are laid on the ocean crust beside
+them (`floorDepths`), so a globe's continental crust is what the earth's
+land is, not the four tenths the earth's continental crust is with its
+shelves. The crust is the first plates' draw, at `oceanFloor` +
+`oceanPerSea` x `SeaShare` = 0.55 ocean on `GlobeTerms`, and put right only
+past `crustSlack`, 0.15, counted in tiles of the cylinder: drawn, the three
+are 0.311, 0.448 and 0.546 continent by tile and 0.227, 0.504 and 0.492 by
+area, and the history takes them to 0.225, 0.441 and 0.462 by area.
+
+**The sea is the wrong lever.** The continents stand all but flat over the
+sea, and unevenly from one globe to the next. Raised over the ground as the
+history left it:
+
+| | land, globes 1/2/3 | water it takes, m |
+| --- | --- | --- |
+| as poured | 0.225 / 0.440 / 0.455 | 7.5 |
+| 10 m higher | 0.207 / 0.384 / 0.360 | 14.9 / 13.6 / 13.0 |
+| 20 m higher | 0.134 / 0.220 / 0.215 | 22.6 / 20.7 / 20.0 |
+
+**The crust, drawn as the earth's.** Probes, the shape yardsticks over the
+three globes, the crust balanced by area on the sphere within 0.05:
+
+| | land, globes 1/2/3 | remoteness |
+| --- | --- | --- |
+| as made | 0.223 / 0.431 / 0.449 | 0.520 |
+| balanced to 0.70 ocean, drawn as before | 0.262 / 0.289 / 0.357 | 0.312 |
+| drawn and balanced at 0.70 ocean | 0.257 / 0.312 / 0.310 | 0.438 |
+| drawn and balanced at 0.66 ocean | 0.257 / 0.378 / 0.380 | 0.543 |
+
+The remoteness that fell with the balance alone was five continents read,
+the rest touching a pole.
+
+**The water has to fill the basins it is given.** `DefaultWater` was
+chosen to all but fill basins of half to three fifths of the map. With
+seven tenths of floor it does not: small globe 3, 0.764 of its tiles ocean
+crust, had its coasts stand beside the deep floor, the shaping laid its land
+kilometres down, and the sea poured again stood at -2782 m. The first globe
+as made is 0.731 ocean crust by tile and already has 229 dry tiles beside the
+deep floor. At 9 m the sea stands 1.8 to 3.2 m over the basins on every
+seed, as 7.5 m stood it on the crust it was chosen for.
+
+**What it buys and costs.** Drawn and balanced at 0.70 ocean, with 9 m of
+water, every yardstick against the base:
+
+| | base | crust and water |
+| --- | --- | --- |
+| land share, furthest of three globes | 0.449 | **0.253** (0.253 / 0.308 / 0.306) |
+| hypsometric integral, small globe | 0.312, out | **0.362** |
+| discharge exceedance exponent, small globe | 0.464, out | **0.436** |
+| valley floor over hillslope soil depth, small globe | 1.71, gap | **3.49**, in |
+| remoteness, islands, coast dimension, coast lock | 0.52, 0.68, 1.13, 0.084 | 0.42, 0.82, 1.12, 0.060 |
+| plate area cumulative exponent | 0.341 | **0.454**, out of 0.15-0.35 |
+| meander wavelength, small globe | 11.7 | **14.1**, out of 10-14 |
+| mean land rain, 2x over 1x | 1.13 | **1.36**, out of 0.85-1.15 |
+| channel concavity, 2x less 1x | -0.07 | **0.18**, out of -0.1-0.1 |
+
+With the slack left at 0.15 the third globe comes out 0.417 and the same
+four go out, with Flint's R2 besides, so it is the ocean and not the
+balancing. And
+`TestAGlobeHasASeaItsRiversReach` holds a globe's sea to 0.4-0.7 by tile and
+one tile of the pole bare, both of which an earth's crust moves.
+
+---
+
 ## 2026-10-06 - Where the relief's intermittency goes
 
 **What this is.** On `claude/relief-intermittency`, on top of

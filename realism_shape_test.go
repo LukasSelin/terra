@@ -73,7 +73,7 @@ var shapeYardsticks = []realYardstick{
 			return far
 		},
 	},
-		gap: "known gap: K - the crust is drawn within crustSlack of four tenths continent and the water floods what the crust leaves dry, so a world's land is its own luck: globes 2 and 3 come out 0.43 and 0.45 land: 0.449",
+		gap: "known gap: K - a globe's land is its continental crust, 97 to 99 hundredths of it above the sea, and the crust is drawn at 45% continent and put right only past crustSlack, counting tiles and not the sphere's area: 0.223, 0.431 and 0.449 globe by globe: 0.449",
 	},
 	{yardstick: yardstick{
 		name: "remoteness of the continents, three globes", unit: "", scale: "ground", lo: 0.4, hi: 0.7, slow: true,
