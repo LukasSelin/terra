@@ -85,11 +85,105 @@ the comment is left for whoever next reads that bar.
 `digest.json` as it is, and `TERRA_DIGEST=check` passes after: no world
 moves. The budget and `scripts/perf.sh` read nothing this touches and are
 not run. `go test -short` passes whole, 66 s (on 53eb8bf it failed these
-two). The yardsticks fail what the entry below leaves failing on `main`,
-at its figures: channel concavity (0.246), drainage area (0.486) and
+two). The yardsticks fail what the fracture-bend entry leaves failing on
+`main`, at its figures: channel concavity (0.246), drainage area (0.486) and
 discharge (0.462) exceedance exponents and the hypsometric integral
 (0.305), small globe; mean land rain 2x over 1x (1.25), midlatitude over
 subtropical rain (0.90), Aridisols and Gelisols. 281 s.
+
+---
+
+## 2026-10-06 - The sea keeps its currents
+
+**What this is.** On `claude/ocean-fields`, from `main` (53eb8bf):
+workstream O1 of the ocean-currents plan. `(*Env).currents` worked out the
+current, the upwelling and the water's temperature, then kept only the
+clamped warmth: `seaLinks` wrote its weights over `cu`, `cv` and `rise`, and
+`temp` was dropped. Now `Env` keeps `Cu`, `Cv`, `Rise` and `WaterTemp`
+(°C, unclamped; `SeaTemp` was already the name of the storms' seasonal
+reading) as `[]float32` on the air's cells, nil on a valley. `seaLinks` takes
+its own `base`, `wa` and `wb`. `Grid` reads them per tile, as it reads
+`SeaWarmth`: `SeaCurrent`, `Upwelling`, `SeaTemp`. `cmd/overview` draws
+`sea-currents.png`: the current as streamlines (the wind's, drawn full length
+at 0.5 m/s) over the water's warmth against its latitude, darkened where it
+upwells.
+
+**The world.** Unchanged. `TERRA_DIGEST=write` on 53eb8bf left
+`docs/perf/digest.json` as committed, and `TERRA_DIGEST=check` passes after,
+with `TERRA_HISTORIES=off` too. `TestKeepingTheCurrentsLeavesTheWarmthAsItWas`
+pins an FNV hash of `Warm` and `Coast` on `twoOceans`, taken on 53eb8bf
+(0xafdf8947c074a07c), and checks that the kept temperature over its
+latitude's mean, clamped to ±10, is `Warm` to within float32 rounding.
+The yardsticks were not rerun because every world is bit for bit as it was.
+
+**The heap.** globe128 allocates 405.8 -> 413.0 MB (+1.78%, over the 1%
+slack, so the budget is rewritten), with 152 more allocations. That is 40 B
+an air cell each time the winds are made: the three float64 slices
+`seaLinks` no longer borrows and the four float32 fields kept. The valley
+and the ancient valley make no currents, and their budget entries are left
+as they were. Letting `seaLinks` keep borrowing `cu`, `cv` and `rise`
+after they are narrowed to float32 would save the 24 B of scratch. It was
+left undone so that the solve writes over nothing it is handed.
+
+**Timing.** `scripts/perf.sh check` fails against the 2026-09-16 07:18
+baseline: valley +25%, ancient +13%, globe256 +30%, with spreads of ±10-24%.
+The valleys make no currents, so this is the machine's load (and main's drift
+since then), not the change. Interleaved, main's test binary and this one
+turn and turn about on globe256, six runs each, on the same loaded machine:
+
+| globe256 | main | ocean-fields | |
+| --- | --- | --- | --- |
+| sec/op | 4.926 ± 38% | 4.775 ± 17% | ~ (p=0.818) |
+| B/op | 1.521 Gi | 1.546 Gi | +1.68% (p=0.002) |
+| allocs/op | 192.5k | 192.6k | ~ (p=0.699) |
+
+No time to be seen; the bytes are the 40 B an air cell above. A quiet-machine
+`check` is still owed before merging.
+
+---
+
+## 2026-10-06 - A reading is kept for its own grid
+
+**What this is.** Test code only. The yardsticks' memo, `remember` in
+`realism_test.go`, kept a reading under the address of the grid it was read
+off (`%p`), and for most readings only the first grid's address and how many
+there were. A grid the registry keeps (`yardWorld`) lives the whole run and
+is never mistaken for another; a map drawn in a test and let go can have its
+address given to the next map drawn, which was then served the forgotten
+map's reading. Drawn in a loop of 32, with a collection between, 14 maps
+were read as an earlier map's land; on `claude/fracture-bend`, `cornerLock`
+read 0.046 for six of eight Brownian maps until they were kept alive.
+
+A reading is now kept under its name and a serial for every grid it is read
+off, each grid numbered by a `weak.Pointer` to it: equal only for the one
+grid, even once it has gone and another lies where it lay, and not keeping a
+drawn map alive for the rest of the run as a `*Grid` key would.
+`TestAReadingIsKeptForItsOwnGrid` draws the 32 maps; on the address key it
+fails at the second. The `runtime.KeepAlive(kept)` that
+`claude/fracture-bend` put in `TestTheShapeMeasuresReadDrawnShapes` for it
+is taken out.
+
+It was failing the short tier on main, and keeping maps alive did not mend
+it. Run with the rest of the tier at 2a00ecb,
+`TestTheShapeMeasuresReadDrawnShapes` read the spectrum of its Brownian
+relief of H 0.8 as 1.964 - the H 0.5 relief's, 1.96379, drawn and let go the
+turn before - against 2.6 within 0.2; run alone, it was given another
+address and read its own 2.591. At 53eb8bf, with the three-tenths maps kept,
+it read the H 0.8 relief's continents as gathering 0.479 at right angles,
+against its own 0.067: a test can keep its own maps, but not the ones the
+tests before it let go. Eight Brownian maps drawn in a loop and let go read
+corners of 0.059 and then one value seven times over, 0.0254 run alone and
+0.0334 in the tier; they now read 0.020 to 0.077.
+It passes now, alone and in the tier.
+
+**What it moved.** No world. No non-test code changed, so the heap budget and
+`TERRA_DIGEST=check` stand as they were. Against main at 53eb8bf, the twelve
+three-globe shape readings and the twenty-two readings of the drawn shapes
+(each map kept alive on main, so that main reads its own) are the same to the
+last digit, and the short tier passes, skips and fails the same tests with
+the same messages, but for `TestTheShapeMeasuresReadDrawnShapes`, which now
+passes. `TestAHistoryLeavesAMapTheSettlementCanUse` and
+`TestAHistoryLeavesItsBedsInLayers` fail the tier on main as they do here.
 
 ---
 
