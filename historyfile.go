@@ -51,6 +51,7 @@ var historyDropped = map[string]string{
 	"flowScratch":  "working memory: flow clears what it reads",
 	"stepScratch":  "working memory: the step clears what it reads",
 	"creepScratch": "working memory: creep clears what it reads",
+	"paw":          "working memory: the weather lays it afresh before it reads it",
 	"router":       "made the first time a route is asked for",
 	"landmarks":    "a game's, laid once the world is handed over",
 	"features":     "read at the end of the cover stage",
