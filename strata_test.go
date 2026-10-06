@@ -202,31 +202,48 @@ func TestARiverStepsDownOverAHardBed(t *testing.T) {
 // A history leaves its ground layered: most tiles stand on a pile of more
 // than one bed, and on a good share of them the weather has cut through to
 // a bed that is not the one on top.
+//
+// The share and the depth are asked of the middle of a dozen valleys and not
+// of one, which is the dozen TestAHistoryLeavesAMapTheSettlementCanUse makes.
+// Over six hundred seeds the share runs from 0.41 to 0.72 with its middle at
+// 0.57, so one valley in seven stands less than half on a pile, and a pile is
+// under two beds deep on one in twenty-five; the fractures bent by the plate
+// moved neither (0.567 and 0.564 on the mean, 85 and 86 seeds under a half;
+// 2.33 beds both). Read on seed 1 alone, the bar was on the draw: it read
+// 0.517 and then 0.489 when the bend handed seed 1 different plates. The
+// middle of a dozen has read 0.50 to 0.62 over a hundred dozens, and a pile
+// 2.10 to 2.46 beds deep.
 func TestAHistoryLeavesItsBedsInLayers(t *testing.T) {
-	g := madeLand(1, AncientTerms()).Grid
-	beds, layered := 0, 0
-	kinds := map[Bedrock]bool{}
-	for i := range g.Tiles {
-		c := &g.strata[i]
-		beds += int(c.n)
-		if c.n > 1 {
-			layered++
+	const seeds = 12
+	var shares, depths []float64
+	for seed := uint64(1); seed <= seeds; seed++ {
+		g := madeLand(seed, AncientTerms()).Grid
+		beds, layered := 0, 0
+		kinds := map[Bedrock]bool{}
+		for i := range g.Tiles {
+			c := &g.strata[i]
+			beds += int(c.n)
+			if c.n > 1 {
+				layered++
+			}
+			if g.Tiles[i].Bedrock != c.rock[0] {
+				t.Fatalf("seed %d: tile %d reads %s over a pile whose top bed is %s", seed, i, g.Tiles[i].Bedrock, c.rock[0])
+			}
+			for k := 0; k < int(c.n); k++ {
+				kinds[c.rock[k]] = true
+			}
 		}
-		if g.Tiles[i].Bedrock != c.rock[0] {
-			t.Fatalf("tile %d reads %s over a pile whose top bed is %s", i, g.Tiles[i].Bedrock, c.rock[0])
-		}
-		for k := 0; k < int(c.n); k++ {
-			kinds[c.rock[k]] = true
+		shares = append(shares, float64(layered)/float64(len(g.Tiles)))
+		depths = append(depths, float64(beds)/float64(len(g.Tiles)))
+		if len(kinds) < 5 {
+			t.Errorf("seed %d: the piles hold only %d kinds of rock", seed, len(kinds))
 		}
 	}
-	if share := float64(layered) / float64(len(g.Tiles)); share < 0.5 {
-		t.Errorf("only %.0f%% of the map stands on more than one bed", 100*share)
+	if share := quantile(shares, 0.5); share < 0.5 {
+		t.Errorf("only %.0f%% of the middling map stands on more than one bed, over %d seeds", 100*share, seeds)
 	}
-	if mean := float64(beds) / float64(len(g.Tiles)); mean < 2 {
-		t.Errorf("a pile is %.2f beds deep on average", mean)
-	}
-	if len(kinds) < 5 {
-		t.Errorf("the piles hold only %d kinds of rock", len(kinds))
+	if mean := quantile(depths, 0.5); mean < 2 {
+		t.Errorf("a pile is %.2f beds deep on average on the middling map, over %d seeds", mean, seeds)
 	}
 }
 

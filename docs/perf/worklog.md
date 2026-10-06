@@ -6,6 +6,93 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - Two short-tier tests that read the draw
+
+**What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at
+53eb8bf. Tests and the work log only. `go test -short` on 53eb8bf failed
+two tests that 2a00ecb passed: `TestAHistoryLeavesAMapTheSettlementCanUse`
+(seed 8, 310 tiles of water against 80) and
+`TestAHistoryLeavesItsBedsInLayers` (49% of the map on more than one bed).
+
+**Which change.** The fracture bend, 69d6e2e, alone: 2a00ecb passes both
+and 69d6e2e fails both with the same messages. `claude/relief-intermittency`
+changes no code (35f586d and ff2b847 are a test's messages and this log),
+and 53eb8bf's tree is 9d271cb's but for those. The entry below names both as
+the draw on the seed each reads; this is the measurement of whether they
+are.
+
+**The reading.** Both read the default valley run through sixteen epochs
+(`AncientTerms`, which is `historyConfig(16)`), whose fractures went from
+0.10 radians over a spacing to 0.30. `fractureBend` at 0.1 in the new code
+makes the old valley tile for tile (two hundred seeds, every reading the
+same), so on the valley the change is the bend and nothing else. Seeds
+1-600, drawn valley and made:
+
+| | before (0.1) | after (0.3) |
+| --- | --- | --- |
+| made valley's water, tiles, mean (drawn 175) | 169 | 174 |
+| made valley's water, middle (drawn 166) | 158 | 158 |
+| correlation of a made valley's water with its twin's | 0.03 | 0.09 |
+| seeds over three times their twin's water | 17 | 19 |
+| share on more than one bed, mean | 0.567 | 0.564 |
+| seeds under a half | 85 | 86 |
+| beds a tile, mean | 2.33 | 2.33 |
+| seeds under two | 22 | 27 |
+| steepest tenth over the twin's, mean, seeds 1-200 | 0.845 | 0.841 |
+| ploughland over the twin's, mean, seeds 1-200 | 1.000 | 1.001 |
+
+The made valley did not move on anything these tests read. Over seeds 1-200
+the bend at 0.2 and at 0.45 reads the same within the seeds' spread (share
+0.556 and 0.560, water 173 and 171 tiles).
+
+**Why they tripped.** The water was asked of each seed against its drawn
+twin, and the twins share a seed number and nothing else. The bar was three
+times whatever that draw left - 72 tiles where the drawn map had 24, 2556
+where it had 852 - and it tripped wherever a dry drawn map met a wet made
+one: of the fifty dozens in seeds 1-600, 14 before the bend and 16 after.
+Seeds 1-12 cleared it before by that much luck. The layers were asked of
+seed 1 alone, of a share that runs 0.41-0.74 over the seeds with one in
+seven under a half: seed 1 read 0.517 before and 0.489 after.
+
+**What changed.** The bars stay; what they are asked of moves, as the
+steepest tenth in the same test already is:
+
+- The water is asked of the dozen together: the made valleys' water in all
+  no more than twice the drawn ones'. A dozen reads 0.60 to 1.50 of its
+  twins' over the hundred dozens before and after, seeds 1-12 1.07 (0.91
+  before). The made valleys are, if anything, less often drowned: 3 and 4
+  in 600 hold three times the drawn maps' middle, where 11 drawn maps do.
+  One drowned valley is the ploughland check's, which is still per seed:
+  water is not ploughed, and no made valley of the 1200 read under 0.85
+  of its twin's ploughland (the bar is 0.8). Holding each made valley
+  against the middling drawn map at three times still failed 4 and 6
+  dozens in fifty, which is why the dozen's sum is read.
+- The layers' share and depth are asked of the middle of the same dozen,
+  at the same half and two beds; the per-tile check and the five kinds of
+  rock are still asked of every valley. The middle of a dozen reads 0.50 to
+  0.62 over the hundred dozens and 0.543 on seeds 1-12 (0.555 before); its
+  depth 2.10 to 2.46, and 2.28 (2.24).
+- The settlement test makes its valleys through `madeLand`, so the two tests
+  share the dozen's histories: 6.7 s -> 2.0 s with them kept, and the layers
+  test 0.5 s -> 1.0 s for twelve valleys and not one.
+
+Still in the steepest tenth's comment: over thirty seeds the made valley
+ran 1.42 times its twin's on the middle. Over seeds 1-200 it is 0.82 before
+the bend and 0.83 after, so a made valley is no longer the steeper place;
+the comment is left for whoever next reads that bar.
+
+**Digest, budget, time.** `TERRA_DIGEST=write` on 53eb8bf leaves
+`digest.json` as it is, and `TERRA_DIGEST=check` passes after: no world
+moves. The budget and `scripts/perf.sh` read nothing this touches and are
+not run. `go test -short` passes whole, 66 s (on 53eb8bf it failed these
+two). The yardsticks fail what the fracture-bend entry leaves failing on
+`main`, at its figures: channel concavity (0.246), drainage area (0.486) and
+discharge (0.462) exceedance exponents and the hypsometric integral
+(0.305), small globe; mean land rain 2x over 1x (1.25), midlatitude over
+subtropical rain (0.90), Aridisols and Gelisols. 281 s.
+
+---
+
 ## 2026-10-06 - The sea keeps its currents
 
 **What this is.** On `claude/ocean-fields`, from `main` (53eb8bf):
