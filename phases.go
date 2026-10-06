@@ -19,7 +19,7 @@ import "github.com/LukasSelin/terra/internal/phase"
 var phaseNames = []string{
 	"Generate", "history", "move", "joinUp", "tectonics", "reshape",
 	"keepBook", "settleRock", "basins", "drain", "weather", "windsFor",
-	"rainOn", "orographic", "airEnv.vapour", "airEnv.currents", "pool",
+	"rainOn", "orographic", "airEnv.vapour", "airEnv.currents", "airEnv.gyres", "pool",
 	"flow", "wear", "waterStep", "fluvial.solve", "creep", "landslide",
 	"shape", "cutValleys", "silt", "tides", "readFeatures",
 	"stage.ground", "stage.sea", "stage.shape", "stage.cut", "stage.coast",

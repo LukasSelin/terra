@@ -3,6 +3,8 @@ package atmos
 import (
 	"math"
 	"slices"
+
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The gyres in two dimensions.
@@ -154,6 +156,7 @@ type level struct {
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
 // it is the level of the landmass. It is for a globe only.
 func (e *Env) gyres(tx, ty []float64) []float64 {
+	defer phase.Start("airEnv.gyres")()
 	f := e.newFlow()
 	x := f.solve(f.forcing(tx, ty))
 	return f.spread(x)

@@ -330,6 +330,8 @@ type seaLinks struct {
 	base, take []float64
 	wa, wb     []float64
 	ja, jb     []int32
+	// up is ja as a column of its own row, or -1.
+	up []int32
 }
 
 // seaLinks writes each cell's equation down. It takes over deep for its own
@@ -388,6 +390,13 @@ func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
 			l.base[i], l.take[i] = sum, take
 		}
 	}
+	l.up = make([]int32, n)
+	for i, j := range l.ja {
+		l.up[i] = -1
+		if j >= 0 {
+			l.up[i] = j % int32(l.w)
+		}
+	}
 	return l
 }
 
@@ -407,17 +416,36 @@ func (l *seaLinks) gaussSeidel(t []float64) {
 	c, g := make([]float64, l.w), make([]float64, l.w)
 	state := make([]int8, l.w)
 	stack := make([]int, 0, l.w)
+	// A row is swept again only while it, or a row either side, which is
+	// all a row's water comes from, changed by more than seaSettled in the
+	// round before: on a globe that has made its history, all but a few
+	// rows near the poles have settled within a few rounds.
+	moved, active := make([]bool, l.h), make([]bool, l.h)
+	for cy := range active {
+		active[cy] = true
+	}
 	for round := 0; round < seaRounds; round++ {
 		most := 0.0
+		clear(moved)
 		for k := 0; k < 2*l.h; k++ {
 			cy := k
 			if k >= l.h {
 				cy = 2*l.h - 1 - k
 			}
-			most = math.Max(most, l.row(cy, t, c, g, state, stack))
+			if !active[cy] {
+				continue
+			}
+			d := l.row(cy, t, c, g, state, stack)
+			most = math.Max(most, d)
+			if d >= seaSettled {
+				moved[cy] = true
+			}
 		}
 		if most < seaSettled {
 			return
+		}
+		for cy := range active {
+			active[cy] = moved[cy] || (cy > 0 && moved[cy-1]) || (cy < l.h-1 && moved[cy+1])
 		}
 	}
 }
@@ -430,19 +458,15 @@ func (l *seaLinks) gaussSeidel(t []float64) {
 // that comes back to itself.
 func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) float64 {
 	row := cy * l.w
-	up := func(x int) int {
-		if j := l.ja[row+x]; j >= 0 {
-			return int(j) - row
-		}
-		return -1
-	}
+	ts := t[row : row+l.w]
+	up := l.up[row : row+l.w]
 	for x := range l.w {
 		i := row + x
-		state[x] = 0
 		if l.take[i] == 0 {
 			state[x] = 2
 			continue
 		}
+		state[x] = 0
 		s := l.base[i]
 		if j := l.jb[i]; j >= 0 {
 			s += l.wb[i] * t[j]
@@ -450,13 +474,6 @@ func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) flo
 		c[x], g[x] = s/l.take[i], l.wa[i]/l.take[i]
 	}
 	most := 0.0
-	set := func(x int, v float64) {
-		if d := math.Abs(v - t[row+x]); d > most {
-			most = d
-		}
-		t[row+x] = v
-		state[x] = 2
-	}
 	for x0 := range l.w {
 		if state[x0] == 2 {
 			continue
@@ -466,17 +483,19 @@ func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) flo
 		for x >= 0 && state[x] == 0 {
 			state[x] = 1
 			stack = append(stack, x)
-			x = up(x)
+			x = int(up[x])
 		}
 		if x >= 0 && state[x] == 1 {
 			// A ring: the warmth at x, carried round it, comes back as
 			// a + b times itself.
 			a, b := c[x], g[x]
-			for y := up(x); y != x; y = up(y) {
+			for y := int(up[x]); y != x; y = int(up[y]) {
 				a += b * c[y]
 				b *= g[y]
 			}
-			set(x, a/(1-b))
+			v := a / (1 - b)
+			most = math.Max(most, math.Abs(v-ts[x]))
+			ts[x], state[x] = v, 2
 		}
 		for k := len(stack) - 1; k >= 0; k-- {
 			y := stack[k]
@@ -484,10 +503,11 @@ func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) flo
 				continue
 			}
 			v := c[y]
-			if u := up(y); u >= 0 {
-				v += g[y] * t[row+u]
+			if u := up[y]; u >= 0 {
+				v += g[y] * ts[u]
 			}
-			set(y, v)
+			most = math.Max(most, math.Abs(v-ts[y]))
+			ts[y], state[y] = v, 2
 		}
 	}
 	return most
