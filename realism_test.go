@@ -3,9 +3,12 @@ package terra
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"weak"
 )
 
 // The world held against the planet it is meant to be a piece of.
@@ -259,15 +262,55 @@ func TestTheRealWorld(t *testing.T) {
 // memo keeps a reading that several yardsticks share, made once.
 var memo sync.Map
 
-func remember[T any](key string, f func() T) T {
+// remember is f's reading of gs, made once and kept under what and the grids
+// it is read off. A grid is not known by its address: a map drawn after
+// another has gone can be given the address it had, and would be served its
+// reading.
+func remember[T any](what string, gs []*Grid, f func() T) T {
 	type once struct {
 		sync.Once
 		v any
+	}
+	key := what
+	for _, g := range gs {
+		key += fmt.Sprintf("/%d", gridSerial(g))
 	}
 	o, _ := memo.LoadOrStore(key, &once{})
 	c := o.(*once)
 	c.Do(func() { c.v = f() })
 	return c.v.(T)
+}
+
+// gridSerials numbers each grid a reading is kept for, by a weak pointer to
+// it. Two weak pointers are equal only when they were made from the one grid,
+// even once it has gone and another lies where it lay; and, unlike the grid
+// itself as a key, one does not keep a drawn map alive for the rest of the run.
+var (
+	gridSerials sync.Map // weak.Pointer[Grid] to uint64
+	gridsSeen   atomic.Uint64
+)
+
+func gridSerial(g *Grid) uint64 {
+	w := weak.Make(g)
+	if n, ok := gridSerials.Load(w); ok {
+		return n.(uint64)
+	}
+	n, _ := gridSerials.LoadOrStore(w, gridsSeen.Add(1))
+	return n.(uint64)
+}
+
+// A reading is kept for its own grid. Maps drawn one after another and let
+// go are given, as often as not, an address a forgotten one had: when the
+// memo knew a grid by its address, 14 of 32 Brownian maps drawn in a loop
+// were read as a map drawn before them.
+func TestAReadingIsKeptForItsOwnGrid(t *testing.T) {
+	for k := range 32 {
+		g := drawnLand(64, 64, func(x, y float64) bool { return x < float64(k+1) })
+		if got, want := landOf(g).land, float64(64*(k+1)); got != want {
+			t.Fatalf("a map of %.0f tiles of land is read as %.0f", want, got)
+		}
+		runtime.GC() // for the next map to be drawn where this one lay
+	}
 }
 
 // plateWorlds are the worlds plate_test.go reads, kept.
@@ -394,7 +437,7 @@ type subsidence struct {
 const shelfBreak = 200.0
 
 func seafloorSubsidence(gs []*Grid) subsidence {
-	return remember(fmt.Sprintf("subsidence/%p", gs[0]), func() subsidence {
+	return remember("subsidence", gs, func() subsidence {
 		const bins = 256
 		var sum, n [bins]float64
 		for _, g := range gs {
@@ -486,7 +529,7 @@ func plateAreaExponent(gs []*Grid) float64 {
 // of its own and is left out.
 func flint(gs []*Grid) (theta, r2 float64) {
 	type fl struct{ theta, r2 float64 }
-	r := remember(fmt.Sprintf("flint/%p/%d", gs[0], len(gs)), func() fl {
+	r := remember("flint", gs, func() fl {
 		const width = math.Ln10 / 5
 		sum, count := map[int]float64{}, map[int]float64{}
 		most := 0.0
@@ -556,7 +599,7 @@ const chiRef = 0.45
 // trunk is walked up from the outlet along the inflow that drains the most, to
 // where the channel heads.
 func chiLinearity(gs []*Grid) float64 {
-	return remember(fmt.Sprintf("chi/%p/%d", gs[0], len(gs)), func() float64 {
+	return remember("chi", gs, func() float64 {
 		sum, weight := 0.0, 0.0
 		for _, g := range gs {
 			tr := treeOf(g)
@@ -628,7 +671,7 @@ func meanderingSlope(q float64) float64 { return 0.0125 * math.Pow(math.Max(q, 1
 // eased over three steps: twice the length of the line over how many times the
 // river crosses it. A river here is a tile wide, so tiles are widths.
 func meanders(gs []*Grid) meanderReading {
-	return remember(fmt.Sprintf("meanders/%p/%d", gs[0], len(gs)), func() meanderReading {
+	return remember("meanders", gs, func() meanderReading {
 		var wl, sn []float64
 		for _, g := range gs {
 			// A lake is no reach of a river, but an open one is no end of it
