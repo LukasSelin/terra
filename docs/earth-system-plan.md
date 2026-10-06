@@ -137,6 +137,8 @@ times in the work log.
 
 ## Owner decisions
 
+Settled 2026-10-06: the defaults below stand.
+
 1. **The deep-time climate's cost (X1).** A coarse weather per epoch
    multiplies the history's weather work by up to sixteen. Default: measure
    first, and accept up to doubling the history's time.
