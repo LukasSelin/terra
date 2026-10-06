@@ -231,7 +231,7 @@ func (g *Grid) shape() (area []float64) {
 // What it cannot hand on is how high. At a 25 metre tile the shaping lays the
 // ground to the map's own scale whatever uplift it is given - see shapeTop -
 // and a range kilometres high is a wall there. On a globe how high is the
-// country's, which the map's ground stands on and the air reads: see
+// country's, which the map's ground stands on and the air's warmth reads: see
 // hypsometry.go.
 func (g *Grid) shapeUplift(uplift []float64, root []bool) {
 	var order []int
