@@ -171,7 +171,8 @@ M1, starts after O1 and runs alongside O2.
    the field's own resolution) or carried down to tiles like climate
    regions (their `Tiles` list on the map). Default: tiles, so `FeaturesAt`
    works the same for every kind.
-2. Whether M5's overturning is allowed to move the Gulf Stream's
+2. Decided 2026-10-06 (see `docs/ocean-model-plan.md`): no, a reading
+   only for now. Was: whether M5's overturning is allowed to move the Gulf Stream's
    warmth, once read.
 3. Whether relations (O3) are the start of a general relation layer for
    every kind (belt `Shadows` basin, belt `Raises` plate boundary, basin

@@ -209,8 +209,20 @@ fifth of the weather's time on GlobeTerms, measured quiet.
 
 ## Owner decisions
 
-1. The time budget above.
-2. Whether M3's coupling into the EBM goes in, knowing it re-fits the
-   latitude profile and moves every climate yardstick at once.
-3. Whether M5's overturning may move the Gulf Stream's warmth.
-4. Whether M6's seasons are worth four solves, once measured.
+Decided 2026-10-06:
+
+1. **Budget.** The ocean takes no more than a fifth of the weather's time
+   on GlobeTerms, measured on a quiet machine. A step that goes over it
+   comes back with a profile and a way under it before it merges.
+2. **M3 couples into the EBM.** The ocean's heat convergence goes into the
+   energy balance, `ebmDiffusion` is re-fitted to the air's share with its
+   source, and the latitude profile is fitted again. The climate
+   yardsticks will move all at once; M3's commit lists every one that
+   moved and which way.
+3. **M5 is a reading only.** The overturning, its sinking sites and its
+   heat are worked out and exposed, and do not change the currents or the
+   warmth. Feeding them back is a later decision, taken on the reading.
+4. **M6 is measured first.** The four phases go in only if they buy
+   something the yardsticks see (seasonal upwelling, monsoon reversal,
+   sea ice's year) within the budget in 1. If not, the annual solve stays
+   and M7 runs on it with the coldest phase's air.
