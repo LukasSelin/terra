@@ -49,7 +49,7 @@ O1 keep the fields ──► O2 currents as features ──► O3 relations and 
         └────────────► M track (docs/ocean-model-plan.md), world-moving
 ```
 
-O1 changes no world and goes first, alone. O2 and O4 run side by side on
+O1 changes no world and goes first, alone. O2 and M1 run side by side on
 O1. O3 waits for O2. Every workstream follows `CLAUDE.md`'s before-merging
 list; the digest line is given for each.
 
@@ -89,7 +89,7 @@ the ids are deterministic like every other kind's:
     or cold is read off this, not assumed from which side of the ocean it
     is on;
   - `Class`: western boundary, eastern boundary, drift (zonal, open
-    water), equatorial (once O4 gives it one), circumpolar (likewise);
+    water), equatorial (once M1 gives it one), circumpolar (likewise);
   - `Path`, its centre line from its head downstream, the way a basin
     carries its `Trunk`.
 - `Gyre`: a closed loop of currents in one ocean basin, found as the
@@ -130,7 +130,7 @@ second guess:
   - `PartOf`: a current and its gyre; a gyre and its ocean basin.
   - `Feeds`: one current into the next downstream along its `Path`, the
     Gulf Stream into the North Atlantic Drift.
-  - `Freezes` (after O4's sea ice): a cold current and the sea ice it
+  - `Freezes` (after M7's sea ice): a cold current and the sea ice it
     carries.
 - `Why`: `OfRain` gains `OffshoreCurrent` (the current, its warmth, the
   extra damp `damp` gives) and `Inversion` (the upwelling, the share it
@@ -171,7 +171,7 @@ M1, starts after O1 and runs alongside O2.
    the field's own resolution) or carried down to tiles like climate
    regions (their `Tiles` list on the map). Default: tiles, so `FeaturesAt`
    works the same for every kind.
-2. Whether O4 item 4's overturning is allowed to move the Gulf Stream's
+2. Whether M5's overturning is allowed to move the Gulf Stream's
    warmth, once read.
 3. Whether relations (O3) are the start of a general relation layer for
    every kind (belt `Shadows` basin, belt `Raises` plate boundary, basin
