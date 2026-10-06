@@ -806,6 +806,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 				return c
 			},
 		},
+		currentsDrawing(g),
 		{
 			file: "woods", title: "Woods",
 			about: "How well each tile suits trees (WoodsAt), with the woods standing now outlined dark.",
@@ -833,6 +834,37 @@ func streamDrawing(file, title, about string, g *terra.Grid, f *windField, shade
 				return scaleRGB(c, 0.88)
 			}
 			return scaleRGB(c, shade(p))
+		},
+		overlay: func(img *image.RGBA, px int) { streamlines(img, f, px) },
+	}
+}
+
+// currentsDrawing is a map of the sea's currents over the year, as
+// streamlines over the water's warmth against its latitude, darkened where
+// the water comes up from under.
+func currentsDrawing(g *terra.Grid) drawing {
+	f := currentsOf(g)
+	var most float64
+	for i := range g.Tiles {
+		most = math.Max(most, g.Upwelling(i))
+	}
+	return drawing{
+		file: "sea-currents", title: "Currents",
+		about: fmt.Sprintf("The sea's currents over the year as streamlines, drawn their full length at %.1f m/s and not at all under %.2f, over how much warmer (red) or colder (blue) than its latitude the water is, ±8 C at full colour. The water is darkened where it comes up from under, to half at the most upwelling on the map, %.2g m/s (%.1f m a day). Land grey.", currentMost, currentCalm, most, most*86400),
+		color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
+			if !t.Wet() {
+				return color.RGBA{200, 198, 190, 255}
+			}
+			warm := g.SeaWarmth(i)
+			k := clamp(math.Abs(warm)/8, 0, 1)
+			c := lerpRGB(color.RGBA{240, 240, 236, 255}, color.RGBA{200, 40, 36, 255}, k)
+			if warm < 0 {
+				c = lerpRGB(color.RGBA{240, 240, 236, 255}, color.RGBA{36, 80, 200, 255}, k)
+			}
+			if most > 0 {
+				c = scaleRGB(c, 1-0.5*clamp(g.Upwelling(i)/most, 0, 1))
+			}
+			return c
 		},
 		overlay: func(img *image.RGBA, px int) { streamlines(img, f, px) },
 	}
