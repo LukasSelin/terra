@@ -6,6 +6,55 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - The sea keeps its currents
+
+**What this is.** On `claude/ocean-fields`, from `main` (53eb8bf):
+workstream O1 of the ocean-currents plan. `(*Env).currents` worked out the
+current, the upwelling and the water's temperature, then kept only the
+clamped warmth: `seaLinks` wrote its weights over `cu`, `cv` and `rise`, and
+`temp` was dropped. Now `Env` keeps `Cu`, `Cv`, `Rise` and `WaterTemp`
+(°C, unclamped; `SeaTemp` was already the name of the storms' seasonal
+reading) as `[]float32` on the air's cells, nil on a valley. `seaLinks` takes
+its own `base`, `wa` and `wb`. `Grid` reads them per tile, as it reads
+`SeaWarmth`: `SeaCurrent`, `Upwelling`, `SeaTemp`. `cmd/overview` draws
+`sea-currents.png`: the current as streamlines (the wind's, drawn full length
+at 0.5 m/s) over the water's warmth against its latitude, darkened where it
+upwells.
+
+**The world.** Unchanged. `TERRA_DIGEST=write` on 53eb8bf left
+`docs/perf/digest.json` as committed, and `TERRA_DIGEST=check` passes after,
+with `TERRA_HISTORIES=off` too. `TestKeepingTheCurrentsLeavesTheWarmthAsItWas`
+pins an FNV hash of `Warm` and `Coast` on `twoOceans`, taken on 53eb8bf
+(0xafdf8947c074a07c), and checks that the kept temperature over its
+latitude's mean, clamped to ±10, is `Warm` to within float32 rounding.
+The yardsticks were not rerun because every world is bit for bit as it was.
+
+**The heap.** globe128 allocates 405.8 -> 413.0 MB (+1.78%, over the 1%
+slack, so the budget is rewritten), with 152 more allocations. That is 40 B
+an air cell each time the winds are made: the three float64 slices
+`seaLinks` no longer borrows and the four float32 fields kept. The valley
+and the ancient valley make no currents, and their budget entries are left
+as they were. Letting `seaLinks` keep borrowing `cu`, `cv` and `rise`
+after they are narrowed to float32 would save the 24 B of scratch. It was
+left undone so that the solve writes over nothing it is handed.
+
+**Timing.** `scripts/perf.sh check` fails against the 2026-09-16 07:18
+baseline: valley +25%, ancient +13%, globe256 +30%, with spreads of ±10-24%.
+The valleys make no currents, so this is the machine's load (and main's drift
+since then), not the change. Interleaved, main's test binary and this one
+turn and turn about on globe256, six runs each, on the same loaded machine:
+
+| globe256 | main | ocean-fields | |
+| --- | --- | --- | --- |
+| sec/op | 4.926 ± 38% | 4.775 ± 17% | ~ (p=0.818) |
+| B/op | 1.521 Gi | 1.546 Gi | +1.68% (p=0.002) |
+| allocs/op | 192.5k | 192.6k | ~ (p=0.699) |
+
+No time to be seen; the bytes are the 40 B an air cell above. A quiet-machine
+`check` is still owed before merging.
+
+---
+
 ## 2026-10-06 - A reading is kept for its own grid
 
 **What this is.** Test code only. The yardsticks' memo, `remember` in

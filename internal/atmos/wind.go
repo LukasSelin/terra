@@ -244,6 +244,14 @@ type Env struct {
 	// latitude's mean for the currents, and Coast what that is worth to the
 	// country round it: see currents. Both are nil on a valley.
 	Warm, Coast []float64
+	// Cu and Cv are the sea's current over each cell, metres a second toward
+	// the east and the north; Rise how fast water comes up from under it,
+	// metres a second; and WaterTemp the water's temperature, degrees: the
+	// latitude's mean and Warm, before Warm is held to seaWarmMost. Land
+	// has no current and no upwelling; the land along a shore is given the
+	// temperature of the sea beside it, and the land away from the sea its
+	// latitude's mean. All are nil on a valley.
+	Cu, Cv, Rise, WaterTemp []float32
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's
