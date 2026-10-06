@@ -55,6 +55,51 @@ No time to be seen; the bytes are the 40 B an air cell above. A quiet-machine
 
 ---
 
+## 2026-10-06 - A reading is kept for its own grid
+
+**What this is.** Test code only. The yardsticks' memo, `remember` in
+`realism_test.go`, kept a reading under the address of the grid it was read
+off (`%p`), and for most readings only the first grid's address and how many
+there were. A grid the registry keeps (`yardWorld`) lives the whole run and
+is never mistaken for another; a map drawn in a test and let go can have its
+address given to the next map drawn, which was then served the forgotten
+map's reading. Drawn in a loop of 32, with a collection between, 14 maps
+were read as an earlier map's land; on `claude/fracture-bend`, `cornerLock`
+read 0.046 for six of eight Brownian maps until they were kept alive.
+
+A reading is now kept under its name and a serial for every grid it is read
+off, each grid numbered by a `weak.Pointer` to it: equal only for the one
+grid, even once it has gone and another lies where it lay, and not keeping a
+drawn map alive for the rest of the run as a `*Grid` key would.
+`TestAReadingIsKeptForItsOwnGrid` draws the 32 maps; on the address key it
+fails at the second. The `runtime.KeepAlive(kept)` that
+`claude/fracture-bend` put in `TestTheShapeMeasuresReadDrawnShapes` for it
+is taken out.
+
+It was failing the short tier on main, and keeping maps alive did not mend
+it. Run with the rest of the tier at 2a00ecb,
+`TestTheShapeMeasuresReadDrawnShapes` read the spectrum of its Brownian
+relief of H 0.8 as 1.964 - the H 0.5 relief's, 1.96379, drawn and let go the
+turn before - against 2.6 within 0.2; run alone, it was given another
+address and read its own 2.591. At 53eb8bf, with the three-tenths maps kept,
+it read the H 0.8 relief's continents as gathering 0.479 at right angles,
+against its own 0.067: a test can keep its own maps, but not the ones the
+tests before it let go. Eight Brownian maps drawn in a loop and let go read
+corners of 0.059 and then one value seven times over, 0.0254 run alone and
+0.0334 in the tier; they now read 0.020 to 0.077.
+It passes now, alone and in the tier.
+
+**What it moved.** No world. No non-test code changed, so the heap budget and
+`TERRA_DIGEST=check` stand as they were. Against main at 53eb8bf, the twelve
+three-globe shape readings and the twenty-two readings of the drawn shapes
+(each map kept alive on main, so that main reads its own) are the same to the
+last digit, and the short tier passes, skips and fails the same tests with
+the same messages, but for `TestTheShapeMeasuresReadDrawnShapes`, which now
+passes. `TestAHistoryLeavesAMapTheSettlementCanUse` and
+`TestAHistoryLeavesItsBedsInLayers` fail the tier on main as they do here.
+
+---
+
 ## 2026-10-06 - The fractures bend by the plate, and the continents are less square
 
 **What this is.** On `claude/fracture-bend`, from `main`. The globes'
