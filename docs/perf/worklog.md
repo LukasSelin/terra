@@ -6,6 +6,46 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Relations across the world's systems, and the coupling graph
+
+**What this is.** On `claude/system-relations`, from `claude/ocean-relations`
+(88e43b6, O3 unmerged): #27. The land's relations (`relations_land.go`):
+`Shadows` (a belt's orographic rain, `Budget.Oro`, on the cells of it the
+air crossed, walked back up each phase's wind with the walk `Why` uses,
+now `upwindWalk`), `Fills` (a lake's `Inflow`), `Grows` (a climate region's
+share under each wood; woods are a new feature kind, `Woodland`, connected
+forest), `Raises` (a belt's plates from `Feature.Plates`) and `DrainsInto`
+(a basin of `textureChannel` tiles or more and the current, upwelling or
+gyre nearest its mouth). `Why` gains `RainShadow` in `OfRain`. And the
+coupling graph (`couplings.go`): every pass of `Generate`, its stages, and
+the world's fields it reads and writes, held to the code by
+`couplings_test.go` - the source read pass by pass with `go/parser`, and the
+budget's three worlds made stage by stage with every Grid field hashed after
+each - with `docs/couplings.md` and `cmd/overview`'s `couplings.html` made
+from it. `weather`'s default air for a hand-made grid moved into
+`ensureAir`, its own pass, so the graph does not read the weather as
+writing the energy balance.
+
+**The world.** Unchanged: `TERRA_DIGEST=write` on 88e43b6 left
+`docs/perf/digest.json` as committed, and `TERRA_DIGEST=check` passes after.
+
+**The heap.** Moved, and the budget rewritten: valley 10.47 -> 10.54 MB,
+ancient 58.85 -> 59.12 MB, globe128 412.98 -> 415.00 MB (+0.5%), the
+woods' label (4 B a tile), the land's relations and the shadow walk's cells.
+A first cut allocated a closure for every cell and phase of the walk and
+grew its kept parts from nothing, 3 MB on globe128; one closure and a kept
+slice made to size took it to the figure above.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, two runs each, base then head:
+`readRelations` 0.17-0.18 s -> 0.30-0.37 s, `readFeatures` (which holds it
+and now the woods) 0.45-0.49 s -> 0.57-0.67 s, `readSea` 0.15-0.16 s and
+`airEnv.currents` 0.12 s both sides (untouched), against `Generate`
+12.1-12.5 s and 11.4-12.2 s. On that globe there are 39477 relations, 14639
+of them `Shadows` and 19044 `Raises`.
+
+---
+
 ## 2026-10-07 - What the sea's features do: relations, and Why for rain and warmth
 
 **What this is.** On `claude/ocean-relations`, from `claude/ocean-features`

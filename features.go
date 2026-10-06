@@ -23,7 +23,8 @@ import (
 // the history left; a climate region is a run of Köppen's one letter; a
 // current, a gyre and an upwelling are the sea's own current, the way it
 // turns and where it comes up, as the weather worked them out (see
-// features_sea.go). The registry joins, and invents nothing.
+// features_sea.go); a wood is the forest the cover left standing. The
+// registry joins, and invents nothing.
 //
 // Ids are deterministic: each kind's features are numbered in the order of
 // their lowest tile, kind by kind in the order of FeatureKind, so the same
@@ -63,10 +64,13 @@ const (
 	// sea faster than a floor: the Humboldt off Peru, the Benguela off
 	// Namibia.
 	Upwelling
+	// Woodland is connected forest, joined eight ways: a wood as the woods
+	// stand when the registry is read.
+	Woodland
 	featureKinds
 )
 
-var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region", "sea current", "gyre", "upwelling"}
+var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region", "sea current", "gyre", "upwelling", "woodland"}
 
 func (k FeatureKind) String() string {
 	if int(k) < len(featureKindNames) {
@@ -160,6 +164,8 @@ type Features struct {
 	belt, basin, climate []FeatureID
 	lake                 []FeatureID
 	plate                [plateCap]FeatureID
+	// wood is each tile's woodland, or 0.
+	wood []FeatureID
 	// current, gyre and upwell are each tile's feature of those kinds as its
 	// place among its kind's features, from 1, or 0; its id is that place
 	// past the kind's seaBase. The sea's features are few, and a place is
@@ -200,9 +206,9 @@ func (g *Grid) Feature(id FeatureID) *Feature {
 }
 
 // FeaturesAt is every feature the tile at p is part of: its belt, its
-// basin, its lake, its plate, its climate region, and the current, the gyre
-// and the upwelling of the sea over it, in that order, each only where it
-// has one.
+// basin, its lake, its plate, its climate region, the current, the gyre
+// and the upwelling of the sea over it, and its wood, in that order, each
+// only where it has one.
 func (g *Grid) FeaturesAt(p geom.Pos) []FeatureID {
 	if g.features == nil || !g.In(p) {
 		return nil
@@ -247,6 +253,10 @@ func (g *Grid) featureAt(i int, k FeatureKind) FeatureID {
 	case SeaCurrent, Gyre, Upwelling:
 		if at := f.seaLabel(k); i < len(at) && at[i] > 0 {
 			return f.seaBase[k-SeaCurrent] + FeatureID(at[i])
+		}
+	case Woodland:
+		if i < len(f.wood) {
+			return f.wood[i]
 		}
 	}
 	return 0
@@ -374,6 +384,12 @@ func (g *Grid) readFeatures() {
 	// weather worked out. See features_sea.go.
 	f.All, stack = g.readSea(f, f.All, stack, g.winds)
 
+	// The woods: forest, joined where it touches.
+	f.wood = make([]FeatureID, n)
+	f.All, stack = g.components(f.All, f.wood, stack, func(i int) (uint32, bool) {
+		return 0, g.Tiles[i].Terrain == Forest
+	}, func(fe *Feature, i int) { fe.Kind = Woodland })
+
 	// Every feature's tiles, lowest first, out of one slice. A plate's are
 	// not listed.
 	for id := range f.All {
@@ -392,6 +408,7 @@ func (g *Grid) readFeatures() {
 	each(f.basin, tally)
 	each(f.climate, tally)
 	f.eachSea(tally)
+	each(f.wood, tally)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			counts[f.lake[k]]++
@@ -418,6 +435,7 @@ func (g *Grid) readFeatures() {
 	each(f.basin, fill)
 	each(f.climate, fill)
 	f.eachSea(fill)
+	each(f.wood, fill)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			fill(f.lake[k], i)

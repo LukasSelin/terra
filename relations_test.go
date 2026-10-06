@@ -141,7 +141,8 @@ func TestRelationsAreFoundFromBothEnds(t *testing.T) {
 				t.Fatalf("relations %d and %d are out of order: %+v, %+v", k-1, k, p, r)
 			}
 		}
-		unit := map[RelationKind]string{Warms: "°C", Cools: "°C", Dries: "share", Waters: "share", PartOf: "", Feeds: "Sv"}[r.Kind]
+		unit := map[RelationKind]string{Warms: "°C", Cools: "°C", Dries: "share", Waters: "share", PartOf: "", Feeds: "Sv",
+			Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s"}[r.Kind]
 		if r.Unit != unit {
 			t.Errorf("%v has unit %q", r.Kind, r.Unit)
 		}
@@ -212,12 +213,14 @@ func TestTheWarmthComesToItsCauses(t *testing.T) {
 	}
 }
 
-// A valley has no sea's features, and so no relations; its rain's chain is
-// what it was.
-func TestAValleyHasNoRelations(t *testing.T) {
+// A valley has no sea's features, and so none of the sea's relations: only
+// the land's (see relations_land.go).
+func TestAValleyHasNoSeaRelations(t *testing.T) {
 	g := yardWorld("valley", 1, DefaultTerms())
-	if r := g.Features().Relations(); len(r) != 0 {
-		t.Fatalf("a valley has %d relations", len(r))
+	for _, r := range g.Features().Relations() {
+		if _, land := landEnds[r.Kind]; !land {
+			t.Fatalf("a valley has a %v relation: %+v", r.Kind, r)
+		}
 	}
 }
 
@@ -298,13 +301,21 @@ func TestTheGlobesRelations(t *testing.T) {
 		if b, ok := best[r.Kind]; !ok || math.Abs(r.Quantity) > math.Abs(b.Quantity) {
 			best[r.Kind] = r
 		}
+		if _, land := landEnds[r.Kind]; land {
+			continue // checkLandRelations's
+		}
 		if want := ends[r.Kind]; g.Feature(r.From).Kind != want[0] || g.Feature(r.To).Kind != want[1] {
 			t.Fatalf("%+v joins a %v and a %v", r, g.Feature(r.From).Kind, g.Feature(r.To).Kind)
 		}
 	}
+	checkLandRelations(t, g)
 	t.Logf("%d relations: %v", len(all), count)
 	for k := Warms; k < relationKinds; k++ {
-		b := best[k]
+		b, ok := best[k]
+		if !ok {
+			t.Errorf("the globe has no %v relations", k)
+			continue
+		}
 		from, to := g.Feature(b.From), g.Feature(b.To)
 		t.Logf("the strongest %v: %v %v %d -> %v %d (%c, %d tiles): %.3g %s", k, from.Class, from.Kind, from.ID, to.Kind, to.ID, to.Group, to.Count, b.Quantity, b.Unit)
 	}

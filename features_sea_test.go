@@ -188,7 +188,7 @@ func TestTheSeaFeaturesDoNotDependOnTheGoroutines(t *testing.T) {
 func TestAValleyHasNoSeaFeatures(t *testing.T) {
 	g := yardWorld("valley", 1, DefaultTerms())
 	for _, fe := range g.Features().All {
-		if fe.Kind >= SeaCurrent {
+		if fe.Kind >= SeaCurrent && fe.Kind <= Upwelling {
 			t.Fatalf("a valley has a %v", fe.Kind)
 		}
 	}

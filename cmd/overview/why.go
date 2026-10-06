@@ -276,6 +276,20 @@ func relationSentence(g *terra.Grid, r terra.Relation) string {
 		return fmt.Sprintf("%s runs in %s", from, to)
 	case terra.Feeds:
 		return fmt.Sprintf("%s feeds %s, up to %s %s", from, to, num(r.Quantity), r.Unit)
+	case terra.Shadows:
+		return fmt.Sprintf("%s shadows %s: its lift wrings %s %s a year out of the air on its way there", from, to, num(r.Quantity), r.Unit)
+	case terra.Fills:
+		return fmt.Sprintf("%s fills %s with %s %s", from, to, sig(r.Quantity), r.Unit)
+	case terra.Grows:
+		return fmt.Sprintf("%s grows %s, which covers %s of it", from, to, percent(r.Quantity))
+	case terra.Raises:
+		verb := "raised"
+		if r.Quantity < 0 {
+			verb = "let down"
+		}
+		return fmt.Sprintf("%s %s %s, by as much as %s %s of the history's own", from, verb, to, num(math.Abs(r.Quantity)), r.Unit)
+	case terra.DrainsInto:
+		return fmt.Sprintf("%s drains into %s, %s %s at its mouth", from, to, sig(r.Quantity), r.Unit)
 	}
 	return fmt.Sprintf("%s %s %s: %s %s", from, r.Kind, to, num(r.Quantity), r.Unit)
 }
@@ -363,6 +377,8 @@ func sentences(g *terra.Grid, chain []terra.Cause) []string {
 			} else {
 				s = fmt.Sprintf("the sea lies %s %s upwind in that quarter's wind", q, c.Unit)
 			}
+		case terra.RainShadow:
+			s = fmt.Sprintf("the air came over %s, whose lift wrung %s %s a year out of it on the way", fe(), q, c.Unit)
 		case terra.Suits:
 			s = fmt.Sprintf("the ground suits trees at %s of one", q)
 			if c.Feature != 0 {

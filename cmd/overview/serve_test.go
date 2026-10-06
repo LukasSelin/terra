@@ -37,7 +37,7 @@ func TestTheButtonMakesAWorldAndShowsIt(t *testing.T) {
 		t.Fatalf("the job went on to %q, want /runs/<run>/", page)
 	}
 
-	for _, p := range []string{page, page + "why.html", page + "terrain.png"} {
+	for _, p := range []string{page, page + "why.html", page + "couplings.html", page + "terrain.png"} {
 		res, err := client.Get(srv.URL + p)
 		if err != nil {
 			t.Fatal(err)

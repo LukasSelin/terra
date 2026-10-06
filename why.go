@@ -26,11 +26,13 @@ import (
 // settlement is here) to the world's - and the sentence is a renderer over
 // it; cmd/overview has one.
 //
-// What is not claimed: a rain shadow. The recorded budget says what the
-// ground's lift wrung out of each phase's air and how far the sea lies
-// upwind, and the chain reports those; whether the lee is dry because a
-// range took the water is a rule over the record (the plan's P2), not a
-// reading of it, and it is not made here.
+// A rain shadow is claimed only as the record has it: the recorded budget
+// says what the ground's lift wrung out of each phase's air, and the walk
+// back up the wind says which cells the air crossed, so the chain can name
+// the range that wrung the most out of the air on its way to the tile and
+// how much (RainShadow; see relations_land.go). Whether the lee would be wet
+// without the range is a counterfactual the record does not hold, and it is
+// not claimed.
 
 // Aspect is what about a tile is being asked.
 type Aspect uint8
@@ -153,6 +155,13 @@ const (
 	OffCoast
 	Altitude
 
+	// Rain, from a range. RainShadow follows Orographic and UpwindSea for
+	// the uplift belt that wrung the most out of the air on its way to the
+	// tile's cell, walked back up each phase's wind, where that is
+	// shadowFloor or more: Quantity is the year's mean of what it wrung out,
+	// in millimetres a year, as the Shadows relation reads it.
+	RainShadow
+
 	causeKinds
 )
 
@@ -163,6 +172,7 @@ var causeNames = [causeKinds]string{
 	"suits", "slope", "treeless", "barren", "warmth", "evaporation", "wetness", "water ratio", "drains", "soil depth",
 	"offshore current", "sea damp", "inversion",
 	"latitude", "latitude warmth", "sea about", "coast warmth", "off coast", "altitude",
+	"rain shadow",
 }
 
 func (k CauseKind) String() string {
@@ -340,6 +350,18 @@ func (g *Grid) whyRain(i int) []Cause {
 	if ok {
 		chain = append(chain, Cause{Kind: UpwindSea, Quantity: d, Unit: "km", Note: phaseNamesOfYear[k]})
 	}
+	// The range the air crossed that wrung the most out of it.
+	if sr := g.shadowReader(g.features); sr != nil {
+		var best shadowPart
+		for _, p := range sr.cell(c) {
+			if p.mm > best.mm {
+				best = p
+			}
+		}
+		if best.mm >= shadowFloor {
+			chain = append(chain, Cause{Feature: best.belt, Kind: RainShadow, Quantity: best.mm, Unit: "mm"})
+		}
+	}
 	r := g.seaReader(g.features)
 	if r == nil {
 		return chain
@@ -420,6 +442,14 @@ func (g *Grid) upwindSea(e *atmos.Env, u, v []float32, c int) (float64, bool) {
 
 // upwindCell is upwindSea with the cell the walk came to the sea at.
 func (g *Grid) upwindCell(e *atmos.Env, u, v []float32, c int) (float64, int, bool) {
+	return upwindWalk(e, u, v, c, nil)
+}
+
+// upwindWalk is the walk upwindCell takes, telling visit, where there is
+// one, of each cell of land it steps onto on the way and how far back up the
+// wind it lies, in kilometres; the walk ends, and comes to no sea, the first
+// time visit says false.
+func upwindWalk(e *atmos.Env, u, v []float32, c int, visit func(cell int, km float64) bool) (float64, int, bool) {
 	if len(e.Sea) <= c || len(u) <= c || len(v) <= c {
 		return 0, -1, false
 	}
@@ -454,6 +484,9 @@ func (g *Grid) upwindCell(e *atmos.Env, u, v []float32, c int) (float64, int, bo
 		}
 		if e.Sea[cy*e.W+cx] > 0.5 {
 			return km, cy*e.W + cx, true
+		}
+		if visit != nil && !visit(cy*e.W+cx, km) {
+			return km, -1, false
 		}
 	}
 	return km, -1, false

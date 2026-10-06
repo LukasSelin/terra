@@ -25,9 +25,10 @@ import (
 // a reading does not give is not made, and where a reading is too weak to
 // mean anything a floor below says so.
 //
-// The layer is general: a relation is any two features and a kind, and the
-// kinds the land's other passes make (a range's rain shadow on a basin, a
-// basin filling a lake) are for them to add. The sea's are filled first.
+// The layer is general: a relation is any two features and a kind. The sea's
+// are read here; the land's - a range's rain shadow on a basin, a basin
+// filling a lake, a plate raising a range, a river reaching the sea - are
+// read in relations_land.go.
 //
 // Relations are built with the registry, on one goroutine, feature by
 // feature in id order and tile by tile in tile order, so that the same world
@@ -64,10 +65,33 @@ const (
 	// lesser of what the two carry, in sverdrups: the most that can run from
 	// the one into the other.
 	Feeds
+	// Shadows is an uplift belt and a drainage basin or a climate region in
+	// its rain shadow: walked back up each phase's wind from the ground's
+	// cell to the sea, the belt is crossed and its lift wrings water out of
+	// the air there. Quantity is the orographic rain the belt wrung out of
+	// that air, in millimetres a year, on the whole of the basin's or the
+	// region's ground: see relations_land.go.
+	Shadows
+	// Fills is a drainage basin and a lake its water stands in: Quantity is
+	// the lake's inflow, in cubic metres a second.
+	Fills
+	// Grows is a climate region and a wood standing in it: Quantity is the
+	// share of the region's ground the wood covers.
+	Grows
+	// Raises is a plate and an uplift belt its meeting raised: Quantity is
+	// the most the meeting raised any tile of the belt, in the history's
+	// metres (Feature.Lift), below nought for a meeting that let the ground
+	// down.
+	Raises
+	// DrainsInto is a drainage basin and the sea's feature its water reaches:
+	// the current, the upwelling or the gyre nearest its outlet. Quantity is
+	// the flow at the outlet, in cubic metres a second.
+	DrainsInto
 	relationKinds
 )
 
-var relationKindNames = [relationKinds]string{"none", "warms", "cools", "dries", "waters", "part of", "feeds"}
+var relationKindNames = [relationKinds]string{"none", "warms", "cools", "dries", "waters", "part of", "feeds",
+	"shadows", "fills", "grows", "raises", "drains into"}
 
 func (k RelationKind) String() string {
 	if int(k) < len(relationKindNames) {
@@ -200,7 +224,9 @@ func (g *Grid) seaReader(f *Features) *seaRead {
 	}
 	r := &seaRead{g: g, f: f, e: w.Env}
 	r.currents = int(f.seaBase[1] - f.seaBase[0])
-	r.ups = len(f.All) - int(f.seaBase[2])
+	for k := int(f.seaBase[2]); k < len(f.All) && f.All[k].Kind == Upwelling; k++ {
+		r.ups++
+	}
 	r.tile, r.cell = newPartSums(r.currents, r.ups), newPartSums(r.currents, r.ups)
 	return r
 }
@@ -395,19 +421,37 @@ func (r *seaRead) owner(c int) uint16 {
 	return best
 }
 
-// readRelations fills in the registry's relations: the sea's, read off the
-// weather. It runs after every feature has its id and its tiles.
+// readRelations fills in the registry's relations: the land's (see
+// relations_land.go) and the sea's, read off the weather. It runs after
+// every feature has its id and its tiles.
 func (g *Grid) readRelations(f *Features) {
-	r := g.seaReader(f)
-	if r == nil {
-		return
-	}
 	defer phase.Start("readRelations")()
+	rel := g.landRelations(f, nil)
+	if r := g.seaReader(f); r != nil {
+		rel = g.seaRelations(f, r, rel)
+	}
+	slices.SortFunc(rel, func(a, b Relation) int {
+		return cmp.Or(cmp.Compare(a.From, b.From), cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.To, b.To))
+	})
+	f.rel = slices.Clip(rel)
+	f.byTo = make([]int32, len(rel))
+	for k := range f.byTo {
+		f.byTo[k] = int32(k)
+	}
+	slices.SortFunc(f.byTo, func(a, b int32) int {
+		x, y := &f.rel[a], &f.rel[b]
+		return cmp.Or(cmp.Compare(x.To, y.To), cmp.Compare(x.From, y.From), cmp.Compare(x.Kind, y.Kind))
+	})
+}
+
+// seaRelations appends to rel the sea's relations, read off the weather:
+// what the currents and the upwellings do to the climate regions and the
+// basins, and to one another.
+func (g *Grid) seaRelations(f *Features, r *seaRead, rel []Relation) []Relation {
 	e := r.e
 	cells := e.W * e.H
 	curID := func(p uint16) FeatureID { return f.seaBase[0] + FeatureID(p) }
 	upID := func(p uint16) FeatureID { return f.seaBase[2] + FeatureID(p) }
-	var rel []Relation
 
 	// Each cell's parts, read once and kept while the relations are built:
 	// span[c] is where they lie in kept, from one past its start, and
@@ -582,19 +626,7 @@ func (g *Grid) readRelations(f *Features) {
 		a, b := &f.All[curID(pq[0])-1], &f.All[curID(pq[1])-1]
 		rel = append(rel, Relation{From: a.ID, To: b.ID, Kind: Feeds, Quantity: float64(min(a.Transport, b.Transport)), Unit: "Sv"})
 	}
-
-	slices.SortFunc(rel, func(a, b Relation) int {
-		return cmp.Or(cmp.Compare(a.From, b.From), cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.To, b.To))
-	})
-	f.rel = slices.Clip(rel)
-	f.byTo = make([]int32, len(rel))
-	for k := range f.byTo {
-		f.byTo[k] = int32(k)
-	}
-	slices.SortFunc(f.byTo, func(a, b int32) int {
-		x, y := &f.rel[a], &f.rel[b]
-		return cmp.Or(cmp.Compare(x.To, y.To), cmp.Compare(x.From, y.From), cmp.Compare(x.Kind, y.Kind))
-	})
+	return rel
 }
 
 // follow is the place of the current the water at tile start, in current

@@ -215,8 +215,9 @@ func makeLand(o options, t terra.Terms) (*terra.Land, error) {
 }
 
 // generate makes the world the options describe and draws it into out: an
-// index.html, a why.html and a png per layer. It prints a summary to the
-// terminal as it goes and returns the world and the path of index.html.
+// index.html, a why.html, a couplings.html and a png per layer. It prints a
+// summary to the terminal as it goes and returns the world and the path of
+// index.html.
 // Where stage is not nil it is told what is being done, as it starts.
 //
 // It sets the package's namer, so no two may run at once.
@@ -344,8 +345,13 @@ func draw(land *terra.Land, o options, t terra.Terms, took time.Duration, out st
 	if err := writeWhy(filepath.Join(out, "why.html"), land, o.Seed, o.Preset); err != nil {
 		return "", err
 	}
+	// And which pass couples which of the world's systems. See couplings.go.
+	stage("writing couplings.html")
+	if err := writeCouplings(filepath.Join(out, "couplings.html"), land, o.Seed, o.Preset); err != nil {
+		return "", err
+	}
 	abs, _ := filepath.Abs(page)
-	fmt.Printf("\nwrote %d maps, why.html and %s\n", len(layers), abs)
+	fmt.Printf("\nwrote %d maps, why.html, couplings.html and %s\n", len(layers), abs)
 	return page, nil
 }
 
