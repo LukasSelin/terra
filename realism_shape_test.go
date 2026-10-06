@@ -159,7 +159,7 @@ type landmasses struct {
 }
 
 func landOf(g *Grid) landmasses {
-	return remember(fmt.Sprintf("landmasses/%p", g), func() landmasses {
+	return remember("landmasses", []*Grid{g}, func() landmasses {
 		n := len(g.Tiles)
 		r := landmasses{of: make([]int32, n)}
 		for i := range r.of {
@@ -581,7 +581,7 @@ const activeReach = 150 * km
 // land beside the sea, and a margin is active where a tile beside a tile of
 // another plate lies within activeReach of it.
 func shelvesOf(gs []*Grid) shelfReading {
-	return remember(fmt.Sprintf("shelves/%p/%d", gs[0], len(gs)), func() shelfReading {
+	return remember("shelves", gs, func() shelfReading {
 		var shallow, sea float64
 		var all, active, quiet []float64
 		for _, g := range gs {
@@ -649,7 +649,7 @@ func landWindows(g *Grid, n int) [][2]int {
 // shape.go cuts at TileSpan stand above the line, as Perron found real
 // valleys do (see valleyWavelength).
 func reliefSpectrum(gs []*Grid) float64 {
-	return remember(fmt.Sprintf("spectrum/%p/%d", gs[0], len(gs)), func() float64 {
+	return remember("spectrum", gs, func() float64 {
 		const n = 64
 		power := make([]float64, n/4+1)
 		hann := make([]float64, n)
@@ -704,7 +704,7 @@ const intermittencyWindow = 32
 // moments read by traceMoments.
 func reliefIntermittency(gs []*Grid) (c1, alpha float64) {
 	type ca struct{ c1, alpha float64 }
-	r := remember(fmt.Sprintf("intermittency/%p/%d", gs[0], len(gs)), func() ca {
+	r := remember("intermittency", gs, func() ca {
 		const n = intermittencyWindow
 		var fields [][]float64
 		for _, g := range gs {

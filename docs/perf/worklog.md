@@ -6,6 +6,40 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - A reading is kept for its own grid
+
+**What this is.** Test code only. The yardsticks' memo, `remember` in
+`realism_test.go`, kept a reading under the address of the grid it was read
+off (`%p`), and for most readings only the first grid's address and how many
+there were. A grid the registry keeps (`yardWorld`) lives the whole run and
+is never mistaken for another; a map drawn in a test and let go can have its
+address given to the next map drawn, which was then served the forgotten
+map's reading. Drawn in a loop of 32, with a collection between, 14 maps
+were read as an earlier map's land; on `claude/fracture-bend`, `cornerLock`
+read 0.046 for six of eight Brownian maps until they were kept alive.
+
+A reading is now kept under its name and a serial for every grid it is read
+off, each grid numbered by a `weak.Pointer` to it: equal only for the one
+grid, even once it has gone and another lies where it lay, and not keeping a
+drawn map alive for the rest of the run as a `*Grid` key would.
+`TestAReadingIsKeptForItsOwnGrid` draws the 32 maps; on the address key it
+fails at the second. Once `claude/fracture-bend` is in, the
+`runtime.KeepAlive(kept)` in its `TestTheShapeMeasuresReadDrawnShapes` can go.
+
+It was failing the short tier on main. Run with the rest of the tier,
+`TestTheShapeMeasuresReadDrawnShapes` read the spectrum of its Brownian
+relief of H 0.8 as 1.964 - the H 0.5 relief's, 1.96379, drawn and let go the
+turn before - against 2.6 within 0.2; run alone, it was given another
+address and read its own 2.591. It passes now in both.
+
+**What it moved.** No world. No non-test code changed, so the heap budget and
+`TERRA_DIGEST=check` stand as they were. The eleven three-globe shape
+readings and the sixteen readings of the drawn shapes are the same to the
+last digit before and after, and the short tier passes and skips the same
+tests with the same messages, but for the H 0.8 spectrum above.
+
+---
+
 ## 2026-10-05 - A shelf is as wide as its margin is quiet
 
 **What this is.** On `claude/shelf-margins`, on top of
