@@ -79,11 +79,15 @@ const (
 	bottomDrag = 5e-7
 	// munkCells is how many cells across Munk's layer, (A/β)^⅓, is on every
 	// row: A is set from it rather than held the same everywhere, so that the
-	// western current is a few cells wide and resolved at every latitude
-	// (Bryan, Manabe and Pacanowski, 1975, whose criterion is that the layer
-	// be at least a cell). On the air's cells of eighty kilometres it is some
-	// a hundred and sixty kilometres, a little wider than the Gulf Stream.
-	munkCells = 2.0
+	// western current is resolved at every latitude, never narrower than the
+	// least Bryan, Manabe and Pacanowski (1975) found a grid could carry, a
+	// cell. The current itself is some three times the layer across, and on
+	// the air's cells of eighty kilometres it runs at a metre a second in the
+	// subtropics, as the Gulf Stream and the Kuroshio do (Lumpkin and
+	// Johnson, 2013). At two cells it ran at sixty centimetres, its return
+	// flow spread wider than the ocean yardsticks read a western boundary to
+	// be, and two of the southern gyres there closed at under a half.
+	munkCells = 1.0
 	// flowSettled is how small the residual of the equations is to be, as a
 	// share of their forcing: to a tenth of a sverdrup, where a hundredth of
 	// the forcing left a sverdrup on an island's level. flowRestart is how
