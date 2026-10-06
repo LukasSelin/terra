@@ -89,6 +89,13 @@ go test -json -timeout 60m . > suite.json
 and sort the `pass`/`fail`/`skip` events without a `/` in their `Test` by
 `Elapsed`.
 
+## The ocean's yardsticks
+
+`realism_ocean_test.go` (2026-10-06, `TestOcean*`) reads only the full
+globe, seed 1, through `yardWorld`, and every test in it skips under
+`-short`. It makes no world of its own: in the whole suite it costs the
+globe's reading, a second or so; run on its own it costs the globe.
+
 ## Kept histories
 
 Since 2026-09-16 a world a test only needs, and not the making of, comes
