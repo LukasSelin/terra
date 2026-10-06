@@ -6,6 +6,49 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - Air A0: the forcings as variables (#32)
+
+**What this is.** On `claude/air-forcings`, from `main` at 2c51bea. The
+energy balance's sun, orbit and carbon are a `Forcing` on `Terms`
+(`internal/atmos/forcing.go`); its outgoing longwave gains Myhre et al.'s
+-5.35 ln(C/C₀); the daily sun reads the obliquity, the eccentricity and the
+longitude of perihelion through FAO-56's form it always used; the
+`sync.Once` is a `sync.Once` for today's and a `sync.Map` of once-solved
+balances for any other; and `Forcing.OrbitBefore` gives Berger's (1978)
+orbit of a time before 1950 (`internal/atmos/orbit.go`, the full 47 + 19 +
+78 term series).
+
+**The digest.** Unchanged, as meant: `TERRA_DIGEST=write` on 2c51bea left
+`docs/perf/digest.json` as committed, and `TERRA_DIGEST=check` on the change
+passes for the valley, the ancient valley and globe128. Today's forcing goes
+through the daily sun to the bit (`TestTodaysForcingIsTheWrittenOne` holds
+every half degree of latitude on every quarter day against the formula as it
+was written), and the carbon term is ln 1 = 0 exactly.
+
+**The heap.** `TestWorldCreationBudget` unmoved: valley 10.0 MiB in 1335
+allocations, ancient 56.1 MiB in 8697, globe128 393.8 MiB in 29296, each
+within a few allocations of its budget. No budget diff is committed.
+
+**Time.** Nothing per tile: a globe's `MeanAt` and swing read the balance
+through one comparison of the forcing with the zero one before the slot
+they read before. A forcing other than today's costs one solve of the
+balance, some 0.6 s, the first time a process asks for it. Timings from
+`TestWorldCreationBudget` (globe128 1.98 s against 2.11 s budgeted) were
+taken with other sessions running and are noise; `scripts/perf.sh check`
+was not run on a quiet machine.
+
+**What it reads.** Doubling the carbon (330 to 660 ppm) warms the
+balance's global mean 1.89 degrees (16.24 to 18.13 C); halving it cools it
+1.95. That is 3.71 W/m² over B = 2.09, 1.77 degrees, and a little ice
+albedo: under the 2-4 the issue expected, because Budyko's B has no water
+vapour or cloud feedback for the balance to add (A5's work). Tilt 22.1
+against 24.5 degrees gives 65N's summer quarter 417 W/m² against 449.
+`OrbitBefore` reads PMIP's orbits to their printed digits: 1950 at 0.016724,
+23.446, 102.04; 21 ka at 0.018994, 22.949, 114.42; 6 ka at 0.018682, 24.105,
+0.87.
+
+---
+
 ## 2026-10-06 - Two short-tier tests that read the draw
 
 **What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at
