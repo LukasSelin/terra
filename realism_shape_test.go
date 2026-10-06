@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"runtime"
 	"slices"
 	"testing"
 
@@ -913,8 +912,6 @@ func TestTheShapeMeasuresReadDrawnShapes(t *testing.T) {
 	near("a hexagon's right angles", cornerLock([]*Grid{hexagon}), 0, 0.05)
 	near("a disc's right angles", cornerLock([]*Grid{disc}), 0, 0.03)
 
-	var kept []*Grid
-	defer func() { runtime.KeepAlive(kept) }()
 	for _, hurst := range []float64{0.5, 0.8} {
 		f := fbmField(1024, 512, hurst, 1)
 		// Seven tenths land, for squares of it to read the relief in.
@@ -929,9 +926,6 @@ func TestTheShapeMeasuresReadDrawnShapes(t *testing.T) {
 		if lock := gridLock([]*Grid{g}, landEdge); !(lock < 0.1) {
 			t.Errorf("the coasts of a Brownian relief of H %.1f lean %.3f to the grid", hurst, lock)
 		}
-		// Kept, since landOf remembers a map by where it lies in memory, and
-		// the next map drawn could lie where a forgotten one did.
-		kept = append(kept, g)
 		if corners := cornerLock([]*Grid{g}); !(corners < 0.1) {
 			t.Errorf("the continents of a Brownian relief of H %.1f gather %.3f at right angles", hurst, corners)
 		}
