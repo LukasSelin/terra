@@ -65,15 +65,17 @@ import (
 const (
 	// bottomDrag is r, how fast, per second, the drag of the sea floor slows
 	// the water the wind drives: a spin-down of some three weeks. That is
-	// more than the floor of a deep, flat ocean gives, standing for what a
+	// more than the floor of a deep, flat ocean gives, and stands for what a
 	// flat floor leaves out, the mountains on the real one that the deep
-	// currents push against (Munk and Palmén, 1951); and less than would
-	// hold a current all the way round the planet to the real one's hundred
-	// and fifty million cubic metres a second, which would slow the gyres by
-	// half: the friction on a gyre's north to south breadth is r k² against
-	// the planet's turning βk across it. Under it the current against an
-	// ocean's western shore would be r/β, some twenty-five kilometres, wide
-	// (Stommel, 1948): Munk's layer is what sets its width.
+	// currents push against (Munk and Palmén, 1951): with it an ocean all
+	// the way round the planet under the westerlies carries some hundred and
+	// sixty million cubic metres a second round it, as the Antarctic
+	// Circumpolar Current does, where a deep floor's tenth of it would carry
+	// thousands. Four times it slowed the gyres to half of Sverdrup's balance:
+	// the friction on a gyre's breadth north to south, r k², is then as
+	// strong as the planet's turning across it, β k. Under it the current
+	// against an ocean's western shore would be r/β, some twenty-five
+	// kilometres, wide (Stommel, 1948): Munk's layer is what sets its width.
 	bottomDrag = 5e-7
 	// munkCells is how many cells across Munk's layer, (A/β)^⅓, is on every
 	// row: A is set from it rather than held the same everywhere, so that the
@@ -83,9 +85,10 @@ const (
 	// a hundred and sixty kilometres, a little wider than the Gulf Stream.
 	munkCells = 2.0
 	// flowSettled is how small the residual of the equations is to be, as a
-	// share of their forcing; flowRestart how many directions GMRES keeps
-	// before it starts again from where it got, and flowMost how many it
-	// takes at most all told.
+	// share of their forcing: to a tenth of a sverdrup, where a hundredth of
+	// the forcing left a sverdrup on an island's level. flowRestart is how
+	// many directions GMRES keeps before it starts again from where it got,
+	// and flowMost how many it takes at most all told.
 	flowSettled = 1e-3
 	flowRestart = 30
 	flowMost    = 300
@@ -700,13 +703,9 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 
 // solve is x with A x = b, to flowSettled of b.
 func (f *flow) solve(b []float64) []float64 {
-	x, done, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
-	flowIterations = done
+	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
 	return x
 }
-
-// flowIterations is how many directions the last solve took: for the tests.
-var flowIterations int
 
 // chain is a line of cells and the operator between them, a band of two
 // either side of the diagonal, factored for solving: L U without exchanging

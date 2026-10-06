@@ -134,7 +134,7 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 	if g.winds.Warm != nil || g.winds.Coast != nil {
 		t.Fatal("a valley has currents")
 	}
-	if e := g.winds.Env; e.Cu != nil || e.Cv != nil || e.Rise != nil || e.WaterTemp != nil {
+	if e := g.winds.Env; e.Cu != nil || e.Cv != nil || e.Rise != nil || e.WaterTemp != nil || e.Psi != nil {
 		t.Fatal("a valley keeps a current, an upwelling or a sea's temperature")
 	}
 	for i := range g.Tiles {
@@ -149,9 +149,10 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 
 // The current, the upwelling and the water's temperature are kept beside the
 // warmth they make, and keeping them changes it not at all: the hash is of
-// Warm and Coast on twoOceans as main made them before they were kept
-// (53eb8bf). And the warmth is the kept temperature over its latitude's
-// mean, held to seaWarmMost.
+// Warm and Coast on twoOceans. It was taken on 53eb8bf, before they were
+// kept, and taken again when the gyres were solved in two dimensions
+// (docs/ocean-model-plan.md, M1), which moves them on purpose. And the warmth
+// is the kept temperature over its latitude's mean, held to seaWarmMost.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -164,7 +165,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xafdf8947c074a07c); got != want {
+	if got, want := h.Sum64(), uint64(0xd33a7cb64de4d403); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost
@@ -186,14 +187,29 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 // The water a gyre drives toward the equator across an ocean comes back
 // toward the pole in the narrow current against its western shore: north in
 // the north, south in the south. The interior drifts the other way, slower.
+// The interior is the gyre's own flow, read off its streamfunction: the
+// surface water there also drifts with the wind, and under the trades that
+// runs toward the pole faster than the gyre's interior runs toward the
+// equator, so that the two together come to about nothing between twenty
+// degrees and forty.
 func TestTheWesternBoundaryCurrentRunsPoleward(t *testing.T) {
 	g := twoOceans()
 	g.weather()
+	e := g.winds.Env
+	if e.Cell != 1 {
+		t.Fatalf("twoOceans has %d tiles to a cell", e.Cell)
+	}
 	north := func(i int) float64 { _, v := g.SeaCurrent(i); return v }
+	// The gyre's flow toward the north, ψ's rise toward the east over the
+	// depth the gyre goes to (atmos.gyreDepth).
+	const depth = 300
+	gyre := func(i int) float64 {
+		return float64(e.Psi[i+1]-e.Psi[i-1]) * atmos.Sverdrup / (2 * e.Dx[i/e.W]) / depth
+	}
 	for _, hemi := range []float64{1, -1} {
 		lo, hi := min(20*hemi, 40*hemi), max(20*hemi, 40*hemi)
 		west := band(g, lo, hi, 40, 44, north)
-		inside := band(g, lo, hi, 70, 110, north)
+		inside := band(g, lo, hi, 70, 110, gyre)
 		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.3f", hemi, west, inside)
 		if west*hemi < 0.05 {
 			t.Errorf("at 20 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
@@ -224,7 +240,8 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 		for i, w := range e.Warm {
 			s += w*float64(i%89) + e.Coast[i]
 			s += float64(e.Cu[i])*float64(i%83) + float64(e.Cv[i])*float64(i%79) +
-				float64(e.Rise[i])*1e6 + float64(e.WaterTemp[i])*float64(i%73)
+				float64(e.Rise[i])*1e6 + float64(e.WaterTemp[i])*float64(i%73) +
+				float64(e.Psi[i])*float64(i%71)
 		}
 		for i, r := range g.rain {
 			s += r * float64(i%97)
@@ -271,5 +288,84 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	}
 	if cold <= still || cold <= warm {
 		t.Errorf("a storm over the cold current aged %.0f days, over the same water with no currents %.0f, over the warm western water %.0f", cold, still, warm)
+	}
+}
+
+// Every landmass is a shore the water cannot cross, so the gyres' stream-
+// function is one level all round it: nought on the largest, and on every
+// other the level the island rule gives it.
+func TestALandmassHasOneLevel(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	e := g.winds.Env
+	// The two continents are the same size, and the first found, the one
+	// over the seam, is the mainland.
+	var first, second []float32
+	for i, p := range e.Psi {
+		if e.Sea[i] > 0.5 {
+			continue
+		}
+		if x := i % e.W; x < 40 {
+			first = append(first, p)
+		} else {
+			second = append(second, p)
+		}
+	}
+	for _, p := range first {
+		if p != 0 {
+			t.Fatalf("the mainland stands at %v Sv", p)
+		}
+	}
+	for _, p := range second {
+		if p != second[0] {
+			t.Fatalf("the other continent stands at %v and %v Sv", second[0], p)
+		}
+	}
+	t.Logf("the other continent stands at %+.1f Sv: what goes round the poles between them", second[0])
+}
+
+// ringWorld is an ocean globe with a southern continent from the pole to
+// sixty-four degrees south, and a continent sixty columns wide from
+// forty-four degrees south to seventy north: an ocean all the way round the
+// planet between them, under the westerlies, as the Southern Ocean is.
+func ringWorld() *Grid {
+	g := oceanGlobe(256, 128)
+	c := Climate{rows: g.H, globe: true}
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		if lat := c.latitude(y); lat < -64 || (lat > -44 && lat < 70 && x < 60) {
+			g.Height[i] = 60
+		}
+	}
+	return g
+}
+
+// An ocean all the way round the planet has no shore for its water to turn
+// back at, and the westerlies drive it round the planet to the east, against
+// the friction all the way round: the Antarctic Circumpolar Current, a
+// hundred and thirty to a hundred and seventy million cubic metres a second
+// through Drake Passage (Donohue and others, 2016). The southern continent's
+// level over the northern one's is how much goes round.
+func TestASeaAllTheWayRoundCarriesItsCurrentRoundThePlanet(t *testing.T) {
+	g := ringWorld()
+	g.weather()
+	e := g.winds.Env
+	south := float64(e.Psi[(e.H-1)*e.W])
+	var east, n float64
+	for y := 0; y < e.H; y++ {
+		if lat := g.air.Lat[y]; lat > -60 && lat < -48 {
+			for x := 0; x < e.W; x++ {
+				u, _ := g.SeaCurrent(y*g.W + x)
+				east, n = east+u, n+1
+			}
+		}
+	}
+	east /= n
+	t.Logf("%.0f Sv go round the planet; the ring of sea runs %+.2f m/s east", south, east)
+	if south < 50 || south > 500 {
+		t.Errorf("%.0f Sv go round the planet", south)
+	}
+	if east < 0.05 {
+		t.Errorf("the ring of sea runs %+.2f m/s east", east)
 	}
 }
