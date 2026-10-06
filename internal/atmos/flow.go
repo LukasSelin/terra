@@ -90,14 +90,14 @@ const (
 	// many directions GMRES keeps before it starts again from where it got,
 	// and flowMost how many it takes at most all told.
 	flowSettled = 1e-3
-	flowRestart = 30
+	flowRestart = 15
 	flowMost    = 300
 	// coarsestSweeps is how many times the single row the multigrid comes
 	// down to, and the islands with it, are solved in turn.
 	coarsestSweeps = 4
 	// spreadFlow is how many unknowns a level has before its sweeps are
 	// spread over goroutines.
-	spreadFlow = 1024
+	spreadFlow = 8192
 )
 
 // flow is the vorticity equation over the sea of a map, written down once
@@ -136,8 +136,10 @@ type level struct {
 	start []int32
 	col   []int32
 	val   []float64
-	// chains is each row's stretches of sea, factored.
-	chains [][]*chain
+	// chains is the rows' stretches of sea, factored, row by row: row r's
+	// are chains[rowChains[r]:rowChains[r+1]].
+	chains    []chain
+	rowChains []int32
 	// down is each unknown's on the next level.
 	down    []int32
 	x, b, r []float64
@@ -447,35 +449,19 @@ func (l *level) coef(u, v int32) float64 {
 }
 
 // factor writes down each row's stretches of sea as chains, and factors
-// them, and makes the level's scratch.
+// them, and makes the level's scratch. The chains' cells and factors are
+// laid in one stretch of memory each for the whole level.
 func (l *level) factor() {
 	w := l.w
-	l.chains = make([][]*chain, l.rows)
-	type scratch struct {
-		a  [5][]float64
-		xs []int
+	type seg struct {
+		r, x0, n, off int
+		ring          bool
 	}
-	band := func(sc *scratch, r int, xs []int, ring bool) *chain {
-		cells := make([]int32, len(xs))
-		for p, x := range xs {
-			cells[p] = l.at[r*w+x]
-		}
-		var a [5][]float64
-		for d := range a {
-			a[d] = sc.a[d][:len(xs)]
-			clear(a[d])
-		}
-		for p, x := range xs {
-			for d := -2; d <= 2; d++ {
-				if !ring && (p+d < 0 || p+d >= len(xs)) {
-					continue
-				}
-				a[d+2][p] = l.coef(cells[p], l.at[r*w+(x+d+w)%w])
-			}
-		}
-		return newChain(cells, a, ring)
-	}
-	row := func(sc *scratch, r int) {
+	var segs []seg
+	l.rowChains = make([]int32, l.rows+1)
+	off := 0
+	for r := range l.rows {
+		l.rowChains[r] = int32(len(segs))
 		start := -1
 		for x := 0; x < w; x++ {
 			if l.at[r*w+x] < 0 {
@@ -483,43 +469,73 @@ func (l *level) factor() {
 				break
 			}
 		}
-		xs := sc.xs[:0]
 		if start < 0 {
-			for x := range w {
-				xs = append(xs, x)
-			}
-			l.chains[r] = append(l.chains[r], band(sc, r, xs, true))
-			return
+			segs = append(segs, seg{r, 0, w, off, true})
+			off += w
+			continue
 		}
+		run := 0
 		for k := 1; k <= w; k++ {
 			x := (start + k) % w
 			if l.at[r*w+x] >= 0 {
-				xs = append(xs, x)
+				run++
 				continue
 			}
-			if len(xs) > 0 {
-				l.chains[r] = append(l.chains[r], band(sc, r, xs, false))
-				xs = xs[:0]
+			if run > 0 {
+				segs = append(segs, seg{r, (x - run + w) % w, run, off, false})
+				off += run
+				run = 0
 			}
 		}
 	}
+	l.rowChains[l.rows] = int32(len(segs))
+	l.chains = make([]chain, len(segs))
+	cells := make([]int32, off)
+	slab := make([]float64, 5*off)
+	type scratch struct{ a [5][]float64 }
+	work := func(sc *scratch, k int) {
+		sg := segs[k]
+		c := &l.chains[k]
+		r, n := sg.r, sg.n
+		c.cells = cells[sg.off : sg.off+n : sg.off+n]
+		for p := range n {
+			c.cells[p] = l.at[r*w+(sg.x0+p)%w]
+		}
+		var a [5][]float64
+		for d := range a {
+			a[d] = sc.a[d][:n]
+			clear(a[d])
+		}
+		for p := range n {
+			x := (sg.x0 + p) % w
+			for d := -2; d <= 2; d++ {
+				if !sg.ring && (p+d < 0 || p+d >= n) {
+					continue
+				}
+				a[d+2][p] = l.coef(c.cells[p], l.at[r*w+(x+d+w)%w])
+			}
+		}
+		f := slab[5*sg.off : 5*(sg.off+n)]
+		c.l1, c.l2 = f[:n:n], f[n:2*n:2*n]
+		c.u0, c.u1, c.u2 = f[2*n:3*n:3*n], f[3*n:4*n:4*n], f[4*n:]
+		c.factor(a, sg.ring)
+	}
 	workers := 1
 	if l.n >= spreadFlow {
-		workers = workersFor(l.rows)
+		workers = workersFor(len(segs))
 	}
 	scr := make([]scratch, workers)
 	for k := range scr {
 		for d := range scr[k].a {
 			scr[k].a[d] = make([]float64, w)
 		}
-		scr[k].xs = make([]int, 0, w)
 	}
 	if workers == 1 {
-		for r := range l.rows {
-			row(&scr[0], r)
+		for k := range segs {
+			work(&scr[0], k)
 		}
 	} else {
-		inParallel(l.rows, workers, func(r, worker int) { row(&scr[worker], r) })
+		inParallel(len(segs), workers, func(k, worker int) { work(&scr[worker], k) })
 	}
 	l.x, l.b, l.r = make([]float64, l.n), make([]float64, l.n), make([]float64, l.n)
 }
@@ -553,7 +569,8 @@ func (l *level) residuals() {
 // relaxRow solves row r's stretches exactly for what x leaves of b along
 // them, the rest of x as it is.
 func (l *level) relaxRow(r int, buf []float64) {
-	for _, c := range l.chains[r] {
+	for k := l.rowChains[r]; k < l.rowChains[r+1]; k++ {
+		c := &l.chains[k]
 		for p, u := range c.cells {
 			buf[p] = l.residual(u)
 		}
@@ -736,6 +753,14 @@ func newChain(cells []int32, a [5][]float64, ring bool) *chain {
 		l1:    slab[:n:n], l2: slab[n : 2*n : 2*n],
 		u0: slab[2*n : 3*n : 3*n], u1: slab[3*n : 4*n : 4*n], u2: slab[4*n:],
 	}
+	c.factor(a, ring)
+	return c
+}
+
+// factor factors the band a into the chain's own l1 to u2, which are
+// already the chain's length.
+func (c *chain) factor(a [5][]float64, ring bool) {
+	n := len(c.cells)
 	for i := range n {
 		var l1, l2 float64
 		sub := a[1][i] // the coefficient one back, as elimination leaves it
@@ -802,7 +827,6 @@ func newChain(cells []int32, a [5][]float64, ring bool) *chain {
 		j.cap = invert4(m)
 		c.ring = j
 	}
-	return c
 }
 
 // solve solves the chain for r in place.
