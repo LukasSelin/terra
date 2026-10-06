@@ -6,6 +6,118 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - The fractures bend by the plate, and the continents are less square
+
+**What this is.** On `claude/fracture-bend`, from `main`. The globes'
+continents came out cut in rectangles: long straight coasts meeting at
+corners near a right angle. How far a fracture's bearing wanders was
+`fractureCreep`, 0.05 radians a tile, which over the spacing between plate
+middles is 0.14 on a small globe (sixteen plates, 45 tiles apart), 0.23 on
+a full one (32 plates, 128 tiles apart) and 0.10 on the ancient valley. It
+is now `fractureBend`, the spread over a spacing, which is what
+`fractureLong` and `fractureShort` are quoted in, at 0.3: the full globe's
+faults bend a third more than they did and every map's bend alike.
+
+**The reading.** `cornerLock`, a new yardstick, "right angles of the
+continents' coasts": for each continent, |<e^{4iθ}>| of the directions its
+eased coast faces, which is high for a rectangle whichever way it is turned
+and low for anything with its corners at other angles, averaged over the
+continents by size within 60 degrees of the equator. Off drawn shapes, a
+square and a diamond read 1, a hexagon and a disc nothing, and Brownian
+coasts 0.02-0.07 (eight of them; a continent's few long runs of rough coast
+read that much by chance). No figure for the earth's has been read this
+way, so the band, 0-0.15, is not a measured one.
+
+| | globe 1 | globe 2 | globe 3 | three |
+| --- | --- | --- | --- | --- |
+| before | 0.239 | 0.145 | 0.181 | 0.181 |
+| after | 0.208 | 0.053 | 0.113 | **0.125** |
+
+On the continental crust at the end of the history, over five globes, 0.176
+-> 0.128.
+
+**The search.** Bends in radians over a spacing, and the fracture's wall;
+the full globes' continents (crust at the end of the history), and the plate
+tests on the small globes, which are where the straight walls of the
+2026-09-19 entry are held:
+
+| bend, wall | continents, globes 1/2/3 | straight wall (1.05 and over) | plate area exponent, three | plate tests |
+| --- | --- | --- | --- | --- |
+| as made (0.23, 6.5) | 0.29 / 0.17 / 0.20 | 1.167 | 0.341 | pass |
+| 0.23, 6.5 | 0.19 / 0.17 / 0.16 | 1.215 | 0.253 | pass |
+| **0.3, 6.5** | 0.18 / 0.07 / 0.16 | 1.159 | 0.383 | pass |
+| 0.35, 6.5 | 0.05 / 0.09 / 0.15 | 1.094 | 0.217 | a plate of 0.38 of the world |
+| 0.4, 6.5 | 0.14 / 0.08 / 0.12 | 0.961 | 0.206 | wall |
+| 0.6, 6.5 | 0.18 / 0.17 / 0.16 | 0.957 | 0.304 | wall; a plate of 0.36 |
+| 0.9, 6.5 | 0.08 / 0.11 / 0.15 | 0.924 | 0.280 | wall |
+| 0.6, 5 | 0.12 / 0.11 / 0.12 | 1.027 | 0.476 | wall; a plate of 0.35 |
+| 0.9, 5 | 0.07 / 0.17 / 0.10 | 0.949 | 0.319 | wall |
+
+The 0.23 row bends the full globe as it was bent and still reads
+differently: one globe's continents move by a tenth with any change to where
+the fractures run, so only what holds over several is a reading. Past 0.35 the
+straight walls go before the right angles do: a straight wall is what a
+right angle is made of, and the right angles are not the fractures' own -
+three sets a sixth of a turn apart make sixty degrees - but grow over the
+history. 0.3 is the most bend that keeps the walls, over eight small globes
+1.080 against 1.182 before.
+
+Kept a rate a tile and raised by the same third (0.065), the full globe gets
+the same bend and the small worlds a third more and not twice as much; it
+failed fourteen tests and yardsticks to this one's thirteen, among them the
+right angles themselves (0.158).
+
+**The plate area exponent** is read over eight small globes and not three.
+The suite makes small globes 1-16 for its rivers, so it costs nothing, and
+over three it read anywhere from 0.21 to 0.48 across the settings above;
+over eight it is 0.354 before (out of 0.15-0.35 by a hair, where three read
+0.341) and 0.296 after.
+
+**What else moved.** Every made world's plates are different plates. The
+whole suite against `main` with the shelves of the two entries below:
+
+- In now: ridge-valley wavelength, small globe, 533 -> 133 m;
+  `TestAGlobeHasASeaItsRiversReach`, the globe 0.67 water; the plate area
+  exponent, over eight; the floor's grid lock off the coasts, 0.084 ->
+  0.015, its marker off, since the coasts lean less to the diagonals (0.085
+  -> 0.040) and the floor is laid at the true distance from them; and the
+  land share, furthest of three globes, 0.449 -> 0.377 (0.33, 0.38, 0.37).
+  That last is the draw's luck and not a fix - the crust is still drawn at
+  45% continent within crustSlack - but a gap that closes takes its marker
+  off.
+- Out now: channel concavity, small globe, 0.353 -> 0.246; drainage area
+  exceedance exponent, small globe, 0.421 -> 0.486; mean land rain, 2x over
+  1x, 1.13 -> 1.25; and shelf width, quiet margins over active, 1.88 ->
+  1.24 (2.00, 0.94, 1.23), which takes its marker back: most coasts with a
+  seam within 150 km are quiet margins as laid, so which side of 1.8 it
+  reads is where the seams fall.
+- Three tests that read one seed or one storm: the ancient valley stands
+  49% on more than one bed (`TestAHistoryLeavesItsBedsInLayers`, 50%); made
+  valley 8 has 310 tiles of water against its drawn twin's 80
+  (`TestAHistoryLeavesAMapTheSettlementCanUse`, three times); and a storm on
+  small globe 3 deepens to 866 hPa (`TestTheWeatherChangesFromDayToDay`,
+  870, Typhoon Tip). Each is the draw on the seed it reads.
+- Still out as on `main`: midlatitude over subtropical rain, Aridisols,
+  Gelisols, the small globe's hypsometric integral (0.305) and discharge
+  exponent (0.462).
+- The other K gaps: C1 0.053 -> 0.075, mean shelf 292 -> 276 km.
+  `TestThePolarSeaIsIce` passes.
+- `TestTheChainForOneTileOfTheAncientValley`, the golden test, moves from
+  tile 2628 to 987, raised by an arc in the first epoch by some 12 km.
+
+**Digest, budget, time.** `TERRA_DIGEST=write`: `ancient` and `globe128`
+move, `valley` does not. `globe128` came in under its budget and the budget
+is rewritten: 32056 -> 29149 allocations and 440 -> 406 MB, peak as it was;
+`ancient` 8848 -> 8700. `main` against this, before the shelves merged, two
+rounds of six turn about:
+no significant change on any world (valley +18%, ancient +11%, globe256 -1%,
+all p > 0.2; the valley's world is not touched by this and it moved the most,
+which is the machine's load). `scripts/perf.sh check` is still not readable
+against `2026-09-16-0718-small` (see the shelf entries on
+`claude/floor-exact-distance`).
+
+---
+
 ## 2026-10-05 - A shelf is as wide as its margin is quiet
 
 **What this is.** On `claude/shelf-margins`, on top of
