@@ -142,7 +142,7 @@ var shapeYardsticks = []realYardstick{
 		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
 		measure: func() float64 { c1, _ := reliefIntermittency(threeGlobes()); return c1 },
 	},
-		gap: "known gap: K - the land is as rough in its plains as in its ranges, near the 0.037 a relief rough everywhere alike reads: 0.053",
+		gap: "known gap: K - the history leaves its relief gathered, 0.175 as the shaping takes it up, and the shaping lays it again as one hillslope on every tile off the rivers: the uplift it grades by spans 1.55 times (shapeFloor), shapeLift flattens the ranges and the slides hold what is steep at one threshold: 0.053",
 	},
 }
 

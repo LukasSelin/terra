@@ -6,6 +6,102 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - Where the relief's intermittency goes
+
+**What this is.** On `claude/relief-intermittency`, on top of
+`claude/statistical-output-verification`. The K gap "land relief
+intermittency C1" reads 0.053 against the earth's 0.12. This finds where a
+globe loses it and what closing it would cost, and changes nothing but the
+gap's message: `TERRA_DIGEST=check` passes.
+
+**Where it goes.** Globes 1-3, read on the same land windows at every step,
+and the land cut into boxes of 8 tiles, each with its mean |grad h|:
+
+| step | C1 | boxes, q90 over q10 | boxes ranked against the shaping's input |
+| --- | --- | --- | --- |
+| the history's heights, before `basins` | 0.154 | | |
+| as the shaping takes them up (after `basins`) | 0.175 | 98 | 1.00 |
+| graded, before the rescale | 0.059 | 2.0 | 0.04 |
+| rescaled to the map's spread | 0.065 | 3.0 | 0.03 |
+| after `texture` and `denude` | 0.068 | 2.9 | 0.05 |
+| after the stage's slides | 0.053 | 2.6 | -0.02 |
+| the finished globe | 0.053 | | |
+
+`basins`' rank mapping keeps the gathering; the shape stage loses it, and
+not only its strength but its place: after the grading, how rough a box is
+says nothing about how rough it was. The cut, coast and cover stages change
+nothing after it.
+
+**Why.** Three things, each measured:
+
+- The grading lays every tile off the rivers as a hillslope of one fall. The
+  drop to the steepest neighbour is 7.1 m a tile at the median and 8.5 at
+  the ninetieth centile, and ranks with the uplift at 0.06. The uplift it
+  grades by is the history's rate by rank onto `shapeFloor`..1, 1.55 times
+  end to end, less than the rock's hardness moves a fall; and the rate is
+  not gathered to begin with - 0.21 mm/yr over the land at the median, 0.27
+  to 0.39 at the ninetieth centile, 1.2 to 1.4 at the ninety-ninth. The
+  history's heights are what is gathered.
+- The lift, 1-(1-x)^`shapeLift`, steepens low ground up to 2.65 times and
+  flattens the tops of ranges.
+- The slides at the stage's end hold what is steep at one threshold, 0.068
+  -> 0.053: the globe's land stands at a median fall of 0.5 at `TileSpan`,
+  much of it near `Critical`.
+
+**What closing it would take.** Probes, C1 at the end of the shape stage on
+the same windows; none is kept:
+
+| the grading's uplift | lift | C1 |
+| --- | --- | --- |
+| as made | 2.65 | 0.053 |
+| by rank, floor 0.1 | 2.65 | 0.052 |
+| by rank, floor 0.1 | 1 | 0.064 |
+| the rate over its 99th centile, floor 0.1 | 2.65 | 0.052 |
+| by rank, floor 0.1, the graded height scaled by the history's | 1 | 0.080 |
+| the history's local relief within 2 tiles (Ahnert 1970), floor 0.1 | 2.65 | 0.062 |
+| the same | 1 | 0.087 |
+| the same, floor 0.3 | 2.65 | 0.050 |
+
+The last but one, taken through every stage with the rivers graded from the
+sea's level (below), gives the finished globes 0.077 and moves the small
+globes' rivers. Against the base, every yardstick:
+
+| | base | relief uplift |
+| --- | --- | --- |
+| land relief intermittency C1 | 0.053 | 0.077 |
+| Hack exponent, small globe | 0.581 | **0.620**, out of 0.54-0.60 |
+| channel concavity, 2x less 1x, small globe | -0.075 | **0.225**, out of -0.1-0.1 |
+| land share of Mollisols | 0.078 | **0.119**, out of 0.05-0.09 |
+| hypsometric integral, small globe | 0.312, out | 0.234 |
+| discharge exceedance exponent, small globe | 0.464, out | 0.473 |
+| chi-plot linearity, small globe | 0.960 | 0.990 |
+| Horton bifurcation, small globe | 3.25 | 4.37 |
+| land share, remoteness, coasts, sea floor | | within a few hundredths |
+
+Read over 150 km rather than two tiles, so that a small globe at twice the
+resolution reads the same ground, the relief uplift gives C1 0.058 at a
+floor of 0.1 and 0.053 at 0.2: the gathering the yardstick reads lies within
+one to four tiles of a full globe, which is less than a tile of a small one.
+
+**The sea under the coast.** `shape` grades each tile up from the height of
+the root its water ends in, and for the sea that is the floor under the
+coast, a few metres below the surface. It does no harm while every hillslope
+falls seven metres a tile. With the plains graded gentle it laid much of the
+land under the sea: the land share's reading, the globe furthest from the
+earth's, went from 0.449 to 0.167. Any
+change that makes plains gentle needs the grading to start at the sea's
+level.
+
+**Two conflicts in the yardsticks.** The hypsometric integral is read over
+each whole map, against Strahler's band for single drainage basins; a
+continent with its relief gathered into ranges reads low over the whole of
+it (the earth's land, 840 m on the mean against 8848 at the top, about 0.1),
+so any closing of this gap lowers it. And the shaping's constants were
+searched against the small globes' rivers with an uplift all but even:
+gathering it is a search of its own, not a change.
+
+---
+
 ## 2026-10-05 - The shape of the world held against the earth's
 
 **What this is.** On `claude/statistical-output-verification`. A world can
