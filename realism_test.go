@@ -83,8 +83,8 @@ var realYardsticks = []realYardstick{
 	// follow a power law in area.
 	{yardstick: yardstick{
 		name: "plate area cumulative exponent, plate world", unit: "", scale: "ground", lo: 0.15, hi: 0.35, slow: true,
-		source:  "Bird 2003 Fig. 19: N(>=A) ~ A^-0.25 for plates of 0.002-1 sr; Sornette & Pisarenko 2003",
-		measure: func() float64 { return plateAreaExponent(plateWorlds(3)) },
+		source:  "Bird 2003 Fig. 19: N(>=A) ~ A^-0.25 for plates of 0.002-1 sr; Sornette & Pisarenko 2003. Read over networkGlobes small globes, which the suite makes for its rivers anyway: over three it read anywhere from 0.21 to 0.48 as the fractures were tried at one setting and another, and over eight the fractures before fractureBend and after read 0.354 and 0.296",
+		measure: func() float64 { return plateAreaExponent(plateWorlds(networkGlobes)) },
 	}},
 
 	// 4. River profiles. A river worn by its water falls less steeply the more
@@ -402,7 +402,7 @@ func seafloorSubsidence(gs []*Grid) subsidence {
 				continue
 			}
 			away := g.awayFrom(func(i int) bool { return math.IsNaN(g.floorAge[i]) })
-			margin := tilesAcross(shelfWidth+slopeWidth, deepSpan(g))
+			margin := tilesAcross(quietShelf+slopeWidth, deepSpan(g))
 			for i := range g.Tiles {
 				if g.sea-g.Height[i] < shelfBreak || math.IsNaN(g.floorAge[i]) || away[i] < margin {
 					continue

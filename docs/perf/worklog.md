@@ -6,6 +6,118 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - The fractures bend by the plate, and the continents are less square
+
+**What this is.** On `claude/fracture-bend`, from `main`. The globes'
+continents came out cut in rectangles: long straight coasts meeting at
+corners near a right angle. How far a fracture's bearing wanders was
+`fractureCreep`, 0.05 radians a tile, which over the spacing between plate
+middles is 0.14 on a small globe (sixteen plates, 45 tiles apart), 0.23 on
+a full one (32 plates, 128 tiles apart) and 0.10 on the ancient valley. It
+is now `fractureBend`, the spread over a spacing, which is what
+`fractureLong` and `fractureShort` are quoted in, at 0.3: the full globe's
+faults bend a third more than they did and every map's bend alike.
+
+**The reading.** `cornerLock`, a new yardstick, "right angles of the
+continents' coasts": for each continent, |<e^{4iθ}>| of the directions its
+eased coast faces, which is high for a rectangle whichever way it is turned
+and low for anything with its corners at other angles, averaged over the
+continents by size within 60 degrees of the equator. Off drawn shapes, a
+square and a diamond read 1, a hexagon and a disc nothing, and Brownian
+coasts 0.02-0.07 (eight of them; a continent's few long runs of rough coast
+read that much by chance). No figure for the earth's has been read this
+way, so the band, 0-0.15, is not a measured one.
+
+| | globe 1 | globe 2 | globe 3 | three |
+| --- | --- | --- | --- | --- |
+| before | 0.239 | 0.145 | 0.181 | 0.181 |
+| after | 0.208 | 0.053 | 0.113 | **0.125** |
+
+On the continental crust at the end of the history, over five globes, 0.176
+-> 0.128.
+
+**The search.** Bends in radians over a spacing, and the fracture's wall;
+the full globes' continents (crust at the end of the history), and the plate
+tests on the small globes, which are where the straight walls of the
+2026-09-19 entry are held:
+
+| bend, wall | continents, globes 1/2/3 | straight wall (1.05 and over) | plate area exponent, three | plate tests |
+| --- | --- | --- | --- | --- |
+| as made (0.23, 6.5) | 0.29 / 0.17 / 0.20 | 1.167 | 0.341 | pass |
+| 0.23, 6.5 | 0.19 / 0.17 / 0.16 | 1.215 | 0.253 | pass |
+| **0.3, 6.5** | 0.18 / 0.07 / 0.16 | 1.159 | 0.383 | pass |
+| 0.35, 6.5 | 0.05 / 0.09 / 0.15 | 1.094 | 0.217 | a plate of 0.38 of the world |
+| 0.4, 6.5 | 0.14 / 0.08 / 0.12 | 0.961 | 0.206 | wall |
+| 0.6, 6.5 | 0.18 / 0.17 / 0.16 | 0.957 | 0.304 | wall; a plate of 0.36 |
+| 0.9, 6.5 | 0.08 / 0.11 / 0.15 | 0.924 | 0.280 | wall |
+| 0.6, 5 | 0.12 / 0.11 / 0.12 | 1.027 | 0.476 | wall; a plate of 0.35 |
+| 0.9, 5 | 0.07 / 0.17 / 0.10 | 0.949 | 0.319 | wall |
+
+The 0.23 row bends the full globe as it was bent and still reads
+differently: one globe's continents move by a tenth with any change to where
+the fractures run, so only what holds over several is a reading. Past 0.35 the
+straight walls go before the right angles do: a straight wall is what a
+right angle is made of, and the right angles are not the fractures' own -
+three sets a sixth of a turn apart make sixty degrees - but grow over the
+history. 0.3 is the most bend that keeps the walls, over eight small globes
+1.080 against 1.182 before.
+
+Kept a rate a tile and raised by the same third (0.065), the full globe gets
+the same bend and the small worlds a third more and not twice as much; it
+failed fourteen tests and yardsticks to this one's thirteen, among them the
+right angles themselves (0.158).
+
+**The plate area exponent** is read over eight small globes and not three.
+The suite makes small globes 1-16 for its rivers, so it costs nothing, and
+over three it read anywhere from 0.21 to 0.48 across the settings above;
+over eight it is 0.354 before (out of 0.15-0.35 by a hair, where three read
+0.341) and 0.296 after.
+
+**What else moved.** Every made world's plates are different plates. The
+whole suite against `main` with the shelves of the two entries below:
+
+- In now: ridge-valley wavelength, small globe, 533 -> 133 m;
+  `TestAGlobeHasASeaItsRiversReach`, the globe 0.67 water; the plate area
+  exponent, over eight; the floor's grid lock off the coasts, 0.084 ->
+  0.015, its marker off, since the coasts lean less to the diagonals (0.085
+  -> 0.040) and the floor is laid at the true distance from them; and the
+  land share, furthest of three globes, 0.449 -> 0.377 (0.33, 0.38, 0.37).
+  That last is the draw's luck and not a fix - the crust is still drawn at
+  45% continent within crustSlack - but a gap that closes takes its marker
+  off.
+- Out now: channel concavity, small globe, 0.353 -> 0.246; drainage area
+  exceedance exponent, small globe, 0.421 -> 0.486; mean land rain, 2x over
+  1x, 1.13 -> 1.25; and shelf width, quiet margins over active, 1.88 ->
+  1.24 (2.00, 0.94, 1.23), which takes its marker back: most coasts with a
+  seam within 150 km are quiet margins as laid, so which side of 1.8 it
+  reads is where the seams fall.
+- Three tests that read one seed or one storm: the ancient valley stands
+  49% on more than one bed (`TestAHistoryLeavesItsBedsInLayers`, 50%); made
+  valley 8 has 310 tiles of water against its drawn twin's 80
+  (`TestAHistoryLeavesAMapTheSettlementCanUse`, three times); and a storm on
+  small globe 3 deepens to 866 hPa (`TestTheWeatherChangesFromDayToDay`,
+  870, Typhoon Tip). Each is the draw on the seed it reads.
+- Still out as on `main`: midlatitude over subtropical rain, Aridisols,
+  Gelisols, the small globe's hypsometric integral (0.305) and discharge
+  exponent (0.462).
+- The other K gaps: C1 0.053 -> 0.075, mean shelf 292 -> 276 km.
+  `TestThePolarSeaIsIce` passes.
+- `TestTheChainForOneTileOfTheAncientValley`, the golden test, moves from
+  tile 2628 to 987, raised by an arc in the first epoch by some 12 km.
+
+**Digest, budget, time.** `TERRA_DIGEST=write`: `ancient` and `globe128`
+move, `valley` does not. `globe128` came in under its budget and the budget
+is rewritten: 32056 -> 29149 allocations and 440 -> 406 MB, peak as it was;
+`ancient` 8848 -> 8700. `main` against this, before the shelves merged, two
+rounds of six turn about:
+no significant change on any world (valley +18%, ancient +11%, globe256 -1%,
+all p > 0.2; the valley's world is not touched by this and it moved the most,
+which is the machine's load). `scripts/perf.sh check` is still not readable
+against `2026-09-16-0718-small` (see the shelf entries on
+`claude/floor-exact-distance`).
+
+---
+
 ## 2026-10-06 - How square the plates are
 
 **What this is.** On `claude/relief-intermittency`. The globes' continents
@@ -68,6 +180,9 @@ are read on the small globes:
 Squaring the continents less is a search of the fractures' bend, read per
 kilometre, and their wall, against the plate tests, not a change of one
 constant.
+
+That search is the entry above: the bend is now quoted per plate spacing
+(`fractureBend`), and `cornerLock` holds the right angles.
 
 ---
 
@@ -238,6 +353,198 @@ it (the earth's land, 840 m on the mean against 8848 at the top, about 0.1),
 so any closing of this gap lowers it. And the shaping's constants were
 searched against the small globes' rivers with an uplift all but even:
 gathering it is a search of its own, not a change.
+
+---
+
+## 2026-10-05 - A shelf is as wide as its margin is quiet
+
+**What this is.** On `claude/shelf-margins`, on top of
+`claude/floor-exact-distance`. Every margin was given one shelf,
+`shelfWidth`, 80 km, and the K gap "shelf width, quiet margins over active"
+read 1.67 against the earth's 2.85 (Harris and others 2014: 88.2 km on
+passive margins, 31 on active ones). A margin is now passive where the
+continent and the ocean floor beside it ride one plate - the textbook
+definition, the Atlantic's margins - and active where the floor is another
+plate's, going down a trench or grinding past. `floorDepths` finds the
+nearest continental tile to each tile of floor (`nearestTo`, the same
+transform as `awayFrom`, keeping where each parabola stood), and lays the
+shelf `quietShelf`, 88.2 km, or `activeShelf`, 31 km, by whether the two
+tiles' plates are one once welds are followed (`rootPlate`; `keepPlates`
+now runs before `floorDepths` for it).
+
+**How narrow an active shelf can be.** 31 km is under a tile of a full globe,
+37.5 km, and a shelf is laid no narrower than `shelfLeast`, a tile and a half
+(see the entry below): the deep floor laid inside the ring of eight round a
+coast is land graded under the sea. So on a full globe an active shelf is a
+tile and a half and a quiet one two and a third, and the first floor under
+200 m is two tiles out of an active coast and three out of a quiet one. On a
+small globe, a tile of 150 km, both are the least there is, and nothing
+changes: small globes, double globes and the digest's worlds are the worlds
+they were to the bit (`TERRA_DIGEST=write` leaves `digest.json` as it was).
+Only maps whose tile is under 59 km - 88.2 km over a tile and a half - see
+this change, which on the presets is the full globe.
+
+**The shaping that was proposed with it, and was not needed.** The plan was
+to let the active shelf go to a tile, and have `shape` grade the land over
+the water and not the floor under it (`laidHeight`), which keeps a full
+globe's coasts where the floor comes beside them: globe 1 had 0.2249 of its
+surface dry when the sea was poured and 0.2231 when it was made, against
+0.2232 with the floor kept back. It was measured both ways over every
+yardstick:
+
+| | floor kept a tile and a half away (taken) | a tile, and shaped over the water |
+| --- | --- | --- |
+| quiet over active, three globes | 1.88 | 2.04 |
+| mean shelf width | 292 km | 286 km |
+| channel concavity, small globe | 0.353 | **0.312**, out of 0.35-0.6 |
+| discharge exceedance exponent, small globe | 0.464, out of 0.40-0.46 as on the base | 0.435 |
+| drainage area exceedance exponent, small globe | 0.421 | 0.395 |
+| Horton bifurcation ratio, small globe | 3.25 | 3.70 |
+
+A shelf of one tile puts the deep floor beside the corners of every small
+globe's coast, and the small globes' rivers move: one yardstick out and one
+in, for a full globe's ratio a little further inside. Not taken; the gap
+closes without it.
+
+**What the globes read.** Seeds 1-3:
+
+| | before (exact distance) | after |
+| --- | --- | --- |
+| shelf, quiet over active | 1.67 (1.02, 3.03, 0.98) | **1.88** (1.18, 3.58, 1.06) |
+| mean shelf width | 279 km (149, 411, 266) | 292 km (151, 434, 277) |
+| sea floor within 200 m | 0.094 | 0.097 |
+| grid lock of the floor off the coasts | 0.082 | 0.084 |
+
+The quiet-over-active gap has closed and its marker is off: 1.88 is inside
+1.8-4.5, near the floor of the band, and pooled over globes that read 1.18,
+3.58 and 1.06. The yardstick reads a coast as active where a seam runs within
+150 km of it, and most such coasts are not active margins as laid: 1048 of
+7041 on globe 1, 1251 of 4712 on globe 2, 1056 of 5554 on globe 3. The rest
+are quiet margins with a seam near them, inland or offshore past a strip of
+their own plate's floor, and they read as quiet shelves in the active column.
+The mean
+width goes the wrong way, 279 -> 292 km: the quiet shelves, most of the
+coast, are Harris's 88 km now where they were 80, and the active ones narrow
+from 80 to 56 at most. It was never the mean's cause: an eighth of the coasts
+it reads are shores of hollows inside the continents with no deep floor in
+them (see the gap message).
+
+**The sea floor's yardsticks** read beyond a quiet shelf and a slope, now
+`quietShelf+slopeWidth`, and do not move: ridge 2.772 km, subsidence 317.4,
+flattening 0.207, the modes as they were. The full globe's networks:
+drainage area 0.388 -> 0.395, Hack 0.584 -> 0.582, Horton 4.46 -> 4.20.
+`TestThePolarSeaIsIce` passes.
+
+**Tests.** `TestAShelfIsWideWhereItsMarginIsQuiet`: a strip of continent
+with its own plate's floor to the west and another's to the east; the floor
+goes down two tiles out of the east coast and three out of the west, and
+welded, the east is three too.
+
+**Heap and time.** `TestWorldCreationBudget` passes and is not rewritten
+(ancient +10 allocations, which the valley, untouched, wanders by too;
+globe128 +5; bytes +0.05%). `nearestTo` keeps two more `int32` maps for the
+one call that asks. Timing against the base, twelve runs each, turn about:
+valley and globe256 within noise, ancient -5.2% (p 0.014) on a world that is
+the base's to the bit, so drift; `scripts/perf.sh check` fails against
+`2026-09-16-0718-small` here as on the base (see the entry below).
+
+**The yardsticks.** The whole suite, `go test -timeout 60m .`, fails the
+base's six yardsticks (midlatitude over subtropical rain; Aridisols and
+Gelisols; the small globe's hypsometric integral, discharge exponent and
+ridge-valley wavelength) and two tests that fail on the base (cc67797) as
+well: `TestTheTideLaysFlatsOnlyWhereItReaches`, small globe 2 has no flats,
+and `TestAGlobeHasASeaItsRiversReach`, the globe 0.73 water. Nothing new.
+
+---
+
+## 2026-10-05 - The sea floor is laid at the true distance from the continents
+
+**What this is.** On `claude/floor-exact-distance`, on top of
+`claude/statistical-output-verification`. `awayFrom` - what `floorDepths`
+lays the shelf and the slope at, and what `firstFloorAges` ranks the first
+plates' floor by - walked to the eight tiles round each and counted a
+diagonal step as one. What it read was the larger of the two distances
+across, and the floor laid at it was an octagon round every coast and a
+square round every islet: the K gap "grid lock of the sea floor off the
+coasts", 0.104. It is now the exact distance, Felzenszwalb and
+Huttenlocher's two passes of lower envelopes, which is the transform
+`realism_shape_test.go` already read the shelves with (`distanceFrom` there
+is gone; the tests call `awayFrom`).
+
+**The cause, measured before the fix.** A floor laid by each distance,
+`4000 * smooth((d - 2)/4)`, round coasts that lean to nothing - Brownian
+reliefs drawn on a 1024x512 map - and its grid lock read as the yardstick
+reads it:
+
+| coasts | the coasts' own lock | floor by the walk | floor by the true distance |
+| --- | --- | --- | --- |
+| H 0.5, 30% land | 0.014 | 0.230 | 0.013 |
+| H 0.5, 45% land | 0.020 | 0.233 | 0.033 |
+| H 0.8, 30% land | 0.067 | 0.251 | 0.066 |
+| H 0.8, 45% land | 0.018 | 0.216 | 0.035 |
+
+The walk locks a floor to the grid round coasts that have no lock; the true
+distance gives the floor its coast's lock and no more. That is now
+`TestTheFloorLeansAsItsCoastDoes`, with a check of `awayFrom` against
+Pythagoras round the seam (short tier, half a second).
+
+**The shelf's least width.** The shelf was floored at one tile, which under
+the walk was the whole ring of eight round a continent. At the true distance
+the ring's corners are a root of two out, and on a small globe, whose shelf
+is that one tile, they were laid a third of the way down the slope beside the
+corner of every coast. `shape` lays every tile over the water its drainage
+ends in, and there that was the floor, a kilometre and more down: in the first
+draft of this change the shaping laid the whole of small globes 1 and 2 under
+the sea (land 0.47 -> 0.00), the sea poured again on what it left stood at
+-691 and -712 m, and ten of the small globes' yardsticks went out of their
+bands (Hack 0.581 -> 0.427, Flint's R2 0.939 -> 0.731, channel concavity 0.353
+-> 0.260, the 99th centile slope 1.06 -> 2.05). `shelfLeast`, a tile and a
+half, keeps the whole ring shelf, and with it every small globe and valley is
+the world it was to the bit.
+
+**What the globes read.** Seeds 1-3, the shape yardsticks' globes:
+
+| | before | after |
+| --- | --- | --- |
+| grid lock of the floor off the coasts | 0.104 (0.124, 0.088, 0.124) | **0.082** (0.066, 0.085, 0.103) |
+| its terms, cos 4θ and cos 8θ | +0.072, +0.104 | -0.082, +0.023 |
+| grid lock of the coasts | 0.084 (cos 4θ -0.084) | 0.087 (cos 4θ -0.087) |
+| mean shelf width | 305 km | 279 km |
+| shelf, quiet over active | 1.60 | 1.67 |
+| sea floor within 200 m | 0.103 | 0.094 |
+
+The octagons are gone (cos 8θ 0.104 -> 0.023). What is left is cos 4θ, the
+floor leaning to the diagonals as the coasts do: the floor is now laid as its
+coast lies, and the coasts lean 0.087, which their own yardstick (0-0.1)
+allows. The gap stays open on that: the floor's band, 0-0.05, is tighter
+than a floor laid exactly can read round Brownian coasts of H 0.8 (0.066).
+The lean is born with the first plates: on globe 3 their seams read cos 4θ
+-0.16 before anything has moved. Flooding the plates over sixteen neighbours
+rather than eight did not take it away, so it is not the flood's metric
+alone.
+
+**The sea floor's yardsticks** read the first globe, beyond a shelf and a
+slope of the continents, and hardly notice: ridge 2.772 km, subsidence 317.4
+m per root Myr, flattening 0.201 -> 0.207, the hypsometric modes +0.125 and
+-5.375 km as they were. `TestThePolarSeaIsIce` passes.
+
+**The digest is rewritten**: `globe128` moves, `valley` and `ancient` do not
+(the ancient valley has no water, so no floor to lay).
+
+**The yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld'` here
+and on the base (cc67797) fail the same six: midlatitude over subtropical
+rain, the land shares of Aridisols and Gelisols, and the small globe's
+hypsometric integral, discharge exponent and ridge-valley wavelength. The
+full globe's networks move a little and stay in: drainage area exponent
+0.395 -> 0.388, Hack 0.583 -> 0.584, Horton 4.20 -> 4.46.
+
+**Heap and time.** `TestWorldCreationBudget` passes and is not rewritten:
+ancient +5 allocations, globe128 -2, bytes +0.03%. `scripts/perf.sh check`
+fails against `2026-09-16-0718-small` on this commit and on its base alike
+(+12 to +17% on all three worlds; the base moved 12% between two rounds of
+its own), so it cannot judge this. Base against this commit, twelve runs
+each, taken turn about on a quiet machine: valley, ancient and globe256 all
+within noise, geomean -2.8%.
 
 ---
 

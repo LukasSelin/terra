@@ -369,17 +369,27 @@ const (
 	// Voronoi one - the same angle for a different reason.
 	fractureSets   = 3
 	fractureWander = 0.22
-	// fractureCreep is how far a fracture's bearing wanders as it runs, in
-	// radians a tile, drawn afresh at every step. A fault is straight and it is
-	// not a ruled line: it bends by a few degrees over its length and steps
-	// sideways where it bends. Laid perfectly straight the walls showed
-	// through - a coast two hundred tiles long with not a bay in it, an ocean
-	// with four sides and four corners - which reads as drawn with a
-	// straightedge, which is the fault the round world had in the other
-	// direction. A run of sixty tiles still has to be straight to the eye, so
-	// the wander is slow: it comes to a few degrees over a whole fracture, and
-	// a stretch of that within a range of hills of it.
-	fractureCreep = 0.05
+	// fractureBend is how far a fracture's bearing wanders as it runs: the
+	// spread, in radians either way, that it comes to over the spacing
+	// between plate middles, drawn afresh at every step of the walk. A fault
+	// is straight and it is not a ruled line: it bends by a few degrees over
+	// its length and steps sideways where it bends. Laid perfectly straight
+	// the walls showed through - a coast two hundred tiles long with not a bay
+	// in it, an ocean with four sides and four corners - which reads as drawn
+	// with a straightedge, which is the fault the round world had in the
+	// other direction.
+	//
+	// It is quoted in the spacing, as fractureLong and fractureShort are, so
+	// that a small globe's faults bend as a full one's do. It was a rate a
+	// tile, 0.05, which came to 0.14 over a spacing on a small globe, where
+	// the plate tests are read, and 0.23 on a full one, whose continents came
+	// out cut in rectangles: their coasts gathered at right angles by
+	// cornerLock 0.18 on the mean of the first five globes, against 0.01 for
+	// a Brownian coast. At 0.3 it is 0.13, and a plate's longest straight wall
+	// is still 1.08 of the root of its area over eight small globes, against
+	// 1.18 before: past that the walls go before the corners do (0.96 at
+	// 0.4, where TestAPlatesWallRunsStraight wants 1.05).
+	fractureBend = 0.3
 	// plateStretch is the most a plate is drawn out along its own grain: a
 	// flood goes this much more slowly across the grain than along it, so a
 	// plate at the full stretch is about that much longer than it is wide.
@@ -1100,14 +1110,16 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	}
 
 	// The ages of the floor and how fast the ground is rising are read while
-	// the tiles are still pieces of a planet. See floorDepths and upliftOf.
+	// the tiles are still pieces of a planet, and once the plates are kept,
+	// since how wide a shelf is depends on which plate the continent beside it
+	// has become part of. See floorDepths and upliftOf.
+	g.keepPlates(plates)
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
 		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
-	g.keepPlates(plates)
 	g.settleRock(book, cr.ocean)
 	if g.planet > 0 {
 		d.book = book // the foot of every pile is laid on the map
@@ -1621,6 +1633,10 @@ func (w *Land) fractures(g *Grid, reach float64) []float64 {
 	// How far a step of the walk goes: half a tile, so that a line at any
 	// bearing marks every tile it passes through.
 	const step = 0.5
+	// The turn each step draws, uniform either way, for the bearing to have
+	// wandered by fractureBend over a spacing of reach tiles: a step's turn
+	// has a variance of creep^2 step^2/3, and a spacing is reach/step of them.
+	creep := fractureBend * math.Sqrt(3/(step*reach))
 	out := int(math.Ceil(fractureCore + 2*fractureWide))
 	for k, f := range lines {
 		for _, way := range [2]float64{1, -1} {
@@ -1679,7 +1695,7 @@ func (w *Land) fractures(g *Grid, reach float64) []float64 {
 				// the one the fracture was drawn at and wander away from it
 				// on their own, so the two of them are a line with a slow
 				// bend in it and not two lines meeting at the seed.
-				a := fractureCreep * step * 2 * (w.RNG.Float64() - 0.5)
+				a := creep * step * 2 * (w.RNG.Float64() - 0.5)
 				sin, cos := math.Sin(a), math.Cos(a)
 				ux, uy = ux*cos-uy*sin, ux*sin+uy*cos
 				x, y = x+way*ux*step, y+way*uy*step
