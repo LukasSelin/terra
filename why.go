@@ -1,6 +1,9 @@
 package terra
 
 import (
+	"cmp"
+	"slices"
+
 	"math"
 
 	"github.com/LukasSelin/terra/geom"
@@ -37,10 +40,11 @@ const (
 	OfRock                 // why this rock is at the surface
 	OfRain                 // why this much rain falls
 	OfCover                // why the ground suits trees as well as it does
+	OfWarmth               // why the year is as warm as it is
 	aspects
 )
 
-var aspectNames = [aspects]string{"height", "rock", "rain", "cover"}
+var aspectNames = [aspects]string{"height", "rock", "rain", "cover", "warmth"}
 
 func (a Aspect) String() string {
 	if int(a) < len(aspectNames) {
@@ -119,6 +123,36 @@ const (
 	Drains
 	SoilDepth
 
+	// Rain, from the sea. OffshoreCurrent follows UpwindSea where the sea
+	// the walk came to is a current's water: the current, and how many
+	// degrees over its latitude's mean the water stands there, as the air
+	// read it. SeaDamp is how many times the water the sea there gives the
+	// air in that phase it gives for that warmth (atmos.Env.Damp).
+	// Inversion is the share of the rain over the tile's cell that the air
+	// held down by cold water off the coast did not rain out, with the
+	// upwelling - or failing one, the current - whose water chills the tile
+	// most, if any chills it by coastFloor (see relations.go).
+	OffshoreCurrent
+	SeaDamp
+	Inversion
+
+	// Warmth. The chain starts at Warmth, the year's mean at the tile, with
+	// its climate region. Latitude is the tile's, in degrees north of the
+	// equator; LatitudeWarmth the year's mean at sea level there; SeaAbout
+	// what the sea about the tile adds, against the sea about its row;
+	// CoastWarmth what the currents offshore add, with the current whose
+	// water adds the most; OffCoast follows it for each current and
+	// upwelling whose water adds coastFloor or more either way, the most
+	// first, with what it adds; and Altitude what the tile's height takes
+	// off at the lapse rate. LatitudeWarmth, SeaAbout, CoastWarmth and
+	// Altitude come to Warmth.
+	Latitude
+	LatitudeWarmth
+	SeaAbout
+	CoastWarmth
+	OffCoast
+	Altitude
+
 	causeKinds
 )
 
@@ -127,6 +161,8 @@ var causeNames = [causeKinds]string{
 	"bed of", "laid as fill", "laid as mud", "laid as lime", "laid as lava", "cooked", "melted at depth", "ocean floor", "buried last",
 	"rain of", "latitude rain", "orographic", "upwind sea",
 	"suits", "slope", "treeless", "barren", "warmth", "evaporation", "wetness", "water ratio", "drains", "soil depth",
+	"offshore current", "sea damp", "inversion",
+	"latitude", "latitude warmth", "sea about", "coast warmth", "off coast", "altitude",
 }
 
 func (k CauseKind) String() string {
@@ -165,6 +201,8 @@ func (g *Grid) Why(p geom.Pos, a Aspect) []Cause {
 		return g.whyRain(i)
 	case OfCover:
 		return g.whyCover(i, p)
+	case OfWarmth:
+		return g.whyWarmth(i)
 	}
 	return nil
 }
@@ -298,10 +336,77 @@ func (g *Grid) whyRain(i int) []Cause {
 		return chain
 	}
 	chain = append(chain, Cause{Kind: Orographic, Quantity: w.Budget[k].Oro[c] * secondsPerYear, Unit: "mm", Note: phaseNamesOfYear[k]})
-	if d, ok := g.upwindSea(e, w.U[k], w.V[k], c); ok {
+	d, s, ok := g.upwindCell(e, w.U[k], w.V[k], c)
+	if ok {
 		chain = append(chain, Cause{Kind: UpwindSea, Quantity: d, Unit: "km", Note: phaseNamesOfYear[k]})
 	}
+	r := g.seaReader(g.features)
+	if r == nil {
+		return chain
+	}
+	// The sea the air came off, where it is a current's water.
+	if ok {
+		if p := r.owner(s); p > 0 {
+			chain = append(chain,
+				Cause{Feature: g.features.seaBase[0] + FeatureID(p), Kind: OffshoreCurrent, Quantity: e.Warm[s], Unit: "°C", Note: phaseNamesOfYear[k]},
+				Cause{Kind: SeaDamp, Quantity: e.Damp(s, k), Unit: "times"})
+		}
+	}
+	// And the cold water that holds the air down.
+	if taken := e.Inversion(c); taken > 0 {
+		r.tileParts(i, nil)
+		id, _ := r.strongest(true, -1)
+		if id == 0 {
+			id, _ = r.strongest(false, -1)
+		}
+		chain = append(chain, Cause{Feature: id, Kind: Inversion, Quantity: taken, Unit: "share"})
+	}
 	return chain
+}
+
+func (g *Grid) whyWarmth(i int) []Cause {
+	if len(g.warm) != len(g.Tiles) || g.air == nil {
+		return nil
+	}
+	y := i / g.W
+	mean, coast := g.air.Mean[y], g.CoastWarmth(i)
+	alt := -Lapse * g.Height[i]
+	chain := []Cause{
+		{Feature: g.featureAt(i, ClimateRegion), Kind: Warmth, Quantity: g.meanOn(i, g.Height[i]), Unit: "°C"},
+		{Kind: Latitude, Quantity: g.air.Lat[y], Unit: "°"},
+		{Kind: LatitudeWarmth, Quantity: mean, Unit: "°C"},
+		{Kind: SeaAbout, Quantity: float64(g.warm[i]) - mean - coast, Unit: "°C"},
+	}
+	at := len(chain)
+	chain = append(chain, Cause{Kind: CoastWarmth, Quantity: coast, Unit: "°C"})
+	if r := g.seaReader(g.features); r != nil && coast != 0 {
+		r.tileParts(i, nil)
+		chain[at].Feature, _ = r.strongest(false, 0)
+		// Each current's and each upwelling's, the most first; an
+		// upwelling's water is a current's too, and is given apart.
+		type part struct {
+			id FeatureID
+			d  float64
+		}
+		var parts []part
+		for _, p := range r.tile.curOn {
+			if d := r.tile.cur[p]; math.Abs(d) >= coastFloor {
+				parts = append(parts, part{r.f.seaBase[0] + FeatureID(p), d})
+			}
+		}
+		for _, p := range r.tile.upOn {
+			if d := r.tile.up[p]; math.Abs(d) >= coastFloor {
+				parts = append(parts, part{r.f.seaBase[2] + FeatureID(p), d})
+			}
+		}
+		slices.SortFunc(parts, func(a, b part) int {
+			return cmp.Or(cmp.Compare(math.Abs(b.d), math.Abs(a.d)), cmp.Compare(a.id, b.id))
+		})
+		for _, p := range parts {
+			chain = append(chain, Cause{Feature: p.id, Kind: OffCoast, Quantity: p.d, Unit: "°C"})
+		}
+	}
+	return append(chain, Cause{Kind: Altitude, Quantity: alt, Unit: "°C"})
 }
 
 // upwindSea is how far, in kilometres, the sea lies upwind of cell c under
@@ -309,16 +414,22 @@ func (g *Grid) whyRain(i int) []Cause {
 // than half sea, or the air's rows run out. A cell already more than half
 // sea is nothing away; a wind of nothing has no upwind.
 func (g *Grid) upwindSea(e *atmos.Env, u, v []float32, c int) (float64, bool) {
+	km, _, ok := g.upwindCell(e, u, v, c)
+	return km, ok
+}
+
+// upwindCell is upwindSea with the cell the walk came to the sea at.
+func (g *Grid) upwindCell(e *atmos.Env, u, v []float32, c int) (float64, int, bool) {
 	if len(e.Sea) <= c || len(u) <= c || len(v) <= c {
-		return 0, false
+		return 0, -1, false
 	}
 	if e.Sea[c] > 0.5 {
-		return 0, true
+		return 0, c, true
 	}
 	uu, vv := float64(u[c]), float64(v[c])
 	speed := math.Hypot(uu, vv)
 	if speed < 1e-6 {
-		return 0, false
+		return 0, -1, false
 	}
 	// Against the wind, a cell at a time: north is up the rows, so v goes
 	// against cy.
@@ -328,24 +439,24 @@ func (g *Grid) upwindSea(e *atmos.Env, u, v []float32, c int) (float64, bool) {
 	for steps := 0; steps < 2*(e.W+e.H); steps++ {
 		cy := int(fy)
 		if cy < 0 || cy >= e.H {
-			return km, false
+			return km, -1, false
 		}
 		km += math.Hypot(dx*e.Dx[cy], dy*e.Dy) / 1000
 		fx, fy = fx+dx, fy+dy
 		cx, cy := int(math.Floor(fx)), int(math.Floor(fy))
 		if cy < 0 || cy >= e.H {
-			return km, false
+			return km, -1, false
 		}
 		if e.Wrap {
 			cx = ((cx % e.W) + e.W) % e.W
 		} else if cx < 0 || cx >= e.W {
-			return km, false
+			return km, -1, false
 		}
 		if e.Sea[cy*e.W+cx] > 0.5 {
-			return km, true
+			return km, cy*e.W + cx, true
 		}
 	}
-	return km, false
+	return km, -1, false
 }
 
 func (g *Grid) whyCover(i int, p geom.Pos) []Cause {

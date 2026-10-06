@@ -6,6 +6,45 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - What the sea's features do: relations, and Why for rain and warmth
+
+**What this is.** On `claude/ocean-relations`, from `claude/ocean-features`
+(12e4610, O2 unmerged): workstream O3 of the ocean-currents plan (#20). A
+general relation layer on the registry (`relations.go`): `Relation{From,
+To, Kind, Quantity, Unit}`, kept sorted by From, Kind and To with an index
+by To, and `Features.RelationsOf`. `readRelations` runs at the end of
+`readFeatures`, on one goroutine in id and tile order. The sea's kinds are
+filled: `Warms`/`Cools` (a current's part of `CoastWarmth`, read back out of
+`coastal`'s blur cell by cell with the new `(*Env).CoastFrom`), `Dries` (the
+share `inversion` takes, `(*Env).Inversion`), `Waters` (the share of a
+basin's rain whose phase's upwind walk ends on a current's water),
+`PartOf` (current to gyre) and `Feeds` (the current traced along and back
+against the field from a current's mouth and head). `Why` gains
+`OffshoreCurrent`, `SeaDamp` (`(*Env).Damp`, the sea's saturation with and
+without the current's warmth, as `RainCells` reads it) and `Inversion` in
+`OfRain`, and a new `OfWarmth` aspect whose causes add up to the year's mean.
+
+**The world.** Unchanged: relations are a reading. `TERRA_DIGEST=write` on
+12e4610 left `docs/perf/digest.json` as committed, and `TERRA_DIGEST=check`
+passes after.
+
+**The heap.** globe128 allocates 394.8 MiB in 29343 allocations against the
+budget's 393.8 MiB in 29301 (O2 had it at 394.5 MiB): inside the slack, and
+the budget is not rewritten. The relations kept on GlobeTerms seed 3 are
+4873 at 40 B, some 190 KiB; the cells' parts and splits are dropped once
+they are read.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, two runs of each, loaded machine:
+`readRelations` (new) 0.19 s, `readFeatures` 0.31-0.32 s -> 0.53 s with it,
+`readSea` 0.17-0.18 s and `airEnv.currents` 0.12-0.13 s before and after
+(their code is untouched), against `weather` 1.13-1.19 s and `Generate`
+12.7-13.1 s. A first cut took 0.34 s: `CoastFrom` walked its window twice
+and each window cell's tiles twice; one walk, and each cell's split among
+the features kept, halved it.
+
+---
+
 ## 2026-10-07 - The sea's currents, gyres and upwellings are features
 
 **What this is.** On `claude/ocean-features`, from `main` (7e17754, which

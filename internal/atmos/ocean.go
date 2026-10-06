@@ -656,3 +656,90 @@ func (w *Winds) WaterWarmth(i int) float64 {
 	a, b := min(max(int(y0), 0), w.H-1), min(max(int(y0)+1, 0), w.H-1)
 	return w.Sample32(w.WaterTemp, fx, fy) - (w.Mean[a] + (w.Mean[b]-w.Mean[a])*t)
 }
+
+// CoastFrom hands visit what the water of each cell adds to Coast[c], the
+// warmth the country round cell c feels off the sea: coastal's blur undone
+// for the one cell, so that what each current makes of a coast can be read
+// off it. What it hands is in degrees once taken times what it gives back,
+// which is how much the country round c feels of the sea about it and is
+// known only once every cell has been handed. Over every cell, the degrees
+// come to Coast[c] to rounding. A valley, and a cell with no sea within
+// coastReach, gives back nothing. Nothing in the weather calls it.
+func (e *Env) CoastFrom(c int, visit func(cell int, degrees float64)) (felt float64) {
+	if e.Coast == nil || e.Warm == nil || c < 0 || c >= len(e.Coast) || e.Coast[c] == 0 {
+		return 0
+	}
+	cx, cy := c%e.W, c/e.W
+	// The rows and the cells of each that box took the mean over, and how
+	// many: see box.
+	down := min(int(math.Round(coastReach/(e.Dy/1000))), e.H)
+	y0, y1 := max(cy-down, 0), min(cy+down, e.H-1)
+	rows := float64(y1 - y0 + 1)
+	span := func(y int) (x0, x1 int, k float64) {
+		r := int(math.Round(coastReach / (e.Dx[y] / 1000)))
+		switch {
+		case e.Wrap && 2*r+1 >= e.W:
+			return 0, e.W - 1, float64(e.W)
+		case e.Wrap:
+			return cx - r, cx + r, float64(2*r + 1)
+		}
+		x0, x1 = max(cx-r, 0), min(cx+r, e.W-1)
+		return x0, x1, float64(x1 - x0 + 1)
+	}
+	share := 0.0
+	for y := y0; y <= y1; y++ {
+		x0, x1, k := span(y)
+		w := 1 / (k * rows)
+		for x := x0; x <= x1; x++ {
+			j := e.at(x, y)
+			share += e.Sea[j] * w
+			if d := e.Warm[j] * e.Sea[j]; d != 0 {
+				visit(j, d*w)
+			}
+		}
+	}
+	if share <= 1e-6 {
+		return 0
+	}
+	return smoothstep(0, coastShare, share) / share
+}
+
+// Inversion is how much of the rain over cell c the inversion takes: the
+// share the air held down by the cold water off the coast does not rain out,
+// as the budget read it (see RainCells). Nothing over warm water, and nothing
+// on a valley.
+func (e *Env) Inversion(c int) float64 {
+	if e.Coast == nil || c < 0 || c >= len(e.Coast) {
+		return 0
+	}
+	return 1 - inversion(e.Coast[c])
+}
+
+// Damp is how many times the water the sea over cell c gives the air in
+// phase k it gives for its current's warmth: the sea's saturation at the
+// temperature the budget read it at (see RainCells), over its saturation
+// without what the current brings. One where the water stands at its
+// latitude's mean, and on a valley.
+func (e *Env) Damp(c, k int) float64 {
+	if e.Warm == nil || c < 0 || c >= len(e.Warm) || k < 0 || k >= Phases {
+		return 1
+	}
+	if k == Phases-1 {
+		k = 1 // the autumn is the spring
+	}
+	cy := c / e.W
+	sst := e.Mean[cy] + seasonTemp(e.hemi[cy], phaseSin[k], 0) + seaOverAir
+	return saturation(sst+e.Warm[c]) / saturation(sst)
+}
+
+// Corners is the cells a reading of tile i is taken between, and how much
+// of each it takes: Sample's, so that what a sum over the cells comes to at
+// a tile is what Sample would read of it.
+func (e *Env) Corners(i int) (cells [4]int, weights [4]float64) {
+	fx, fy := e.CellAt(i)
+	x0, y0 := math.Floor(fx), math.Floor(fy)
+	tx, ty := fx-x0, fy-y0
+	x, y := int(x0), int(y0)
+	return [4]int{e.at(x, y), e.at(x+1, y), e.at(x, y+1), e.at(x+1, y+1)},
+		[4]float64{(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty}
+}

@@ -159,7 +159,8 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	for a := OfHeight; a < aspects; a++ {
 		for _, c := range g.Why(p, a) {
 			switch c.Kind {
-			case RaisedBy, WornSince, Stands, BedOf, RainOf, LatitudeRain, Orographic, UpwindSea, Slope, Warmth, Evaporation, Drains, SoilDepth:
+			case RaisedBy, WornSince, Stands, BedOf, RainOf, LatitudeRain, Orographic, UpwindSea, Slope, Warmth, Evaporation, Drains, SoilDepth,
+				OffshoreCurrent, SeaDamp, Inversion, Latitude, LatitudeWarmth, SeaAbout, CoastWarmth, OffCoast, Altitude:
 				if c.Unit == "" {
 					t.Errorf("%v: %v has no unit", a, c.Kind)
 				}

@@ -170,6 +170,10 @@ type Features struct {
 	// tiles and trunks back every feature's Tiles and Trunk, one slice each
 	// rather than one a feature; the currents' Paths have one of their own.
 	tiles, trunks []int32
+	// rel is every relation between the features, by From, Kind and To, and
+	// byTo their places in it by To, From and Kind. See relations.go.
+	rel  []Relation
+	byTo []int32
 }
 
 // namer is what names the features, if anything does. See SetNamer.
@@ -419,6 +423,9 @@ func (g *Grid) readFeatures() {
 			fill(f.lake[k], i)
 		}
 	}
+
+	// What the features do to one another. See relations.go.
+	g.readRelations(f)
 
 	if namer != nil {
 		for id := range f.All {

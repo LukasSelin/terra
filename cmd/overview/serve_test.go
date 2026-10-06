@@ -163,8 +163,8 @@ func TestATileSaysWhyItIsSo(t *testing.T) {
 	if err := json.Unmarshal([]byte(kept), &place); err != nil {
 		t.Fatal(err)
 	}
-	if place.Pos.X != 5 || place.Pos.Y != 7 || place.Terrain == "" || len(place.Aspects) != 4 {
-		t.Errorf("tile answered %+v, want tile (5, 7) with its terrain and four aspects", place)
+	if place.Pos.X != 5 || place.Pos.Y != 7 || place.Terrain == "" || len(place.Aspects) != 5 {
+		t.Errorf("tile answered %+v, want tile (5, 7) with its terrain and five aspects", place)
 	}
 	if len(place.Aspects[0].Sentences) == 0 {
 		t.Errorf("the tile gave no reason for its height: %+v", place)

@@ -1218,6 +1218,7 @@ async function pick(x,y){
  if(picked.x!==x||picked.y!==y)return;
  const head=[el('h2','Tile ('+x+', '+y+'): '+a.terrain+', '+a.height)];
  if(a.features&&a.features.length)head.push(el('p','Part of '+a.features.join(', '),'mut'));
+ for(const s of a.relations||[])head.push(el('p',s,'mut'));
  box.replaceChildren(...head);
  for(const as of a.aspects){
   box.append(el('h3',as.name));
