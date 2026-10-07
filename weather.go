@@ -242,7 +242,8 @@ func (g *Grid) rainOn() {
 	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw)
 	if n := len(g.Tiles) * atmos.Phases; len(g.soilWater) != n {
 		g.rainIn, g.soilWater, g.runoffIn = make([]float32, n), make([]float32, n), make([]float32, n)
-		g.soilHold = make([]float32, len(g.Tiles))
+		g.snowWater, g.snowCover, g.meltIn = make([]float32, n), make([]float32, n), make([]float32, n)
+		g.soilHold, g.ice = make([]float32, len(g.Tiles)), make([]float32, len(g.Tiles))
 	}
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
@@ -274,14 +275,18 @@ func (g *Grid) rainOn() {
 				g.rainWarm[i] = float32((summer + (each[1]+each[3])/2) / total)
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
-			g.soilHold[i] = 0
+			g.soilHold[i], g.ice[i] = 0, 0
 			at := i * atmos.Phases
 			fell, water, shed := g.rainIn[at:at+atmos.Phases], g.soilWater[at:at+atmos.Phases], g.runoffIn[at:at+atmos.Phases]
+			snow, cover, melt := g.snowWater[at:at+atmos.Phases], g.snowCover[at:at+atmos.Phases], g.meltIn[at:at+atmos.Phases]
 			for k := range atmos.Phases {
 				fell[k] = float32(each[k] / atmos.Phases)
 			}
 			clear(water)
 			clear(shed)
+			clear(snow)
+			clear(cover)
+			clear(melt)
 			if g.sunk(i) {
 				continue
 			}
@@ -305,10 +310,12 @@ func (g *Grid) rainOn() {
 				}
 			}
 			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), atmos.RootDepth(pe/math.Max(p, 1e-9)))
-			b := atmos.Bucket(hold, &rain, &take)
-			g.runoff[i], g.soilHold[i] = b.Shed(), float32(hold)
+			mean, swing := g.snowYear(i, t)
+			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
+			g.runoff[i], g.soilHold[i], g.ice[i] = b.Shed(), float32(hold), float32(b.Ice)
 			for k := range atmos.Phases {
 				water[k], shed[k] = float32(b.Water[k]), float32(b.Runoff[k])
+				snow[k], cover[k], melt[k] = float32(b.Snow[k]), float32(b.Cover[k]), float32(b.Melt[k])
 			}
 		}
 	})

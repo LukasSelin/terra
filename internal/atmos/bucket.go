@@ -74,8 +74,19 @@ var yearOrder = [Phases]int{1, 2, 3, 0}
 // BucketYear is a bucket's steady year, phase by phase, in mm: the water it
 // held on the mean through the phase, what the air took from it, and what it
 // shed to the rivers in the phase.
+//
+// Where the year is cold enough to snow (see BucketCold) it is the snow's
+// year too: the snow water lying on the mean through the phase, what of it
+// melted in the phase, how much of the phase's precipitation fell as snow,
+// and the share of the ground the snow covered on the mean. What the air
+// took off the snow is in Evap with what it took off the soil, and what a
+// glacier's ice carried off is in Runoff. Ice is the ground's mass balance
+// where the snow outlasts the year, the mm of water a year it gains as ice,
+// and nothing where it melts out.
 type BucketYear struct {
-	Water, Evap, Runoff [Phases]float64
+	Water, Evap, Runoff         [Phases]float64
+	Snow, Melt, Snowfall, Cover [Phases]float64
+	Ice                         float64
 }
 
 // Evaporated is what the air took from the bucket in the year, in mm.
@@ -98,11 +109,28 @@ func (b *BucketYear) Shed() float64 {
 // empty the bucket however long it is, and what goes in is what comes out
 // and what stays, to the rounding.
 func Bucket(hold float64, rain, pet *[Phases]float64) BucketYear {
-	return bucketRun(hold, rain, pet, bucketSpins, bucketSteps)
+	return bucketRun(hold, rain, pet, bucketSpins, bucketSteps, nil)
 }
 
+// BucketCold is Bucket on ground whose year has a mean of mean degrees at the
+// ground, swinging swing either side of it, signed by hemisphere as SwingAt
+// is: the phase's precipitation falls as snow on its cold days, lies, and
+// reaches the bucket as it melts (see snowYear). A year too warm ever to snow
+// is Bucket's to the bit.
+func BucketCold(hold float64, rain, pet *[Phases]float64, mean, swing float64) BucketYear {
+	if SnowFree(mean, swing) {
+		return Bucket(hold, rain, pet)
+	}
+	return bucketRun(hold, rain, pet, bucketSpins, bucketSteps, &snowYearOf{mean, swing})
+}
+
+// snowYearOf is the year a bucket's snow is read on: its mean at the ground
+// and its signed swing.
+type snowYearOf struct{ mean, swing float64 }
+
 // bucketRun is Bucket, taken in steps steps a phase, with spins rounds of
-// spinning up before the year read.
+// spinning up before the year read, under the snow of year cold where it is
+// not nil.
 //
 // The fill a year ends at goes toward the steady year's by much the same
 // share each year, so after two years the rest of the way is a geometric
@@ -110,26 +138,53 @@ func Bucket(hold float64, rain, pet *[Phases]float64) BucketYear {
 // extrapolation). A bucket in a cold dry country, whose air takes little a
 // year from a deep store, would otherwise take tens of years to come to its
 // steady year.
-func bucketRun(hold float64, rain, pet *[Phases]float64, spins, steps int) BucketYear {
+func bucketRun(hold float64, rain, pet *[Phases]float64, spins, steps int, cold *snowYearOf) BucketYear {
 	var out BucketYear
+	// The water that reaches the soil in each step and what the air could
+	// still take up off it, in mm, in the year's order: the phase's rain
+	// and evaporation evenly over its steps where there is no snow, and
+	// the rain and the melt, and what the snow left the air wanting, where
+	// there is.
+	n := Phases * steps
+	var buf [2 * Phases * bucketSteps]float64
+	var in, dry []float64
+	if 2*n <= len(buf) {
+		in, dry = buf[:n], buf[n:2*n]
+	} else {
+		in, dry = make([]float64, n), make([]float64, n)
+	}
+	if cold != nil {
+		snowYear(rain, pet, cold.mean, cold.swing, steps, in, dry, &out)
+	} else {
+		for s := range n {
+			k := yearOrder[s/steps]
+			in[s] = math.Max(0, rain[k]) / float64(steps)
+			dry[s] = math.Max(0, pet[k]) / float64(steps)
+		}
+	}
 	if hold <= 0 {
-		// No store: the air takes what it can of the phase's rain as it
-		// falls and the rest goes.
-		for k := range Phases {
-			e := math.Max(0, math.Min(rain[k], pet[k]))
-			out.Evap[k], out.Runoff[k] = e, math.Max(0, rain[k]-e)
+		// No store: the air takes what it can of the water as it reaches
+		// the ground and the rest goes.
+		for s := range n {
+			k := yearOrder[s/steps]
+			e := math.Max(0, math.Min(in[s], dry[s]))
+			out.Evap[k] += e
+			out.Runoff[k] += math.Max(0, in[s]-e)
 		}
 		return out
 	}
-	var a, d [Phases]float64
-	for k := range Phases {
-		a[k] = math.Max(0, rain[k]) / float64(steps) / hold
-		d[k] = math.Max(0, pet[k]) / float64(steps) / hold
+	var liquid, take [Phases]float64
+	for s := range n {
+		k := yearOrder[s/steps]
+		liquid[k] += in[s]
+		take[k] += dry[s]
+		in[s] /= hold
+		dry[s] /= hold
 	}
-	x := bucketStart(rain, pet)
+	x := bucketStart(&liquid, &take)
 	for range spins {
-		x1 := bucketYear(x, &a, &d, steps, nil)
-		x2 := bucketYear(x1, &a, &d, steps, nil)
+		x1 := bucketYear(x, in, dry, steps, nil)
+		x2 := bucketYear(x1, in, dry, steps, nil)
 		if gone := x1 - x; math.Abs(gone) > 1e-12 {
 			if s := (x2 - x1) / gone; s > 0 && s < 1 {
 				x2 = clamp01(x2 + (x2-x1)*s/(1-s))
@@ -137,26 +192,29 @@ func bucketRun(hold float64, rain, pet *[Phases]float64, spins, steps int) Bucke
 		}
 		x = x2
 	}
-	bucketYear(x, &a, &d, steps, &out)
+	var soil BucketYear
+	bucketYear(x, in, dry, steps, &soil)
 	for k := range Phases {
-		out.Water[k] *= hold
-		out.Evap[k] *= hold
-		out.Runoff[k] *= hold
+		out.Water[k] = soil.Water[k] * hold
+		out.Evap[k] += soil.Evap[k] * hold
+		out.Runoff[k] += soil.Runoff[k] * hold
 	}
 	return out
 }
 
-// bucketYear runs a bucket a year from fill x, with a and d each phase's
-// rain and evaporation a step over the bucket's size, and gives the fill it
-// ends at. Where out is not nil the year is written into it, over the
-// bucket's size.
-func bucketYear(x float64, a, d *[Phases]float64, steps int, out *BucketYear) float64 {
+// bucketYear runs a bucket a year from fill x, with in and dry each step's
+// water and evaporation over the bucket's size, steps steps a phase in the
+// year's order, and gives the fill it ends at. Where out is not nil the year
+// is written into it, over the bucket's size.
+func bucketYear(x float64, in, dry []float64, steps int, out *BucketYear) float64 {
+	s := 0
 	for _, k := range yearOrder {
-		a, d := a[k], d[k]
 		var water, evap, runoff float64
-		// Under bucketDry, the air takes in proportion to the fill.
-		b := 1 + d/bucketDry
 		for range steps {
+			a, d := in[s], dry[s]
+			s++
+			// Under bucketDry, the air takes in proportion to the fill.
+			b := 1 + d/bucketDry
 			y := 2 * (x + a) / (b + math.Sqrt(b*b+4*a*(x+a)))
 			e := d * y / bucketDry
 			if y > bucketDry {

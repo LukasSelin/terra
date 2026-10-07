@@ -127,11 +127,13 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // sea laid lime over its pluton; then tile 1307, raised by an arc in the
 // first epoch by some 12 km, until the soil came to hold its water from one
 // season to the next (see soilwater.go) and lime was laid over its pluton
-// too. Tile 1791 is now the one an arc raised in the first epoch, by some
-// 12 km.
+// too; then tile 1791, raised by an arc in the first epoch by some 12 km,
+// until a cold year's precipitation came to lie as snow (see snow.go) and
+// lime was laid over its pluton as well. Tile 1871 is now the one an arc
+// raised in the first epoch, by some 11 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(1791)
+	p := g.PosOf(1871)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -150,7 +152,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 1791 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 1871 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {

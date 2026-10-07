@@ -164,6 +164,13 @@ type Grid struct {
 	// each tile's soil as the weather reads it. See soilwater.go.
 	rainIn, soilWater, runoffIn []float32
 	soilHold, paw               []float32
+	// snowWater, snowCover and meltIn are, the same way, the snow water
+	// lying on each tile on the mean through each phase, the share of the
+	// ground it covered and what of it melted in the phase, in mm; ice is
+	// the mass balance of the snow that outlasts the year, mm of water a
+	// year, and nothing where it melts out. See snow.go.
+	snowWater, snowCover, meltIn []float32
+	ice                          []float32
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -354,6 +361,8 @@ func (g *Grid) Clone() *Grid {
 	c.runoff = append([]float64(nil), g.runoff...)
 	c.rainIn, c.soilWater, c.runoffIn = slices.Clone(g.rainIn), slices.Clone(g.soilWater), slices.Clone(g.runoffIn)
 	c.soilHold = slices.Clone(g.soilHold)
+	c.snowWater, c.snowCover, c.meltIn = slices.Clone(g.snowWater), slices.Clone(g.snowCover), slices.Clone(g.meltIn)
+	c.ice = slices.Clone(g.ice)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)
@@ -564,14 +573,28 @@ func (g *Grid) Treeless(p geom.Pos) bool {
 	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < atmos.TreeLineMean(float64(g.swing[i]))
 }
 
-// Barren reports whether the ground here is under ice: a summer too cold to
-// melt the snow its year brings, by Ohmura's equilibrium line. See iceSummer.
+// Barren reports whether the ground here is under ice: snow that outlasts
+// the year, by its mass balance through the year's seasons (see snow.go).
 // It is the ground that grows nothing, which is what an outcrop is.
+//
+// It was Ohmura's equilibrium line, a summer too cold for the year's
+// precipitation (see atmos.IceSummer), and a map whose weather has not been
+// read still reads that.
 func (g *Grid) Barren(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
+	if len(g.ice) == len(g.Tiles) {
+		return g.ice[i] > 0
+	}
+	return g.ohmuraIce(i)
+}
+
+// ohmuraIce reports whether tile i stands above Ohmura's equilibrium line:
+// a summer quarter colder than the one at which its year's precipitation
+// just melts (Ohmura, Kasser and Funk, 1992).
+func (g *Grid) ohmuraIce(i int) bool {
 	summer := g.meanOn(i, g.Height[i]) + atmos.SummerPeak*math.Abs(float64(g.swing[i]))
 	return summer < atmos.IceSummer(g.Rain(i))
 }
