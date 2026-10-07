@@ -23,7 +23,7 @@ import (
 // that meant to move the world and had not yet said so here.
 //
 // A change that moves the world commits the rewritten file with the budget
-// and the work-log entry, so that a reviewer sees that it did. See
+// and says so in its commit and PR, so that a reviewer sees that it did. See
 // docs/perf/README.md.
 const digestFile = "docs/perf/digest.json"
 
