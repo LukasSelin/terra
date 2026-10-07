@@ -817,8 +817,11 @@ func (g *Grid) waterStep(years float64) fluvial {
 			}
 			// How hard the water cuts: stream power, charged to what the soil
 			// is made of for the soil and to the rock for the rock. See
-			// fluvial.go and rockErodibility.
-			power := years * Erodibility * math.Sqrt(g.Flow[i]) / run[i]
+			// fluvial.go and rockErodibility. A tile the water barely reaches
+			// can be left a flow of minus a few tenths of a picometre a second
+			// by the rounding of what is taken off along the way, and the root
+			// of that is no number at all: it is nothing.
+			power := years * Erodibility * math.Sqrt(max(0, g.Flow[i])) / run[i]
 			c.f[i] = power * g.washAt(i)
 			c.rock[i] = power * rockErodibility(t)
 			c.abrade[i] = abrasion(run[i])
