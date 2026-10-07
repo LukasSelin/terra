@@ -156,6 +156,14 @@ type Grid struct {
 	// rainWarm is how much of each tile's year of rain falls in its warmer
 	// half, which is what tells a monsoon from a Mediterranean winter rain.
 	rainWarm []float32
+	// rainIn, soilWater and runoffIn are, for each tile and each phase of the
+	// year, tile by tile and the phases together, how much rain fell on it in
+	// the phase, how much water its soil held on the mean through the phase
+	// and how much it shed to the rivers in it, in mm; soilHold is the most
+	// its soil holds. paw is working memory: the plant-available water of
+	// each tile's soil as the weather reads it. See soilwater.go.
+	rainIn, soilWater, runoffIn []float32
+	soilHold, paw               []float32
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -344,6 +352,8 @@ func (g *Grid) Clone() *Grid {
 	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
+	c.rainIn, c.soilWater, c.runoffIn = slices.Clone(g.rainIn), slices.Clone(g.soilWater), slices.Clone(g.runoffIn)
+	c.soilHold = slices.Clone(g.soilHold)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)

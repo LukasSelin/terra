@@ -6,6 +6,91 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Land L1: soil moisture and the seasons of water (#49)
+
+**What this is.** On `claude/land-soil-water`, stacked on
+`claude/air-calendar` (A1, #71) at cfdd360. Each land tile's runoff is what
+a bucket (Manabe 1969) sheds through the air's four phases, in place of the
+year's P - Fu(P, PET). The bucket fills with the phase's rain, gives the air
+its PET while over 0.8 full and in proportion under that, and sheds the
+rain times its fill squared (HBV's soil routine, Bergström 1992), all of it
+when full: unseasonal, it is Fu's curve at ω = 2.6 to 2.6 % of the rain
+(`internal/atmos/bucket.go`). Its size is the soil's plant-available water
+(Saxton & Rawls 2006, from sand and clay) over the roots' depth, 1 m under
+open ground and 2 m under forest, with the climate's dryness standing in
+for the cover until L3, plus 5 % of the rock the roots reach below the soil
+(`atmos.Hold`, `soilwater.go`). The vapour budget's land evaporation is the
+same bucket's, phase by phase, on the air cells. Each phase is six implicit
+steps; the year read follows two years of spin and an Aitken jump, the
+steady year to 1e-4 of the rain. `Grid.RainIn`, `SoilWater`, `RunoffIn`
+and `SoilHold` keep it, 52 bytes a tile. The phases' PET share read the
+summer's sun for the autumn (`dayOf[min(k, 2)]` from an older order of the
+phases); it reads each phase's own.
+
+**The digest.** Rewritten, as meant: valley 370bf276e6a662b5, ancient
+183a13b2920d004e, globe128 cfb3d4761bff9aca.
+
+**The heap.** Budget rewritten: valley 10.1 MiB in 1308 allocations
+(10.0 in 1330), ancient 56.6 MiB in 8791 (56.1 in 8700), globe128 397.8
+MiB in 29092 (393.9 in 29301): the four phases' rain, water and runoff
+and the bucket, kept per tile. The full globe allocates 10.99 GB against
+11.22.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, three runs each, under other
+sessions' load: Generate 54.1 s on cfdd360 and 54.1 here; stage.ground
+42.2 against 43.4; weather 14.1 against 14.5; rainOn 11.09 against 11.51
+(+4 %: 72 steps of a bucket a tile, and the cells' buckets each round of
+the recycling); windsFor 2.97 against 2.94. `scripts/perf.sh check` was not
+run on a quiet machine.
+
+**What it reads.** The globe's land gives the air 0.584 of its rain (Oki &
+Kanae 0.59); Fu's ω fitted to its tiles is 2.34; of its land with half its
+rain in one phase, 0.998 sheds most in that phase or the next. On the small
+globes the phase after the wet one sheds 1.12 times the phase before it,
+on the same rain and sun, where the year never freezes. The valley: a
+bucket of 100 mm holding 69 on the mean, evaporation 0.528 of the rain (0.524
+before), ω 2.63. The small globes' runoff is about 12 % over Fu's, evenly
+with height: half their land has a month under freezing, and with no snow
+yet (L2) the winter's rain fills a bucket the air takes nothing from.
+
+The yardsticks, `TestRealNumbers|TestTheRealWorld`, cfdd360 against this:
+
+| yardstick | cfdd360 | L1 | real |
+|---|---|---|---|
+| channel concavity, small globe | 0.3499 fail | 0.2450 fail | 0.35-0.6 |
+| Flint's law fit R2, small globe | 0.960 pass | 0.832 fail | 0.85-1 |
+| channel concavity, 2x less 1x | 0.085 pass | 0.186 fail | -0.1-0.1 |
+| land relief intermittency C1 | 0.0867 pass | 0.0672 fail | 0.08-0.18 |
+| midlatitude over subtropical rain, globe | 0.959 fail | 0.946 fail | 1.1-2 |
+| mean land rain, 2x over 1x | 1.260 fail | 1.251 fail | 0.85-1.15 |
+| land share of Aridisols | 0.065 fail | 0.082 fail | 0.09-0.15 |
+| land share of Gelisols | 0.117 fail | 0.121 fail | 0.06-0.11 |
+| drainage area exceedance, small globe | 0.500 fail | 0.468 fail | 0.39-0.46 |
+| discharge exceedance, small globe | 0.480 fail | 0.435 pass | 0.40-0.46 |
+| ridge-valley wavelength, small globe | 400 m fail | 178 m pass | 24-224 |
+| hypsometric integral, 2x less 1x | -0.070 fail | -0.011 pass | -0.05-0.05 |
+| land evaporation over land rain, globe (new) | - | 0.584 pass | 0.55-0.70 |
+| Budyko-Fu ω fitted to the land, globe (new) | - | 2.34 pass | 1.8-3.6 |
+| seasonal land peaking in or after its wet season (new) | - | 0.998 pass | 0.8-1 |
+
+Three new failures, none tuned away; three old ones pass. The concavity and
+Flint's fit are one pooled fit over eight small globes whose own readings
+scatter from -0.03 to 0.95 (cfdd360: 0.15 to 0.96). Two controls on this
+branch: the bucket at one size everywhere reads 0.243 and R2 0.71, so the
+soil's depth is not it; the tiles' runoff put back to Fu's, with the rest
+of the change kept, reads 0.340 and 0.88. So it is the bucket's runoff,
+which is some 12 % over Fu's on the small globes and no different with
+height: the runoff moved every history, and the pooled fit is as noisy as
+its globes. The concavity's difference between scales and C1 move with it.
+
+**The tests it moved.** The ancient chain reads tile 1791, since lime was
+laid over 1307's pluton. The tree line's share on valley seed 1 is read
+against the land that suits trees at all, 0.160 of it, where it read
+against eight tenths of woodsShare (0.161 on cfdd360, 0.160 here):
+readHolds already says such a map takes what there is.
+
+---
+
 ## 2026-10-07 - Air A2: the general circulation worked out (#34)
 
 **What this is.** On `claude/air-circulation`, stacked on

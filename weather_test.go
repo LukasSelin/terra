@@ -254,11 +254,11 @@ func TestTheTradeInversionCapsTheRangesRain(t *testing.T) {
 	for i := range ground {
 		ground[i] = math.Max(0, g.Height[i])
 	}
-	_, capped, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground)
+	_, capped, _, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground, g.Soil, g.paw)
 	for k := range g.winds.Subsides {
 		g.winds.Subsides[k] = make([]float64, len(g.winds.Subsides[k]))
 	}
-	_, open, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground)
+	_, open, _, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground, g.Soil, g.paw)
 	c := Climate{rows: g.H, globe: true}
 	island := func(lift [atmos.Phases][]float32, lat float64) (all, high float64) {
 		for i := range g.Tiles {

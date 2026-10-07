@@ -15,9 +15,10 @@ import (
 // - which gave every map the same climate and made every river a share of a
 // whole rather than an amount of water. Here it is carried: the wind brings
 // water off the sea, the ground it crosses wrings some of it out on the way
-// up, what is left over the top is dry, and the warmth of a place decides how
-// much of what fell goes straight back into the air. What runs off is what the
-// rivers carry, in real quantities, so a wet country and a dry one have
+// up, what is left over the top is dry, and the warmth of a place and the
+// water its soil holds over from one season to the next decide how much of
+// what fell goes back into the air (see soilwater.go). What runs off is what
+// the rivers carry, in real quantities, so a wet country and a dry one have
 // different rivers and not just different colours.
 //
 // The scale of the air is a fiction and worth being plain about. A tile is
@@ -224,7 +225,10 @@ func (g *Grid) weatherStale() bool {
 	return float64(flips) > weatherFlips*float64(len(g.Tiles)) || moved > weatherDrift*stood
 }
 
-// rainOn is the rain and the runoff of g under the winds it has.
+// rainOn is the rain and the runoff of g under the winds it has, and the
+// soil's year of water under them: each tile's runoff is what its soil's
+// bucket sheds through the four phases (see atmos.Bucket), and no longer
+// the year's rain less Budyko's share of it.
 func (g *Grid) rainOn() {
 	defer phase.Start("rainOn")()
 	a := g.air
@@ -241,7 +245,12 @@ func (g *Grid) rainOn() {
 		}
 	}
 
-	carried, lift, given := atmos.RainCells(&g.Map, a, w, ground)
+	g.soilBucket()
+	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw)
+	if n := len(g.Tiles) * atmos.Phases; len(g.soilWater) != n {
+		g.rainIn, g.soilWater, g.runoffIn = make([]float32, n), make([]float32, n), make([]float32, n)
+		g.soilHold = make([]float32, len(g.Tiles))
+	}
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
 	// out of the air there.
@@ -272,11 +281,41 @@ func (g *Grid) rainOn() {
 				g.rainWarm[i] = float32((summer + (each[1]+each[3])/2) / total)
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
-			if !g.sunk(i) {
-				t := a.Mean[y] - Lapse*g.laidHeight(i)
-				pe := atmos.PetAt(a.PET[y], t, g.yearCont(i))
-				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
-				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
+			g.soilHold[i] = 0
+			at := i * atmos.Phases
+			fell, water, shed := g.rainIn[at:at+atmos.Phases], g.soilWater[at:at+atmos.Phases], g.runoffIn[at:at+atmos.Phases]
+			for k := range atmos.Phases {
+				fell[k] = float32(each[k] / atmos.Phases)
+			}
+			clear(water)
+			clear(shed)
+			if g.sunk(i) {
+				continue
+			}
+			t := a.Mean[y] - Lapse*g.laidHeight(i)
+			pe := atmos.PetAt(a.PET[y], t, g.yearCont(i))
+			g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
+			pe *= float64(g.dayRange[i])
+			// The ground's year: the phase's rain into the soil's bucket, and
+			// what the air could take up in the phase shared out as the air
+			// cell's is, evenly where the cell's year is frozen through.
+			var rain, take [atmos.Phases]float64
+			var shares float64
+			for k := range atmos.Phases {
+				shares += share[k][cell]
+			}
+			for k := range atmos.Phases {
+				rain[k] = each[k] / atmos.Phases
+				take[k] = pe / atmos.Phases
+				if shares > 0 {
+					take[k] *= share[k][cell] * atmos.Phases / shares
+				}
+			}
+			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), atmos.RootDepth(pe/math.Max(p, 1e-9)))
+			b := atmos.Bucket(hold, &rain, &take)
+			g.runoff[i], g.soilHold[i] = b.Shed(), float32(hold)
+			for k := range atmos.Phases {
+				water[k], shed[k] = float32(b.Water[k]), float32(b.Runoff[k])
 			}
 		}
 	})
