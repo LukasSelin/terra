@@ -96,7 +96,7 @@ func (g *Grid) meanTempOf(i int) float64 {
 	if g.air != nil && y < len(g.air.Mean) {
 		mean = g.air.Mean[y]
 	}
-	t := mean - Lapse*g.Height[i]
+	t := mean - Lapse*g.Elevation(i)
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}

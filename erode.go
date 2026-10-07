@@ -792,6 +792,27 @@ func (g *Grid) waterStep(years float64) fluvial {
 			if int(recv[i]) == i || t.Mark != None {
 				continue
 			}
+			if g.deep > 0 {
+				// A tile of a history is a piece of a planet, tens of
+				// kilometres across, and it comes down as a landscape and not
+				// as a channel: by its relief over the ground its water goes
+				// to, or the sea where that lies lower. See denude.go.
+				//
+				// Its water runs in a network of channels too fine for it to
+				// draw. Read as a sheet that wide it put no stress on
+				// anything, and read as settling over the whole run it laid
+				// every grain of sand back where it was cut: either way the
+				// ranges rose for ever, to two hundred kilometres by the
+				// sixteenth epoch of a small globe. What a planet's rivers
+				// carry off a tile settles where they stop, in its basins and
+				// its seas - see stillWork and shelve - and the beds of its
+				// channels grow nothing.
+				r := int(recv[i])
+				f := g.deepRate(i, g.Height[i]-math.Max(g.Height[r], math.Max(0, g.base)), years)
+				c.f[i], c.rock[i] = f, f
+				c.abrade[i] = abrasion(run[i])
+				continue
+			}
 			// How hard the water cuts: stream power, charged to what the soil
 			// is made of for the soil and to the rock for the rock. See
 			// fluvial.go and rockErodibility.
@@ -840,5 +861,18 @@ func (g *Grid) waterStep(years float64) fluvial {
 	g.tideWork(&c, recv)
 	g.edgeWork(&c, recv, years)
 	g.stillWork(&c, recv)
+	if g.deep > 0 {
+		// A history's land is worn toward the sea it runs against and not
+		// toward the floor under it: a coast whose water went to a tile of
+		// the deep floor was cut toward that, kilometres down, and the coast
+		// went back every epoch. And what reaches the sea is kept by the
+		// mouth it reached it by, to be laid off it. See shelve.
+		s.floor = sized(s.floor, n)
+		for i := range s.floor {
+			s.floor[i] = math.Max(0, g.base)
+		}
+		c.floor = s.floor
+		c.mouth = g.toSea
+	}
 	return c
 }

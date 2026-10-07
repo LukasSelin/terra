@@ -123,7 +123,7 @@ func (g *Grid) waterTable(i int) (float64, bool) {
 	// a day, is over T/e^λ.
 	need := drainK * math.Max(drained, 1e-3) / math.Exp(g.twi(i))
 	days := daysAYear / atmos.Phases
-	mean, swing := g.meanOn(i, g.Height[i]), float64(g.swing[i])
+	mean, swing := g.meanOn(i, g.Elevation(i)), float64(g.swing[i])
 	var thawed, wet float64
 	for k := range atmos.Phases {
 		if mean+swing*atmos.SummerPeak*phaseSin[k] <= 0 {

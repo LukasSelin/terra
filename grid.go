@@ -131,6 +131,17 @@ type Grid struct {
 	uplift   []float64
 	floorAge []float64
 
+	// country is, for each dry tile of a globe, how high the country it lies
+	// in stands above the sea at the planet's scale, in metres, under the
+	// map's own ground; nil on any other map. See hypsometry.go.
+	country []float64
+
+	// planetHeight is, on a globe made by a history, how high each tile stood
+	// over the history's sea when the history ended, in a planet's metres,
+	// from the end of the history until layCountry has laid the country off
+	// it; nil on any other map, and after that. See hypsometry.go.
+	planetHeight []float64
+
 	// pedons says the soil's age and chemistry have been laid and are kept
 	// from here on, which they are from the end of the making of a map. See
 	// pedogenesis.go.
@@ -204,6 +215,9 @@ type Grid struct {
 	// exported is what the last age of weather carried off the land into the
 	// sea or off the edge of the map, grain by grain, in metres over a tile.
 	exported [Grains]float64
+	// toSea is, while a history runs, what the weather has sent to the sea
+	// from each root this epoch: see shelve.
+	toSea [][Grains]float64
 	// bankLoad is what the rivers took off the outside of their bends in the
 	// last meander and did not lay on the inside, by tile and grain, in metres
 	// over a tile: ground in the water, waiting for the next wear to carry it.
@@ -367,6 +381,7 @@ func (g *Grid) Clone() *Grid {
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
 	c.abyss, c.uplift, c.floorAge = g.abyss, g.uplift, g.floorAge       // laid once, and never written again
+	c.country, c.planetHeight = g.country, g.planetHeight               // and so are these
 	c.hot, c.welds, c.deep, c.planet = g.hot, g.welds, g.deep, g.planet // hot, like abyss, is never written once drawn
 	c.ledger, c.epochs, c.plateRoot = slices.Clone(g.ledger), g.epochs, g.plateRoot
 	c.features = g.features // built once, and never written again; Erode builds the copy its own
@@ -579,7 +594,7 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 	if f, read := g.groundFrost(i); read {
 		return frostShareOf(f.ttop) > 0
 	}
-	return g.meanOn(i, g.Height[i]) < Permafrost
+	return g.meanOn(i, g.Elevation(i)) < Permafrost
 }
 
 // FrostShare is the share of tile i's ground that is permafrost: none where
@@ -604,7 +619,7 @@ func (g *Grid) FrostShare(i int) float64 {
 	if f, read := g.groundFrost(i); read {
 		return frostShareOf(f.ttop)
 	}
-	return atmos.FrostShare(g.meanOn(i, g.Height[i]), float64(g.swing[i]))
+	return atmos.FrostShare(g.meanOn(i, g.Elevation(i)), float64(g.swing[i]))
 }
 
 // Treeless reports whether the summer here is too short or too cool for a
@@ -612,7 +627,7 @@ func (g *Grid) FrostShare(i int) float64 {
 // season, whichever is the stricter. See treeMean.
 func (g *Grid) Treeless(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < atmos.TreeLineMean(float64(g.swing[i]))
+	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Elevation(i)) < atmos.TreeLineMean(float64(g.swing[i]))
 }
 
 // Barren reports whether the ground here is under ice: snow that outlasts
@@ -637,7 +652,7 @@ func (g *Grid) Barren(p geom.Pos) bool {
 // a summer quarter colder than the one at which its year's precipitation
 // just melts (Ohmura, Kasser and Funk, 1992).
 func (g *Grid) ohmuraIce(i int) bool {
-	summer := g.meanOn(i, g.Height[i]) + atmos.SummerPeak*math.Abs(float64(g.swing[i]))
+	summer := g.meanOn(i, g.Elevation(i)) + atmos.SummerPeak*math.Abs(float64(g.swing[i]))
 	return summer < atmos.IceSummer(g.Rain(i))
 }
 
@@ -653,7 +668,7 @@ func (g *Grid) ohmuraIce(i int) bool {
 // business being there. See SeaFreeze.
 func (g *Grid) Freezing(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && g.Tiles[i].Wet() && g.meanOn(i, g.Surface(i)) < SeaFreeze
+	return ok && g.Tiles[i].Wet() && g.meanOn(i, g.Surface(i)+g.countryAt(i)) < SeaFreeze
 }
 
 // yearIndex is the index of p, and whether the map has a year written down
@@ -678,7 +693,7 @@ func (g *Grid) YearAt(i int) (mean, coldest, warmest float64) {
 	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) {
 		return 0, 0, 0
 	}
-	mean = g.meanOn(i, g.Height[i])
+	mean = g.meanOn(i, g.Elevation(i))
 	d := atmos.MonthPeak * math.Abs(float64(g.swing[i]))
 	return mean, mean - d, mean + d
 }
