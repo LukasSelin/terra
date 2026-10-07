@@ -14,7 +14,7 @@ import (
 // from 1, and the registry they were read into.
 func seaOf(g *Grid, w *Winds) ([]Feature, *Features) {
 	f := &Features{}
-	all, _ := g.readSea(f, nil, nil, w)
+	all, _ := g.readSeaFeatures(f, nil, nil, w)
 	for k := range all {
 		all[k].ID = FeatureID(k + 1)
 	}

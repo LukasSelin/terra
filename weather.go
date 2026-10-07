@@ -262,7 +262,7 @@ func (g *Grid) rainOn() {
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
-				t := a.Mean[y] - Lapse*g.laidHeight(i)
+				t := a.Mean[y] - Lapse*g.lapseHeight(i)
 				pe := atmos.PetAt(a.PET[y], t)
 				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
 				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
@@ -299,7 +299,7 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.lapseHeight(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}

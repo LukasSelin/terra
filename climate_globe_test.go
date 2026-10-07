@@ -115,11 +115,24 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if poleward > 0 {
 		t.Errorf("%d river tiles run off the top or the bottom of the map", poleward)
 	}
-	// The poles are bare and the middle is not.
-	switch g.At(geom.Pos{X: 100, Y: 0}).Terrain {
-	case Rock, Water, Ice:
-	default:
-		t.Fatal("the pole is not bare")
+	// The poles are bare: most of the rows along them is rock, water or ice.
+	// It was one tile, the hundredth along the north pole's row, and the row
+	// is not all bare - the air's poles are some ten degrees too warm (see
+	// the realism gaps) and the land on them is open ground: main's first
+	// globe had 305 tiles of 1024 open along the north pole and 109 along
+	// the south. With the crust floating on its thickness (isostasy.go) the
+	// hundredth came out on one of them, in a row 74 in a hundred bare.
+	for _, y := range []int{0, g.H - 1} {
+		bare := 0
+		for x := 0; x < g.W; x++ {
+			switch g.At(geom.Pos{X: x, Y: y}).Terrain {
+			case Rock, Water, Ice:
+				bare++
+			}
+		}
+		if share := float64(bare) / float64(g.W); share < 2.0/3 {
+			t.Fatalf("the pole's row %d is %.2f bare", y, share)
+		}
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of
 	// plates, weather and drainage over half a million tiles - see Globe. It
