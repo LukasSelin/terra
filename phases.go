@@ -21,7 +21,8 @@ var phaseNames = []string{
 	"keepBook", "isostasy", "settleRock", "basins", "drain", "weather", "windsFor",
 	"rainOn", "orographic", "airEnv.vapour", "airEnv.currents", "airEnv.gyres", "pool",
 	"flow", "wear", "waterStep", "fluvial.solve", "creep", "landslide",
-	"shape", "cutValleys", "silt", "tides", "readFeatures",
+	"shape", "cutValleys", "silt", "tides", "readFeatures", "readSeaFeatures",
+	"readRelations",
 	"stage.ground", "stage.sea", "stage.shape", "stage.cut", "stage.coast",
 	"stage.cover",
 }
