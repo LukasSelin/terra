@@ -115,18 +115,35 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if poleward > 0 {
 		t.Errorf("%d river tiles run off the top or the bottom of the map", poleward)
 	}
-	// The poles grow no wood and no crop, all the way round. This read one
-	// tile, the hundredth of the top row, and asked it to be rock, water or
-	// ice; it was ice, while the tiles three and nine hundred along it were
-	// open ground, a tundra under the balance's pole of some minus thirteen
-	// and a summer quarter a degree or two over freezing. When the air came to
-	// swing the energy balance's year (see atmos.Env.seasonTemp) the ground
-	// there came out a hundred metres higher, and open too.
+	// The poles grow no wood and no crop, all the way round, and most of the
+	// rows along them is bare: rock, water or ice.
+	//
+	// The first: this read one tile, the hundredth of the top row, and asked
+	// it to be rock, water or ice; it was ice, while the tiles three and nine
+	// hundred along it were open ground, a tundra under the balance's pole of
+	// some minus thirteen and a summer quarter a degree or two over freezing.
+	// When the air came to swing the energy balance's year (see
+	// atmos.Env.seasonTemp) the ground there came out a hundred metres higher,
+	// and open too.
+	//
+	// The second: the row is not all bare - the air's poles are some ten
+	// degrees too warm (see the realism gaps) and the land on them is open
+	// ground: main's first globe had 305 tiles of 1024 open along the north
+	// pole and 109 along the south. With the crust floating on its thickness
+	// (isostasy.go) the hundredth came out on one of them, in a row 74 in a
+	// hundred bare.
 	for _, y := range []int{0, g.H - 1} {
+		bare := 0
 		for x := 0; x < g.W; x++ {
-			if tr := g.At(geom.Pos{X: x, Y: y}).Terrain; tr == Forest || tr == Field {
+			switch tr := g.At(geom.Pos{X: x, Y: y}).Terrain; tr {
+			case Rock, Water, Ice:
+				bare++
+			case Forest, Field:
 				t.Fatalf("the pole at %d grows %v", x, tr)
 			}
+		}
+		if share := float64(bare) / float64(g.W); share < 2.0/3 {
+			t.Fatalf("the pole's row %d is %.2f bare", y, share)
 		}
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of
