@@ -35,9 +35,16 @@ import (
 //     sea runs all the way round the planet, round the planet. See flow.go.
 //     On top of it the surface water drifts a few hundredths of the speed of
 //     the wind over it.
+//   - The thermocline. The gyres run in a layer of warm water over a cold,
+//     still deep, and the layer is thickened where they drive the water
+//     toward the equator and thinned where they drive it toward the pole,
+//     and the trades hold it up in the east of the tropics and down in the
+//     west. See thermocline.go.
 //   - Upwelling. The water the wind drives goes to the right of it in the
 //     north and the left in the south (Ekman, 1905), and where that takes it
-//     off a shore, cold water comes up from under to take its place.
+//     off a shore, or where the drifts part in the open ocean, on the
+//     equator and under the subpolar lows, cold water comes up from under to
+//     take its place: as cold as the thermocline is shallow there.
 //   - The warmth all of that carries: the water keeps the warmth of where it
 //     came from, and gives it up to the air over some months.
 //
@@ -57,13 +64,6 @@ const (
 	// stressDrag is the drag of the sea surface on the wind over it: the
 	// ordinary bulk figure for a moderate wind (Large and Pond).
 	stressDrag = 1.3e-3
-	// gyreDepth is how deep, in metres, the water driven round a gyre goes: its
-	// transport over this is how fast the surface of it goes. Thirty million
-	// cubic metres a second in a current a hundred and fifty kilometres wide
-	// comes to some seventy centimetres a second, which is what the Gulf
-	// Stream's surface runs at off the Carolinas. The thermocline's depth will
-	// take its place (docs/ocean-model-plan.md, M2).
-	gyreDepth = 300.0
 	// ekmanDepth is how deep, in metres, the water the wind drives straight
 	// off is: the Ekman layer, some fifty metres. What it carries goes a
 	// quarter turn to the right of the wind in the north, and to the left in
@@ -90,12 +90,6 @@ const (
 	// is still in the water when it reaches Norway.
 	seaExchange = 30.0
 	seaHeat     = 4.1e6
-	// upwellContrast is how much colder, in degrees, the water under the mixed
-	// layer is than the surface at the equator's side of the subtropics; it
-	// falls away toward the poles, where the ocean is mixed from top to bottom
-	// in winter. The water off Peru and Namibia comes up seven or eight
-	// degrees colder than the open ocean at its latitude.
-	upwellContrast = 10.0
 	// seaWarmMost is the most degrees the sea stands warmer or colder than its
 	// latitude: the Gulf Stream at the Grand Banks, some eight or ten over the
 	// water beside it, is about the most the real world has.
@@ -163,8 +157,10 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		return ty[i] / (SeaDensity * f), -tx[i] / (SeaDensity * f)
 	}
 
-	// The gyres: the transport the wind drives round each ocean, ψ, and the
-	// current it makes over the depth the gyres go to. See flow.go. The
+	// The gyres: the transport the wind drives round each ocean, ψ, the
+	// thermocline that it and the wind tilt, and the current ψ makes spread
+	// over the warm water above the thermocline, which is what moves, though
+	// never over less than flowLeast. See flow.go and thermocline.go. The
 	// current toward the pole or the equator is ψ's rise toward the east
 	// across a reach of the row never narrower than a cell is at polarReach
 	// degrees: toward a pole the cells narrow to a few hundred metres, and
@@ -173,6 +169,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// air on a grid of parallels filter their rows near the poles for the
 	// same reason (Arakawa and Lamb, 1977).
 	psi := e.gyres(tx, ty)
+	thermo := e.thermocline(psi, tx)
 	widest := 0.0
 	for _, dx := range e.Dx {
 		widest = math.Max(widest, dx)
@@ -190,8 +187,9 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		reach = min(reach, e.W/4)
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			cu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / gyreDepth
-			cv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / gyreDepth
+			layer := math.Max(flowLeast, thermo[i])
+			cu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / layer
+			cv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / layer
 		}
 	}
 	e.Psi = make([]float32, n)
@@ -210,8 +208,10 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	}
 
 	// Upwelling: how fast, in metres a second, the water the wind drives off a
-	// shore is replaced from under, and how much colder what comes up is.
-	rise := make([]float64, n)
+	// shore, or the water its drift parts over in the open ocean, is replaced
+	// from under, and how cold what comes up is: the colder the shallower
+	// the thermocline under it.
+	rise := e.pumping(u, v)
 	deep := make([]float64, n)
 	land := make([]float64, n)
 	for i := range land {
@@ -219,10 +219,9 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	}
 	for cy := 0; cy < e.H; cy++ {
 		lat := e.lat[cy]
-		c := math.Cos(lat * math.Pi / 180)
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			deep[i] = e.Mean[cy] - upwellContrast*c*c
+			deep[i] = e.upwelled(cy, thermo[i])
 			if !wet(i) || math.Abs(lat) < upwellCalm {
 				continue
 			}
@@ -241,7 +240,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			// shore goes to nothing, and what sends it there instead is the
 			// open ocean's business rather than a coast's.
 			if off > 0 {
-				rise[i] = off / math.Min(e.Dx[cy], e.Dy) * smoothstep(upwellCalm, upwellLow, math.Abs(lat))
+				rise[i] += off / math.Min(e.Dx[cy], e.Dy) * smoothstep(upwellCalm, upwellLow, math.Abs(lat))
 			}
 		}
 	}
@@ -267,7 +266,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// column, or across the diagonal where that is land. Land takes nothing.
 	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
 	sea.gaussSeidel(temp)
-	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
+	e.Cu, e.Cv, e.Rise, e.Thermocline = narrow(cu), narrow(cv), narrow(rise), narrow(thermo)
 
 	// Water colder than seaIce is under ice, and the air over ice is not
 	// warmed by the water under it: there the sea is worth no more than its
@@ -626,4 +625,13 @@ func (w *Winds) WaterTempAt(i int) float64 {
 	}
 	fx, fy := w.CellAt(i)
 	return w.Sample32(w.WaterTemp, fx, fy)
+}
+
+// ThermoclineAt is terra.Grid.Thermocline for a tile of the map.
+func (w *Winds) ThermoclineAt(i int) float64 {
+	if w.Thermocline == nil {
+		return 0
+	}
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.Thermocline, fx, fy)
 }
