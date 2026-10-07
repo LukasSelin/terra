@@ -129,8 +129,9 @@ var shapeYardsticks = []realYardstick{
 		// (seawater.go) it read 1.85, inside the band by a hair, and the marker
 		// came off. With the basins subsiding and filling with what arrives
 		// (subside.go, #45) it fell out again: 1.13 to 1.67 over five builds of
-		// that change that differ in nothing a shelf is laid by.
-		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: 1.13 to 1.85 over builds that do not touch the shelves",
+		// that change, three of which lay their shelves alike and differ only in
+		// whether the rifts and the margins carry their heat and the plates break.
+		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: 1.13 to 1.85 over builds that lay their shelves alike",
 	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
