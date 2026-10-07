@@ -251,9 +251,15 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	temp[3], sst[3] = temp[1], sst[1]
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
-	for k := range Phases - 1 {
-		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k], s.phaseWork(k))
+	// A map too small for orographic to spread its patches over the
+	// goroutines has its phases spread instead: each is a field of its own.
+	oroWorkers := 1
+	if m.W*m.H < spreadTiles {
+		oroWorkers = workersFor(Phases - 1)
 	}
+	inParallel(Phases-1, oroWorkers, func(k, _ int) {
+		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k], s.phaseWork(k))
+	})
 	lift[3] = lift[1]
 	liftCell := func(k int) []float64 {
 		c := s.phaseWork(k).floats(slotLiftCells, n)
