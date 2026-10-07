@@ -25,11 +25,11 @@ runs alone before the others start; three run at once, on disjoint files.
 - **Write your own digest at the start** (`TERRA_DIGEST=write`) on your
   base commit before touching anything, and check against it
   (`TERRA_DIGEST=check`) after every item. A session whose change is meant
-  to move the world (A) rewrites it and says so in the work log.
+  to move the world (A) rewrites it and says so in its commit and PR.
 - **Do not touch files another brief owns.** If an item needs one, write
-  what it needs in the work log and skip the item.
+  what it needs in the PR description and skip the item.
 - **Stop rule:** two failed attempts at one item, then write what was tried
-  and what was measured under a heading in `docs/perf/worklog.md` and move
+  and what was measured under a heading in the PR description and move
   to the next item. Never tune a constant against a single yardstick
   reading; several of the river yardsticks rest on a handful of samples.
 - **Commit after every item** on your own branch, with a message that says
@@ -37,6 +37,6 @@ runs alone before the others start; three run at once, on disjoint files.
   quiet machine after `scripts/perf.sh check` on each branch.
 - **Never `git stash` bare.** The stash is shared with other worktrees.
   Prefer a WIP commit.
-- **The work-log entry** goes at the top of `docs/perf/worklog.md`: what was
-  measured, on what, what changed, what it bought, in the style of the
-  entries there.
+- **The PR description** says what was measured, on what, what changed and
+  what it bought. (The briefs below predate the work log's retirement on
+  2026-10-07; read their "work-log entry" as the PR description.)

@@ -22,8 +22,9 @@ and says so in its commit.
 
 ## Before merging
 
-1. A work-log entry at the top of `docs/perf/worklog.md`: what was
-   measured, on what, what changed, what it bought.
+1. The PR description says what was measured, on what, what changed and
+   what it bought. There is no work-log file to append to: an entry every
+   branch writes at the top of one file conflicted with every other branch.
 2. The budget diff: `TERRA_PERF_UPDATE=1 go test -run TestWorldCreationBudget .`
    when the heap is meant to move, committed with the change.
 3. The digest written or checked (above).
@@ -62,8 +63,9 @@ its SHA from `git stash list --format='%H %gs'`, and restore with
 `docs/perf/README.md` is how a world is measured and held: the benchmarks,
 the heap budget, `scripts/perf.sh check` and `scaling`, the digest, and the
 profiles. `docs/perf/scaling-plan.md` is where world creation goes from
-here and why. `docs/perf/worklog.md` is what was measured and what it
-bought, newest first.
+here and why. What each change measured and bought is in its PR and its
+commit message; the work log kept until 2026-10-07 is in git history
+(`git show 434c511:docs/perf/worklog.md`).
 
 `Generate` runs in stages (`stages.go`); the first is the history. Work on
 the later stages from a kept history (`cmd/overview -keep-history` once,
