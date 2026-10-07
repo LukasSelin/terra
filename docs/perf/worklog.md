@@ -6,6 +6,164 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The thermocline
+
+**What this is.** On `claude/ocean-thermocline`, from `claude/ocean-flow-2d`
+(PR #73, M1): M2 of `docs/ocean-model-plan.md` (#21). The gyres now run in a
+reduced-gravity layer of warm water over a still deep (Zebiak and Cane's
+1½-layer ocean, at its steady state), `internal/atmos/thermocline.go`. Its
+thickness h comes from `g'h∇h = f k×(hu) + τ/ρ` integrated west along each
+row of sea: `Φ = g'h²/2` rises by `f ∂ψ/∂x + τx/ρ`, which is Sverdrup's
+balance away from the equator and the equatorial balance on it, from
+thermoEast = 50 m at each eastern shore. Near the equator (weight
+exp(-y²/2L²), L = √(c/β) = 355 km) each stretch is held to thermoMean =
+150 m on its mean, as a parallel all the way round is; τx is averaged across
+the parallels over each row's radius of deformation. g' = 2.9²/150. Upwelling
+gains open-ocean Ekman pumping, the divergence of a drift damped in two days,
+counted phase by phase where it draws water up; the water that comes up is
+`Mean − 16·cos²φ / (1 + exp((h − 80)/25))`, replacing `upwellContrast`. The
+gyres' surface current is ψ over max(h, 200 m), replacing `gyreDepth`.
+`Env.Thermocline` keeps h; `Grid.Thermocline` reads it.
+
+**The world.** Moved, on purpose. `docs/perf/digest.json`: globe128
+2685c213bb74b5d7 -> afc1d682f44c7d42; the valley and the ancient valley
+unchanged. Yardsticks against the base's (ocean-flow-2d 0b54aef, histories
+made afresh on each):
+
+| yardstick | base | this |
+| --- | --- | --- |
+| channel concavity, small globe | 0.2563 fails | 0.182 fails |
+| midlatitude over subtropical rain, globe | 0.9296 fails | 0.9826 fails |
+| mean land rain 2x over 1x, small globe | 1.299 fails | 1.282 fails |
+| Aridisols | 0.0577 fails | 0.0658 fails |
+| Gelisols | 0.1186 fails | passes |
+| ridge-valley wavelength, small globe | 320 m fails | passes |
+| Flint's law fit R², small globe | passes | 0.844 fails (0.85-1) |
+| channel concavity, 2x less 1x, small globe | passes | 0.162 fails (±0.1) |
+| drainage area exceedance, small globe | passes | 0.483 fails (0.39-0.46) |
+| Mollisols | passes | 0.0909 fails (0.05-0.09) |
+
+The four new failures are small-globe river readings that move with any
+change to a coast's rain, and a soil share a thousandth over its ceiling;
+two old ones pass. Under the wind of the year's mean the equator's
+temperature and rain are where they were (the equator's warm water is held to
+its mean; pinned at fifty metres along the equator the whole band came up
+three degrees colder and the equator's air read 23.1 C, under its 24).
+
+**The sea.** Seed 1's globe, PR #64's ocean yardsticks run from a copy: the
+eastern shores stand -3.95 N and -3.10 S on their zonal means (base -3.45,
+-2.71: the southern gap is closed); the western current runs 1.43 m/s at
+27.1N and 0.88 at 25.7S (base 1.08, 0.74); six gyres close at 0.797 together
+(base 0.831; the reading turns speeds into transports over a fixed 300 m,
+which the layer no longer is); the gyres carry +0.90 and -0.77 PW at 35N and
+35S (base +0.70, -0.51); sea ice 4.86% (5.04). On the equator, within 2
+degrees, the thermocline lies 148 m down in the west quarter of the broadest
+ocean and 143 in the east, the water comes up 0.55 m a day, and the
+west-east contrast within 5 degrees reads -0.19 degrees (base -0.05; real
+4-6): the year's mean wind on the equator is -0.0 to -0.2 m/s, the doldrums,
+where the Pacific's is -4 to -6, so there is next to nothing to tilt it. The
+subtropical gyres' thermocline averages 162 m at 20-35N and 136 at 20-35S,
+the subpolar gyres' 13 m (outcropping).
+
+**What it cost.** `TERRA_PHASES=1 cmd/overview -preset globe`, interleaved,
+machine loaded by other sessions:
+
+| | weather s | airEnv.currents s | airEnv.gyres s | currents / weather |
+| --- | --- | --- | --- | --- |
+| base | 15.26, 14.35, 15.35, 14.73, 15.16 | 2.67, 2.52, 2.69, 2.43, 2.68 | 1.57, 1.50, 1.62, 1.44, 1.64 | 0.175, 0.176, 0.175, 0.165, 0.177 |
+| this | 14.58, 15.79, 14.79, 13.88, 14.42 | 2.65, 2.85, 2.80, 2.40, 2.46 | 1.31, 1.42, 1.39, 1.20, 1.26 | 0.182, 0.180, 0.189, 0.173, 0.171 |
+
+The first three of each are an earlier cut (the equator pinned at 50 m),
+the same work. The thermocline, the guided stress and four phases of
+pumping are a few milliseconds a call; the ocean stays under a fifth of the
+weather. Budget: globe128 459.2 -> 467.9 MB (+1.9%), 32106 -> 32265
+allocations, from the thermocline, the pumping's drift and `Env.Thermocline`.
+A quiet-machine `scripts/perf.sh check` is still owed.
+
+---
+
+## 2026-10-07 - The gyres in two dimensions
+
+**What this is.** On `claude/ocean-flow-2d`, from `claude/ocean-fields`
+(PR #14) and then `main` at 2c51bea: M1 of `docs/ocean-model-plan.md`
+(#19). `(*Env).currents` solved the gyres one parallel at a time (Sverdrup
+along a row, a western wall, `gyreRows` smoothing, `cornerReach`, a zonal
+closure sweep, and nothing within `gyreCalm` of the equator or across an
+ocean `gyreOpen` of the way round). Now `internal/atmos/flow.go` solves the
+barotropic vorticity equation for the transport streamfunction ψ over the
+whole sea at once, on the air's cells and the sphere's metric: Stommel's
+bottom drag (r = 5e-7 /s), Munk's stirring along the rows with A set per row
+so the layer is one cell wide, ψ = 0 on the largest landmass and Godfrey's
+island rule for every other, posed as one more equation per island in the
+same solve. GMRES, preconditioned by one multigrid V-cycle that coarsens the
+rows two into one (Galerkin, islands carried down whole) and smooths by
+solving each row exactly along itself, even rows then odd. `Env.Psi` keeps
+ψ in Sv. The water's warmth sweeps (`seaLinks.gaussSeidel`) now solve each
+row exactly along itself, rings round a parallel included, and sweep only
+the rows still moving. The meridional current is read across a reach no
+narrower than a cell at 60 degrees, and water under ice (colder than -1.8)
+gives the air none of its warmth. A rounding-negative flow in
+`waterStep` and `edgeWork` is taken as nought, where its root was NaN
+and spread through a 64x32 history's heights.
+
+**The world.** Moved, on purpose. `docs/perf/digest.json`: globe128
+f92adf079b762dca -> 2685c213bb74b5d7; the valley and the ancient valley
+unchanged (a valley has no currents). Yardsticks against the base's failure
+list (`TERRA_HISTORIES=off` on ocean-fields 55d497d, whose code is main's):
+
+| yardstick | base | this |
+| --- | --- | --- |
+| channel concavity, small globe | 0.2455 fails | 0.2563 fails |
+| midlatitude over subtropical rain, globe | 0.9042 fails | 0.9296 fails |
+| mean land rain 2x over 1x, small globe | 1.246 fails | 1.299 fails |
+| Aridisols | 0.0592 fails | 0.0577 fails |
+| Gelisols | 0.1295 fails | 0.1186 fails |
+| hypsometric integral, small globe | 0.3055 fails | passes |
+| drainage area exceedance, small globe | 0.4863 fails | passes |
+| discharge exceedance, small globe | 0.4622 fails | passes |
+| ridge-valley wavelength, small globe | passes | 320 m fails (24-224) |
+
+The one new failure is a small globe's valley spacing, which moves with the
+rain the currents give it; intermediate versions of this change passed it
+and failed the small globe's Hack exponent instead. The small globes'
+river readings rest on few samples and move with any change to their rain.
+
+**The sea.** On seed 1's globe, PR #64's ocean yardsticks (run from a copy
+of `realism_ocean_test.go`, not committed here): six gyres close at 0.831
+together (base 0.885); the western current runs 1.08 m/s at 27.8N and 0.74
+at 27.1S (base 1.84 and 0.86); the eastern shores stand -3.45 and -2.71
+degrees on their zonal means (base -3.32, -2.83); the three largest islands'
+passages carry +7.1/+23.0, +22.5/+16.2 and +1.3/+9.2 Sv north, west/east
+(base +6.1/+23.3, +17.8/+12.1, +6.4/+10.4). One southern gyre of 4 Sv
+closes at 0.22, under the yardstick's 0.5: the yardstick reads the return
+flow along each row against a two-cell western boundary, and the flow now
+goes round islands. Seed 1 has no ring of sea; `ringWorld` in
+`ocean_test.go`, open from 64 to 44 degrees south, carries 162 Sv round the
+planet. On `twoOceans`, ψ's greatest at 30N is 34.5 Sv against the 31.9 Sv
+Sverdrup's balance integrates from the eastern shore.
+
+**Timing.** `TERRA_PHASES=1 cmd/overview -preset globe`, base and branch
+turn and turn about, three each, on a machine loaded by other sessions:
+
+| | weather s | airEnv.currents s | of which airEnv.gyres | currents / weather |
+| --- | --- | --- | --- | --- |
+| base | 13.48, 12.83, 13.32 | 1.85, 1.79, 1.83 | - | 0.137, 0.140, 0.137 |
+| branch | 14.30, 15.30, 13.77 | 2.60, 2.56, 2.40 | 1.54, 1.55, 1.44 | 0.182, 0.167, 0.174 |
+
+The branch makes 21 weather calls to the base's 20 (the world is another
+world). The flow is some 70 ms a call on the 512x256 air grid, 10 to 15
+directions of GMRES; the warmth's sweeps, which hit their forty-round cap
+on every made globe before and still do near the poles, cost some 40 ms
+less. The ocean is within the fifth of the weather the owner set; that is
+to be taken again quiet.
+
+**The heap.** globe128 413.0 -> 459.2 MB (+11.2%), 29301 -> 32106
+allocations: the multigrid's levels (equations, factored rows, scratch) and
+GMRES's fifteen directions, each time the winds are made. The budget's
+globe128 entry is rewritten; the valleys' are left as they were.
+
+---
+
 ## 2026-10-07 - Land L1: soil moisture and the seasons of water (#49)
 
 **What this is.** On `claude/land-soil-water`, stacked on

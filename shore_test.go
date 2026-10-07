@@ -189,7 +189,7 @@ func estuary() *Grid {
 // globe cut into steep country is not everywhere, and they are no great part of
 // it. A valley has no sea and no tide.
 //
-// A small globe with flats on it: the first. The fourth had sixteen while its
+// A small globe with flats on it: the first that has them. The fourth had sixteen while its
 // whole ocean floor lay within twenty metres of the sea and every tile of it
 // was surf the littoral drift carried sand across; with the deep floor laid at
 // its age's depth - see abyss.go - that sand stays on the shelves, and the
@@ -201,17 +201,18 @@ func estuary() *Grid {
 // plates are grown (see fractureWall) they hold 2, 0, 1, 0, 1, 3, 1 and 0: the
 // second's coast has seventy-two tiles within a spring's reach of the sea where
 // it had a hundred and six, and the gentlest of them is six times steeper than
-// the sea grades it. The first held its two through that change, and lost
-// them when the air came to swing the energy balance's year (see
-// atmos.Env.seasonTemp): small globes 1-8 hold 0, 1, 3, 0, 0, 1, 2 and 0, and
-// the third was the one read. With the belts placed by the circulation (see
-// atmos.Env.beltsAt) they hold 0, 2, 0, 1, 0, 1, 0 and 2, and the second is
-// the one read.
+// the sea grades it. The first held its two through that change. With the
+// gyres solved over the whole ocean at once rather than a row at a time (see
+// internal/atmos/flow.go), which moves every globe's rain and so its ground,
+// they hold 3, 0, 0, 0, 0, 2, 4 and 2. With the thermocline under the
+// gyres (internal/atmos/thermocline.go), which moves the cold of the water
+// that comes up and so the rain of every coast, they hold 0, 0, 1, 0, 2, 3, 0
+// and 1, and the first with flats is the third.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 3", yardWorld("small", 3, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})

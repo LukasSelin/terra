@@ -62,7 +62,10 @@ func TestTheWarmCurrentRunsUpTheWestSideOfAnOcean(t *testing.T) {
 
 // A parallel of open sea all the way round has no shore for a gyre to turn
 // at, and no western current to warm it or upwelling to chill it: only the
-// wind's own slow drift across the parallels.
+// wind's own slow drift across the parallels. The drifts part on the equator
+// there too, but with no eastern shore to tilt it against, the thermocline
+// lies a hundred and fifty metres down all the way round, and what comes up
+// from above it is hardly colder than the surface.
 func TestAnOpenOceanHasNoGyre(t *testing.T) {
 	g := oceanGlobe(256, 128)
 	g.weather()
@@ -134,14 +137,14 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 	if g.winds.Warm != nil || g.winds.Coast != nil {
 		t.Fatal("a valley has currents")
 	}
-	if e := g.winds.Env; e.Cu != nil || e.Cv != nil || e.Rise != nil || e.WaterTemp != nil {
-		t.Fatal("a valley keeps a current, an upwelling or a sea's temperature")
+	if e := g.winds.Env; e.Cu != nil || e.Cv != nil || e.Rise != nil || e.WaterTemp != nil || e.Psi != nil || e.Thermocline != nil {
+		t.Fatal("a valley keeps a current, an upwelling, a thermocline or a sea's temperature")
 	}
 	for i := range g.Tiles {
 		if g.SeaWarmth(i) != 0 || g.CoastWarmth(i) != 0 {
 			t.Fatalf("tile %d of a valley is warmed by the sea", i)
 		}
-		if u, v := g.SeaCurrent(i); u != 0 || v != 0 || g.Upwelling(i) != 0 || g.SeaTemp(i) != 0 {
+		if u, v := g.SeaCurrent(i); u != 0 || v != 0 || g.Upwelling(i) != 0 || g.SeaTemp(i) != 0 || g.Thermocline(i) != 0 {
 			t.Fatalf("tile %d of a valley has a current under it", i)
 		}
 	}
@@ -149,12 +152,16 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 
 // The current, the upwelling and the water's temperature are kept beside the
 // warmth they make, and keeping them changes it not at all: the hash is of
-// Warm and Coast on twoOceans as main made them before they were kept
-// (53eb8bf), taken again when the air came to swing the energy balance's year
-// (see atmos.Env.seasonTemp) and when its belts came to be placed by the
-// circulation (see atmos.Env.beltsAt), each of which moves the wind the
-// currents are driven by. And the warmth is the kept temperature over its latitude's
-// mean, held to seaWarmMost.
+// Warm and Coast on twoOceans. It was taken on 53eb8bf, before they were
+// kept, and taken again each time the world was moved on purpose: when the
+// air came to swing the energy balance's year (see atmos.Env.seasonTemp),
+// when its belts came to be placed by the circulation (see
+// atmos.Env.beltsAt), both of which move the wind the currents are driven
+// by; when the gyres were solved in two dimensions (docs/ocean-model-plan.md,
+// M1); when the water that comes up was given the thermocline's depth (M2);
+// and on the integration branch, where all four meet. And the warmth is the
+// kept temperature over its latitude's mean, held to seaWarmMost, and to
+// nothing over it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -167,7 +174,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0x37e26f8c491bf23b); got != want {
+	if got, want := h.Sum64(), uint64(0xd41043659ff2b76d); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost
@@ -176,6 +183,10 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			continue
 		}
 		over := float64(e.WaterTemp[i]) - e.Mean[i/e.W]
+		if float64(e.WaterTemp[i]) < SeaFreeze {
+			// Under ice: the air over it takes none of the water's warmth.
+			over = math.Min(0, over)
+		}
 		if math.Abs(over) >= most {
 			over = math.Copysign(most, over)
 		}
@@ -189,28 +200,36 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 // The water a gyre drives toward the equator across an ocean comes back
 // toward the pole in the narrow current against its western shore: north in
 // the north, south in the south. The interior drifts the other way, slower.
-//
-// It is read from twenty-five degrees to forty. It was read from twenty, but
-// the interior turns poleward south of twenty-five, under the trades' side
-// of the gyre, and from twenty to forty the two halves came to some three
-// ten-thousandths of a metre a second either way: when the belts came to
-// follow the balance's ITCZ, whose year's mean lies some two fifths of a
-// degree south for the sun's being nearer in the south's summer, the south's
-// went from +0.0004 to -0.0005, and the sign the test read was the noise's.
+// The interior is the gyre's own flow, read off its streamfunction: the
+// surface water there also drifts with the wind, and under the trades that
+// runs toward the pole faster than the gyre's interior runs toward the
+// equator, so that the two together come to about nothing between twenty
+// degrees and forty.
 func TestTheWesternBoundaryCurrentRunsPoleward(t *testing.T) {
 	g := twoOceans()
 	g.weather()
+	e := g.winds.Env
+	if e.Cell != 1 {
+		t.Fatalf("twoOceans has %d tiles to a cell", e.Cell)
+	}
 	north := func(i int) float64 { _, v := g.SeaCurrent(i); return v }
+	// The gyre's flow toward the north, ψ's rise toward the east over the
+	// warm water above the thermocline, never less than two hundred metres
+	// (atmos.flowLeast).
+	gyre := func(i int) float64 {
+		depth := math.Max(200, float64(e.Thermocline[i]))
+		return float64(e.Psi[i+1]-e.Psi[i-1]) * atmos.Sverdrup / (2 * e.Dx[i/e.W]) / depth
+	}
 	for _, hemi := range []float64{1, -1} {
-		lo, hi := min(25*hemi, 40*hemi), max(25*hemi, 40*hemi)
+		lo, hi := min(20*hemi, 40*hemi), max(20*hemi, 40*hemi)
 		west := band(g, lo, hi, 40, 44, north)
-		inside := band(g, lo, hi, 70, 110, north)
-		t.Logf("at 25 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.4f", hemi, west, inside)
+		inside := band(g, lo, hi, 70, 110, gyre)
+		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.4f", hemi, west, inside)
 		if west*hemi < 0.05 {
-			t.Errorf("at 25 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
+			t.Errorf("at 20 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
 		}
 		if inside*hemi > 0 || math.Abs(inside) > math.Abs(west) {
-			t.Errorf("at 25 to 40 degrees %+v the interior runs %+.4f m/s north against the western current's %+.3f", hemi, inside, west)
+			t.Errorf("at 20 to 40 degrees %+v the interior runs %+.4f m/s north against the western current's %+.3f", hemi, inside, west)
 		}
 	}
 	// And the cold coast is where the water comes up.
@@ -235,7 +254,8 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 		for i, w := range e.Warm {
 			s += w*float64(i%89) + e.Coast[i]
 			s += float64(e.Cu[i])*float64(i%83) + float64(e.Cv[i])*float64(i%79) +
-				float64(e.Rise[i])*1e6 + float64(e.WaterTemp[i])*float64(i%73)
+				float64(e.Rise[i])*1e6 + float64(e.WaterTemp[i])*float64(i%73) +
+				float64(e.Psi[i])*float64(i%71) + float64(e.Thermocline[i])*float64(i%67)
 		}
 		for i, r := range g.rain {
 			s += r * float64(i%97)
@@ -283,4 +303,140 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	if cold <= still || cold <= warm {
 		t.Errorf("a storm over the cold current aged %.0f days, over the same water with no currents %.0f, over the warm western water %.0f", cold, still, warm)
 	}
+}
+
+// Every landmass is a shore the water cannot cross, so the gyres' stream-
+// function is one level all round it: nought on the largest, and on every
+// other the level the island rule gives it.
+func TestALandmassHasOneLevel(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	e := g.winds.Env
+	// The two continents are the same size, and the first found, the one
+	// over the seam, is the mainland.
+	var first, second []float32
+	for i, p := range e.Psi {
+		if e.Sea[i] > 0.5 {
+			continue
+		}
+		if x := i % e.W; x < 40 {
+			first = append(first, p)
+		} else {
+			second = append(second, p)
+		}
+	}
+	for _, p := range first {
+		if p != 0 {
+			t.Fatalf("the mainland stands at %v Sv", p)
+		}
+	}
+	for _, p := range second {
+		if p != second[0] {
+			t.Fatalf("the other continent stands at %v and %v Sv", second[0], p)
+		}
+	}
+	t.Logf("the other continent stands at %+.1f Sv: what goes round the poles between them", second[0])
+}
+
+// ringWorld is an ocean globe with a southern continent from the pole to
+// sixty-four degrees south, and a continent sixty columns wide from
+// forty-four degrees south to seventy north: an ocean all the way round the
+// planet between them, under the westerlies, as the Southern Ocean is.
+func ringWorld() *Grid {
+	g := oceanGlobe(256, 128)
+	c := Climate{rows: g.H, globe: true}
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		if lat := c.latitude(y); lat < -64 || (lat > -44 && lat < 70 && x < 60) {
+			g.Height[i] = 60
+		}
+	}
+	return g
+}
+
+// An ocean all the way round the planet has no shore for its water to turn
+// back at, and the westerlies drive it round the planet to the east, against
+// the friction all the way round: the Antarctic Circumpolar Current, a
+// hundred and thirty to a hundred and seventy million cubic metres a second
+// through Drake Passage (Donohue and others, 2016). The southern continent's
+// level over the northern one's is how much goes round.
+func TestASeaAllTheWayRoundCarriesItsCurrentRoundThePlanet(t *testing.T) {
+	g := ringWorld()
+	g.weather()
+	e := g.winds.Env
+	south := float64(e.Psi[(e.H-1)*e.W])
+	var east, n float64
+	for y := 0; y < e.H; y++ {
+		if lat := g.air.Lat[y]; lat > -60 && lat < -48 {
+			for x := 0; x < e.W; x++ {
+				u, _ := g.SeaCurrent(y*g.W + x)
+				east, n = east+u, n+1
+			}
+		}
+	}
+	east /= n
+	t.Logf("%.0f Sv go round the planet; the ring of sea runs %+.2f m/s east", south, east)
+	if south < 50 || south > 500 {
+		t.Errorf("%.0f Sv go round the planet", south)
+	}
+	if east < 0.05 {
+		t.Errorf("the ring of sea runs %+.2f m/s east", east)
+	}
+}
+
+// The warm water the gyres run in lies over a cold deep, and the wind tilts
+// the step between them, the thermocline: the subtropical gyres pile the warm
+// water up some hundreds of metres deep in the west of their oceans and the
+// subpolar gyres draw it away until the thermocline comes up to the surface
+// in theirs, and against an ocean's eastern shore it lies some fifty metres
+// down. Along the equator the trades either side of it hold it up in the
+// east, and the water is drawn up where their drifts part. On Earth the
+// thermocline lies fifty metres down off Peru and two hundred under the warm
+// pool, and the water drawn up in the east is the cold tongue (Wyrtki,
+// 1981). The year's mean wind here has the doldrums on the equator, with no
+// easterlies on it, and the trades either side tilt it only a little: the
+// tilt is asserted, and the cold tongue, which the trades on the equator make
+// and the Walker circulation over it keeps (Bjerknes, 1969), is a reading
+// until the sea and the air are solved together (#28).
+func TestTheThermoclineTiltsUnderTheTrades(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	e := g.winds.Env
+	if e.Cell != 1 {
+		t.Fatalf("twoOceans has %d tiles to a cell", e.Cell)
+	}
+	h := func(i int) float64 { return float64(e.Thermocline[i]) }
+	day := func(i int) float64 { return float64(e.Rise[i]) * 86400 }
+	east := func(i int) float64 { u, _ := g.SeaCurrent(i); return u }
+	// The first ocean runs from column 40 to 127.
+	westH, eastH := band(g, -3, 3, 40, 62, h), band(g, -3, 3, 106, 128, h)
+	westT, eastT := band(g, -3, 3, 40, 62, g.SeaTemp), band(g, -3, 3, 106, 128, g.SeaTemp)
+	up, down := band(g, -3, 3, 60, 110, day), band(g, 22, 32, 60, 110, day)
+	t.Logf("on the equator the thermocline lies %.0f m down in the west of the ocean and %.0f in the east; the water stands %.2f degrees in the west and %.2f in the east, and comes up %.2f m a day (%.2f under the subtropical high)",
+		westH, eastH, westT, eastT, up, down)
+	if westH <= eastH {
+		t.Errorf("on the equator the thermocline lies %.0f m down in the west and %.0f in the east", westH, eastH)
+	}
+	if up <= 0 || up <= down {
+		t.Errorf("the water comes up %.2f m a day on the equator and %.2f under the subtropical high", up, down)
+	}
+	for _, hemi := range []float64{1, -1} {
+		lo, hi := min(22*hemi, 32*hemi), max(22*hemi, 32*hemi)
+		gyre, shore := band(g, lo, hi, 44, 60, h), band(g, lo, hi, 126, 128, h)
+		plo, phi := min(50*hemi, 62*hemi), max(50*hemi, 62*hemi)
+		polar := band(g, plo, phi, 44, 60, h)
+		t.Logf("at %+.0f degrees: the thermocline lies %.0f m down in the west of the subtropical gyre, %.0f against the eastern shore, and %.0f in the west of the subpolar gyre",
+			hemi, gyre, shore, polar)
+		if gyre < 150 || gyre < shore+100 {
+			t.Errorf("at %+.0f degrees the thermocline lies %.0f m down in the subtropical gyre and %.0f against the eastern shore", hemi, gyre, shore)
+		}
+		if polar > 50 {
+			t.Errorf("at %+.0f degrees the thermocline lies %.0f m down in the subpolar gyre", hemi, polar)
+		}
+	}
+	// The current along the equator, and either side of it, where the real
+	// oceans have their countercurrents: a reading.
+	t.Logf("the surface runs %+.3f m/s east on the equator, %+.3f and %+.3f at 2 to 6 degrees north and south, %+.3f and %+.3f at 6 to 12",
+		band(g, -2, 2, 60, 110, east), band(g, 2, 6, 60, 110, east), band(g, -6, -2, 60, 110, east),
+		band(g, 6, 12, 60, 110, east), band(g, -12, -6, 60, 110, east))
 }

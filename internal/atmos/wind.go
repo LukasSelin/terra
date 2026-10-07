@@ -241,7 +241,7 @@ type Env struct {
 	Warm, Coast []float64
 	// Cu and Cv are the sea's current over each cell, metres a second toward
 	// the east and the north; Rise how fast water comes up from under it,
-	// metres a second; and WaterTemp the water's temperature, degrees: the
+	// metres a second, off a shore and in the open ocean; and WaterTemp the water's temperature, degrees: the
 	// latitude's mean and Warm, before Warm is held to seaWarmMost. Land
 	// has no current and no upwelling; the land along a shore is given the
 	// temperature of the sea beside it, and the land away from the sea its
@@ -252,6 +252,18 @@ type Env struct {
 	// in each phase of the year, metres a second at 500 hPa, which lays the
 	// trade-wind inversion over it. See circulation.go.
 	Subsides [Phases][]float64
+	// Psi is the transport streamfunction the gyres are read off, in
+	// sverdrups: the water between two cells flows past them at the
+	// difference of their Psi, with the higher on its right, and a gyre is
+	// a closed contour of it. On land it is the level of the landmass,
+	// nought on the largest. See flow.go. Nil on a valley.
+	Psi []float32
+	// Thermocline is how deep the warm water over the cold deep goes under
+	// each cell, metres: shallow against an ocean's eastern shore and under
+	// the subpolar gyres, deep in the west of the tropics and under the
+	// subtropical gyres. Nought on land. See thermocline.go. Nil on a
+	// valley.
+	Thermocline []float32
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's

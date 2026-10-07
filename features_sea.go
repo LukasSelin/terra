@@ -264,6 +264,7 @@ func (g *Grid) readSea(f *Features, all []Feature, stack []int32, w *Winds) ([]F
 	// round between it and the shore, in sverdrups.
 	sea := make([]bool, n)
 	u, v, psi := make([]float32, n), make([]float32, n), make([]float32, n)
+	layer := make([]float32, n)
 	stream := w.Stream()
 	for i := range n {
 		if !g.underSea(i) || (len(g.lakeOf) == n && g.lakeOf[i] >= 0) {
@@ -272,7 +273,8 @@ func (g *Grid) readSea(f *Features, all []Feature, stack []int32, w *Winds) ([]F
 		sea[i] = true
 		fx, fy := w.CellAt(i)
 		u[i], v[i] = float32(w.Sample32(w.Cu, fx, fy)), float32(w.Sample32(w.Cv, fx, fy))
-		psi[i] = float32(w.Sample(stream, fx, fy) * atmos.GyreDepth / 1e6)
+		psi[i] = float32(w.Sample(stream, fx, fy))
+		layer[i] = float32(math.Max(atmos.FlowLeast, w.ThermoclineAt(i)))
 	}
 	run, round := make([]int32, n), make([]int8, n)
 	f.current, f.gyre, f.upwell = make([]uint16, n), make([]uint16, n), make([]uint16, n)
@@ -436,7 +438,7 @@ func (g *Grid) readSea(f *Features, all []Feature, stack []int32, w *Winds) ([]F
 		fe.Gyre = FeatureID(best)
 		start := int32(len(paths))
 		var transport float64
-		paths, transport = g.layCurrent(tiles, round, u, v, hx, hy, paths, &lay)
+		paths, transport = g.layCurrent(tiles, round, u, v, layer, hx, hy, paths, &lay)
 		fe.Transport = float32(transport)
 		spans[k] = [2]int32{start, int32(len(paths))}
 	}
@@ -565,8 +567,9 @@ type layScratch struct {
 // section, from its head downstream, appended to path; and the water it
 // carries is what goes through its narrowest section in the middle half of
 // its length - the ends of a current are where it gathers and spreads, and
-// carry little - in sverdrups over the gyres' depth.
-func (g *Grid) layCurrent(tiles []int32, round []int8, u, v []float32, hx, hy float64,
+// carry little - in sverdrups over the depth the current is spread over
+// there (layer: the thermocline's, never less than atmos.FlowLeast).
+func (g *Grid) layCurrent(tiles []int32, round []int8, u, v, layer []float32, hx, hy float64,
 	path []int32, s *layScratch) ([]int32, float64) {
 	dy := g.air.Dy
 	// Where each tile lies along the way, in rows' breadths, and across it.
@@ -605,7 +608,7 @@ func (g *Grid) layCurrent(tiles []int32, round []int8, u, v []float32, hx, hy fl
 		// What the tile carries the way the current runs, over its area: a
 		// section's sum of it, over the section's breadth along the way, is
 		// what goes through the section.
-		s.flux[b] += (float64(u[t])*hx + float64(v[t])*hy) * g.air.Dx[y] * dy * 1e6
+		s.flux[b] += (float64(u[t])*hx + float64(v[t])*hy) * float64(layer[t]) * g.air.Dx[y] * dy * 1e6
 		s.best[b] = -1
 	}
 	for b := range nb {
@@ -638,5 +641,5 @@ func (g *Grid) layCurrent(tiles []int32, round []int8, u, v []float32, hx, hy fl
 	if narrow < 0 {
 		return path, 0
 	}
-	return path, s.flux[narrow] / (dy * 1e3) * atmos.GyreDepth / 1e6
+	return path, s.flux[narrow] / (dy * 1e3) / 1e6
 }
