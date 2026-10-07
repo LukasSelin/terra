@@ -121,11 +121,21 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // crust was broken into fractures before its plates were grown (see
 // fractureWall) and every plate on the map came out somewhere else; then tile
 // 2628, raised by an arc in the first epoch by some 11 km, until the fractures
-// were bent by the plate spacing and not the tile (see fractureBend). Tile 987
-// is now the one an arc raised in the first epoch, by some 12 km.
+// were bent by the plate spacing and not the tile (see fractureBend); then tile
+// 987, raised by an arc in the first epoch by some 12 km, until the crust
+// floated on its thickness (see isostasy.go) and the ancient valley's plates
+// met elsewhere; then tile 1228, raised by an arc in the first epoch by some
+// 17 km, until the history's ground came down by its relief and not by
+// stream power (see denude.go), and no tile an arc raised in the first epoch
+// was worn down far enough to bare the granite under it; then tile 2232,
+// the oldest of the arc's tiles that had, raised by an arc fifty-two million
+// years before the present by some 11 km, until a rift split a plate into
+// halves (see split) and the ancient valley's plates met elsewhere again.
+// Tile 667 is now the oldest of them: raised by an arc in the first epoch,
+// by some 9 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(987)
+	p := g.PosOf(667)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -144,7 +154,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 987 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 667 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {
