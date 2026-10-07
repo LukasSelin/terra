@@ -6,6 +6,33 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Air: the trades where the earth's are (#88)
+
+**What this is.** On `claude/air-trades`, from `claude/integration-fixups`
+(a2cfad0). Moves the world: digest rewritten (valley `7a8d5667d94ed090`,
+ancient `d4af9d09f0c1182d`, globe128 `d4a6a6dba4c7cfd3`).
+
+**What changed.** The Hadley cell's pressure (`atmos` `belts.hadley`): the
+trough and the highs were two bumps ten degrees broad whose sum rose twice
+as steeply at 22-27 degrees as near the trough, and the trades blew hardest
+at 24 (planet of sea), 22.4 (two oceans), 22.3N/22.5S (globe seed 1). The
+same rise is now the square of a sine from the ITCZ to the edge: 16.8/17.2,
+17.1/17.5, 17.2N/17.7S. The surface balance ties the cross-isobar wind to
+the along-isobar wind (v/u = r/f), so the air near the ground now gathers
+within some eleven degrees of the ITCZ where it gathered to nineteen, and
+the column budget's subtropical rain halves: midlatitude over subtropical
+rain 1.44 -> 2.49, equatorial over subtropical 5.66 -> 11.8, both now under
+gap G. On two oceans, moving the rise's steepest from half-way to the outer
+three quarters moves the trades from 17 to 23 degrees and that reading from
+2.8 to 0.9: there is no shape that has both.
+
+**Heap.** Budget (4 goroutines): globe128 425.3 -> 375.9 MiB, 28497 ->
+24182 allocations (not traced: the history is redrawn); ancient
+and valley within 0.3%. Peak 37.2 -> 38.2 MiB. Times taken with other
+sessions' work on the machine; `scripts/perf.sh check` not run.
+
+---
+
 ## 2026-10-07 - Integration fix-ups: the heap and three interactions
 
 **What this is.** On `claude/integration-fixups`, from

@@ -96,6 +96,14 @@ func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
 // side. On a made globe every subtropical gyre has at least one western
 // boundary current, warm and running poleward, warmer than each of the
 // eastern boundary currents of the same gyre.
+//
+// Known gap (#88): on the third globe, whose history the trades' move has
+// redrawn, a weak subtropical gyre at 22 degrees (13 Sv) has its warmest
+// western current at +0.74 and one of its eight eastern currents at +2.37.
+// With the trades strongest at seventeen degrees the subtropical gyres reach
+// down to it. Which currents a gyre counts as its own is the reading
+// TestTwoOceansHaveTheirGyresAndTheirCurrents records as a gap, and it was
+// not traced further here.
 func TestEveryOceanHasItsWarmWesternCurrent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe; see docs/perf/suite.md")
