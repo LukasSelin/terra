@@ -2,7 +2,6 @@ package terra
 
 import (
 	"math"
-	"slices"
 
 	"github.com/LukasSelin/terra/internal/phase"
 )
@@ -105,55 +104,71 @@ func (g *Grid) areaOf(i int) float64 {
 	return g.rowArea(i / g.W)
 }
 
+// rowWeights is areaOf for each row of g, worked out once for a pass over
+// every tile.
+func (g *Grid) rowWeights() []float64 {
+	w := make([]float64, g.H)
+	for y := range w {
+		w[y] = 1
+		if g.Wrap {
+			w[y] = g.rowArea(y)
+		}
+	}
+	return w
+}
+
 // roomUnder is how much water g's ground holds under a sea at level, in metres
 // over a tile on the equator.
 func (g *Grid) roomUnder(level float64) float64 {
-	sum := 0.0
-	for i := range g.Tiles {
-		if d := level - g.Height[i]; d > 0 {
-			sum += d * g.areaOf(i)
+	room, _ := g.roomAt(level, g.rowWeights())
+	return room
+}
+
+// roomAt is roomUnder, and the area under the sea at level beside it, which
+// is how fast the room grows as the level rises.
+func (g *Grid) roomAt(level float64, rows []float64) (room, wet float64) {
+	for y, a := range rows {
+		for _, h := range g.Height[y*g.W : (y+1)*g.W] {
+			if d := level - h; d > 0 {
+				room += d * a
+				wet += a
+			}
 		}
 	}
-	return sum
+	return room, wet
 }
 
 // seaOver is the level at which the room under it over g's ground comes to
-// water, in the same measure as roomUnder. It is the heights sorted once and
-// walked up, as level is for the map's sea: between one tile's height and the
-// next the room grows by the area already under water, so it is a straight
-// line on each step and the level falls on one of them. Ties are broken by
-// the tile, so that a world repeats.
+// water, in the same measure as roomUnder. The room is a straight line in the
+// level between one tile's height and the next, steeper at every height, so
+// Newton's step taken from over the answer never goes past it: from where the
+// water would stand over a planet all under it, each step goes down to where
+// the room at the present slope would hold the water, and the steps end on
+// the straight piece the level lies on. It was the heights sorted and walked
+// up, which is exact in one walk, and cost a globe two seconds of its history
+// for the sort; this is a pass over the tiles a step, and some ten steps.
 func (g *Grid) seaOver(water float64) float64 {
-	n := len(g.Tiles)
-	order := make([]int32, n)
-	for i := range order {
-		order[i] = int32(i)
-	}
-	slices.SortFunc(order, func(a, b int32) int {
-		switch ha, hb := g.Height[a], g.Height[b]; {
-		case ha < hb:
-			return -1
-		case ha > hb:
-			return 1
-		}
-		return int(a - b)
-	})
-	under, below := 0.0, 0.0 // the area under water, and its heights times their areas
-	for k, i := range order {
-		a := g.areaOf(int(i))
-		under += a
-		below += a * g.Height[i]
-		next := math.Inf(1)
-		if k+1 < n {
-			next = g.Height[order[k+1]]
-		}
-		// The level somewhere from this tile's height up to the next's:
-		// room = under*level - below.
-		if under*next-below >= water {
-			return (water + below) / under
+	rows := g.rowWeights()
+	total, top := 0.0, math.Inf(-1)
+	for y, a := range rows {
+		total += a * float64(g.W)
+		for _, h := range g.Height[y*g.W : (y+1)*g.W] {
+			top = math.Max(top, h)
 		}
 	}
-	return (water + below) / under
+	level := top + water/total
+	for range 200 {
+		room, wet := g.roomAt(level, rows)
+		if wet == 0 || room-water <= 1e-12*math.Max(1, water) {
+			break
+		}
+		next := level - (room-water)/wet
+		if next >= level {
+			break
+		}
+		level = next
+	}
+	return level
 }
 
 // iceHeld is how much of the planet's water the ice holds in epoch epoch, in

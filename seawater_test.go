@@ -1,8 +1,10 @@
 package terra
 
 import (
+	"cmp"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -159,4 +161,49 @@ func correlation(xs, ys []float64) float64 {
 		syy += (ys[k] - my) * (ys[k] - my)
 	}
 	return sxy / math.Sqrt(sxx*syy)
+}
+
+// The sea poured into any ground stands where the room under it holds the
+// water: read against the heights sorted and walked up, which is exact, on
+// rough ground with flats and steps in it, on a globe and on a map that is
+// not one, for a little water and for a great deal.
+func TestTheSeaIsPouredToItsLevel(t *testing.T) {
+	rng := rand.New(rand.NewPCG(4, 2))
+	for _, wrap := range []bool{false, true} {
+		g := NewGrid(96, 48)
+		g.Wrap = wrap
+		for i := range g.Height {
+			g.Height[i] = math.Round(rng.NormFloat64()*2000) + 4000*math.Floor(rng.Float64()*2)
+		}
+		total := 0.0
+		for _, a := range g.rowWeights() {
+			total += a * float64(g.W)
+		}
+		for _, depth := range []float64{0.5, 30, 1000, 4000, 20000} {
+			water := depth * total
+			got, want := g.seaOver(water), walkedSea(g, water)
+			if math.Abs(got-want) > 1e-6 {
+				t.Errorf("wrap %v, %g m of water: the sea stands at %.9f, and walked up at %.9f", wrap, depth, got, want)
+			}
+		}
+	}
+}
+
+// walkedSea is the level seaOver finds, by the heights sorted and walked up.
+func walkedSea(g *Grid, water float64) float64 {
+	type tile struct{ h, a float64 }
+	ts := make([]tile, len(g.Tiles))
+	for i := range ts {
+		ts[i] = tile{g.Height[i], g.areaOf(i)}
+	}
+	slices.SortFunc(ts, func(a, b tile) int { return cmp.Compare(a.h, b.h) })
+	under, below := 0.0, 0.0
+	for k, x := range ts {
+		under += x.a
+		below += x.a * x.h
+		if k+1 == len(ts) || under*ts[k+1].h-below >= water {
+			return (water + below) / under
+		}
+	}
+	return math.NaN()
 }
