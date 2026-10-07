@@ -13,6 +13,9 @@ import "math"
 //     plants drop, which lies until it rots, the faster the warmer.
 //   - It is dry enough to burn in a phase as far as the soil under a herb's
 //     roots gives the air less than it could take up, and not under snow.
+//     The standing grass carries a fire only as far as it has cured: a
+//     fire through a green sward goes out, and the early rains' storms
+//     burn the dry season's grass, not the summer's.
 //   - The fires are lit by lightning, and the lightning comes with the
 //     showers: a phase's flashes go with its convective rain.
 //   - A fire runs as far as the wind drives it, through the hours of a
@@ -40,9 +43,14 @@ import "math"
 // each type makes of it: its fires and its storms.
 type Fire struct {
 	// Reach is the share of the ground the year's fires would burn were its
-	// fuel full and unbroken: over the phases, the fires lit on a square
-	// kilometre times what each burns in that phase's dryness and wind.
-	Reach float64
+	// fuel full, unbroken and dead: over the phases, the fires lit on a
+	// square kilometre times what each burns in that phase's dryness and
+	// wind. Cured and Cured2 are the same sum with each fire's area times
+	// the standing grass's curing factor, and times its square: what a fire
+	// burns through a fuel bed of the grass alone, its rate of spread cut
+	// by the curing, and the cross term of a bed of grass and dead fuel
+	// together. See Burned.
+	Reach, Cured, Cured2 float64
 	// Litter is how many years what the plants drop lies before it rots.
 	Litter float64
 	// Throw is the share of a canopy the storms blow down in a year.
@@ -71,6 +79,10 @@ var fireTraits = [PFTs]struct{ resist, flame float64 }{
 	Shrub:               {0.5, 0.7},
 	Tundra:              {0.8, 0.4},
 }
+
+// Survives is the share of type p's cover a fire through it leaves
+// standing: see fireTraits.
+func Survives(p PFT) float64 { return fireTraits[p].resist }
 
 // The lightning. A phase's convective rain is the share of its rain that
 // falls as showers out of towering cloud, which is most of a hot country's
@@ -131,18 +143,25 @@ const (
 // fuel a square metre, half of it carbon, and twice that. Litter rots in
 // litterYears at ten degrees, faster in the warm by the Q10 of two, which is
 // a year or so in the tropics and several in the boreal forest (Zhang and
-// others, 2008). Of a grass's carbon, herbAbove stands above the ground as
-// fuel, LPJ's grass leaves to its roots (Sitch and others, 2003), and
-// burnHerb of it goes with a fire through it; of a shrub's, its leaves and
-// twigs, burnShrub.
+// others, 2008). Of a grass's carbon, HerbAbove stands above the ground as
+// fuel, and burnHerb of it goes with a fire through it; of a shrub's, its
+// leaves and twigs, burnShrub.
 const (
 	fuelLeast   = 0.1
 	fuelFull    = 0.4
 	litterYears = 2.0
-	herbAbove   = 0.5
 	burnHerb    = 0.4
 	burnShrub   = 0.3
 )
+
+// HerbAbove is the share of a grass's carbon above the ground, which is the
+// fuel a grass fire runs through: a grassland's roots hold some two thirds
+// of its carbon (Mokany and others, 2006, whose root to shoot ratios run
+// about two under grass, and more under the temperate grasslands). It was
+// LPJ's grass leaves to its roots, half, while the carbon's pools read
+// Mokany's third (carbon.go); the fuel the fires run through and the carbon
+// they send to the air now read the same grass.
+const HerbAbove = 1.0 / 3
 
 // The fuel's continuity. Where the cover that carries a fire, each type's
 // weighed by its flame, is under contLeast of the ground, a fire goes out
@@ -159,8 +178,11 @@ const (
 // out of the flames' reach between fires. A savanna's saplings, burned back
 // to the ground every few years, take decades to escape (Hoffmann and
 // others, 2009; Bond, 2008). It is set where a wet savanna's year holds
-// either state (see the tests): at twice it a savanna held barely a tree.
-const trap = 3.0
+// either state (see the tests), its savanna's trees on a third of the
+// ground: three while a fire ran through green grass as through cured, and
+// four and a half since the grass's curing cuts the early rains' fires
+// (see curing). At twice it a savanna held barely a tree.
+const trap = 4.5
 
 // droughtMost is the share of its cover a woody type loses in a year whose
 // water is at the least it survives on, and nothing where the water is what
@@ -208,8 +230,13 @@ func (y *Year) Fire() Fire {
 		// As many of the fires lit take as the dryness says, and they run as
 		// long as it lets them.
 		for _, m := range yearsWater {
-			dry := (1 - math.Min(1, m*c.Herb[k])) * (1 - c.Snow[k])
-			f.Reach += lit * dry * spread(c.Wind[k], dry) / float64(len(yearsWater))
+			w := math.Min(1, m*c.Herb[k])
+			dry := (1 - w) * (1 - c.Snow[k])
+			r := lit * dry * spread(c.Wind[k], dry) / float64(len(yearsWater))
+			cure := curing(w)
+			f.Reach += r
+			f.Cured += r * cure
+			f.Cured2 += r * cure * cure
 		}
 	}
 	return f
@@ -217,24 +244,53 @@ func (y *Year) Fire() Fire {
 
 // Burned is the share of the ground the year's fires burn under a state:
 // 1 - e^(-reach·fuel·continuity), the fires falling where they fall.
+//
+// The reach is the fuel bed's: a fire runs through it at the mean of its
+// fuels' rates of spread, each weighed by its load, as SPITFIRE weighs a
+// fuel bed's properties (Thonicke and others, 2010). The dead fuel - the
+// litter and the shrubs' twigs - runs at the rate Fire reads; the standing
+// grass at that rate cut by its curing (see curing), so that the area a
+// fire burns, which goes as the square of its run, goes as the square of
+// the bed's weighed rate: (d²·Reach + 2dg·Cured + g²·Cured2)/(d+g)², d and
+// g the dead fuel and the grass.
 func Burned(s *State, pot *[PFTs]Potential, f *Fire) float64 {
 	if f.Reach <= reachLeast {
 		return 0
 	}
-	var fuel, carry float64
+	var dead, grass, carry float64
 	for p := range PFTs {
 		k := &Kinds[p]
 		carry += s.Cover[p] * fireTraits[p].flame
 		// What it drops a year, as its leaves turn over, and lies.
-		fuel += s.Cover[p] * pot[p].LAI * k.leafTurn / 1000 * f.Litter
+		dead += s.Cover[p] * pot[p].LAI * k.leafTurn / 1000 * f.Litter
 		switch {
 		case !k.Woody:
-			fuel += herbAbove * s.Mass[p]
+			grass += HerbAbove * s.Mass[p]
 		case !k.Tree:
-			fuel += burnShrub * s.Mass[p]
+			dead += burnShrub * s.Mass[p]
 		}
 	}
-	return 1 - math.Exp(-f.Reach*smooth(fuelLeast, fuelFull, fuel)*smooth(contLeast, contFull, carry))
+	fuel := dead + grass
+	if fuel <= 0 {
+		return 0
+	}
+	reach := (dead*dead*f.Reach + 2*dead*grass*f.Cured + grass*grass*f.Cured2) / (fuel * fuel)
+	return 1 - math.Exp(-reach*smooth(fuelLeast, fuelFull, fuel)*smooth(contLeast, contFull, carry))
+}
+
+// curing is how much of its rate of spread a grass fire keeps where the
+// herbs' soil gives the air w of what it could take. A grass holds the
+// water its roots have: SPITFIRE gives the live grass a moisture of
+// 10/9·w - 1/9 of what it holds wet (Thonicke and others, 2010), read here
+// as the share of the grass still green, and the rest cured. A grassfire
+// spreads through green grass barely at all until half or so of it has
+// cured, and at its full rate once all of it has: Cruz and others' (2015)
+// curing coefficient, 1.036 / (1 + 103.99·e^(-0.0996·(C - 20))), C the
+// per cent cured, fitted to their field fires.
+func curing(w float64) float64 {
+	green := math.Max(0, math.Min(1, (10*w-1)/9))
+	c := 100 * (1 - green)
+	return math.Min(1, 1.036/(1+103.99*math.Exp(-0.0996*(c-20))))
 }
 
 // reachLeast is the reach under which a year's fires are read as none: a

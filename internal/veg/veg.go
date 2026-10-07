@@ -28,6 +28,9 @@
 //     establishment, mortality and competition for space, with a year as its
 //     step. It is run from BIOME4's answer to a steady state, so that a wood
 //     whose ground stops suiting it dies back.
+//   - On a desert's ground the open ground's plants stand apart, their roots
+//     taking the water of the bare ground between them, and cover as much of
+//     it as its water holds (see sparse), rather than leaving it bare.
 //
 // The year a type reads is the air's four phases: the sun through each, the
 // temperature of each fortnight of it, the share of the ground its snow
@@ -264,6 +267,11 @@ type Potential struct {
 	// the drought of a year whose water is under what it establishes on:
 	// see droughtMost.
 	Drought float64
+	// Room is the share of the open ground the type's crowns can stand on
+	// at the water the ground has, one where the water does not bound it:
+	// see sparse. LAI, NPP and Surplus are a crown's on that room, drawing
+	// on the water of the ground between.
+	Room float64
 }
 
 // stepAngle is the place in the year of step j of steps of phase k, as the
@@ -418,21 +426,107 @@ func (y *Year) Potential(p PFT) Potential {
 	}
 	leafCost := (1-growthCost)*k.leafKeep*leafQ/1000 + k.leafTurn/1000
 	wood := k.woodKeep * woodQ / 1000
+	most := 1 - math.Exp(-extinction*k.laiMost)
 
-	fBest := bestCover(a, s, leafCost, 1-math.Exp(-extinction*k.laiMost))
-	if fBest <= 0 {
-		return pot
+	// The leaf area that does best by a crown, and what it makes there.
+	best := func() {
+		pot.LAI, pot.NPP, pot.Surplus = 0, 0, 0
+		f := bestCover(a, s, leafCost, most)
+		if f <= 0 {
+			return
+		}
+		lai := -math.Log(1-f) / extinction
+		var gpp float64
+		for ph := range Phases {
+			gpp += a[ph] * math.Min(f, s[ph])
+		}
+		pot.LAI = lai
+		pot.NPP = (1 - growthCost) * (gpp - k.leafKeep*leafQ*lai/1000 - wood)
+		pot.Surplus = pot.NPP - k.leafTurn*lai/1000
 	}
-	lai := -math.Log(1-fBest) / extinction
-	var gpp float64
-	for ph := range Phases {
-		gpp += a[ph] * math.Min(fBest, s[ph])
+	pot.Room = 1
+	best()
+	// On open ground the type's crowns may stand apart instead, on the water
+	// of the ground between them (see sparse); they do where that makes
+	// more of the ground than leaves spread thin over all of it, as the
+	// leaf area is the one that makes the most.
+	if !k.Tree {
+		full := pot
+		if pot.Room = sparse(&a, &s, water, k.wue, leafCost, most); pot.Room < 1 {
+			best()
+			if pot.worth() <= full.worth() {
+				pot = full
+			}
+		}
 	}
-	pot.LAI = lai
-	pot.NPP = (1 - growthCost) * (gpp - k.leafKeep*leafQ*lai/1000 - wood)
-	pot.Surplus = pot.NPP - k.leafTurn*lai/1000
 	return pot
 }
+
+// sparse is the share of the open ground a type's crowns stand on where the
+// water bounds them, and it gives each crown the water of its share of the
+// ground between them: s, the light the water lets a crown use in each
+// phase, becomes the water of 1/room of the ground, up to all of what the
+// air could take.
+//
+// On dry ground a plant's leaves do not thin out over the whole of it: its
+// crowns stand apart, and their roots reach out under the bare ground
+// between and take its water too. A dry country's plants cover its ground in
+// proportion to its water (Walter, 1939, 1971: an arid grassland's or
+// scrub's leaf and root mass as its rain; Noy-Meir, 1973: the plants' cover
+// and production in deserts as their rain), the crowns as many as the water
+// keeps unstressed, which is the canopy density Eagleson (1982) found a
+// water-limited stand comes to. A stand is spaced by its growing season at
+// its wettest: what a dry season takes it rides out in its phenology or its
+// stress. So the room is the share of the ground whose water, gathered onto
+// the crowns, lets them put up the leaf area that does best by them on the
+// light alone (f) in the wettest phase they grow in: one wherever some
+// phase's water does, and the water's share of it where none does.
+//
+// Potential takes the spaced crowns only where they make more of the ground
+// than the leaves thinned out over all of it would (see worth): on a
+// desert's ground, which leaves spread over the whole of it would not pay
+// for. There the crowns on its last few hundredths of the water the air
+// could take are a few hundredths of its ground, as the shrubs of a
+// hyper-arid core are, and there are none, as before, only where a crown
+// with all the water it could use would not pay its own way. Real deserts
+// carry a twentieth to a third of their ground in plants, and are bare
+// only in their hyper-arid cores (UNEP's aridity index under 0.05).
+func sparse(a, s, water *[Phases]float64, wue, cost, most float64) float64 {
+	var free [Phases]float64
+	for ph := range Phases {
+		if a[ph] > 0 {
+			free[ph] = 1
+		}
+	}
+	f := bestCover(*a, free, cost, most)
+	if f <= 0 {
+		return 1
+	}
+	var wet float64
+	for ph := range Phases {
+		if a[ph] > 0 {
+			wet = math.Max(wet, s[ph])
+		}
+	}
+	if wet >= f {
+		return 1
+	}
+	if wet <= 0 {
+		return 0
+	}
+	room := wet / f
+	for ph := range Phases {
+		if a[ph] > 0 {
+			s[ph] = math.Min(1, water[ph]/room) * wue
+		}
+	}
+	return room
+}
+
+// worth is what the type makes of the ground it can stand on, to grow by:
+// a crown's surplus over the room the water gives its crowns. It is what the
+// types of a layer are ranked by.
+func (p *Potential) worth() float64 { return p.Room * p.Surplus }
 
 // bestCover is the share of the light a canopy takes up that leaves it the
 // most to grow by, up to most: the F at which (1-growthCost)·Σ a_k·(1-F)·k
@@ -522,7 +616,7 @@ func Equilibrium(pot *[PFTs]Potential) State {
 func settle(s *State, pot *[PFTs]Potential, tree bool, room float64) float64 {
 	best := -1
 	for p := range PFTs {
-		if Kinds[p].Tree == tree && pot[p].Establish && pot[p].Surplus > 0 && (best < 0 || pot[p].Surplus > pot[best].Surplus) {
+		if Kinds[p].Tree == tree && pot[p].Establish && pot[p].Surplus > 0 && (best < 0 || pot[p].worth() > pot[best].worth()) {
 			best = int(p)
 		}
 	}
@@ -531,7 +625,7 @@ func settle(s *State, pot *[PFTs]Potential, tree bool, room float64) float64 {
 	}
 	k := &Kinds[best]
 	grow := pot[best].Surplus / k.seed
-	c := room * math.Max(0, 1-k.mortality/grow)
+	c := room * pot[best].Room * math.Max(0, 1-k.mortality/grow)
 	s.Cover[best] = c
 	s.Mass[best] = c * pot[best].NPP * k.residence
 	return c
@@ -615,18 +709,13 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		if Kinds[p].Tree == tree {
 			held += s.Cover[p]
 			if s.Cover[p] > 0 {
-				best = math.Max(best, pot[p].Surplus)
+				best = math.Max(best, pot[p].worth())
 			}
 		}
 	}
-	free := math.Max(0, room-held)
 	young := 1.0 // what the fires leave of the canopy's young
 	if tree && burned > 0 {
 		young = math.Exp(-trap * burned)
-	}
-	crowd := 0.0
-	if room > 0 {
-		crowd = math.Min(1, held/room)
 	}
 	var total float64
 	for p := range PFTs {
@@ -636,9 +725,24 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		}
 		c, m := s.Cover[p], k.mortality
 		pt := &pot[p]
+		// The room the type's crowns have: the layer's, or on dry open
+		// ground the share of it the water holds them on (see sparse).
+		// Crowns standing past it go short of water and starve back to it.
+		rp := room
+		if !tree {
+			rp *= pt.Room
+		}
+		free := math.Max(0, rp-held)
+		crowd := 0.0
+		if rp > 0 {
+			crowd = math.Min(1, held/rp)
+		}
+		if held > rp {
+			m += starving * (1 - rp/held)
+		}
 		gain := 0.0
 		if pt.Surplus > 0 {
-			gain = pt.Surplus / k.seed * c * free / math.Max(room, 1e-9)
+			gain = pt.Surplus / k.seed * c * free / math.Max(rp, 1e-9)
 			if pt.Establish {
 				seed := seedOpen
 				if tree {
@@ -647,7 +751,7 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 				gain += seed * free
 			}
 			if best > 0 {
-				m += crowding * (1 - pt.Surplus/best) * crowd
+				m += crowding * (1 - pt.worth()/best) * crowd
 			}
 		} else {
 			m += starving

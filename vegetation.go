@@ -189,21 +189,30 @@ func (g *Grid) keep(i int, s *veg.State, pot *[PFTs]veg.Potential) {
 }
 
 // rootOf is how deep, in metres, the roots on tile i reach: a woody plant's
-// under the trees and the shrubs, a herb's under the rest and on bare ground.
-// It is the dryness's reading (atmos.RootDepth) where nothing has been laid,
-// as through a history.
+// where the trees and the shrubs stand, a herb's where the rest do and on
+// bare ground. The roots are read by the share of what stands that is woody,
+// not of the ground: a dry country's sparse crowns reach under the bare
+// ground between them for its water (see veg's sparse), so that a desert's
+// scattered shrubs root its whole ground as deep as a shrub's. It is the
+// dryness's reading (atmos.RootDepth) where nothing has been laid, as
+// through a history.
 func (g *Grid) rootOf(i int, phi float64) float64 {
 	if !g.vegLaid() {
 		return atmos.RootDepth(phi)
 	}
-	var woody float64
+	var woody, all float64
 	at := i * int(PFTs)
 	for p := range PFTs {
+		c := float64(g.vegCover[at+int(p)]) * coverStep
+		all += c
 		if veg.Kinds[p].Woody {
-			woody += float64(g.vegCover[at+int(p)]) * coverStep
+			woody += c
 		}
 	}
-	return rootHerb + (rootWood-rootHerb)*clamp01(woody)
+	if all <= 0 {
+		return rootHerb
+	}
+	return rootHerb + (rootWood-rootHerb)*clamp01(woody/all)
 }
 
 // soilYear is tile i's year of water as the air last read it - each phase's

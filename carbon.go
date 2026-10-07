@@ -108,16 +108,25 @@ const churnRate = 5e-4 // m² a year
 // grasses and the litter nearly all of, and the stems of the woody plants a
 // fraction (van der Werf and others, 2010, the middles of their combustion
 // completeness: 0.8–1 for the leaves and the litter, 0.2–0.4 for the stems).
+// The stems are those of the trees the fire kills: a tree whose bark sees a
+// surface fire through stands on with its stem unburned, as a savanna's
+// trees do, and a fire burns a stand's stems as far as it takes the stand,
+// as GFED burns a stand's live wood through the fire's mortality of its
+// trees (van der Werf and others, 2010). The share of each type a fire
+// leaves standing is package veg's, which the vegetation already dies by
+// (veg.Survives): a savanna's trees nine in ten, a boreal forest's under a
+// fifth.
 //
 // And only what is above the ground: a fire burns none of the roots, which
 // are some two thirds of a grassland's carbon and a fifth of a forest's
 // (Mokany and others, 2006: root to shoot ratios of about 2 under grass and
-// 0.25 under trees), and of the litter it burns what lies on the ground,
-// taken as the same share of it.
+// 0.25 under trees; the grass's share is the fuel's, veg.HerbAbove), and of
+// the litter it burns what lies on the ground, taken as the same share of
+// it.
 const (
 	burnHerb  = 0.9
 	burnWood  = 0.3
-	aboveHerb = 1.0 / 3
+	aboveHerb = veg.HerbAbove
 	aboveWood = 0.8
 )
 
@@ -156,6 +165,9 @@ func (g *Grid) inputOf(i int, c pedoClimate, cv cover) carbonInput {
 		if veg.Kinds[p].Woody {
 			woody += cov
 			cc = burnWood * aboveWood
+			if veg.Kinds[p].Tree {
+				cc *= 1 - veg.Survives(p)
+			}
 		}
 		all += cov
 		mass += m
