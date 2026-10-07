@@ -196,7 +196,7 @@ func (w *Land) stageCoast(g *Grid, cfg Terms) {
 				// The sea's moderation of the swing is swingAt's, off the land
 				// round about; taking the maritime share off it as well counted
 				// the same sea twice.
-				g.swing[i] = float32(atmos.SwingAt(w.Climate.latitude(y), g.contAt(i)))
+				g.swing[i] = float32(atmos.SwingUnder(w.Climate.forcing, w.Climate.latitude(y), g.contAt(i)))
 			}
 		}
 	})
