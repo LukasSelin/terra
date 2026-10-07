@@ -217,7 +217,7 @@ func (g *Grid) laySoil(made bool) {
 	// The peat is laid with the rest of the soil's state: see wetland.go.
 	g.peat, g.peatAge = make([]float32, len(g.Tiles)), make([]float32, len(g.Tiles))
 	g.pools = make([]carbonPools, len(g.Tiles))
-	g.EachRow(func(y int) {
+	g.EachDearRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			h, pace := g.soilDepthOf(i)
 			// A flat keeps the mud the tide laid on it (see silt): the steady

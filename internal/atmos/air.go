@@ -351,14 +351,12 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 			annual[i] = firstRain
 		}
 	}
-	// The budget is settled in a dozen rounds or so, each a pass over the
-	// cells for each phase and a year of a bucket's seventy steps for each
-	// cell of land, and so it is spread over the goroutines at an eighth of
-	// the cells a single pass over the lattice is.
-	workers := 1
-	if n >= spreadTiles/8 {
-		workers = workersFor(Phases)
-	}
+	// The budget is settled in up to settleRounds rounds, each a pass over
+	// the cells for each phase and a year of a bucket's seventy steps for
+	// each cell of land, and so it is spread over the goroutines on any map:
+	// on a valley, too small for a single pass over the lattice to be worth
+	// spreading, the rounds are the most of a reading (#89).
+	workers := workersFor(Phases)
 	var phases [Phases - 1]*vapourBudget
 	inParallel(Phases-1, workers, func(k, _ int) {
 		phases[k] = e.newVapour(vapourIn{
@@ -409,10 +407,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		}
 		landEvap[1][i] = (landEvap[1][i] + landEvap[3][i]) / 2
 	}
-	rowWorkers := 1
-	if n >= spreadTiles/8 {
-		rowWorkers = workersFor(e.H)
-	}
+	rowWorkers := workersFor(e.H)
 	for round := range settleRounds {
 		inParallel(e.H, rowWorkers, func(cy, _ int) {
 			for i := cy * e.W; i < (cy+1)*e.W; i++ {
