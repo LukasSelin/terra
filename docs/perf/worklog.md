@@ -6,6 +6,86 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Integration fix-ups: the heap and three interactions
+
+**What this is.** On `claude/integration-fixups`, from
+`claude/earth-integration` (c848a76). Four commits; none moves a world:
+`TERRA_DIGEST=check` passes on the integration's digest after each.
+
+**Where the integration's heap went** (alloc profile, `-memprofilerate 1`,
+globe128 at 24 goroutines, by merge). M1/M2 add the gyres' solve to every
+reading of the weather: +54 MB, of which `gyres` 52 (the equations at every
+coarseness 38, GMRES 11). G2 then adds 68 MiB without a line of its own in
+the weather: its history stands the sea at the continents' edge (`seaDatum`)
+instead of the lowest 35% of the ground, so while the history runs the air
+reads 6100-7600 of 8192 cells as sea where it read 2867, and the gyres'
+unknowns double (`gmres` 11 -> 25 MB, `newFlow` 38 -> 78); and its rebound
+moves the ground past the weather gate twice more (22 -> 24 readings). Both
+are the world as designed, not waste.
+
+**What was waste.** A reading of the weather made each of its few dozen
+cell-sized fields new and dropped it: it asked the heap for several times
+what it held at once. `atmos.Scratch` (one per reading) gives each field a
+slot and a field begun after another is done with takes its slot: the
+wind's fields and the rain's in turn, the currents in the first phase's
+once its wind is out, GMRES's directions in the next phases', the vapour's
+own fields in vapourFluxes'. `orographic` adds its patches' lift a run at a
+time instead of holding every patch's sum to the end.
+
+| component (globe128, MB asked) | main | +M1/M2 | integration | fix-ups |
+|---|---|---|---|---|
+| weather, all | 352 | 417 | 491 | 387 |
+| WindsFor | 128 | 186 | 253 | 217 |
+| - Solve | 54 | 54 | 59 | 45 |
+| - currents (with gyres) | 31 | 84 | 141 | 119 |
+| - gyres (newFlow, GMRES) | - | 51 | 106 | 90 |
+| RainCells | 220 | 227 | 234 | 165 |
+| - vapour (with fluxes) | 139 | 139 | 151 | 119 |
+| - orographic | 42 | 42 | 33 | 18 |
+| whole world | 394 | 462 | 530 | 425 |
+
+Budget (4 goroutines): globe128 555.2 -> 446.0 MB, 35515 -> 28497
+allocations; ancient 58.6 -> 52.0; valley 10.8 -> 9.8. Benchmarks against
+the integration, turn about, 6 runs: B/op valley -9.3%, ancient -11.3%,
+globe256 -19.3%; time ~ (globe256 -5%, p=0.13).
+
+**Tried and not kept: the Scratch kept between readings.** It took globe128
+to 214 MiB, but the most the heap held while a globe256 was made rose from
+72 to 98 MB (live after each mark, `gctrace`, GOGC=5 for steady marks): the
+kept memory sat through the land's other passes and through the gyres'
+solve. Made per reading, with slots let go where the collector had them
+before, the most held reads 75-77 against the integration's 73-74 (+3%),
+and the rain's own peak fell. The peak, not the churn, bounds the size of
+world a machine can make.
+
+**The three interactions** (each a known gap, each written down beside its
+test, no test loosened):
+- `TestNoPieceOfCrustIsASliverOrAHemisphere`: not G2 x the climate. The
+  largest plate is over the 0.22 ceiling after reshape in nearly every
+  epoch on every branch; split's floods start on the plate's edge among the
+  fractures (0.385 rifted into 0.054 + 0.332), and a plate is rifted once an
+  epoch. A fix (floods a quarter in, most even of four lines, rift again
+  while over) holds all three globes under 0.22 but redraws every history:
+  eleven more yardsticks and eight more tests fail, so it is on
+  `claude/rift-even-halves` to calibrate.
+- `TestAStormDiesOverTheColdCurrent`: M2's pumping has the right sign
+  (down, -0.03 to -0.14 m/day, 22-39°N). A2's trades peak at 22°N, so the
+  tropical upwelling band is at 9-20°N (+0.044 m/day at 18°N on the year's
+  mean; the phase rectification adds a fifth).
+- `TestTheMildWestCoastIsWarmedFromAWesternCurrent`: linear gyres pass no
+  water across nought ψ; eddy diffusion of warmth would not make the Feeds
+  chain, which follows the water. For M3 (#22) or the overturning.
+
+**Suite.** Root full suite fails the same tests as the integration (the
+three above, Sverdrup closure, and the five yardsticks: concavity and
+hypsometric 2x-1x small globe, discharge and Hack small globe, drainage area
+globe). `-short ./...` and cmd/zarr pass apart from the three.
+`scripts/perf.sh check` fails against the 2026-09-16 baseline (+22-36%),
+which is the Earth-system work since, not these commits (see the
+benchmarks against the integration above).
+
+---
+
 ## 2026-10-07 - Integration: the Earth-system stack, merged and measured
 
 **What this is.** On `claude/earth-integration`, from `main` (2c51bea):
