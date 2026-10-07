@@ -289,10 +289,91 @@ func RootDepth(phi float64) float64 {
 	return rootOpen + (rootForest-rootOpen)*clamp01(2-phi)
 }
 
+// RootDepthOn is RootDepth on ground of soil metres holding paw of its
+// volume as water the roots can take, where the year's dry season needs need
+// mm of store (DryNeed): the woody share of the cover reaches as deep as
+// Reach takes it.
+func RootDepthOn(phi, soil, paw, need float64) float64 {
+	return rootOpen + (Reach(soil, paw, rootForest, need)-rootOpen)*clamp01(2-phi)
+}
+
 // Hold is the bucket a ground holds, in mm, with soil metres of soil over
 // the rock that holds paw of its volume as water the roots can take, under a
 // cover whose roots reach root metres.
 func Hold(soil, paw, root float64) float64 {
 	soil = math.Max(0, soil)
 	return 1000 * (paw*math.Min(soil, root) + rockWater*math.Max(0, root-soil))
+}
+
+// The roots a dry season grows.
+//
+// A woody cover's roots do not stop where its height says they would. Where
+// the year has a dry season the trees and shrubs that live through it reach
+// as deep as the water that carries them through it lies: the root zone a
+// catchment's cover keeps is the store its driest season draws down, and no
+// more (Gao and others, 2014, who read it off 300 catchments' water
+// balances; Wang-Erlandsson and others, 2016, off the world's evaporation;
+// Kleidon and Heimann, 1998). It is how the seasonal tropics' forests and
+// savannas keep transpiring months into the dry season (Nepstad and others,
+// 1994: Amazonian roots past eight metres). A cover sized only by its
+// height - a metre or two - holds a hundred millimetres or so, sheds the
+// rest of a monsoon's wet season to the rivers, and has nothing to give the
+// air or its own leaves through the dry season.
+//
+// So the woody cover's roots reach at least as deep as the bucket its dry
+// season needs (DryNeed), down to rootDeepest: Canadell and others (1996)
+// find trees' deepest roots at seven metres on the mean of the world's
+// biomes, shrubs' at five. Below the soil the roots take the weathered
+// rock's water (rockWater).
+const rootDeepest = 7.0
+
+// DryNeed is the store, in mm, a cover has to draw down to carry itself
+// through the dry part of a year with rain mm falling in each phase and the
+// air able to take up pet mm in each: the deepest the year's running
+// deficit of what the cover gives the air under the rain goes, phase after
+// phase in the year's order (Gao and others, 2014, the memory method). What
+// the cover gives the air is its share of the year's water: pet in each
+// phase, scaled so that the year's is no more than the year's rain.
+func DryNeed(rain, pet *[Phases]float64) float64 {
+	var p, e float64
+	for k := range Phases {
+		p += math.Max(0, rain[k])
+		e += math.Max(0, pet[k])
+	}
+	if p <= 0 || e <= 0 {
+		return 0
+	}
+	use := math.Min(1, p/e)
+	// Twice round the year, so that a dry season across the year's turn is
+	// counted whole.
+	var short, most float64
+	for range 2 {
+		for _, k := range yearOrder {
+			short = math.Max(0, short+use*math.Max(0, pet[k])-math.Max(0, rain[k]))
+			most = math.Max(most, short)
+		}
+	}
+	return most
+}
+
+// Reach is how deep, in metres, a woody cover whose roots would reach root
+// metres by its height reaches on ground of soil metres holding paw of its
+// volume as water the roots can take, where its dry season needs need mm of
+// store: as deep as Hold gives need, and no deeper than rootDeepest nor
+// shallower than root.
+func Reach(soil, paw, root, need float64) float64 {
+	if root >= rootDeepest || Hold(soil, paw, root) >= need {
+		return root
+	}
+	soil = math.Max(0, soil)
+	// Hold grows by paw a metre in the soil and rockWater a metre under it.
+	z := root
+	if z < soil {
+		if paw > 0 && need <= 1000*paw*soil {
+			return math.Min(rootDeepest, math.Max(root, need/(1000*paw)))
+		}
+		z = soil
+	}
+	z += (need - Hold(soil, paw, z)) / (1000 * rockWater)
+	return math.Min(rootDeepest, math.Max(root, z))
 }

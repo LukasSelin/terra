@@ -195,10 +195,12 @@ func (g *Grid) keep(i int, s *veg.State, pot *[PFTs]veg.Potential) {
 // ground between them for its water (see veg's sparse), so that a desert's
 // scattered shrubs root its whole ground as deep as a shrub's. It is the
 // dryness's reading (atmos.RootDepth) where nothing has been laid, as
-// through a history.
-func (g *Grid) rootOf(i int, phi float64) float64 {
+// through a history. A woody plant's roots reach as deep as the year's dry
+// season needs, need mm of store, takes them (atmos.Reach).
+func (g *Grid) rootOf(i int, phi, need float64) float64 {
+	soil, paw := float64(g.Soil[i]), float64(g.paw[i])
 	if !g.vegLaid() {
-		return atmos.RootDepth(phi)
+		return atmos.RootDepthOn(phi, soil, paw, need)
 	}
 	var woody, all float64
 	at := i * int(PFTs)
@@ -212,7 +214,7 @@ func (g *Grid) rootOf(i int, phi float64) float64 {
 	if all <= 0 {
 		return rootHerb
 	}
-	return rootHerb + (rootWood-rootHerb)*clamp01(woody/all)
+	return rootHerb + (atmos.Reach(soil, paw, rootWood, need)-rootHerb)*clamp01(woody/all)
 }
 
 // soilYear is tile i's year of water as the air last read it - each phase's
@@ -266,7 +268,7 @@ func (g *Grid) rewater() {
 				continue
 			}
 			p := g.Rain(i)
-			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), g.rootOf(i, pe/math.Max(p, 1e-9)))
+			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), g.rootOf(i, pe/math.Max(p, 1e-9), atmos.DryNeed(&rain, &take)))
 			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
 			// The phases' rain is kept in float32 (rainIn), and where the air
 			// takes nothing back their sum can come over the year's rain by a
@@ -318,10 +320,11 @@ func (g *Grid) vegClimate(i int, sea, land float64, sun *[atmos.Phases]float64, 
 		hollow = math.Max(1/wetHollow, math.Min(wetHollow, g.twi(i)/twiMean))
 	}
 	soil, paw := float64(g.Soil[i]), float64(g.paw[i])
+	wood := atmos.Reach(soil, paw, rootWood, atmos.DryNeed(&rain, &take))
 	for _, lot := range [2]struct {
 		root float64
 		into *[atmos.Phases]float64
-	}{{rootHerb, &c.Herb}, {rootWood, &c.Wood}} {
+	}{{rootHerb, &c.Herb}, {wood, &c.Wood}} {
 		b := atmos.BucketCold(atmos.Hold(soil, paw, lot.root), &rain, &take, mean, swing)
 		for k := range atmos.Phases {
 			lot.into[k] = 1
