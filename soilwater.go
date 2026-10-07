@@ -38,12 +38,29 @@ const (
 // plantWater is the plant-available water of a soil sand and clay of it, as
 // a share of its volume. See soilOrganic.
 func plantWater(sand, clay float64) float64 {
-	s, c, om := clamp01(sand), clamp01(clay), soilOrganic
-	wilt := -0.024*s + 0.487*c + 0.006*om + 0.005*s*om - 0.013*c*om + 0.068*s*c + 0.031
-	wilt += 0.14*wilt - 0.02
-	field := -0.251*s + 0.195*c + 0.011*om + 0.006*s*om - 0.027*c*om + 0.452*s*c + 0.299
-	field += 1.283*field*field - 0.374*field - 0.015
+	wilt, field := saxtonRawls(sand, clay)
 	return math.Max(pawLeast, math.Min(pawMost, field-wilt))
+}
+
+// saxtonRawls is the water a soil of sand and clay holds at the wilting
+// point and at field capacity, each a share of its volume. See plantWater.
+func saxtonRawls(sand, clay float64) (wilt, field float64) {
+	s, c, om := clamp01(sand), clamp01(clay), soilOrganic
+	wilt = -0.024*s + 0.487*c + 0.006*om + 0.005*s*om - 0.013*c*om + 0.068*s*c + 0.031
+	wilt += 0.14*wilt - 0.02
+	field = -0.251*s + 0.195*c + 0.011*om + 0.006*s*om - 0.027*c*om + 0.452*s*c + 0.299
+	field += 1.283*field*field - 0.374*field - 0.015
+	return wilt, field
+}
+
+// textureOf is tile i's sand and clay, or the mixture its rock weathers to
+// where none has been laid: see pawOf.
+func (g *Grid) textureOf(i int) (sand, clay float64) {
+	sand, clay = g.Sand[i], g.Clay[i]
+	if sand == 0 && clay == 0 {
+		sand, clay = g.TextureAt(geom.Pos{X: i % g.W, Y: i / g.W})
+	}
+	return sand, clay
 }
 
 // pawOf is the plant-available water of tile i's soil, or nothing where the
@@ -54,11 +71,7 @@ func (g *Grid) pawOf(i int) float64 {
 	if g.sunk(i) {
 		return 0
 	}
-	sand, clay := g.Sand[i], g.Clay[i]
-	if sand == 0 && clay == 0 {
-		sand, clay = g.TextureAt(geom.Pos{X: i % g.W, Y: i / g.W})
-	}
-	return plantWater(sand, clay)
+	return plantWater(g.textureOf(i))
 }
 
 // soilBucket lays out what the air's bucket reads of the ground: each tile's

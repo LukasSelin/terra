@@ -125,12 +125,20 @@ func wetSeason(g *Grid, i int) (int, bool) {
 }
 
 // unfrozen reports whether tile i's ground is over freezing through the
-// whole year: its year's mean less its swing.
+// whole year - its year's mean less its swing, which is signed by
+// hemisphere - and no snow lies on it: a day of a mild winter that snows
+// sends its water to the spring's rivers rather than the winter's (see
+// snow.go), and the phases either side of it are no longer alike.
 func (g *Grid) unfrozen(i int) bool {
 	if len(g.swing) != len(g.Tiles) {
 		return false
 	}
-	return g.meanOn(i, g.Height[i])-float64(g.swing[i]) > 0
+	for k := range atmos.Phases {
+		if g.SnowCover(i, k) > 0 {
+			return false
+		}
+	}
+	return g.meanOn(i, g.Height[i])-math.Abs(float64(g.swing[i])) > 0
 }
 
 // fitFu is the ω of Fu's curve the evaporative indices index, at dryness

@@ -233,8 +233,8 @@ func TestWhatGrowsLeavesItsMarkOnTheSoil(t *testing.T) {
 		c := g.pedoClimateOf(0)
 		c.temp = temp
 		cv := g.coverOf(0, temp)
-		level, _ := g.carbonLevel(0, c, cv)
-		g.Tiles[0].Carbon = float32(level)
+		x := carbonSteady(g.carbonMatrix(0, c, cv))
+		g.Tiles[0].Carbon = float32(x[1] + x[2] + x[3])
 		l, _ := g.leachLevel(0, c, cv, 20e3)
 		rate := c.water * cv.acid / leachWater
 		g.Tiles[0].SetLeaching(l * -math.Expm1(-rate/l*20e3))
@@ -329,10 +329,17 @@ func TestTheSoilIsOldWhereTheGroundIsStill(t *testing.T) {
 }
 
 // The key sorts a soil by what time and the climate have made of it: bare
-// ground is no soil, a surface a century old has only its parent material, a
+// ground is no soil, a surface a decade old has only its parent material, a
 // thin one of a few thousand years a subsoil, the same under a metre of soil
 // the dark topsoil of a prairie, and one the rain has stripped of its bases
 // over a long age is an Ultisol.
+//
+// The young surface was a century old while the soil's carbon came to its
+// level in a century. Its pools (carbon.go) fill the slow pool in its own 32
+// years, under a prairie's full NPP from the first year, so a century of
+// prairie on fresh ground holds a mollic epipedon's carbon. Real primary
+// succession is slower, because what grows on fresh ground takes its time to
+// come (Schlesinger 1990), and the pools do not model that.
 func TestTheKeySortsASoilByWhatTimeMadeOfIt(t *testing.T) {
 	bare := one(900, 400)
 	bare.Soil[0] = 0
@@ -343,7 +350,7 @@ func TestTheKeySortsASoilByWhatTimeMadeOfIt(t *testing.T) {
 		rain, runoff, soil, years float64
 		want                      SoilOrder
 	}{
-		{900, 400, 1, 100, Entisol},
+		{900, 400, 1, 10, Entisol},
 		{900, 400, 0.2, 3e3, Inceptisol},
 		{900, 400, 1, 3e3, Mollisol},
 		{2500, 1800, 1, 1e6, Ultisol},

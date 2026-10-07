@@ -67,8 +67,8 @@ func TestBucketSteadyAndStepped(t *testing.T) {
 		}
 		hold := 10 + 400*r.Float64()
 		b := Bucket(hold, &rain, &pet)
-		steady := bucketRun(hold, &rain, &pet, 30, bucketSteps)
-		fine := bucketRun(hold, &rain, &pet, 30, 200)
+		steady := bucketRun(hold, &rain, &pet, 30, bucketSteps, nil)
+		fine := bucketRun(hold, &rain, &pet, 30, 200, nil)
 		worstSteady = math.Max(worstSteady, math.Abs(b.Shed()-steady.Shed())/p)
 		step := math.Abs(steady.Shed()-fine.Shed()) / p
 		worstStep = math.Max(worstStep, step)

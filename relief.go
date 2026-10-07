@@ -236,14 +236,14 @@ func (g *Grid) SoilAt(p geom.Pos) float64 {
 	wet := damp + (1-damp)*shoulderWater*g.wetOf(i)
 	lie := wet * (0.75 + 0.5*g.Sunlight(p))
 	// Organisms and time again: the carbon the soil holds, and what the rain,
-	// the dry years and the rock have made of its chemistry. See humus and
-	// soilChemistry; on a grid whose soil state was never laid, the climate's
-	// organic matter alone, as it was.
+	// the dry years and the rock have made of its chemistry. See organic and
+	// soilChemistry; on a grid whose soil state was never laid, the carbon
+	// its climate and cover would come to.
 	chem := 1.0
 	if g.pedons {
 		chem = soilChemistry(t)
 	}
-	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*g.loamAt(i))*g.humus(i)*chem)
+	return clamp01(0.15 + 0.85*depth*lie*(0.75+0.5*g.loamAt(i))*g.organic(i)*chem)
 }
 
 // rootReach is how deep the soil a crop's roots fill is, in metres: most of
@@ -262,20 +262,15 @@ const rootReach = 0.5
 // field wants against a thirtieth before; at 0.12, one tile in eighteen.
 const shoulderWater = 0.12
 
-// organic is the organic matter in tile i's soil, against the map's middling
-// climate at one: what grows there to put back into it, over how fast the
-// soil's life eats it. Growth is the growing weather of the year's mean, cut
-// off below freezing and by the water there is; decay doubles with every ten
-// degrees, which is the Q10 of two that soil respiration has the world over
-// (Raich and Schlesinger 1992). So a cold wet soil keeps its peat and a hot
-// one burns through what falls on it. It is held within half again either
-// way, because it multiplies what the soil holds and not what a soil is.
+// organic is the organic matter in tile i's soil, against the middling
+// soil's at one: the carbon its soil's pools hold in their top metre (see
+// carbon.go) over carbonMiddle. It is the one reading of a soil's carbon
+// there is: the pools' where the soil's state has been laid, and their
+// steady state under the tile's climate and cover where it has not. It is
+// held within half again either way, because it multiplies what the soil
+// holds and not what a soil is.
 func (g *Grid) organic(i int) float64 {
-	t := g.meanTempOf(i)
-	input := growthOf(t) * ramp(t, -5, 5) * g.wetOf(i)
-	decay := math.Pow(2, (t-MeanTemp)/10)
-	middle := growthOf(MeanTemp) * ramp(MeanTemp, -5, 5) * (1 - math.Exp(-middleRunoff/weatherRunoff))
-	return math.Max(0.5, math.Min(1.5, input/decay/middle))
+	return math.Max(0.5, math.Min(1.5, g.soilCarbonOf(i)/carbonMiddle))
 }
 
 // clamp01 holds a share inside [0,1].

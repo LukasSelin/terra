@@ -289,8 +289,11 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// range adds is read off the land's rain as the budget settles: see
 	// below.
 	pet0 := make([]float64, n)
+	// share is given back, and the grid keeps it for the vegetation's
+	// bucket (terra's petShare), so it is new memory and not the
+	// Scratch's: nothing a reading gives back lives in one.
 	for k := range share {
-		share[k] = s.phaseWork(k).floats(slotShare, n)
+		share[k] = make([]float64, n)
 	}
 	for cy := 0; cy < e.H; cy++ {
 		row := min(cy*e.Cell+e.Cell/2, m.H-1)
@@ -396,7 +399,11 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		if annual[i] > 0 {
 			phi = pet[i] / annual[i]
 		}
-		b := Bucket(Hold(cellSoil[i], cellPaw[i], RootDepth(phi)), &rain, &take)
+		// On the cell's year at its ground, so that a cold cell's winter
+		// lies as snow and goes up off it or into the soil in the spring.
+		mean := temp[1][i] - Lapse*e.Height[i]
+		swing := (temp[2][i] - temp[0][i]) / 2
+		b := BucketCold(Hold(cellSoil[i], cellPaw[i], RootDepth(phi)), &rain, &take, mean, swing)
 		for k := range Phases {
 			landEvap[k][i] = b.Evap[k] * Phases / secondsPerYear
 		}

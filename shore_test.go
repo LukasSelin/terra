@@ -201,18 +201,18 @@ func estuary() *Grid {
 // plates are grown (see fractureWall) they hold 2, 0, 1, 0, 1, 3, 1 and 0: the
 // second's coast has seventy-two tiles within a spring's reach of the sea where
 // it had a hundred and six, and the gentlest of them is six times steeper than
-// the sea grades it. The first held its two through that change. With the
-// gyres solved over the whole ocean at once rather than a row at a time (see
-// internal/atmos/flow.go), which moves every globe's rain and so its ground,
-// they hold 3, 0, 0, 0, 0, 2, 4 and 2. With the thermocline under the
-// gyres (internal/atmos/thermocline.go), which moves the cold of the water
-// that comes up and so the rain of every coast, they hold 0, 0, 1, 0, 2, 3, 0
-// and 1, and the first with flats is the third. Each branch of the
-// Earth-system stack moved them on its own (the air's swing to 0, 1, 3, 0,
-// 0, 1, 2, 0; the circulation's belts to 0, 2, 0, 1, 0, 1, 0, 2; the crust
-// floating on its thickness, see isostasy.go, to 0, 8, 0, 0, 0, 0, 0, 34);
-// with all of them together on the integration branch they hold 0, 14, 4,
-// 0, 0, 0, 1 and 7, and the first with flats is the second.
+// the sea grades it. The first held its two through that change, and lost
+// them when the crust came to float on its thickness (see isostasy.go): they
+// hold 0, 8, 0, 0, 0, 0, 0 and 34 now, and the second is read.
+// The gyres solved over the whole ocean at once rather than a row at a
+// time (see internal/atmos/flow.go) move every globe's rain and so its
+// ground again, on top of that; and the thermocline under the gyres
+// (internal/atmos/thermocline.go), which moves the cold of the water that
+// comes up and so the rain of every coast, moved its own reading to the
+// third. On the merged world every one of the eight has flats and the
+// second has the most of them, so the second is read. (Before the rock
+// stack, once a cold year's precipitation came to lie as snow, see snow.go,
+// the snow's branch read the eighth.)
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string

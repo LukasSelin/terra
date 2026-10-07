@@ -132,6 +132,8 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	// and G2 (isostasy) to "each row at least two-thirds bare". The
 	// integration branch holds all of them at once, at the strictest share
 	// that passes on the merged world: see poleBare.
+	// On main, A and M together read the north row 0.63; with the soil's
+	// water (L1) it was 0.77 again.
 	for _, y := range []int{0, g.H - 1} {
 		bare := 0
 		for x := 0; x < g.W; x++ {
