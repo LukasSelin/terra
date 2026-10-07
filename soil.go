@@ -217,7 +217,15 @@ func (g *Grid) laySoil(made bool) {
 	g.EachRow(func(y int) {
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			h, pace := g.soilDepthOf(i)
-			g.Soil[i] = float32(h)
+			// A flat keeps the mud the tide laid on it (see silt): the steady
+			// depth reads it as wet ground with none, and with none its grain
+			// fell back to its rock's, finer than the mud the tide graded it
+			// on, so a flat laid at the grade of its mud read steeper than the
+			// grade of its rock (#116; the second small globe's flat at 239,92
+			// stood at 0.0166 against 0.0160).
+			if g.Tiles[i].Terrain != Flat {
+				g.Soil[i] = float32(h)
+			}
 			// The history's age bounds the ground's own reading of it, except
 			// where the history last saw the tile under its sea: the map's sea
 			// is poured again, and when that ground came out of it the history
