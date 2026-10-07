@@ -6,6 +6,118 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Relations across the world's systems, and the coupling graph
+
+**What this is.** On `claude/system-relations`, from `claude/ocean-relations`
+(88e43b6, O3 unmerged): #27. The land's relations (`relations_land.go`):
+`Shadows` (a belt's orographic rain, `Budget.Oro`, on the cells of it the
+air crossed, walked back up each phase's wind with the walk `Why` uses,
+now `upwindWalk`), `Fills` (a lake's `Inflow`), `Grows` (a climate region's
+share under each wood; woods are a new feature kind, `Woodland`, connected
+forest), `Raises` (a belt's plates from `Feature.Plates`) and `DrainsInto`
+(a basin of `textureChannel` tiles or more and the current, upwelling or
+gyre nearest its mouth). `Why` gains `RainShadow` in `OfRain`. And the
+coupling graph (`couplings.go`): every pass of `Generate`, its stages, and
+the world's fields it reads and writes, held to the code by
+`couplings_test.go` - the source read pass by pass with `go/parser`, and the
+budget's three worlds made stage by stage with every Grid field hashed after
+each - with `docs/couplings.md` and `cmd/overview`'s `couplings.html` made
+from it. `weather`'s default air for a hand-made grid moved into
+`ensureAir`, its own pass, so the graph does not read the weather as
+writing the energy balance.
+
+**The world.** Unchanged: `TERRA_DIGEST=write` on 88e43b6 left
+`docs/perf/digest.json` as committed, and `TERRA_DIGEST=check` passes after.
+
+**The heap.** Moved, and the budget rewritten: valley 10.47 -> 10.54 MB,
+ancient 58.85 -> 59.12 MB, globe128 412.98 -> 415.00 MB (+0.5%), the
+woods' label (4 B a tile), the land's relations and the shadow walk's cells.
+A first cut allocated a closure for every cell and phase of the walk and
+grew its kept parts from nothing, 3 MB on globe128; one closure and a kept
+slice made to size took it to the figure above.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, two runs each, base then head:
+`readRelations` 0.17-0.18 s -> 0.30-0.37 s, `readFeatures` (which holds it
+and now the woods) 0.45-0.49 s -> 0.57-0.67 s, `readSea` 0.15-0.16 s and
+`airEnv.currents` 0.12 s both sides (untouched), against `Generate`
+12.1-12.5 s and 11.4-12.2 s. On that globe there are 39477 relations, 14639
+of them `Shadows` and 19044 `Raises`.
+
+---
+
+## 2026-10-07 - What the sea's features do: relations, and Why for rain and warmth
+
+**What this is.** On `claude/ocean-relations`, from `claude/ocean-features`
+(12e4610, O2 unmerged): workstream O3 of the ocean-currents plan (#20). A
+general relation layer on the registry (`relations.go`): `Relation{From,
+To, Kind, Quantity, Unit}`, kept sorted by From, Kind and To with an index
+by To, and `Features.RelationsOf`. `readRelations` runs at the end of
+`readFeatures`, on one goroutine in id and tile order. The sea's kinds are
+filled: `Warms`/`Cools` (a current's part of `CoastWarmth`, read back out of
+`coastal`'s blur cell by cell with the new `(*Env).CoastFrom`), `Dries` (the
+share `inversion` takes, `(*Env).Inversion`), `Waters` (the share of a
+basin's rain whose phase's upwind walk ends on a current's water),
+`PartOf` (current to gyre) and `Feeds` (the current traced along and back
+against the field from a current's mouth and head). `Why` gains
+`OffshoreCurrent`, `SeaDamp` (`(*Env).Damp`, the sea's saturation with and
+without the current's warmth, as `RainCells` reads it) and `Inversion` in
+`OfRain`, and a new `OfWarmth` aspect whose causes add up to the year's mean.
+
+**The world.** Unchanged: relations are a reading. `TERRA_DIGEST=write` on
+12e4610 left `docs/perf/digest.json` as committed, and `TERRA_DIGEST=check`
+passes after.
+
+**The heap.** globe128 allocates 394.8 MiB in 29343 allocations against the
+budget's 393.8 MiB in 29301 (O2 had it at 394.5 MiB): inside the slack, and
+the budget is not rewritten. The relations kept on GlobeTerms seed 3 are
+4873 at 40 B, some 190 KiB; the cells' parts and splits are dropped once
+they are read.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, two runs of each, loaded machine:
+`readRelations` (new) 0.19 s, `readFeatures` 0.31-0.32 s -> 0.53 s with it,
+`readSea` 0.17-0.18 s and `airEnv.currents` 0.12-0.13 s before and after
+(their code is untouched), against `weather` 1.13-1.19 s and `Generate`
+12.7-13.1 s. A first cut took 0.34 s: `CoastFrom` walked its window twice
+and each window cell's tiles twice; one walk, and each cell's split among
+the features kept, halved it.
+
+---
+
+## 2026-10-07 - The sea's currents, gyres and upwellings are features
+
+**What this is.** On `claude/ocean-features`, from `main` (7e17754, which
+has O1 merged): workstream O2 of the ocean-currents plan (#18). Three new
+kinds in the registry, `SeaCurrent`, `Gyre` and `Upwelling`, read off O1's
+fields in `readSea` (`features_sea.go`) at the end of `readFeatures`. The
+gyres are the hills and hollows of a streamfunction solved from the
+current's own vorticity (`(*Env).Stream`, `internal/atmos/stream.go`: SOR on
+cells of up to 200 km, the air's two by two on the globe, started from two
+coarser lattices), so nothing is read off the row-by-row gyre solve that M1
+replaces. Each tile keeps its place among each sea kind's features as a
+`uint16`, not a `FeatureID`: 3 × 2 B a tile, nil on a valley.
+
+**The world.** Unchanged: the registry is a reading. `TERRA_DIGEST=write`
+on 7e17754 left `docs/perf/digest.json` as committed, and
+`TERRA_DIGEST=check` passes after.
+
+**The heap.** globe128 allocates 393.8 -> 394.5 MiB (+0.18%) in 29301 ->
+29323 allocations: inside the slack, and the budget is not rewritten. The
+valleys have no currents and do not move.
+
+**Timing.** GlobeTerms seed 3 from a kept history, `TERRA_PHASES=1`,
+`cmd/overview -from-history`, loaded machine: `readSea` 0.16 s of
+`readFeatures` 0.29 s (so `readFeatures` was some 0.13 s before), against
+`weather` 1.18 s. Of `readSea`, about 0.1 s is the streamfunction; solving
+it on the air's own cells was 0.9 s, on cells twice the size 0.12 s with a
+mean difference of 0.8% of the largest ψ and no change of sign where ψ is
+over a tenth of it. It settles to 1e-4 of the largest ψ; 1e-5 found the same
+gyres and currents but for a handful of tiles. `airEnv.currents`
+is 0.13 s before and after: its code is untouched.
+
+---
+
 ## 2026-10-06 - Ocean yardsticks
 
 **What this is.** Test code only, on `claude/ocean-yardsticks` from
