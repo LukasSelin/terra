@@ -124,11 +124,14 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // were bent by the plate spacing and not the tile (see fractureBend); then tile
 // 987, raised by an arc in the first epoch by some 12 km, until the crust
 // floated on its thickness (see isostasy.go) and the ancient valley's plates
-// met elsewhere. Tile 1228 is now the one an arc raised in the first epoch,
-// by some 17 km.
+// met elsewhere; then tile 1228, raised by an arc in the first epoch by some
+// 17 km, until the history's ground came down by its relief and not by
+// stream power (see denude.go) and the granite under it was still buried
+// under its fill. Tile 1229, beside it, is now the one an arc raised in the
+// first epoch, by some 13 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(1228)
+	p := g.PosOf(1229)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -147,7 +150,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 1228 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 1229 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {

@@ -152,6 +152,7 @@ type historyEnd struct {
 	ocean           []bool
 	sea             float64
 	eroded, rebound float64
+	denuded         []denudation
 }
 
 // endOfHistory makes the world of seed and terms afresh and keeps what its
@@ -162,7 +163,7 @@ func endOfHistory(seed uint64, terms Terms) historyEnd {
 		if e != terms.Epochs-1 {
 			return
 		}
-		end = historyEnd{w: g.W, h: g.H, height: g.heights(), sea: g.base, eroded: cr.eroded, rebound: cr.rebound}
+		end = historyEnd{w: g.W, h: g.H, height: g.heights(), sea: g.base, eroded: cr.eroded, rebound: cr.rebound, denuded: slices.Clone(cr.denuded)}
 		end.thick = make([]float64, len(g.Tiles))
 		for i := range end.thick {
 			end.thick[i] = float64(cr.thick[i])
@@ -197,9 +198,10 @@ func weightedQuantile(v, wt []float64, f float64) float64 {
 // continental crust's surface over the mean of the ocean floor's, four and a
 // half to five kilometres on the earth - the land's hypsometry beside
 // Cogley's at the shares G1 reads it at, the crust and the root under the
-// highest of the land, and how far the land rose in the epochs the weather
-// wore it, per metre worn. Each tile is weighted by the ground it stands for
-// on a sphere, as G1 weighs the map's.
+// highest of the land, how far the land rose in the epochs the weather
+// wore it, per metre worn, and how fast the weather wore it, epoch by epoch,
+// beside Portenga and Bierman's (2011) rates. Each tile is weighted by the
+// ground it stands for on a sphere, as G1 weighs the map's.
 //
 // Read so at the end of main's history (2c51bea), with the sea a share of the
 // ground and the plates settling to two fixed levels, the land stood 119, 238
@@ -210,19 +212,26 @@ func weightedQuantile(v, wt []float64, f float64) float64 {
 // ρc/ρm, within a quarter under it or a tenth over. It comes out over, by
 // the plate bending up the land beside what it lost as well as under it.
 //
-// The land's low half is low: half of it within a hundred metres of the sea,
-// where half the earth's stands under 461 m. That is the history's water and
-// not its crust. At a history's span and over an epoch the water's cut on a
-// tile, K√Q·dt/dx, is fifty to two hundred, so every river is cut down to the
-// tile it runs into and the whole of a drainage to its outlet in one step:
-// the low country is planed to the sea every epoch, as it was on main, and
-// the crust floats back five sixths of what was cut.
+// And to G2b's (#78): the land's median in the hundreds of metres, between
+// two hundred and a thousand; the land from its 25th to its 99th hundredth
+// within a factor of two of Cogley's at the same share; and the continental
+// crust within three kilometres of the 35 it starts at. With G2's stream
+// power the land's median stood 26 to 37 metres over its sea, every drainage
+// cut to its outlet each epoch, and the crust thinned to 27 to 29
+// kilometres, since what the rivers took to the sea left it. See denude.go.
+//
+// The lowest twentieth and tenth of the land stand two to three times the
+// earth's, 75 to 120 metres against 36 and 70 to 190 against 71: the earth's
+// lowest land is coastal plain and delta, built by its rivers at the sea,
+// and a history's rivers lay nothing on land but in its hollows. That is
+// logged and not held.
 func TestTheHistoryStandsOnItsCrust(t *testing.T) {
 	if testing.Short() {
 		t.Skip("makes globes")
 	}
 	shares := []float64{0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 1}
-	var hyps, crust strings.Builder
+	var hyps, crust, wear strings.Builder
+	fmt.Fprintf(&wear, "%-14s epoch: median, mean, lower half's and highest twentieth's, mm/yr", "")
 	fmt.Fprintf(&hyps, "%-14s", "land, m")
 	for _, f := range shares {
 		fmt.Fprintf(&hyps, "%8g", f)
@@ -309,7 +318,29 @@ func TestTheHistoryStandsOnItsCrust(t *testing.T) {
 		if per := crustDensity / mantleDensity; rebound < 0.75*per || rebound > 1.1*per {
 			t.Errorf("%s: the land rose %.3f of each metre worn off it", c.name, rebound)
 		}
+		if med := weightedQuantile(hs, ws, 0.5); med < 200 || med > 1000 {
+			t.Errorf("%s: half the land stands within %.0f m of its sea, where half the earth's stands within 461", c.name, med)
+		}
+		for _, f := range []float64{0.25, 0.5, 0.75, 0.9, 0.95, 0.99} {
+			if got, want := weightedQuantile(hs, ws, f), cogleyAt(f); got < want/2 || got > 2*want {
+				t.Errorf("%s: the land at %g of the way up its order stands %.0f m over its sea, where the earth's stands %.0f", c.name, f, got, want)
+			}
+		}
+		if k := contThick / contW; math.Abs(k-continentCrust) > 3*km {
+			t.Errorf("%s: the continental crust is %.1f km thick on the mean, where it starts at %.0f", c.name, k/km, continentCrust/km)
+		}
+		fmt.Fprintf(&wear, "\n%-14s", c.name)
+		var shelved, spilt, lost float64
+		for k, d := range e.denuded {
+			shelved, spilt, lost = shelved+d.shelved, spilt+d.spilt, lost+d.lost
+			if k%3 == 0 || k == len(e.denuded)-1 {
+				fmt.Fprintf(&wear, "  %2d: %.3f %.3f %.3f %.2f", k, d.median, d.mean, d.low, d.high)
+			}
+		}
+		fmt.Fprintf(&wear, "\n%-14s laid on the margins %.0f km over a tile, %.0f of it past a filled sea; %.0f off the map",
+			"", shelved/km, spilt/km, lost/km)
 	}
 	t.Logf("the history's land over its sea, at shares of the land, against Cogley's (1984):\n%s", hyps.String())
 	t.Logf("the history's crust:\n%s", crust.String())
+	t.Logf("what the weather took off the land, against Portenga and Bierman's (2011) median of 0.054 mm/yr over the world's basins, 0.01 to 0.1 on the cratons and up to millimetres in active ranges:\n%s", wear.String())
 }

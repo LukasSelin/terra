@@ -169,6 +169,9 @@ type Grid struct {
 	// exported is what the last age of weather carried off the land into the
 	// sea or off the edge of the map, grain by grain, in metres over a tile.
 	exported [Grains]float64
+	// toSea is, while a history runs, what the weather has sent to the sea
+	// from each root this epoch: see shelve.
+	toSea [][Grains]float64
 	// bankLoad is what the rivers took off the outside of their bends in the
 	// last meander and did not lay on the inside, by tile and grain, in metres
 	// over a tile: ground in the water, waiting for the next wear to carry it.

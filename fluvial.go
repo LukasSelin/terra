@@ -276,6 +276,8 @@ type stepScratch struct {
 	fill                                            []float64
 	root                                            []bool
 	edge, keep, room                                []float64
+	floor                                           []float64
+	seen                                            []int32
 	solve                                           solveScratch
 }
 
@@ -362,6 +364,11 @@ type fluvial struct {
 	trap  [][Grains]float64
 	surf  []int32
 	sands []float64
+	// mouth is, in a history, what each root sends to the sea by grain: the
+	// same load as is counted to exported, kept by the root it leaves from,
+	// so that it can be laid on the margin off that mouth and not lost. It is
+	// nil outside a history. See shelve.
+	mouth [][Grains]float64
 	// scratch is the working memory of solve and account, kept on the Grid
 	// between steps by waterStep, and nil on a fluvial made by hand, which
 	// makes its own. See solveScratch.
@@ -709,7 +716,11 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 			cut := c.edgeCut(i, next[i])
 			change[i] -= cut
 			for gr := range load[i] {
-				exported[gr] += load[i][gr] - kept[gr] + cut*c.parts[i][gr]
+				out := load[i][gr] - kept[gr] + cut*c.parts[i][gr]
+				exported[gr] += out
+				if c.mouth != nil {
+					c.mouth[i][gr] += out
+				}
 			}
 			if c.surf != nil && c.surf[i] >= 0 {
 				sand := load[i][Sand] - kept[Sand]
@@ -798,12 +809,11 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 		if int(recv[i]) != i || g.sunk(i) {
 			continue
 		}
-		t := &g.Tiles[i]
 		if p := g.PosOf(i); !g.outlet(p.X, p.Y) || g.Height[i] <= base {
 			continue
 		}
 		c.edge[i] = base
-		c.f[i] = years * Erodibility * math.Sqrt(g.Flow[i]) * rockErodibility(t) / g.span()
+		c.f[i] = g.deepRate(i, g.Height[i]-base, years)
 	}
 }
 

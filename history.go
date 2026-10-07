@@ -1044,14 +1044,27 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		g.base = g.historyBase()
 		g.drain()
 		worn := cr.worn(g)
+		cr.was = append(cr.was[:0], worn...)
+		if len(g.toSea) != len(g.Tiles) {
+			g.toSea = make([][Grains]float64, len(g.Tiles))
+		}
+		clear(g.toSea)
 		g.wear(epochYears)
+		// What the rivers brought the sea is laid on the margins off their
+		// mouths, and is crust there. See shelve.
+		var shelf denudation
+		shelf.shelved, shelf.spilt, shelf.lost = g.shelve(g.toSea, e, book)
 		// What the weather took off is crust gone, and what it laid down is
 		// crust laid; and the plate floats up under what it lost while it
 		// was losing it, which is the rebound. See isostasy.go.
 		for i := range worn {
 			worn[i] -= g.Height[i]
-			cr.thicken(i, -worn[i])
+			by := cr.thicken(i, -worn[i])
+			cr.sed[i] = float32(math.Max(0, float64(cr.sed[i])+by))
 		}
+		d := readDenudation(g, cr, cr.was, worn)
+		d.shelved, d.spilt, d.lost = shelf.shelved, shelf.spilt, shelf.lost
+		cr.denuded = append(cr.denuded, d)
 		g.isostasy(cr, e, worn, relaxing)
 		cr.riseBy()
 		g.keepBook(book, e)
@@ -1066,6 +1079,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 			epochWatch(g, cr, plates, e)
 		}
 	}
+
+	g.toSea, g.stepScratch.floor, g.stepScratch.seen = nil, nil, nil
 
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet, and once the plates are kept,
@@ -1747,13 +1762,22 @@ type crust struct {
 	// with it. See isostasy.go.
 	thick, nthick []float32
 	sag, nsag     []float32
+	// sed is how much of each tile's crust is what the weather has laid on
+	// it, in metres: a margin's wedge of sediment, or a basin's fill. It is
+	// crust and floats as crust, but it is not what makes a floor a
+	// continent: see accrete.
+	sed, nsed []float32
 	// local is isostasy's working, and plan its transform's. eroded and
 	// rebound are what the weather has taken off the land over the history,
 	// and what the land rose by in the same epochs as it was taken: the
 	// history's reading of its own rebound.
 	local, wear     []float64
+	was             []float64
 	plan            *flexPlan
 	eroded, rebound float64
+	// denuded is what each epoch's weather took off the land. See
+	// readDenudation.
+	denuded []denudation
 	// fed is how many tiles of crust went down, or were crumpled up, at each
 	// place this epoch. It is what feeds the arcs and the ranges: see
 	// tectonics.
@@ -1823,9 +1847,15 @@ func (cr *crust) kinds(g *Grid, plates []Plate) {
 // the hotspots. Left to the volcanic ground alone, a floor a collision had
 // thickened to forty kilometres stayed floor, floated as floor does under the
 // sea, and the plate held it up as a ridge ten kilometres over its level.
+//
+// What the rivers have laid on a floor is not counted (sed). A margin's wedge
+// of sediment is floor with mud on it until something thickens the floor
+// itself; counted, the wedges off every long-lived coast became continent,
+// and the plates' kinds, and so which of them goes down where they meet,
+// moved with them.
 func (cr *crust) accrete() {
 	for i, t := range cr.thick {
-		if cr.ocean[i] && float64(t) >= oceanCrust+accreteEnough {
+		if cr.ocean[i] && float64(t-cr.sed[i]) >= oceanCrust+accreteEnough {
 			cr.ocean[i] = false
 		}
 	}
@@ -1841,6 +1871,7 @@ func newCrust(g *Grid) *crust {
 		ocean: make([]bool, n), nocean: make([]bool, n),
 		rise: make([]float64, n), nrise: make([]float64, n), lifted: make([]float64, n),
 		thick: make([]float32, n), nthick: make([]float32, n),
+		sed: make([]float32, n), nsed: make([]float32, n),
 		sag: make([]float32, n), nsag: make([]float32, n),
 		plate: make([]uint8, n), nplate: make([]uint8, n),
 		org: make([]int32, n), norg: make([]int32, n),
@@ -2052,7 +2083,7 @@ func (cr *crust) land(plates []Plate, i, j int) {
 	}
 	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i], cr.aged[i]
 	cr.nocean[j], cr.nrise[j] = cr.ocean[i], cr.rise[i]
-	cr.nthick[j], cr.nsag[j] = cr.thick[i], cr.sag[i]
+	cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[i], cr.sag[i], cr.sed[i]
 	cr.noff[j] = cr.off[i]
 }
 
@@ -2068,6 +2099,7 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 	cr.ocean, cr.nocean = cr.nocean, cr.ocean
 	cr.rise, cr.nrise = cr.nrise, cr.rise
 	cr.thick, cr.nthick = cr.nthick, cr.thick
+	cr.sed, cr.nsed = cr.nsed, cr.sed
 	cr.sag, cr.nsag = cr.nsag, cr.sag
 	cr.off, cr.noff = cr.noff, cr.off
 }
@@ -2202,7 +2234,7 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 				}
 				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = k, cr.org[best], cr.fresh[best], cr.born[best], cr.aged[best]
 				cr.nocean[j], cr.nrise[j] = cr.ocean[best], cr.rise[best]
-				cr.nthick[j], cr.nsag[j] = cr.thick[best], cr.sag[best]
+				cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[best], cr.sag[best], cr.sed[best]
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
@@ -2295,7 +2327,7 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 			cr.naged[j] = 0
 			cr.nrise[j] = 0
 			// A ridge makes ocean crust, standing as it floats.
-			cr.nthick[j], cr.nsag[j] = oceanCrust, 0
+			cr.nthick[j], cr.nsag[j], cr.nsed[j] = oceanCrust, 0, 0
 			cr.noff[j] = [2]float32{}
 		}
 		next = next[:0]
