@@ -82,11 +82,6 @@ const (
 	// boundaryHumidity is how near saturation the air coming in over the edge
 	// of a map that is not a globe is: maritime air, straight off the sea.
 	boundaryHumidity = 0.7
-	// vapourRounds is the most rounds of four sweeps the columns are given to
-	// settle, and vapourSettled the mean change in kg/m² over the cells in a
-	// round that is settled.
-	vapourRounds  = 4
-	vapourSettled = 3e-2
 	// eddyVapour is K, m²/s, how fast the storms of the middle latitudes mix
 	// the water of the air down its gradient on a globe, which no wind of an
 	// ordinary year carries: the transient eddies' poleward flux of latent heat,
@@ -95,9 +90,36 @@ const (
 	// fall of fifteen kg/m² of column over the twenty-five degrees from the
 	// subtropics to the storm tracks: 2.4e6. A valley is smaller than an eddy.
 	eddyVapour = 2.4e6
-	// recycleRounds is how many times the land's rain and what it sends back
-	// to the air are worked out against each other.
-	recycleRounds = 2
+)
+
+// How the budget is settled. The columns, the ground's lift and the land's
+// rain and what it sends back are worked out against each other round by
+// round, one round of the sweeps and one year of the land's bucket at a time,
+// until a round moves the land's rain by less than settledShare of it, and for
+// settleRounds at the most.
+//
+// They used to be worked out a fixed few times over, from wherever the last
+// budget had left them: a history rains on its world every age, and the age
+// before's columns and land's rain were taken as near enough to start from
+// and one round as enough. It was not. The ground's lift was read off how
+// near saturation the column had stood in the last round, and wrung the more
+// out of air the wetter it had been, which left it the drier for the next: a
+// round that rained a column out on the ground's lift left the next round
+// nothing to lift, and the one after a wet column again. Every round swung the
+// land's rain the other way, and a history ran one round an age, so its land's
+// rain swung from one age to the next by as much as half (the globe's from
+// 1822 mm to 1580, 1800, 1615 and on, to 2178 and 1250), and a hundredth of a
+// degree on the air reshuffled where it swung: the map's heights moved by
+// 1274 m RMS (#84). Now the lift wrings out of the column as near saturation
+// as it stands while it is settled, and the budget is a fixed point of the
+// age's own ground and air: where it starts moves it by no more than the
+// share it is settled to.
+const (
+	settleRounds = 40
+	settledShare = 1e-3
+	// settleLeast is the fewest rounds: a budget started from the last one
+	// is read at least once more after its land has had a year of its rain.
+	settleLeast = 2
 )
 
 // convLayer is the share of the column's water in the air near the ground,
@@ -165,13 +187,12 @@ func rainCurve(r float64) float64 {
 
 // vapourIn is what one phase's budget is worked out from, on the cells.
 type vapourIn struct {
-	u, v     []float32 // the wind near the ground, m/s
-	temp     []float64 // the air at sea level, degrees
-	sst      []float64 // the sea's surface, degrees
-	landEvap []float64 // what the land sends up, kg/m²/s
-	stable   []float64 // how much of its rain air held down by cold water keeps; nil for all
-	oro      []float64 // what the ground's lift would wring out, kg/m²/s; nil for none
-	w        []float64 // where to start the columns from; nil for a fresh start
+	u, v   []float32 // the wind near the ground, m/s
+	temp   []float64 // the air at sea level, degrees
+	sst    []float64 // the sea's surface, degrees
+	stable []float64 // how much of its rain air held down by cold water keeps; nil for all
+	lift   []float64 // what the ground's lift would wring out of saturated air, kg/m²/s; nil for none
+	w      []float64 // where to start the columns from; nil for a fresh start
 }
 
 // vapourOut is one phase's settled budget, on the cells: the water in each
@@ -186,7 +207,7 @@ type vapourOut struct {
 
 // vapourCell is one cell's equation for its column's water, as the sweeps
 // read it: what it is given and loses whatever its water, where its water
-// comes from and how hard, and its rain curve. See vapour.
+// comes from and how hard, and its rain curve. See round.
 type vapourCell struct {
 	give, lose        float64
 	toStep, rainScale float64
@@ -195,10 +216,37 @@ type vapourCell struct {
 	share             [4]float64
 }
 
-// vapour settles one phase's budget, worked out in wk (see Scratch). What it
-// gives back is its own.
-func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
-	defer phase.Start("airEnv.vapour")()
+// vapourBudget is one phase's budget as it is settled: each cell's equation,
+// laid out once for the phase's wind, and the columns as they stand.
+type vapourBudget struct {
+	e     *Env
+	cells []vapourCell
+	// fixed is what each cell is given whatever its land sends up: the sea's
+	// water at a column of nothing, and the air's coming in over the edge.
+	fixed                   []float64
+	seaA, seaB, satW, rainK []float64
+	gather, lift            []float64
+	w, landEvap             []float64
+	// taken is what the ground's lift wrung out of each column in the last
+	// sweep, kg/m²/s.
+	taken []float64
+	// scratch is the coarse corrections' working memory, kept between
+	// rounds.
+	scratch []float64
+	blocks  vapourBlocks
+	orders  [4]sweepOrder
+}
+
+type sweepOrder struct{ x0, x1, dx, y0, y1, dy int }
+
+// noCell is a vapourCell's from where no water comes from that side.
+const noCell = -1
+
+// newVapour lays out one phase's budget: each cell's equation, and the
+// columns at in.w, or near saturation as the air off the sea is. Its
+// fluxes are worked out in wk (see Scratch).
+func (e *Env) newVapour(in vapourIn, wk *work) *vapourBudget {
+	defer phase.Start("airEnv.vapour.setup")()
 	n := e.W * e.H
 	dy := e.Dy
 	f := e.vapourFluxes(in.u, in.v, wk)
@@ -213,11 +261,20 @@ func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 	// gathering; its neighbours upwind are read as the sweeps go.
 	// Each is laid out in a vapourCell, so that a visit reads one run of
 	// memory.
-	cells := wk.vapourCells(n)
-	seaA := wk.floats(slotSeaA, n)   // the sea's evaporation at W of nothing, kg/m²/s
-	seaB := wk.floats(slotSeaB, n)   // and what each kg/m² of W takes off it, a second
-	satW := make([]float64, n)       // the saturated column
-	rainK := wk.floats(slotRainK, n) // what of the column's rain the air keeps
+	b := &vapourBudget{
+		e:      e,
+		cells:  make([]vapourCell, n),
+		fixed:  make([]float64, n),
+		seaA:   make([]float64, n), // the sea's evaporation at W of nothing, kg/m²/s
+		seaB:   make([]float64, n), // and what each kg/m² of W takes off it, a second
+		satW:   make([]float64, n), // the saturated column
+		rainK:  make([]float64, n), // what of the column's rain the air keeps
+		gather: gather,
+		lift:   in.lift,
+		w:      make([]float64, n),
+		taken:  make([]float64, n),
+	}
+	cells, seaA, seaB, satW, rainK := b.cells, b.seaA, b.seaB, b.satW, b.rainK
 	for cy := 0; cy < e.H; cy++ {
 		area := e.Dx[cy] * dy
 		for cx := 0; cx < e.W; cx++ {
@@ -233,23 +290,23 @@ func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 			bulk := airDensity * exchangeCoeff * speed * e.Sea[i]
 			seaA[i] = bulk * saturation(in.sst[i])
 			seaB[i] = bulk / (airDensity * vapourHeight)
-			cells[i].give = seaA[i] + (1-e.Sea[i])*in.landEvap[i]
+			b.fixed[i] = seaA[i]
 			out := math.Max(0, east[i]) + math.Max(0, -westOf(cx, cy)) + math.Max(0, north[i]) + math.Max(0, -southOf(cx, cy))
 			cells[i].lose = out/area + seaB[i] + gather[i]
 			if !e.Wrap {
 				// Air coming in over the edge brings the sea's water with it.
 				bnd := boundaryHumidity * ws
 				if cx == e.W-1 {
-					cells[i].give += math.Max(0, -east[i]) / area * bnd
+					b.fixed[i] += math.Max(0, -east[i]) / area * bnd
 				}
 				if cx == 0 {
-					cells[i].give += math.Max(0, westOf(cx, cy)) / area * bnd
+					b.fixed[i] += math.Max(0, westOf(cx, cy)) / area * bnd
 				}
 				if cy == 0 {
-					cells[i].give += math.Max(0, -north[i]) / area * bnd
+					b.fixed[i] += math.Max(0, -north[i]) / area * bnd
 				}
 				if cy == e.H-1 {
-					cells[i].give += math.Max(0, southOf(cx, cy)) / area * bnd
+					b.fixed[i] += math.Max(0, southOf(cx, cy)) / area * bnd
 				}
 			}
 			rainK[i] = 1
@@ -259,23 +316,21 @@ func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 		}
 	}
 
-	w := make([]float64, n)
 	if in.w != nil {
-		copy(w, in.w)
+		copy(b.w, in.w)
 	} else {
-		for i := range w {
-			w[i] = boundaryHumidity * satW[i]
+		for i := range b.w {
+			b.w[i] = boundaryHumidity * satW[i]
 		}
 	}
 	// Where each cell's water comes from: up to four cells upwind, and the
 	// part a second of each one's water that crosses into it.
-	const none = -1
 	for cy := 0; cy < e.H; cy++ {
 		area := e.Dx[cy] * dy
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
 			c := &cells[i]
-			c.from = [4]int32{none, none, none, none}
+			c.from = [4]int32{noCell, noCell, noCell, noCell}
 			if f := westOf(cx, cy); f > 0 && (cx > 0 || e.Wrap) {
 				c.from[0], c.share[0] = int32(e.at(cx-1, cy)), f/area
 			}
@@ -309,83 +364,260 @@ func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 	}
 	// The rain curve of each column, kept ready: how far along its table a
 	// kg/m² of water moves it, what the column's rain is scaled by, and the
-	// part of its slope that does not depend on the water. Every product is
-	// the one the sweep used to take, in the order it took it, so the sweeps
-	// settle on the same bits.
+	// part of its slope that does not depend on the water.
 	for i := range cells {
 		c := &cells[i]
 		c.toStep = rainSteps / rainMost / satW[i]
 		c.rainScale = rainK[i] * satW[i] / rainColumn / 86400
 		c.slope = c.rainScale * rainSteep * c.toStep * rainMost / rainSteps
 	}
-	taken := make([]float64, n)
-	type order struct{ x0, x1, dx, y0, y1, dy int }
-	orders := [4]order{
+	b.orders = [4]sweepOrder{
 		{0, e.W, 1, 0, e.H, 1}, {e.W - 1, -1, -1, 0, e.H, 1},
 		{0, e.W, 1, e.H - 1, -1, -1}, {e.W - 1, -1, -1, e.H - 1, -1, -1},
 	}
-	// Each visit to a cell takes one step of Newton's method on its own
-	// equation, lose·w + keep·P(w) = what it is given, with its neighbours
-	// as they stand: the left side only grows with w and is convex, so the
-	// steps never run away.
-	for round := 0; round < vapourRounds; round++ {
-		most := 0.0
-		for _, o := range orders {
-			for cy := o.y0; cy != o.y1; cy += o.dy {
-				for cx := o.x0; cx != o.x1; cx += o.dx {
-					i := cy*e.W + cx
-					c := &cells[i]
-					sum := c.give
-					for j, from := range c.from {
-						if from != none {
-							sum += c.share[j] * w[from]
-						}
+	b.blocks = e.vapourBlocks(cells)
+	return b
+}
+
+// balance is cell i's equation as its column and its neighbours' stand: what
+// it is given less what the ground's lift wrings out, and how fast the lift's
+// share grows with its column's water; and its rain and the rain's slope.
+//
+// The ground's lift wrings out of the column as near saturation as it is, and
+// all the column is given if that is less. The builtin min and max are
+// math.Min and math.Max to the bit, and are not a call.
+func (b *vapourBudget) balance(i int) (sum, taken, dTaken, p, dp float64) {
+	c := &b.cells[i]
+	sum = c.give
+	for j, from := range c.from {
+		if from != noCell {
+			sum += c.share[j] * b.w[from]
+		}
+	}
+	wi, ws := b.w[i], b.satW[i]
+	if b.lift != nil {
+		taken = b.lift[i] * min(1, wi/ws)
+		if taken < sum {
+			if wi < ws {
+				dTaken = b.lift[i] / ws
+			}
+		} else {
+			taken = max(0, sum)
+		}
+		sum -= taken
+	}
+	// columnRainSlope, written out for the few million times a map asks it.
+	f := min(wi*c.toStep, rainSteps)
+	kk := int(f)
+	ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
+	p = c.rainScale * (ex - rainEmpty)
+	dp = c.slope * ex
+	if over := wi - rainMost*ws; over > 0 {
+		p += dp * over
+	}
+	return sum, taken, dTaken, p, dp
+}
+
+// round is one round of the budget's settling under what the land sends up,
+// landEvap in kg/m²/s: four sweeps over the cells, each from another corner,
+// and then the coarse corrections. It returns the mean change in a column, in
+// kg/m².
+//
+// Each visit to a cell takes one step of Newton's method on its own
+// equation, lose·w + keep·P(w) + lift·w/ws = what it is given, with its
+// neighbours as they stand: the left side only grows with w and is convex, so
+// the steps never run away.
+func (b *vapourBudget) round(landEvap []float64) float64 {
+	defer phase.Start("airEnv.vapour")()
+	e := b.e
+	n := len(b.cells)
+	b.landEvap = landEvap
+	for i := range b.cells {
+		b.cells[i].give = b.fixed[i] + (1-e.Sea[i])*landEvap[i]
+	}
+	w, lift := b.w, b.lift
+	most := 0.0
+	for _, o := range b.orders {
+		for cy := o.y0; cy != o.y1; cy += o.dy {
+			for cx := o.x0; cx != o.x1; cx += o.dx {
+				i := cy*e.W + cx
+				c := &b.cells[i]
+				// balance, written out for the few million times a map
+				// asks it.
+				sum := c.give
+				for j, from := range c.from {
+					if from != noCell {
+						sum += c.share[j] * w[from]
 					}
-					if in.oro != nil {
-						// The ground's lift wrings out what it would, or all
-						// the column is given if that is less. The builtin
-						// min and max are math.Min and math.Max to the bit,
-						// and are not a call.
-						taken[i] = max(0, min(in.oro[i], sum))
-						sum -= taken[i]
-					}
-					// columnRainSlope, written out for the few million times
-					// a map asks it.
-					wi := w[i]
-					f := wi * c.toStep
-					if f > rainSteps {
-						f = rainSteps
-					}
-					kk := int(f)
-					ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
-					p := c.rainScale * (ex - rainEmpty)
-					dp := c.slope * ex
-					if over := wi - rainMost*satW[i]; over > 0 {
-						p += dp * over
-					}
-					next := wi - (c.lose*wi+p-sum)/(c.lose+dp)
-					if next < 0 {
-						next = 0
-					}
-					most += math.Abs(next - w[i])
-					w[i] = next
 				}
+				wi, ws := w[i], b.satW[i]
+				var dTaken float64
+				if lift != nil {
+					taken := lift[i] * min(1, wi/ws)
+					if taken < sum {
+						if wi < ws {
+							dTaken = lift[i] / ws
+						}
+					} else {
+						taken = max(0, sum)
+					}
+					sum -= taken
+					b.taken[i] = taken
+				}
+				f := min(wi*c.toStep, rainSteps)
+				kk := int(f)
+				ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
+				p := c.rainScale * (ex - rainEmpty)
+				dp := c.slope * ex
+				if over := wi - rainMost*ws; over > 0 {
+					p += dp * over
+				}
+				next := wi - (c.lose*wi+p-sum)/(c.lose+dp+dTaken)
+				if next < 0 {
+					next = 0
+				}
+				most += math.Abs(next - wi)
+				w[i] = next
 			}
 		}
-		if e.Wrap && e.H > 2 {
-			e.zonalCorrection(w, cells, in.oro, satW)
-		}
-		if most < vapourSettled*float64(n) {
-			break
-		}
 	}
+	b.blockCorrection()
+	if e.Wrap && e.H > 2 {
+		b.zonalCorrection()
+	}
+	return most / float64(n)
+}
 
-	out := vapourOut{w: w, Evap: make([]float64, n), Rain: make([]float64, n), Oro: taken, sat: satW}
-	for i := range w {
-		out.Evap[i] = seaA[i] - seaB[i]*w[i] + (1-e.Sea[i])*in.landEvap[i]
-		out.Rain[i] = rainK[i]*columnRain(w[i], satW[i]) + gather[i]*w[i]
+// out is the budget as it stands, written into into where it has room.
+func (b *vapourBudget) out(into vapourOut) vapourOut {
+	n := len(b.cells)
+	o := into
+	if len(o.Rain) != n {
+		o = vapourOut{w: make([]float64, n), Evap: make([]float64, n), Rain: make([]float64, n), Oro: make([]float64, n)}
 	}
-	return out
+	o.sat = b.satW
+	copy(o.w, b.w)
+	copy(o.Oro, b.taken)
+	for i := range b.w {
+		o.Evap[i] = b.seaA[i] - b.seaB[i]*b.w[i] + (1-b.e.Sea[i])*b.landEvap[i]
+		o.Rain[i] = b.rainK[i]*columnRain(b.w[i], b.satW[i]) + b.gather[i]*b.w[i]
+	}
+	return o
+}
+
+// The sweeps carry the water a cell a step, and the slow part of their
+// settling is the water's spreading over many cells: a sweep moves what is
+// out over a block of cells a cell at a time. So after each round the columns
+// of each block of vapourBlock cells a side are moved together by as much as
+// the block's budget, taken together, is still out, solved for over all the
+// blocks at once; and on a globe each row is then moved likewise (see
+// zonalCorrection), which is the same correction with a row for a block. It is
+// a coarse grid under the sweeps, read with each cell's columns where they
+// stand (Galerkin's, for a coarse grid of cells moved as one).
+const (
+	vapourBlock = 4
+	// blockSweeps is how many pairs of sweeps, forth and back, the blocks'
+	// own equations are given.
+	blockSweeps = 20
+)
+
+// vapourBlocks is how the cells are gathered into blocks: which block each
+// cell is in, how much of each block's water stays in it from one cell to
+// the next, and how much a second each block takes of its four neighbours'.
+type vapourBlocks struct {
+	w, h   int
+	of     []int32
+	inside []float64
+	from   [][4]float64 // west, east, south (the next row), north
+}
+
+func (e *Env) vapourBlocks(cells []vapourCell) vapourBlocks {
+	bw, bh := (e.W+vapourBlock-1)/vapourBlock, (e.H+vapourBlock-1)/vapourBlock
+	v := vapourBlocks{w: bw, h: bh, of: make([]int32, len(cells)), inside: make([]float64, bw*bh), from: make([][4]float64, bw*bh)}
+	for cy := 0; cy < e.H; cy++ {
+		for cx := 0; cx < e.W; cx++ {
+			v.of[cy*e.W+cx] = int32(cy/vapourBlock*bw + cx/vapourBlock)
+		}
+	}
+	for i := range cells {
+		c := &cells[i]
+		k := v.of[i]
+		for j, from := range c.from {
+			if from == noCell {
+				continue
+			}
+			if v.of[from] == k {
+				v.inside[k] += c.share[j]
+			} else {
+				v.from[k][j] += c.share[j]
+			}
+		}
+	}
+	return v
+}
+
+// scratchOf is n of the budget's scratch, cleared.
+func (b *vapourBudget) scratchOf(n int) []float64 {
+	if cap(b.scratch) < n {
+		b.scratch = make([]float64, n)
+	}
+	s := b.scratch[:n]
+	clear(s)
+	return s
+}
+
+// blockCorrection moves each block of columns by as much as its block's
+// budget is out. See vapourBlock.
+func (b *vapourBudget) blockCorrection() {
+	v := &b.blocks
+	nb := v.w * v.h
+	work := b.scratchOf(3 * nb)
+	diag, res, delta := work[:nb], work[nb:2*nb], work[2*nb:]
+	for i := range b.cells {
+		c := &b.cells[i]
+		sum, _, dTaken, p, dp := b.balance(i)
+		k := v.of[i]
+		res[k] += sum - c.lose*b.w[i] - p
+		diag[k] += c.lose + dp + dTaken
+	}
+	for k := range diag {
+		diag[k] -= v.inside[k]
+	}
+	at := func(bx, by int) int { return by*v.w + (bx+v.w)%v.w }
+	for range blockSweeps {
+		for _, back := range [2]bool{false, true} {
+			for s := range nb {
+				k := s
+				if back {
+					k = nb - 1 - s
+				}
+				if diag[k] <= 0 {
+					continue
+				}
+				bx, by := k%v.w, k/v.w
+				fr := &v.from[k]
+				sum := res[k]
+				if fr[0] != 0 {
+					sum += fr[0] * delta[at(bx-1, by)]
+				}
+				if fr[1] != 0 {
+					sum += fr[1] * delta[at(bx+1, by)]
+				}
+				if fr[2] != 0 {
+					sum += fr[2] * delta[at(bx, by+1)]
+				}
+				if fr[3] != 0 {
+					sum += fr[3] * delta[at(bx, by-1)]
+				}
+				delta[k] = sum / diag[k]
+			}
+		}
+	}
+	for i := range b.w {
+		if d := delta[v.of[i]]; d == d && !math.IsInf(d, 0) {
+			b.w[i] = math.Max(0, b.w[i]+d)
+		}
+	}
 }
 
 // zonalCorrection moves each row of columns by as much as its row's budget,
@@ -393,45 +625,29 @@ func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 // mixing of the water between the latitudes, which a sweep moves a cell at a
 // time, and one tridiagonal solve down the rows moves it all at once. It is a
 // coarse grid of one cell a row under the sweeps.
-func (e *Env) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float64) {
-	const none = -1
+func (b *vapourBudget) zonalCorrection() {
+	e := b.e
 	h := e.H
-	diag, up, down, res := make([]float64, h), make([]float64, h), make([]float64, h), make([]float64, h)
+	work := b.scratchOf(5 * h)
+	diag, up, down, res, delta := work[:h], work[h:2*h], work[2*h:3*h], work[3*h:4*h], work[4*h:]
 	for cy := 0; cy < h; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			c := &cells[i]
-			sum := c.give
-			for j, from := range c.from {
-				if from != none {
-					sum += c.share[j] * w[from]
-				}
-			}
-			if oro != nil {
-				sum -= max(0, min(oro[i], sum))
-			}
-			wi := w[i]
-			f := min(wi*c.toStep, rainSteps)
-			kk := int(f)
-			ex := rainTable[kk] + (rainTable[kk+1]-rainTable[kk])*(f-float64(kk))
-			p := c.rainScale * (ex - rainEmpty)
-			dp := c.slope * ex
-			if over := wi - rainMost*satW[i]; over > 0 {
-				p += dp * over
-			}
-			res[cy] += sum - c.lose*wi - p
-			diag[cy] += c.lose + dp
+			c := &b.cells[i]
+			sum, _, dTaken, p, dp := b.balance(i)
+			res[cy] += sum - c.lose*b.w[i] - p
+			diag[cy] += c.lose + dp + dTaken
 			// A row moved as one gives itself back what crosses along it.
-			if c.from[0] != none {
+			if c.from[0] != noCell {
 				diag[cy] -= c.share[0]
 			}
-			if c.from[1] != none {
+			if c.from[1] != noCell {
 				diag[cy] -= c.share[1]
 			}
-			if c.from[2] != none {
+			if c.from[2] != noCell {
 				down[cy] += c.share[2]
 			}
-			if c.from[3] != none {
+			if c.from[3] != noCell {
 				up[cy] += c.share[3]
 			}
 		}
@@ -442,7 +658,6 @@ func (e *Env) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float
 		diag[cy] -= m * -down[cy-1]
 		res[cy] -= m * res[cy-1]
 	}
-	delta := make([]float64, h)
 	delta[h-1] = res[h-1] / diag[h-1]
 	for cy := h - 2; cy >= 0; cy-- {
 		delta[cy] = (res[cy] + down[cy]*delta[cy+1]) / diag[cy]
@@ -454,7 +669,7 @@ func (e *Env) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float
 		}
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			w[i] = math.Max(0, w[i]+d)
+			b.w[i] = math.Max(0, b.w[i]+d)
 		}
 	}
 }

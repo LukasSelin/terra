@@ -2,6 +2,7 @@ package terra
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/LukasSelin/terra/internal/atmos"
@@ -203,6 +204,50 @@ func TestTheWaterTheAirTakesUpFallsAgain(t *testing.T) {
 				t.Errorf("phase %d: the planet evaporates %.2f mm a day", k, mm)
 			}
 		}
+	}
+}
+
+// The air's budget settles where its own ground and air put it, wherever it
+// starts. A history starts each age's budget from the last age's, over other
+// ground; when an age's rain kept what the last had left, a hundredth of a
+// degree on the air moved the map's heights by hundreds of metres (#84).
+// Started from the budget of a continent twenty degrees further north, the
+// land's rain is what it is started from nothing, to a part in a hundred on
+// the mean and two tile by tile.
+func TestTheRainSettlesWhereverItStarts(t *testing.T) {
+	ridged := func(lat float64) *Grid {
+		g := continent(lat)
+		c := Climate{rows: g.H, globe: true}
+		for i := range g.Tiles {
+			x, y := i%g.W, i/g.W
+			if g.Height[i] > 0 {
+				dx := float64(x - 80)
+				g.Height[i] += 2500 * math.Exp(-dx*dx/8) * math.Max(0, 1-math.Abs(c.latitude(y)-lat)/15)
+			}
+		}
+		return g
+	}
+	g := ridged(25)
+	g.weather()
+	fresh := slices.Clone(g.rain)
+	other := ridged(45)
+	other.weather()
+	g.winds.Budget = other.winds.Budget
+	g.rainOn()
+	var sum, moved, diff, land float64
+	for i := range g.Tiles {
+		if g.sunk(i) {
+			continue
+		}
+		land++
+		sum += fresh[i]
+		moved += g.rain[i] - fresh[i]
+		diff += math.Abs(g.rain[i] - fresh[i])
+	}
+	t.Logf("the land's rain from nothing %.1f mm, from another continent's budget %+.2f%%, tile by tile %.2f%%",
+		sum/land, 100*moved/sum, 100*diff/sum)
+	if math.Abs(moved) > 0.01*sum || diff > 0.02*sum {
+		t.Errorf("started from another budget, the land's rain moves by %+.2f%% on the mean and %.2f%% tile by tile", 100*moved/sum, 100*diff/sum)
 	}
 }
 

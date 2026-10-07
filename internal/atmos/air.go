@@ -44,16 +44,6 @@ const (
 // over a calm place is the air of that place and not of anywhere upwind.
 const calm = 0.3
 
-// humidity is how near saturation the column over cell i stood in a phase's
-// budget, as the ground's lift reads it: no more than saturated, and the air
-// off the sea where the budget has not been worked out.
-func humidity(b vapourOut, i int) float64 {
-	if b.sat == nil {
-		return boundaryHumidity
-	}
-	return math.Min(1, b.w[i]/b.sat[i])
-}
-
 // CellOfTile is the air cell tile i of the map lies in.
 func (e *Env) CellOfTile(i int) int {
 	across := e.W * e.Cell
@@ -194,19 +184,6 @@ func petRow(table []float64, t float64) float64 {
 // been worked out.
 const firstRain = 700.0
 
-// annualRain is the rain, mm a year, a budget last gave cell i, or nothing
-// where it has not been worked out.
-func annualRain(b [Phases]vapourOut, i int) float64 {
-	if len(b[1].Rain) <= i {
-		return 0
-	}
-	var r float64
-	for k := range Phases {
-		r += (b[k].Rain[i] + b[k].Oro[i]) * secondsPerYear / Phases
-	}
-	return r
-}
-
 // cellCont is rangeCont for air cell i.
 func cellCont(e *Env, i int) float64 {
 	if !e.Wrap {
@@ -308,8 +285,10 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 
 	// What the land could send back to the air in a year, and how that is
 	// shared out over the phases: as Hargreaves shares it, by the sun at the
-	// top of the air and the warmth over freezing.
-	pet := all.floats(slotPet, n)
+	// top of the air and the warmth over freezing. How much of it the day's
+	// range adds is read off the land's rain as the budget settles: see
+	// below.
+	pet0 := make([]float64, n)
 	for k := range share {
 		share[k] = s.phaseWork(k).floats(slotShare, n)
 	}
@@ -317,12 +296,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		row := min(cy*e.Cell+e.Cell/2, m.H-1)
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			pet[i] = PetAt(a.PET[row], e.Mean[cy]-Lapse*e.Height[i], yearCont(e, i))
-			if r := annualRain(w.Budget, i); r > 0 {
-				pet[i] *= Diurnal(cellCont(e, i), pet[i]/r)
-			} else {
-				pet[i] *= Diurnal(cellCont(e, i), 1)
-			}
+			pet0[i] = PetAt(a.PET[row], e.Mean[cy]-Lapse*e.Height[i], yearCont(e, i))
 			var total float64
 			var each [Phases]float64
 			for k := range Phases {
@@ -348,85 +322,119 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	}
 
 	// The budget, and the land's rain and what it sends back worked out
-	// against each other a few times over. What it sends back is what the
-	// soil's bucket on the cell's land gives the air phase by phase (see
-	// Bucket), so that a wet season's rain goes back up through the season
-	// and the one after, and a dry season's air gets what the soil kept.
-	// Where the air was last worked out over much the same ground - a history
-	// rains on its world every age - its columns and its land's rain are
-	// where this one starts, and once round is enough.
-	annual := all.floats(slotAnnual, n)
+	// against each other until they are settled (see settleRounds). What it
+	// sends back is what the soil's bucket on the cell's land gives the air
+	// phase by phase (see Bucket), so that a wet season's rain goes back up
+	// through the season and the one after, and a dry season's air gets what
+	// the soil kept. Where the air was last worked out over much the same
+	// ground - a history rains on its world every age - its columns and its
+	// land's rain are where this one starts, and it settles in fewer rounds;
+	// where it starts moves where it settles by no more than settledShare.
+	annual := make([]float64, n)
 	budget := w.Budget
-	rounds := recycleRounds
+	var from [Phases][]float64
 	if last := budget[1].Rain; len(last) == n {
 		for i := range annual {
 			for k := range Phases {
 				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
 			}
 		}
-		rounds = 1
+		for k := range Phases - 1 {
+			from[k] = budget[k].w
+		}
 	} else {
 		budget = [Phases]vapourOut{}
 		for i := range annual {
 			annual[i] = firstRain
 		}
 	}
+	// The budget is settled in a dozen rounds or so, each a pass over the
+	// cells for each phase and a year of a bucket's seventy steps for each
+	// cell of land, and so it is spread over the goroutines at an eighth of
+	// the cells a single pass over the lattice is.
 	workers := 1
-	if n >= spreadTiles {
+	if n >= spreadTiles/8 {
 		workers = workersFor(Phases)
 	}
+	var phases [Phases - 1]*vapourBudget
+	inParallel(Phases-1, workers, func(k, _ int) {
+		phases[k] = e.newVapour(vapourIn{
+			u: w.U[k], v: w.V[k], temp: temp[k], sst: sst[k],
+			stable: stable[k], lift: liftCells[k], w: from[k],
+		}, s.phaseWork(k))
+	})
 	cellSoil, cellPaw := soilCells(e, soil, paw, all)
 	var landEvap [Phases][]float64
 	for k := range Phases {
 		landEvap[k] = s.phaseWork(k).floats(slotLandEvap, n)
 	}
-	for range rounds {
-		// What the land sends up in each phase is what its bucket gives the
-		// air through its year, under the rain the last budget gave it. The
-		// spring's budget stands for the autumn's too (see temp above), so
-		// it takes up what the land gives in both, between them.
-		for i := range annual {
-			if e.Sea[i] >= 1 {
-				continue
-			}
-			var rain, take [Phases]float64
-			for k := range Phases {
-				if len(budget[k].Rain) == n {
-					rain[k] = (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
-				} else {
-					rain[k] = annual[i] / Phases
-				}
-				take[k] = pet[i] * share[k][i] / Phases
-			}
-			phi := 1.0
-			if annual[i] > 0 {
-				phi = pet[i] / annual[i]
-			}
-			b := Bucket(Hold(cellSoil[i], cellPaw[i], RootDepth(phi)), &rain, &take)
-			for k := range Phases {
-				landEvap[k][i] = b.Evap[k] * Phases / secondsPerYear
-			}
-			landEvap[1][i] = (landEvap[1][i] + landEvap[3][i]) / 2
+	pet := make([]float64, n)
+	was := make([]float64, n)
+	// What the land sends up in each phase is what its bucket gives the air
+	// through its year, under the rain the last round gave it. The spring's
+	// budget stands for the autumn's too (see temp above), so it takes up
+	// what the land gives in both, between them.
+	landYear := func(i int) {
+		if annual[i] > 0 {
+			pet[i] = pet0[i] * Diurnal(cellCont(e, i), pet0[i]/annual[i])
+		} else {
+			pet[i] = pet0[i] * Diurnal(cellCont(e, i), 1)
 		}
-		inParallel(Phases-1, workers, func(k, _ int) {
-			// The ground wrings out of air as near saturation as the column
-			// last stood.
-			wk := s.phaseWork(k)
-			oro := wk.floats(slotOro, n)
-			for i := range oro {
-				oro[i] = liftCells[k][i] * humidity(budget[k], i)
+		if e.Sea[i] >= 1 {
+			return
+		}
+		var rain, take [Phases]float64
+		for k := range Phases {
+			if len(budget[k].Rain) == n {
+				rain[k] = (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
+			} else {
+				rain[k] = annual[i] / Phases
 			}
-			budget[k] = e.vapour(vapourIn{
-				u: w.U[k], v: w.V[k], temp: temp[k], sst: sst[k],
-				landEvap: landEvap[k], stable: stable[k], oro: oro, w: budget[k].w,
-			}, wk)
+			take[k] = pet[i] * share[k][i] / Phases
+		}
+		phi := 1.0
+		if annual[i] > 0 {
+			phi = pet[i] / annual[i]
+		}
+		b := Bucket(Hold(cellSoil[i], cellPaw[i], RootDepth(phi)), &rain, &take)
+		for k := range Phases {
+			landEvap[k][i] = b.Evap[k] * Phases / secondsPerYear
+		}
+		landEvap[1][i] = (landEvap[1][i] + landEvap[3][i]) / 2
+	}
+	rowWorkers := 1
+	if n >= spreadTiles/8 {
+		rowWorkers = workersFor(e.H)
+	}
+	for round := range settleRounds {
+		inParallel(e.H, rowWorkers, func(cy, _ int) {
+			for i := cy * e.W; i < (cy+1)*e.W; i++ {
+				landYear(i)
+			}
+		})
+		inParallel(Phases-1, workers, func(k, _ int) {
+			phases[k].round(landEvap[k])
+			var into vapourOut
+			if round > 0 {
+				into = budget[k] // this call's own, from the last round
+			}
+			budget[k] = phases[k].out(into)
 		})
 		budget[3] = budget[1]
+		copy(was, annual)
+		var moved, land float64
 		for i := range annual {
 			annual[i] = 0
 			for k := range Phases {
 				annual[i] += (budget[k].Rain[i] + budget[k].Oro[i]) * secondsPerYear / Phases
 			}
+			if l := 1 - e.Sea[i]; l > 0 {
+				moved += l * math.Abs(annual[i]-was[i])
+				land += l * annual[i]
+			}
+		}
+		if round+1 >= settleLeast && moved <= settledShare*land {
+			break
 		}
 	}
 	w.Budget = budget
