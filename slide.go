@@ -116,6 +116,14 @@ const runoutMost = 4096
 // the soft beds beneath it, and those beds slump back to a gentler foot. That
 // is the whole shape of a scarp and of the rim of a mesa.
 //
+// And on what grows on it. In the ages of weather the roots in a slope's soil
+// hold it to a steeper fall than loose ground's, a wood's the most and a
+// field's not at all, so a hillside cleared of its trees fails where it stood
+// under them (Schmidt and others, 2001): see rootRise. Nothing stands steeper
+// than standMost makes of Critical, whatever holds it. What a failed slope is
+// left at is the same either way, because what grew on it came down with it.
+// The making's slides read no roots: they put right a rescaling.
+//
 // Each tile a slide cuts or lays anything on is looked at again, and so are the
 // neighbours of the one that failed, whose fall to it has just grown; the
 // tiles are taken in the order they were queued, so a world repeats.
@@ -179,14 +187,19 @@ func (g *Grid) landslide(keep bool) {
 		i := queue[head]
 		queued[i] = false
 		// The neighbour it stands steepest above, past what it can stand at.
+		// Whether the edge fails is the rock the edge is made of, and the
+		// roots in its soil; what it is left at is the rock the failure
+		// bares, which the roots went down with. See rootRise.
+		s := 1.0
+		if g.strata != nil {
+			s = stands[g.bedAt(int(i), h[i])]
+		}
+		critical := Critical * s
+		critical = math.Min(standMost*Critical, critical+g.rootRise(int(i), soil[i], critical))
 		to, run, worst, rests := int32(-1), 0.0, slideLeast, Repose
 		neighbours(i, func(j int32, r float64) {
-			critical, repose := Critical, Repose
+			repose := Repose
 			if g.strata != nil {
-				// Whether the edge fails is the rock the edge is made of;
-				// what it is left at is the rock the failure bares.
-				s := stands[g.bedAt(int(i), h[i])]
-				critical = Critical * s
 				repose = Repose * stands[g.bedAt(int(i), h[j]+Repose*s*r)]
 			}
 			if over := h[i] - h[j] - critical*r; over > worst {

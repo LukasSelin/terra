@@ -6,6 +6,66 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Land L5: vegetation holds the ground (#53)
+
+**What this is.** On `claude/land-roots`, stacked on `claude/land-fire` (L4,
+#92) at 1946412. Open ground and woods are held by what the vegetation has
+standing on them instead of two constants a terrain (`roots.go`). Each
+type's cover counts as far as its leaf covers its own ground once over
+(`leafFull`); trees on ground the map calls open count to a savanna's half
+(`openTrees`: a felled wood keeps its trees on the vegetation's books); and a
+fire bares 1 - e^(-burned·T) of the cover, T a year for herbs and four for
+woody plants (Wright & Bailey 1982; Shakesby & Doerr 2006). The water's
+critical stress is bare loam's 2 Pa plus the herbs' cover times 18 and the
+woody plants' times 23, which is open ground's 20 and a wood's 25 under full
+cover (Istanbulluoglu & Bras 2005; Collins et al. 2004). The creep is open
+ground's, slowed toward a wood's by the woody cover. The slides of the ages
+read the roots' cohesion, 10 kPa under full woody cover and 1 kPa under
+herbs (Schmidt et al. 2001), as c/(γ·z·cos²θ) on a plane at least 2 m deep,
+up to the top of Roering's range (1.35). Where no vegetation has been laid,
+in the valleys a new map is cut with, open ground's cover is the aridity
+index's, from nothing at 0.05 to whole at 0.65. A history reads what it
+read: its water clears no stress, its creep is open ground's, its slides
+are the making's; the ground stage is bit-identical to the base on the
+ancient valley and a small globe.
+
+**The digest.** Rewritten, as meant: valley 2d8333eda9c9b11b, ancient
+6184ba7fa22d13fd, globe128 fd067fcc9edb7dc8.
+
+**The heap.** Budget rewritten: valley 10.47 MiB in 1343 allocations (10.44
+in 1326), ancient 56.89 MiB in 8828 (56.87 in 8807), globe128 399.27 MiB in
+29484 (399.21 in 29466). One float64 a tile more of creep scratch.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, two runs each, the base in its
+own copy then this branch, the machine shared: Generate 61.9-62.6 s on the
+base and 64.2-65.0 here, the history 46.4-47.6 and 46.7-48.8 (the same
+code, so ±2 s is the noise); stage.cut 4.3-4.5 and 4.5-5.6, creep 3.9-4.2
+and 3.9-4.0. `scripts/perf.sh check` was not run: the machine was never
+quiet.
+
+**What it reads.**
+- Drawn valleys at wetness 0.15-2.5, seeds 1-3: the share of the land a
+  storm's water cuts through its cover rises with the rain, 0.0004 at 171
+  mm to 0.55 at 2600, with no semi-arid peak (a known gap: a flood is a
+  thousand times the mean flow everywhere, and a dry country's bucket sheds
+  next to nothing). Against open ground's full cover everywhere, the cover
+  adds 5.6x at 277 mm, 2.3x at 404, 1.3x at 520 and nothing in humid ground.
+- A hillside at a fall of 1.3 stands under a wood and slides under grass
+  (to 0.97) and ploughed (1.16). The slope the land's cover lets it stand
+  at, median: wooded 1.35, open 1.25 on the valleys and 1.23 on small globe
+  1.
+- Erosion after fire: valley slopes lowered 1.22x with 3% of the ground
+  burned a year, 1.86x at 10%, 4.1x at 30%; small globe 1's own burned
+  ground (5%/yr and more) 1.90x with its fires against without.
+
+**Yardsticks.** Base and branch with #80's interval rule applied and not
+committed. The base's four failures, and one new: Mollisols 0.0858 ->
+0.0947 (band 0.05-0.09), made a known gap with its reason. Every interval
+overlaps the base's. Ploughed against wooded slopes 26.9x -> 17.6x (band
+10-120).
+
+---
+
 ## 2026-10-07 - Land L4: fire and disturbance (#52)
 
 **What this is.** On `claude/land-fire`, stacked on `claude/land-vegetation`

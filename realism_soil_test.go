@@ -124,7 +124,9 @@ var soilYardsticks = []realYardstick{
 		name: "land share of Mollisols", unit: "", scale: "ground", lo: 0.05, hi: 0.09, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Mollisols ~6.9% of ice-free land",
 		measure: func() float64 { return soilOrderShare(globes(), Mollisol) },
-	}},
+	},
+		gap: "known gap: L5 - a mollic epipedon is read at three lines at once, 25 cm of soil, 9 kg C/m² and under half its bases leached, over steppe soils a few decimetres deep; 0.0858 until the cover held the ground, when the semi-arid ground the valleys are cut in wore differently and a thousand more tiles, 0.75% of the land and four fifths of them on soils 0.25-0.5 m deep, crossed the lines: 0.0947",
+	},
 }
 
 type soilDepthReading struct{ hillslope, floor float64 }

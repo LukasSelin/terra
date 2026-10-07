@@ -94,6 +94,10 @@ func shelfValley() *Land {
 		}
 		t.Terrain = Grass
 	}
+	// The vegetation was laid over the drawn map's ground and its rivers,
+	// not this one's: the ground is held by the open ground its climate
+	// gives (see coverProxy), as a map with none laid is.
+	g.vegCover, g.vegMass, g.vegLeaf = nil, nil, nil
 	g.sea, g.base = sea, sea
 	for i := range g.Tiles {
 		if g.underSea(i) {

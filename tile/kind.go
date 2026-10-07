@@ -72,6 +72,12 @@ type terrain struct {
 	// was measured against them: Montgomery (2007) has ground under what grows
 	// there of itself wearing a hundred times slower than ploughed fields, a wood
 	// holding half again what grass does, and bare rock slower again.
+	//
+	// For open ground and a wood these are what a full cover holds: what grows
+	// on either is read off the vegetation, and the ground is held between a
+	// bare hillside's and these by how much of it the herbs and the woody
+	// plants cover (see the root package's roots.go). In a history, before
+	// there is any vegetation, they are what they say.
 	hold float64
 	// shear is the critical shear stress, in pascals, what covers this ground
 	// holds it together against: the stress running water has to put on it
@@ -101,6 +107,11 @@ type terrain struct {
 	// rubble an outcrop weathers to is at sixty; a field is bare loam; a tidal
 	// flat's mud and a salt crust are stiff clay. Water and ice are the channel
 	// itself: what holds a bed is its rock, and the rock is rockErodibility.
+	//
+	// A field's, bare loam's, is also what natural ground holds with nothing
+	// growing on it, and open ground's and a wood's are what a full cover of
+	// herbs and of woody plants holds, the vegetation reading the ground up
+	// from the one toward the other (Collins and others, 2004).
 	shear float64
 	// tidal says this ground belongs to the tide: the sea covers it one day
 	// and leaves it the next, so whether it can be walked is a question for
