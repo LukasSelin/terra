@@ -184,8 +184,13 @@ type Grid struct {
 	vegCover, vegLeaf []uint8
 	vegMass           []uint16
 	// burned is the share of each tile's ground its fires burn in a year, in
-	// 65535ths. See Burned.
+	// 65535ths. See Burned. npp is what grows on each tile in a year, in kg C
+	// a square metre: see NPP.
 	burned []uint16
+	npp    []float32
+	// peat is the carbon in each tile's peat, in kg a square metre, and
+	// peatAge how long it has been laying down, in years. See wetland.go.
+	peat, peatAge []float32
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -380,7 +385,8 @@ func (g *Grid) Clone() *Grid {
 	c.ice = slices.Clone(g.ice)
 	c.petShare = g.petShare // the air's, never written once read
 	c.vegCover, c.vegMass, c.vegLeaf = slices.Clone(g.vegCover), slices.Clone(g.vegMass), slices.Clone(g.vegLeaf)
-	c.burned = slices.Clone(g.burned)
+	c.burned, c.npp = slices.Clone(g.burned), slices.Clone(g.npp)
+	c.peat, c.peatAge = slices.Clone(g.peat), slices.Clone(g.peatAge)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)
@@ -559,9 +565,21 @@ func (g *Grid) HasNeighbor(p geom.Pos, ok func(*Tile) bool) bool {
 // when the land was made and the height the ground now has. Water is not
 // frozen ground: see Freezing. It is a yes or a no, which the fringe of the
 // real thing is not: how much of a tile is frozen is FrostShare.
+//
+// Once the snow has been read it is the ground's own heat that says, and not
+// the air's year alone: the temperature at the top of the permafrost under
+// the snow the tile has and the water its ground holds (see frost.go). Frozen
+// is then the outer limit of the last isolated patches, frostSpread over
+// nought.
 func (g *Grid) Frozen(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Height[i]) < Permafrost
+	if !ok || g.Tiles[i].Wet() {
+		return false
+	}
+	if f, read := g.groundFrost(i); read {
+		return frostShareOf(f.ttop) > 0
+	}
+	return g.meanOn(i, g.Height[i]) < Permafrost
 }
 
 // FrostShare is the share of tile i's ground that is permafrost: none where
@@ -572,13 +590,19 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // and for what settles a hectare inside the fringe that a map of kilometre
 // tiles cannot know.
 //
-// Nothing in the making of a world reads it, and the making of a world does
-// not change for its being here. It is what a map of the frozen ground is to
-// be drawn from, so that the edge thins out over the hundreds of kilometres
+// The making of a world reads the share where the frozen ground holds the
+// water up and slows the peat's rot (see wetland.go). It is also what a map
+// of the frozen ground is to be drawn from, so that the edge thins out over the hundreds of kilometres
 // it thins out over in Siberia rather than stopping at a line.
+//
+// Once the snow has been read it is the share of the tile's ground whose top
+// of the permafrost is under nought (see frostShareOf).
 func (g *Grid) FrostShare(i int) float64 {
 	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) || g.Tiles[i].Wet() {
 		return 0
+	}
+	if f, read := g.groundFrost(i); read {
+		return frostShareOf(f.ttop)
 	}
 	return atmos.FrostShare(g.meanOn(i, g.Height[i]), float64(g.swing[i]))
 }

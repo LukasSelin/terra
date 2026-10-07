@@ -27,7 +27,10 @@ func climateGlobe() *Land {
 // stopped warming every tile four degrees over its latitude. The deep floor,
 // and the land shaped to the history's uplift with it, brought it to 10.5%;
 // carrying a plate's travel short of a whole tile took it to 9.0%; breaking
-// the crust before its plates are grown brought it here.
+// the crust before its plates are grown brought it to 13.6%, which covered
+// 8.0% of the land once each tile's share was weighed in. Read off the
+// ground's own heat under the snow it has (frost.go) it reaches 18.7% and
+// covers 15.0%, Obu and others' (2019) fifteen per cent.
 func TestTheColdKeepsToThePoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe takes a while to make")

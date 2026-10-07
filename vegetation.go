@@ -373,6 +373,9 @@ func (g *Grid) growVegetation(years int) {
 	if len(g.burned) != len(g.Tiles) {
 		g.burned = make([]uint16, len(g.Tiles))
 	}
+	if len(g.npp) != len(g.Tiles) {
+		g.npp = make([]float32, len(g.Tiles))
+	}
 	g.soilBucket()
 	twiMean := g.landTwiMean()
 	var throw []float64
@@ -388,7 +391,7 @@ func (g *Grid) growVegetation(years int) {
 				clear(g.vegCover[i*int(PFTs) : (i+1)*int(PFTs)])
 				clear(g.vegMass[i*int(PFTs) : (i+1)*int(PFTs)])
 				clear(g.vegLeaf[i*int(PFTs) : (i+1)*int(PFTs)])
-				g.burned[i] = 0
+				g.burned[i], g.npp[i] = 0, 0
 				continue
 			}
 			yr := veg.Read(&c)
@@ -410,6 +413,11 @@ func (g *Grid) growVegetation(years int) {
 			}
 			g.keep(i, &s, &pot)
 			g.burned[i] = uint16(math.Round(veg.Burned(&s, &pot, &fire) / burnedStep))
+			var npp float64
+			for p := range PFTs {
+				npp += s.Cover[p] * math.Max(0, pot[p].NPP)
+			}
+			g.npp[i] = float32(npp)
 		}
 	})
 }
@@ -434,6 +442,16 @@ func potentials(yr *veg.Year) (pot [PFTs]veg.Potential, fire veg.Fire) {
 // savannas wider (Bartlein and others, 2011; Anhuf and others, 2006): three
 // quarters of the rain.
 const glacialRain = 0.75
+
+// NPP is what everything on tile i grows in a year, net of its own
+// breathing, in kg of carbon a square metre of the tile, as the vegetation on
+// it last ran: each type's NPP over its cover, times its cover.
+func (g *Grid) NPP(i int) float64 {
+	if i < 0 || i >= len(g.npp) {
+		return 0
+	}
+	return float64(g.npp[i])
+}
 
 // burnedStep is what Burned is kept in: 65535ths.
 const burnedStep = 1.0 / 65535

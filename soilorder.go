@@ -76,9 +76,11 @@ func (o SoilOrder) String() string {
 // paler soil the key puts with the Alfisols and Ultisols (Buol and others
 // 2011).
 //
-// A Histosol is a peat: ground waterlogged the year round holding the carbon
-// that builds. An Inceptisol has a subsoil at all, a thousand years of it; an
-// Entisol has nothing yet but its parent material.
+// A Gelisol has permafrost under most of its ground within two metres of the
+// surface (see gelic). A Histosol is a peat, histicPeat of it, which the
+// ground's water and what grows on it lay down (see wetland.go), and which
+// may stand on bare rock. An Inceptisol has a subsoil at all, a thousand
+// years of it; an Entisol has nothing yet but its parent material.
 const (
 	aridicWetness   = 0.2
 	calcicCarbonate = 30.0 // kg/m²
@@ -90,24 +92,23 @@ const (
 	ultisolLeaching = 0.65
 	mollicDepth     = 0.25 // m
 	mollicLeaching  = 0.5
-	mollicCarbon    = 9.0  // kg C/m²
-	histicCarbon    = 20.0 // kg C/m²
-	histicSodden    = 0.75
+	mollicCarbon    = 9.0 // kg C/m²
 	cambicYears     = 1e3
 )
 
 // SoilOrderOf is the order of the soil on tile i.
 func (g *Grid) SoilOrderOf(i int) SoilOrder {
 	t := &g.Tiles[i]
-	if !forms(t) || g.Soil[i] <= 0 {
+	peat := g.Peatland(i)
+	if !forms(t) || (g.Soil[i] <= 0 && !peat) {
 		return NoSoil
 	}
 	c := g.pedoClimateOf(i)
 	age := float64(t.Exposed)
 	switch {
-	case c.frozen:
+	case g.gelic(i):
 		return Gelisol
-	case c.sodden >= histicSodden && float64(t.Carbon) >= histicCarbon:
+	case peat:
 		return Histosol
 	case c.temp >= oxicWarmth && c.wetness >= oxicWetness &&
 		math.Exp(-c.weathering*age/mineralYears) < oxicMinerals:

@@ -46,7 +46,14 @@ whose ground stops suiting it dies back (`Grid.Cover`, `Biomass`, `LeafArea`,
 `LAI`, `BiomeAt`). Its fires, lit by the lightning and spread with the wind
 through the grass and the litter, hold a savanna open where the rain would
 grow a forest, and which of the two a place has is its history's; droughts
-and the storms' gales kill trees too (`Grid.Burned`). How worn a path is and how fast it fades.
+and the storms' gales kill trees too (`Grid.Burned`). The frozen ground, read
+off the temperature at its top under the snow it has, and how deep each
+summer thaws it (`Grid.FrostShare`, `ActiveLayer`); the wet ground, where the
+water coming down through the ground is more than it can pass on and stands
+at the surface, the tundra's thaw flats among it (`Grid.Wetland`,
+`WaterTable`); and the peat that wet ground lays down faster than it rots,
+rising and holding its own water (`Grid.PeatDepth`, `PeatAge`,
+`PeatCarbon`). How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
 

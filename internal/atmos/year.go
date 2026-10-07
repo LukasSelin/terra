@@ -183,6 +183,11 @@ func aboveMean(x, a float64) float64 {
 // over the surface, and the line it gives is the one the discontinuous
 // permafrost is mapped to, a mean annual air temperature of some two degrees
 // under freezing.
+//
+// It is the snow of nowhere in particular. A land whose snow has been read
+// reads its ground's frost off the snow it has instead, with the ground's
+// water and its peat (the land's frost.go); this is the frost of a ground
+// whose snow is not known.
 const (
 	Permafrost    = -2.0
 	surfaceOffset = -Permafrost // how much warmer the ground's surface stands than the air
@@ -198,6 +203,70 @@ func frostIndex(mean, swing float64) float64 {
 		return 0.5
 	}
 	return math.Sqrt(ddf) / (math.Sqrt(ddf) + math.Sqrt(ddt))
+}
+
+// The year's degree-days phase by phase. The ground's frost is read off the
+// thawing and the freezing degree-days of the year, and the snow that lies on
+// it lies in some phases and not others: so they are wanted a phase at a
+// time, each phase the quarter of the year round its middle (see stepAngle),
+// on the same sine the snow is read on.
+
+// PhaseDegreeDays is the thawing and the freezing degree-days, over and under
+// freezing, of each phase of a year whose mean is mean, swinging swing either
+// side of it, signed by hemisphere as SwingAt is. They are exact for a sine,
+// and the four of each add to DegreeDays at a base of nought and of its
+// mirror.
+func PhaseDegreeDays(mean, swing float64) (thaw, freeze [Phases]float64) {
+	scale := daysPerYear / (2 * math.Pi)
+	for k := range Phases {
+		mid := float64(k-1) * math.Pi / 2
+		lo, hi := mid-math.Pi/4, mid+math.Pi/4
+		over := overSine(mean, swing, lo, hi)
+		all := mean*(hi-lo) - swing*(math.Cos(hi)-math.Cos(lo))
+		thaw[k] = scale * over
+		freeze[k] = math.Max(0, scale*(over-all))
+	}
+	return thaw, freeze
+}
+
+// overSine is the integral of max(0, a + b·sin θ) over θ from lo to hi, split
+// where the sine crosses nought.
+func overSine(a, b, lo, hi float64) float64 {
+	cuts := [6]float64{lo}
+	n := 1
+	if b != 0 && math.Abs(a) < math.Abs(b) {
+		r := math.Asin(-a / b)
+		for _, root := range [2]float64{r, math.Pi - r} {
+			for _, turn := range [2]float64{-2 * math.Pi, 0} {
+				if x := root + turn; x > lo && x < hi {
+					cuts[n] = x
+					n++
+				}
+				if x := root + turn + 2*math.Pi; turn == 0 && x > lo && x < hi {
+					cuts[n] = x
+					n++
+				}
+			}
+		}
+	}
+	cuts[n] = hi
+	n++
+	s := cuts[1 : n-1]
+	for j := 1; j < len(s); j++ { // a handful: sorted by insertion
+		for m := j; m > 0 && s[m] < s[m-1]; m-- {
+			s[m], s[m-1] = s[m-1], s[m]
+		}
+	}
+	var sum float64
+	for j := 0; j+1 < n; j++ {
+		// Between two cuts the sine does not cross, so the piece is all
+		// over nought or all under it, as its integral is.
+		x0, x1 := cuts[j], cuts[j+1]
+		if piece := a*(x1-x0) - b*(math.Cos(x1)-math.Cos(x0)); piece > 0 {
+			sum += piece
+		}
+	}
+	return sum
 }
 
 // How much of it. Permafrost has no edge. The maps of it (Brown and others,

@@ -297,7 +297,7 @@ func (g *Grid) pedoClimateOf(i int) pedoClimate {
 	// Ground within a metre or two of the water it drains into is wet through
 	// for much of the year.
 	c.sodden = clamp01(1 - g.Drain[i]/2)
-	c.frozen = g.Frozen(g.PosOf(i))
+	c.frozen = g.permafrost(i)
 	return c
 }
 
@@ -379,6 +379,9 @@ func (g *Grid) ripenSoil(i int, years float64) {
 		if t.Terrain == Pan {
 			t.SetSalinity(math.Inf(1))
 		}
+		if i < len(g.peat) {
+			g.peat[i], g.peatAge[i] = 0, 0
+		}
 		return
 	}
 	c := g.pedoClimateOf(i)
@@ -393,6 +396,7 @@ func (g *Grid) ripenSoil(i int, years float64) {
 	level, rate = g.carbonLevel(i, c, cv)
 	t.Carbon = float32(toward(float64(t.Carbon), level, rate, years))
 	t.Exposed = float32(age)
+	g.ripenPeat(i, c, years)
 }
 
 // drownSoils clears the soil state of every tile that does not form soil: the

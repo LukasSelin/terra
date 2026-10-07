@@ -57,8 +57,9 @@ var waterClass = [waterClasses]class{
 
 // Biomes, after the water: what grows on the land, as the land's vegetation
 // names it (terra.Grid.BiomeAt, from the plant functional types that stand
-// on each tile), and wetland where a river floods ground that is neither
-// desert, tundra nor ice. The Köppen type the climate gives a tile is drawn
+// on each tile), and wetland where the ground's water table stands at its
+// surface through enough of its year (terra.Grid.Wetland), the tundra's thaw
+// flats among them, on ground not under ice. The Köppen type the climate gives a tile is drawn
 // on its own map: see koppenDrawing.
 const (
 	bWetland = waterClasses + iota
@@ -332,7 +333,7 @@ func classify(land *terra.Land) classes {
 			p := g.PosOf(i)
 			byRiver := flood[i] && g.Drain[i] < terra.FloodDepth/2
 			c.Koppen[i] = g.Koppen(p)
-			c.Biome[i] = biome(g.BiomeAt(i), byRiver)
+			c.Biome[i] = biome(g.BiomeAt(i), g.Wetland(i))
 
 			atSea := false
 			for _, d := range terra.Dirs {
@@ -379,15 +380,14 @@ func classify(land *terra.Land) classes {
 }
 
 // biome is the class a tile of vegetation's biome b is drawn as, and
-// wetland where a river floods ground that is neither desert, tundra nor
-// ice.
-func biome(b terra.Biome, byRiver bool) uint8 {
+// wetland where the ground is wet and not under ice.
+func biome(b terra.Biome, wet bool) uint8 {
 	switch b {
 	case terra.NoBiome:
 		return bWetland
-	case terra.IceBiome, terra.TundraBiome, terra.HotDesert, terra.ColdDesert:
+	case terra.IceBiome:
 	default:
-		if byRiver {
+		if wet {
 			return bWetland
 		}
 	}

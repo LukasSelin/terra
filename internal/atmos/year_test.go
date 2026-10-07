@@ -148,3 +148,36 @@ func TestFrostShareRunsFromTheLineToTheContinuousZone(t *testing.T) {
 		}
 	}
 }
+
+// The year's degree-days a phase at a time add to the year's, over freezing
+// and under it, and the summer's phase holds the most of the thaw on either
+// side of the equator.
+func TestPhaseDegreeDaysAddToTheYear(t *testing.T) {
+	for _, c := range [][2]float64{{-15, 20}, {-2, 12}, {0, 8}, {5, -18}, {25, 1}, {-30, 0}, {3, 3}} {
+		mean, swing := c[0], c[1]
+		thaw, freeze := PhaseDegreeDays(mean, swing)
+		var th, fr float64
+		for k := range Phases {
+			th += thaw[k]
+			fr += freeze[k]
+			if thaw[k] < 0 || freeze[k] < 0 {
+				t.Fatalf("mean %v swing %v: a phase's degree-days under nothing: %v %v", mean, swing, thaw, freeze)
+			}
+		}
+		if want := DegreeDays(mean, swing, 0); math.Abs(th-want) > 1e-6*(1+want) {
+			t.Errorf("mean %v swing %v: thaw %.6f against the year's %.6f", mean, swing, th, want)
+		}
+		if want := DegreeDays(-mean, swing, 0); math.Abs(fr-want) > 1e-6*(1+want) {
+			t.Errorf("mean %v swing %v: freeze %.6f against the year's %.6f", mean, swing, fr, want)
+		}
+		summer := 2
+		if swing < 0 {
+			summer = 0
+		}
+		for k := range Phases {
+			if thaw[k] > thaw[summer]+1e-9 {
+				t.Errorf("mean %v swing %v: phase %d thaws more than the summer: %v", mean, swing, k, thaw)
+			}
+		}
+	}
+}
