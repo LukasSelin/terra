@@ -81,6 +81,9 @@ func (t Terms) Check() error {
 	if t.Water < 0 {
 		return fmt.Errorf("terra: a world cannot have less than no water: %v", t.Water)
 	}
+	if err := t.Forcing.Check(); err != nil {
+		return fmt.Errorf("terra: %v", err)
+	}
 	// Tiles are counted in int32 wherever a list of them is kept - the
 	// order the water runs down in, the stack the regions are filled from -
 	// so no map may hold more than one of those can count.

@@ -44,13 +44,13 @@ func TestTheLandsYearIsLargeAndEarly(t *testing.T) {
 // The balance's ice is the sea's: poleward of where the summer's warmth runs
 // out, the sea is under ice and its surface never over melting.
 func TestTheSeaIceHoldsItsSurfaceAtMelting(t *testing.T) {
-	if got := seaSurface(-1e8, heatSea, 500); got > 0 {
+	if got := seaSurface(-1e8, heatSea, 500, olrA); got > 0 {
 		t.Errorf("ice under a polar summer's sun stands at %.1f C", got)
 	}
-	if got := seaSurface(-1e8, heatSea, 0); got > -20 {
+	if got := seaSurface(-1e8, heatSea, 0, olrA); got > -20 {
 		t.Errorf("ice in the polar night stands at %.1f C", got)
 	}
-	if got := seaSurface(heatSea*5, heatSea, 0); math.Abs(got-5) > 1e-9 {
+	if got := seaSurface(heatSea*5, heatSea, 0, olrA); math.Abs(got-5) > 1e-9 {
 		t.Errorf("open water holding five degrees of heat stands at %.1f C", got)
 	}
 }
