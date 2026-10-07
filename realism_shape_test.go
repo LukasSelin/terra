@@ -97,7 +97,9 @@ var shapeYardsticks = []realYardstick{
 		name: "right angles of the continents' coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.15, slow: true,
 		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
 		measure: func() float64 { return cornerLock(threeGlobes()) },
-	}},
+	},
+		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) it keeps two to two and a half times the land over its sea, and the continents' outlines are its margins, which gather at right angles a shade more than the band, itself not a measured figure: 0.153 on G2b, 0.153-0.161 over its builds, 0.156 with the country the history's own height",
+	},
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own
@@ -121,7 +123,14 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
 	},
-		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: it read 1.88 until the fractures bent by the plate moved every coast: 1.24; 2.00, 0.94 and 1.23 globe by globe",
+	// It was known gap K: an active shelf is laid no narrower than a tile and
+	// a half, 56 km, against a quiet one's 88, and most coasts with a seam
+	// within 150 km are quiet margins as laid, so the active column reads
+	// mostly quiet shelves. It read 1.88 until the fractures bent by the plate
+	// moved every coast, then 1.24 (2.00, 0.94 and 1.23 globe by globe), and
+	// 1.37 on the rift's halves (#98). With the sea standing where its water
+	// fills the basins (seawater.go) it reads 1.85, inside the band by a
+	// hair: a point reading off three globes, which can fall out again.
 	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
@@ -138,12 +147,18 @@ var shapeYardsticks = []realYardstick{
 		source:  "Gagnon, Lovejoy & Schertzer 2006 (Multifractal earth topography): P(k) ~ k^-beta with beta = 1 + 2H - K(2) = 2.1 on the continents (H 0.66, C1 0.12, alpha 1.79), 2.3 on their margins, from 40 m to planetary scales. Read along the rows and columns of windows of 64 tiles wholly on land",
 		measure: func() float64 { return reliefSpectrum(threeGlobes()) },
 	}},
+	// It was a known gap, K, at 0.075: the history left its relief gathered,
+	// 0.175 as the shaping took it up, and the shaping laid it again as one
+	// hillslope on every tile off the rivers. With the history's ground
+	// floating on its crust (isostasy.go) the uplift the shaping grades by is
+	// the rock's, rebound and all, and it reads 0.091. It opened again when
+	// the history's ground came down by its relief (denude.go).
 	{yardstick: yardstick{
 		name: "land relief intermittency C1, three globes", unit: "", scale: "ground", lo: 0.08, hi: 0.18, slow: true,
 		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
 		measure: func() float64 { c1, _ := reliefIntermittency(threeGlobes()); return c1 },
 	},
-		gap: "known gap: K - the history leaves its relief gathered, 0.175 as the shaping takes it up, and the shaping lays it again as one hillslope on every tile off the rivers: the uplift it grades by spans 1.55 times (shapeFloor), shapeLift flattens the ranges and the slides hold what is steep at one threshold: 0.075",
+		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) its interiors are plateaus behind escarpments, and the shaping lays the map's ground again from their order alone: the country (hypsometry.go) is the history's height and Height is not, so it does not reach this. 0.091 on G2, 0.052-0.057 on four builds since, its three globes 0.040-0.064 a globe: 0.052",
 	},
 }
 

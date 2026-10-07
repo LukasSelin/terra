@@ -109,9 +109,14 @@ func TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner(t *testing.T) {
 				// The foot of the pile is laid on the map (see layFeet), so
 				// what is below may have been remade; the top of it stands
 				// where it stood against the ground.
+				// To a millimetre, or to what the beds are kept to: they are
+				// float32, and a history's ground stands some twelve
+				// kilometres over its nothing (seaDatum), where a float32 is
+				// good to a millimetre and no finer.
 				a := float64(to.strata[i].top[0]) - to.Height[i]
 				b := float64(from.strata[j].top[0]) - from.Height[j]
-				if math.Abs(a-b) > 1e-3*math.Max(1, math.Abs(b)) {
+				ulp := float64(math.Nextafter32(float32(math.Abs(from.Height[j])), math.MaxFloat32)) - float64(float32(math.Abs(from.Height[j])))
+				if math.Abs(a-b) > math.Max(1e-3*math.Max(1, math.Abs(b)), 4*ulp) {
 					t.Fatalf("tile %v: the top bed stands %.4f under the ground, and %.4f in the history", p, a, b)
 				}
 				plates[to.Tiles[i].Plate] = true
