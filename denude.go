@@ -354,9 +354,6 @@ func (sh *shelfScratch) fill(g *Grid, m int, rem *[Grains]float64, epoch int, bo
 					for gr := range part {
 						part[gr] = want[gr] * r / room
 					}
-					if shelfWatch != nil {
-						shelfWatch(d, part, g.span())
-					}
 					g.layShelf(int(i), part, epoch, book)
 				}
 			}
@@ -493,4 +490,3 @@ func readDenudation(g *Grid, cr *crust, was, worn []float64) denudation {
 	d.high = median(land[len(land)-max(1, len(land)/20):])
 	return d
 }
-var shelfWatch func(d int, part [Grains]float64, span float64) // TEMP

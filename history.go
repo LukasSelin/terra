@@ -484,18 +484,10 @@ const (
 // something as surely as a share does, since it has to stand somewhere.
 const historySea = 0.35
 
-// marineMud is how much a sea bed off a shore takes in an epoch, against the
-// one an epoch of burial on land is worth. fillEnough is how much has to have
-// fallen on a tile before what it is made of is the fill rather than whatever
-// was underneath - a couple of epochs' worth, so that ground which dipped
-// below its river once or twice is still the basement it always was. And
-// Which of the two a fill makes is settled by the sand in it against the
-// clay, which is the sorting asked the only question it can answer: what
-// stopped here, and what went on past.
 // madeEnough is how much has to have happened to a tile before what happened
 // to it decides what it is made of, in metres of ground moved.
 //
-// The fill has always had one - see fillEnough - and the fire and the crushing
+// The fill has always had one - the metres laid - and the fire and the crushing
 // had none, so any trace of either beat a continent: a seam that brushed past
 // a tile once, raising it by a hand's breadth, made that tile igneous forever.
 // One epoch of a rift working at its full rate, which is the scale at which
@@ -514,54 +506,38 @@ const madeEnough = -riftRate * epochYears
 // epochs of a rift's flooring, as it was tuned at.
 const accreteEnough = 4 * madeEnough
 
-// fillRate is how fast a basin fills, in metres a year, and so what an epoch
-// of burial lays on a tile: a tenth of a millimetre, which is what sediment
-// piles up at when it is measured over millions of years rather than over one
-// flood (Sadler 1981 - a rate read over a longer span is a slower one, because
-// it has more gaps in it). Four hundred metres an epoch is a fifteenth of what
-// makes a rock, as the one an epoch was of the fifteen metres before.
+// fillRate is how fast a basin fills, in metres a year, as sediment piles up
+// when it is measured over millions of years rather than over one flood: a
+// tenth of a millimetre (Sadler 1981 - a rate read over a longer span is a
+// slower one, because it has more gaps in it). It was what every epoch of
+// burial laid, wherever the ground lay low, whatever the rivers brought; the
+// beds are what the rivers bring now (keepBook), and this is what a soil
+// reads the age of the ground at the top of a fill by (pedogenesis.go).
 const fillRate = 0.1 * mm / yr
 
-const (
-	marineMud  = 0.5
-	fillEnough = 3 * fillRate * epochYears
-	// coarseShare is how much of a world's filled ground comes out sandstone
-	// rather than shale: the sandiest third of it. It is a share and not a
-	// cutoff for the reason every other share on this map is - see
-	// forestShare - and here the reason is sharper than usual. What a deposit
-	// is made of hardly varies while a history is running, because until the
-	// rock is settled at the end every tile is weathering the same basalt,
-	// so the sand in one basin and the next differ by a few hundredths and
-	// any fixed line puts nearly all of them on one side of it: at sand
-	// against clay the map came out a third sandstone, and one step stricter
-	// it came out with none at all. Ranking the fills against each other asks
-	// the only thing the sorting can actually answer - which of these
-	// stopped soonest - and a third is about the share of the world's
-	// sedimentary rock that is sandstone.
-	coarseShare = 0.35
-)
-
-// The beds a history lays. bedPerFill is how many metres of rock an epoch's
-// fill makes - a unit of what keepBook counts as laid - and limeBed how many
-// an epoch under quiet water leaves. They are metres of the history's own
-// ground, which is handed the drawn map's spread at the end, and they are
-// set against the lift of a range in an epoch - see orogeny - because what
-// makes a scarp is a bed as thick as a hillside is high: a pile of beds a
-// hand's breadth thick is one rock to anything the weather can do.
+// The beds a history lays. limeBed is how many metres an epoch under quiet
+// water leaves; what the rivers lay is as many metres as they brought (see
+// keepBook and shelve). They are metres of the history's own ground, which
+// is handed the drawn map's spread at the end, and they are set against the
+// lift of a range in an epoch - see orogeny - because what makes a scarp is a
+// bed as thick as a hillside is high: a pile of beds a hand's breadth thick
+// is one rock to anything the weather can do.
 //
 // They were 9 and 6 metres an epoch against a lift of 45, and they are real
-// rates now, as the lift is: a basin's fill at fillRate, four hundred metres an
-// epoch, and lime at a fifth of that, which is what a carbonate shelf keeps
-// over millions of years (Schlager 1981 has 0.01 to 0.1 mm/yr at that span).
-// Held in proportion to the lift instead - 3.6 and 2.4 kilometres an epoch -
-// sixteen epochs of them were deeper than the history's whole relief, which
-// real erosion keeps to kilometres and not to what the plates lift, and every
-// tile on a made valley was the last epoch's fill. The depths the fire and the
-// crushing reach are real too: greenschist from some eight kilometres down,
-// and plutons set at five to fifteen.
+// rates now, as the lift is: lime at a fifth of fillRate, which is what a
+// carbonate shelf keeps over millions of years (Schlager 1981 has 0.01 to 0.1
+// mm/yr at that span). The depths the fire and the crushing reach are real
+// too: greenschist from some eight kilometres down, and plutons set at five
+// to fifteen.
 //
-// sandyBed is the sand a fill needs to be laid as sandstone while the
-// history runs, before settleRock ranks the fills against each other.
+// sandyBed is the share of sand that makes a bed the water laid a sandstone
+// rather than a shale: half, where Folk (1954) draws the line between a sand
+// and a mud. A fill used to be ranked against the world's other fills, the
+// sandiest third sandstone, because every load a history's rivers carried
+// was the same weathered basalt and a fixed line put all of them on one side
+// of it. What a bed is made of is the sorting's now: the sand settles out
+// near where it came from and the mud is carried on (shelfReach, fineAt), so
+// the beds off a mouth are sand and the beds out on the shelf are mud.
 //
 // foldShare is how far a collision buckles the beds under it against how far
 // it lifts the ground, and foldWave how many tiles it is from one fold's
@@ -579,12 +555,11 @@ const (
 // Marine Geology, 1982), and a history's quiet floor is a tile - tens of
 // kilometres - from the nearest land.
 const (
-	bedPerFill  = fillRate * epochYears
 	limeBed     = 0.02 * mm / yr * epochYears
 	limeWarm    = 20.0
 	limeCold    = -8.0
 	quietMud    = 0.005 * mm / yr
-	sandyBed    = 0.45
+	sandyBed    = 0.5
 	foldShare   = 0.5
 	foldWave    = 5.0
 	cookDepth   = 8 * km
@@ -3914,20 +3889,4 @@ func (g *Grid) soften() {
 		}
 		g.Height[i] = h[i]
 	}
-}
-
-// offshore reports whether any of the eight tiles around p stands above the
-// sea. It is how a sea bed is told from a shore: what is next to land gets
-// what the land sends it.
-func (g *Grid) offshore(p geom.Pos, sea float64) bool {
-	for _, off := range Dirs {
-		q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-		if g.Wrap {
-			q = g.Norm(q)
-		}
-		if g.In(q) && !g.At(q).Wet() && g.Height[g.Index(q)] > sea {
-			return true
-		}
-	}
-	return false
 }

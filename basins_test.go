@@ -258,26 +258,27 @@ func TestBasinsSubsideAndFill(t *testing.T) {
 			n := math.Max(1, x.n)
 			return fmt.Sprintf("%8.0f %6.0f %6.2f %7.0f", x.moat/n, x.laid/n, x.belt/n, x.n)
 		}
-		var deepUnder, deepUp, nUnder, nUp float64
+		// In front of the range: from two flexural parameters out, past the
+		// high ground at the suture, to the edge of the reach.
+		var under, up foreReading
 		for d := range r.fore[0] {
-			lo, up := r.fore[0][d], r.fore[1][d]
-			if lo.n == 0 && up.n == 0 {
+			lo, hi := r.fore[0][d], r.fore[1][d]
+			if lo.n == 0 && hi.n == 0 {
 				continue
 			}
-			fmt.Fprintf(&b, "%4.0f-%-4.0f %30s %30s\n", float64(d)*foreBin/km, float64(d+1)*foreBin/km, row(lo), row(up))
-			if lo.belt < lo.n/2 {
-				deepUnder += lo.moat
-				nUnder += lo.n
+			fmt.Fprintf(&b, "%4.0f-%-4.0f %30s %30s\n", float64(d)*foreBin/km, float64(d+1)*foreBin/km, row(lo), row(hi))
+			if float64(d)*foreBin < 2*flexuralParameter {
+				continue
 			}
-			if up.belt < up.n/2 {
-				deepUp += up.moat
-				nUp += up.n
-			}
+			under.n, under.moat, under.laid = under.n+lo.n, under.moat+lo.moat, under.laid+lo.laid
+			up.n, up.moat, up.laid = up.n+hi.n, up.moat+hi.moat, up.laid+hi.laid
 		}
-		if nUnder > 0 && nUp > 0 {
-			fmt.Fprintf(&b, "the foredeep, in front of the belt: %.0f m under the plate going under, %.0f m under the plate staying up\n", deepUnder/nUnder, deepUp/nUp)
-			if deepUnder/nUnder <= deepUp/nUp {
-				t.Errorf("%s: the foredeep is %.0f m on the plate going under and %.0f on the plate staying up", c.name, deepUnder/nUnder, deepUp/nUp)
+		if under.n > 0 && up.n > 0 {
+			fmt.Fprintf(&b, "in front of the range: the plate going under bent %.0f m under its columns, and filled %.0f m an epoch; the plate staying up %.0f m, and %.0f m\n",
+				under.moat/under.n, under.laid/under.n, up.moat/up.n, up.laid/up.n)
+			if under.moat/under.n <= up.moat/up.n || under.laid/under.n <= up.laid/up.n {
+				t.Errorf("%s: the foredeep is on the plate staying up: bent %.0f m and filled %.0f an epoch, against %.0f and %.0f on the plate going under",
+					c.name, up.moat/up.n, up.laid/up.n, under.moat/under.n, under.laid/under.n)
 			}
 		}
 		slices.Sort(r.margin)
