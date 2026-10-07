@@ -339,6 +339,78 @@ func (e *Env) descents() {
 	}
 }
 
+// The descent along a parallel.
+//
+// The Hadley cell's descent is a zonal mean, and the air does not come down
+// the same all the way round a parallel. It comes down hardest over the cool
+// eastern oceans, under the stratocumulus decks off California, Peru,
+// Namibia and the Canaries, and hardly at all, or it rises, over the
+// continents' eastern sides and the warm western oceans beside them, where
+// the summer brings the humid air of Florida, southern China, eastern
+// Australia, south-eastern Brazil and Natal. Rodwell and Hoskins (2001) found
+// the summer's descent there to be the monsoons' doing: the heating of a
+// monsoon stands a Rossby wave to its west, and the air the wave carries
+// toward the equator along its eastern flank comes down as it goes, in
+// Sverdrup's balance of the vorticity,
+//
+//	β v = f ∂w/∂z,
+//
+// so that what blows toward the equator under the 500 hPa level comes down at
+// that level at w = (β/f) ∫ v dz, and what blows toward the pole rises. The
+// wind near the ground on each cell is in the pressure the circulation lays
+// down there, the belts', the land's warmth, the waves' and the Walker
+// circulation's, and its part toward the pole is geostrophic outside the
+// deep tropics, v = ∂p/∂x / ρf. The zonal mean of ∂p/∂x round a parallel is
+// nothing, so what this adds to the air's motion along a parallel adds
+// nothing to the Hadley cell's zonal mean: it only lays the cell's descent
+// where the circulation brings it down. Where it brings the air up, nothing
+// comes down and no lid is laid, so the descent kept, which is never less
+// than nothing, comes to more round a parallel than the cell's mean.
+
+// descentDepth is the depth, metres, of the air the wind near the ground is
+// taken to blow in when Sverdrup's balance is integrated to 500 hPa: the
+// wind falling from the ground's to nothing there, half the depth of the air
+// under 500 hPa, at a scale height of R T/g at 288 K.
+const descentDepth = dryGas * 288 / gravity * math.Ln2 / 2
+
+// localDescents lays the Hadley cell's descent over each cell of a globe in
+// each phase of the year where the pressure p of the phase's wind brings it
+// down: the zonal mean of the cell's descent (subsidence), and Sverdrup's
+// descent of the wind near the ground, taken as far as the cell's own descent
+// reaches and in the share of its strongest the cell's descent has there, so
+// that it is nothing where the air rises at the ITCZ and nothing poleward of
+// the subtropical highs. Where the two together rise, nothing comes down and
+// there is no lid. Equatorward of waveFrom the planet's turning is read at
+// waveFrom's, where it first holds a wind in balance with the pressure.
+func (e *Env) localDescents(p *[Phases][]float32) {
+	if !e.Wrap {
+		return
+	}
+	fLeast := 2 * omega * math.Sin(waveFrom*math.Pi/180)
+	for k := range Phases {
+		b := e.beltsAt(phaseSin[k])
+		sub := e.Subsides[k]
+		for cy := 0; cy < e.H; cy++ {
+			lat := e.lat[cy]
+			s := b.subsidence(lat)
+			if s <= 0 || b.depth <= 0 {
+				continue
+			}
+			share := s / (subsideMost * b.depth)
+			f := math.Max(math.Abs(e.f[cy]), fLeast)
+			beta := 2 * omega * math.Cos(lat*math.Pi/180) / planetRadius
+			// What a pascal a metre rising toward the east takes off the
+			// descent, metres a second.
+			take := share * beta * descentDepth / (airDensity * f * f)
+			row := cy * e.W
+			for cx := 0; cx < e.W; cx++ {
+				dp := float64(p[k][e.at(cx+1, cy)]-p[k][e.at(cx-1, cy)]) * 100 / (2 * e.Dx[cy])
+				sub[row+cx] = math.Max(0, s-take*dp)
+			}
+		}
+	}
+}
+
 // SubsidenceOn is how fast the air comes down over tile i of the map on a day
 // of the year, metres a second at 500 hPa: the Hadley cell's descending
 // branch, under the subtropical highs.

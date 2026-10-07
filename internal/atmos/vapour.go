@@ -292,7 +292,16 @@ func (e *Env) newVapour(in vapourIn, wk *work) *vapourBudget {
 			seaB[i] = bulk / (airDensity * vapourHeight)
 			b.fixed[i] = seaA[i]
 			out := math.Max(0, east[i]) + math.Max(0, -westOf(cx, cy)) + math.Max(0, north[i]) + math.Max(0, -southOf(cx, cy))
-			cells[i].lose = out/area + seaB[i] + gather[i]
+			// The air gathering over the cell goes up and rains out as
+			// far as the lid lets it, as the column's own convection does:
+			// under the trade-wind inversion, or held down by cold water,
+			// it gives only what lies under the lid, and the rest stays in
+			// the column.
+			rainK[i] = 1
+			if in.stable != nil {
+				rainK[i] = in.stable[i]
+			}
+			cells[i].lose = out/area + seaB[i] + rainK[i]*gather[i]
 			if !e.Wrap {
 				// Air coming in over the edge brings the sea's water with it.
 				bnd := boundaryHumidity * ws
@@ -308,10 +317,6 @@ func (e *Env) newVapour(in vapourIn, wk *work) *vapourBudget {
 				if cy == e.H-1 {
 					b.fixed[i] += math.Max(0, southOf(cx, cy)) / area * bnd
 				}
-			}
-			rainK[i] = 1
-			if in.stable != nil {
-				rainK[i] = in.stable[i]
 			}
 		}
 	}
@@ -500,7 +505,7 @@ func (b *vapourBudget) out(into vapourOut) vapourOut {
 	copy(o.Oro, b.taken)
 	for i := range b.w {
 		o.Evap[i] = b.seaA[i] - b.seaB[i]*b.w[i] + (1-b.e.Sea[i])*b.landEvap[i]
-		o.Rain[i] = b.rainK[i]*columnRain(b.w[i], b.satW[i]) + b.gather[i]*b.w[i]
+		o.Rain[i] = b.rainK[i] * (columnRain(b.w[i], b.satW[i]) + b.gather[i]*b.w[i])
 	}
 	return o
 }

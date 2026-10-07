@@ -198,10 +198,20 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink 
 		out[i] = float32(math.Max(0, p))
 	}
 	if sink != nil {
-		// Under a lid the air has only the water under it to give.
+		// Under a lid the air has only the water under it to give, and
+		// ground standing over the lid stands in the descent's dry air: what
+		// the air under the lid wrings out condenses under it, and none of it
+		// falls on ground higher up. The lift worked out over the ground the
+		// air climbs, capped at the lid, reads the lid's own rise where the
+		// ground stands over it, as the descent weakens toward its edges or
+		// along a parallel, as a slope the air climbs (#122); that lift falls
+		// on ground over the lid, and is none.
 		eachTileRow(m, func(y int) {
 			for x := 0; x < m.W; x++ {
 				i := y*m.W + x
+				if out[i] > 0 && ground[i] > climb(i) {
+					out[i] = 0
+				}
 				if out[i] > 0 {
 					c := e.CellOfTile(i)
 					out[i] = float32(float64(out[i]) * lidKeeps(lid(sink[c]), temp[c]))

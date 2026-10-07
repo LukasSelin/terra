@@ -108,6 +108,33 @@ func TestTheColdCoastIsADesert(t *testing.T) {
 	}
 }
 
+// The subtropical highs' descent is not the same all the way round their
+// parallel: in the summer it comes down over the cool eastern side of an
+// ocean, west of the continent the monsoon heats, and hardly at all over
+// the continent's eastern side and the warm western side of the next ocean
+// (Rodwell and Hoskins, 2001), whose lid stands the higher for it, or is
+// not there.
+func TestTheSummersDescentLiesOverTheEasternOcean(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	w := g.winds
+	for _, b := range []struct {
+		lat    float64
+		summer int
+	}{{25, 2}, {-25, 0}} {
+		lo, hi := b.lat-5, b.lat+5
+		descent := func(i int) float64 { return 1000 * w.Subsides[b.summer][w.CellOfTile(i)] }
+		east := band(g, lo, hi, 116, 128, descent)
+		coast := band(g, lo, hi, 156, 168, descent)
+		west := band(g, lo, hi, 168, 180, descent)
+		t.Logf("at %v degrees in the summer the air comes down at %.2f mm/s over the ocean's eastern side, %.2f over the continent's eastern side and %.2f over the next ocean's western side",
+			b.lat, east, coast, west)
+		if east <= west || east <= coast {
+			t.Errorf("at %v degrees in the summer the air comes down at %.2f mm/s over the eastern ocean, against %.2f over the continent's eastern side and %.2f over the western ocean", b.lat, east, coast, west)
+		}
+	}
+}
+
 // desertCoast is the most rain, mm a year, a coast counts as a desert with:
 // the Atacama's and the Namib's coasts have a few millimetres to a few tens.
 const desertCoast = 50.0
