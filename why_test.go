@@ -132,14 +132,16 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // years before the present by some 11 km, until a rift split a plate into
 // halves (see split) and the ancient valley's plates met elsewhere again.
 // Tile 667 is now the oldest of them: raised by an arc in the first epoch,
-// by some 9 km.
+// by some 9 km. On main's rock stack (the history's heights, the rift fix and
+// the poured sea) the air reaching it crosses a range that wrings a rain
+// shadow's worth out of it, so its rain's chain ends in RainShadow too.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
 	p := g.PosOf(667)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
-		OfRain:   {RainOf, LatitudeRain, Orographic},
+		OfRain:   {RainOf, LatitudeRain, Orographic, RainShadow},
 		OfCover:  {Suits, Drains, Slope},
 	}
 	for a, kinds := range want {
@@ -169,7 +171,8 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	for a := OfHeight; a < aspects; a++ {
 		for _, c := range g.Why(p, a) {
 			switch c.Kind {
-			case RaisedBy, WornSince, Stands, BedOf, RainOf, LatitudeRain, Orographic, UpwindSea, Slope, Warmth, Evaporation, Drains, SoilDepth:
+			case RaisedBy, WornSince, Stands, BedOf, RainOf, LatitudeRain, Orographic, UpwindSea, Slope, Warmth, Evaporation, Drains, SoilDepth,
+				OffshoreCurrent, SeaDamp, Inversion, Latitude, LatitudeWarmth, SeaAbout, CoastWarmth, OffCoast, Altitude:
 				if c.Unit == "" {
 					t.Errorf("%v: %v has no unit", a, c.Kind)
 				}
