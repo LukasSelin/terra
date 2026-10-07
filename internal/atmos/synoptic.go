@@ -112,6 +112,10 @@ const (
 	lowsADay   = 2.0
 	highsADay  = 0.8
 	stormsADay = 0.45
+	// stormApart is how near, in kilometres, a tropical cyclone is born to
+	// one that is already there at the least: some thousand, the reach of a
+	// mature storm's circulation.
+	stormApart = 1000.0
 	// StormSea is the warmth, in degrees, the sea under a storm has to have
 	// for it to be born or live: twenty-six and a half, the real threshold
 	// (Gray, 1968; Dare and McBride, 2011). It used to be read against a
@@ -125,6 +129,11 @@ const (
 	// 1982). It is the wind near the ground and the thermal wind's shear over
 	// that height, g/(f T) times the fall of the air's warmth across it.
 	steerHeight = 5500.0
+	// highFrom and highReach are where the day's highs are born, in degrees
+	// from the Hadley cell's edge: from six degrees inside it to fourteen
+	// past, today's twenty-five to forty-five.
+	highFrom  = -6.0
+	highReach = 20.0
 	// frontShare is how much of the steering wind a low or a high goes at.
 	frontShare = 0.65
 	// steerLeast is the latitude, in degrees, the turning of the planet is read
@@ -250,15 +259,19 @@ func (wx *Weather) Step(day int) {
 	wx.Systems = live
 
 	r := wx.rng
+	// Where the circulation stands today: the lows are born poleward of the
+	// Hadley cell's edge, and the highs about it.
+	b := e.beltsAt(sinT)
 	for _, hemi := range []float64{1, -1} {
 		winter := -sinT * hemi
+		from, to := b.stormBand(hemi)
 		for range poisson(r, lowsADay*(1+0.3*winter)) {
-			lat, lon := wx.baroclinic(r, hemi, sinT)
+			lat, lon := wx.baroclinic(r, hemi, sinT, from, to)
 			wx.Systems = append(wx.Systems, System{Kind: Low, Lat: lat, Lon: lon,
 				Depth: 12 + 20*r.Float64(), Radius: 600 + 500*r.Float64(), Life: 4 + 4*r.Float64()})
 		}
 		for range poisson(r, highsADay) {
-			wx.Systems = append(wx.Systems, System{Kind: High, Lat: hemi * (25 + 20*r.Float64()), Lon: 360*r.Float64() - 180,
+			wx.Systems = append(wx.Systems, System{Kind: High, Lat: hemi * (from + highFrom + highReach*r.Float64()), Lon: 360*r.Float64() - 180,
 				Depth: 6 + 10*r.Float64(), Radius: 1000 + 800*r.Float64(), Life: 5 + 5*r.Float64()})
 		}
 		if summer := -winter; summer > 0.2 {
@@ -268,7 +281,7 @@ func (wx *Weather) Step(day int) {
 				for range 12 {
 					lat, lon := hemi*(7+13*r.Float64()), 360*r.Float64()-180
 					fx, fy, on := e.CellOf(lat, lon)
-					if sst := e.SeaTemp(fx, fy, sinT); on && e.Sample(e.Sea, fx, fy) > 0.8 && sst >= StormSea {
+					if sst := e.SeaTemp(fx, fy, sinT); on && e.Sample(e.Sea, fx, fy) > 0.8 && sst >= StormSea && !wx.stormNear(lat, lon) {
 						// Few storms reach the most the sea could make of them:
 						// the share they do is spread from a fifth to four fifths
 						// (Emanuel, 2000).
@@ -282,14 +295,35 @@ func (wx *Weather) Step(day int) {
 	}
 }
 
+// stormNear reports whether a tropical cyclone already stands within
+// stormApart of lat, lon. None is born inside another's circulation: two that
+// come that near draw round one another and merge (Fujiwhara, 1921), and the
+// day's pressure, which adds what each takes off, would have one twice as
+// deep as the sea under it allows.
+func (wx *Weather) stormNear(lat, lon float64) bool {
+	for _, s := range wx.Systems {
+		if s.Kind != Storm {
+			continue
+		}
+		dy := (s.Lat - lat) * 111.2
+		dx := wrapLon(s.Lon-lon) * 111.32 * math.Cos((s.Lat+lat)/2*math.Pi/180)
+		if dx*dx+dy*dy < stormApart*stormApart {
+			return true
+		}
+	}
+	return false
+}
+
 // baroclinic is where a low is born in a hemisphere: somewhere in the middle
-// latitudes, and more readily where the warmth of the air changes fastest
-// from one place to the next, which is where lows get their energy - the
-// polar front, and the edge of a continent in winter.
-func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT float64) (lat, lon float64) {
+// latitudes, between from and to degrees from the equator - the storm track,
+// poleward of the Hadley cell's edge (see belts.stormBand) - and more readily
+// where the warmth of the air changes fastest from one place to the next,
+// which is where lows get their energy - the polar front, and the edge of a
+// continent in winter.
+func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT, from, to float64) (lat, lon float64) {
 	e := wx.Env
 	for range 8 {
-		lat, lon = hemi*(32+30*r.Float64()), 360*r.Float64()-180
+		lat, lon = hemi*(from+(to-from)*r.Float64()), 360*r.Float64()-180
 		fx, fy, _ := e.CellOf(lat, lon)
 		// How fast a wave on the front would grow here, by Eady's rate,
 		// against how fast it grows under the planet's own fall of warmth.
@@ -378,7 +412,7 @@ func (e *Env) row(fy float64) int { return min(max(int(math.Round(fy)), 0), e.H-
 func (e *Env) seaTempAt(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
 	cont := e.Sample(e.Cont, fx, fy)
-	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, cont)
+	t := e.Mean[cy] + e.seasonTemp(cy, sinT, cont)
 	if e.Coast != nil {
 		t += e.Sample(e.Coast, fx, fy)
 	}
@@ -389,7 +423,7 @@ func (e *Env) seaTempAt(fx, fy, sinT float64) float64 {
 // it, with the sea's own small swing and what the currents have brought.
 func (e *Env) SeaTemp(fx, fy, sinT float64) float64 {
 	cy := e.row(fy)
-	t := e.Mean[cy] + seasonTemp(e.hemi[cy], sinT, 0) + seaOverAir
+	t := e.Mean[cy] + e.seasonTemp(cy, sinT, 0) + seaOverAir
 	if e.Warm != nil {
 		t += e.Sample(e.Warm, fx, fy)
 	}

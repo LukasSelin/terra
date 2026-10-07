@@ -14,10 +14,10 @@ import (
 // call the place. This file reads two such names off what the land already
 // knows, and neither is written back to it - they are for looking at.
 //
-// A biome is what the weather makes of a tile: its year's warmest and coldest
-// month and its mean at its latitude and height, against the rain that falls
-// on it and when in the year that rain falls, the way Köppen divides the
-// world. A landform is what the ground makes
+// A biome is what grows on a tile, as the land's vegetation names it: see
+// terra.Grid.BiomeAt. (It was what the weather makes of a tile, Köppen's
+// type folded into fourteen; the Köppen type is drawn on a map of its own.)
+// A landform is what the ground makes
 // of it, and that cannot be read off one tile: a peak is a peak because the
 // ground round it is lower, a valley because it is higher, a coast because
 // the sea is next to it. Each is measured over the tile's neighbourhood.
@@ -55,43 +55,33 @@ var waterClass = [waterClasses]class{
 	cPan:      {"salt flat", color.RGBA{232, 226, 212, 255}},
 }
 
-// Biomes, after the water. Each is one of Köppen's types, or a few of them
-// taken together (Köppen, 1936; the thresholds as Peel, Finlayson and
-// McMahon, 2007, give them, with Köppen's own three degrees under freezing
-// between C and D).
+// Biomes, after the water: what grows on the land, as the land's vegetation
+// names it (terra.Grid.BiomeAt, from the plant functional types that stand
+// on each tile), and wetland where the ground's water table stands at its
+// surface through enough of its year (terra.Grid.Wetland), the tundra's thaw
+// flats among them, on ground not under ice. The Köppen type the climate gives a tile is drawn
+// on its own map: see koppenDrawing.
 const (
-	bIceCap          = waterClasses + iota // EF
-	bTundra                                // ET
-	bBoreal                                // D with a summer under 22 degrees
-	bContinental                           // Dsa, Dwa, Dfa: D with a hot summer
-	bColdSteppe                            // BSk
-	bHotSteppe                             // BSh
-	bColdDesert                            // BWk
-	bHotDesert                             // BWh
-	bMediterranean                         // Cs
-	bTemperateForest                       // Cf, Cw
-	bRainforest                            // Af
-	bMonsoon                               // Am
-	bSavanna                               // Aw
-	bWetland                               // a river's floodplain, in any climate but B and E
-	biomeClasses
+	bWetland = waterClasses + iota
+	bVegetation
+	biomeClasses = bVegetation + uint8(terra.Biomes) - 1
 )
 
-var biomeClass = [biomeClasses - waterClasses]class{
-	bIceCap - waterClasses:          {"ice cap", color.RGBA{242, 245, 248, 255}},
-	bTundra - waterClasses:          {"tundra", color.RGBA{168, 164, 136, 255}},
-	bBoreal - waterClasses:          {"boreal forest", color.RGBA{64, 104, 86, 255}},
-	bContinental - waterClasses:     {"continental forest", color.RGBA{96, 128, 80, 255}},
-	bColdSteppe - waterClasses:      {"cold steppe", color.RGBA{178, 176, 138, 255}},
-	bHotSteppe - waterClasses:       {"hot steppe", color.RGBA{196, 188, 112, 255}},
-	bColdDesert - waterClasses:      {"cold desert", color.RGBA{206, 194, 152, 255}},
-	bHotDesert - waterClasses:       {"hot desert", color.RGBA{236, 208, 142, 255}},
-	bMediterranean - waterClasses:   {"mediterranean", color.RGBA{150, 160, 80, 255}},
-	bTemperateForest - waterClasses: {"temperate forest", color.RGBA{86, 142, 70, 255}},
-	bRainforest - waterClasses:      {"tropical rainforest", color.RGBA{22, 112, 42, 255}},
-	bMonsoon - waterClasses:         {"monsoon forest", color.RGBA{70, 130, 50, 255}},
-	bSavanna - waterClasses:         {"savanna", color.RGBA{212, 190, 96, 255}},
-	bWetland - waterClasses:         {"wetland", color.RGBA{92, 138, 118, 255}},
+// vegClass is each of the vegetation's biomes as drawn, by terra.Biome.
+var vegClass = [terra.Biomes]color.RGBA{
+	terra.IceBiome:                 {242, 245, 248, 255},
+	terra.TundraBiome:              {168, 164, 136, 255},
+	terra.BorealForest:             {64, 104, 86, 255},
+	terra.TemperateConiferForest:   {62, 118, 92, 255},
+	terra.TemperateBroadleafForest: {86, 142, 70, 255},
+	terra.TemperateWoodland:        {150, 160, 80, 255},
+	terra.TemperateGrassland:       {178, 176, 108, 255},
+	terra.Shrubland:                {176, 150, 104, 255},
+	terra.ColdDesert:               {206, 194, 152, 255},
+	terra.HotDesert:                {236, 208, 142, 255},
+	terra.TropicalRainforest:       {22, 112, 42, 255},
+	terra.TropicalSeasonalForest:   {70, 130, 50, 255},
+	terra.Savanna:                  {212, 190, 96, 255},
 }
 
 // Landforms, after the water.
@@ -175,10 +165,14 @@ func hogback(g *terra.Grid, p geom.Pos) bool {
 }
 
 func biomeOf(k uint8) class {
-	if k < waterClasses {
+	switch {
+	case k < waterClasses:
 		return waterClass[k]
+	case k == bWetland:
+		return class{"wetland", color.RGBA{92, 138, 118, 255}}
 	}
-	return biomeClass[k-waterClasses]
+	b := terra.Biome(k - bVegetation + 1)
+	return class{b.String(), vegClass[b]}
 }
 
 func formOf(k uint8) class {
@@ -339,7 +333,7 @@ func classify(land *terra.Land) classes {
 			p := g.PosOf(i)
 			byRiver := flood[i] && g.Drain[i] < terra.FloodDepth/2
 			c.Koppen[i] = g.Koppen(p)
-			c.Biome[i] = biome(c.Koppen[i], byRiver)
+			c.Biome[i] = biome(g.BiomeAt(i), g.Wetland(i))
 
 			atSea := false
 			for _, d := range terra.Dirs {
@@ -385,39 +379,19 @@ func classify(land *terra.Land) classes {
 	return c
 }
 
-// biome is the class a Köppen type is drawn as, and wetland where a river
-// floods ground that is neither dry nor polar.
-func biome(k string, byRiver bool) uint8 {
-	if byRiver && k[0] != 'B' && k[0] != 'E' {
+// biome is the class a tile of vegetation's biome b is drawn as, and
+// wetland where the ground is wet and not under ice.
+func biome(b terra.Biome, wet bool) uint8 {
+	switch b {
+	case terra.NoBiome:
 		return bWetland
+	case terra.IceBiome:
+	default:
+		if wet {
+			return bWetland
+		}
 	}
-	switch {
-	case k == "EF":
-		return bIceCap
-	case k == "ET":
-		return bTundra
-	case k == "BWh":
-		return bHotDesert
-	case k == "BWk":
-		return bColdDesert
-	case k == "BSh":
-		return bHotSteppe
-	case k == "BSk":
-		return bColdSteppe
-	case k == "Af":
-		return bRainforest
-	case k == "Am":
-		return bMonsoon
-	case k[0] == 'A':
-		return bSavanna
-	case k[0] == 'C' && k[1] == 's':
-		return bMediterranean
-	case k[0] == 'C':
-		return bTemperateForest
-	case k[2] == 'a':
-		return bContinental
-	}
-	return bBoreal
+	return bVegetation + uint8(b) - 1
 }
 
 // floodReach is how many tiles out a river floods for each root of a cubic

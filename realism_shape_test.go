@@ -158,6 +158,12 @@ var shapeYardsticks = []realYardstick{
 		source: "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
 		seeded: &seeded{worlds: eachOf(threeGlobes), read: pooled(intermittencyC1)},
 	},
+		// It was a known gap (K: the history leaves its relief gathered, 0.175 as
+		// the shaping takes it up, and the shaping lays it again as one hillslope
+		// on every tile off the rivers; 0.075) until the air came to swing the
+		// energy balance's year (see atmos.Env.seasonTemp); it read 0.087 then,
+		// near the floor, and nothing in the shaping changed. That was before the
+		// rock stack; on it the gap is main's.
 		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) its interiors are plateaus behind escarpments, and the shaping lays the map's ground again from their order alone: the country (hypsometry.go) is the history's height and Height is not, so it does not reach this. 0.091 on G2, 0.052-0.057 on four builds since, its three globes 0.040-0.064 a globe: 0.052",
 	},
 }

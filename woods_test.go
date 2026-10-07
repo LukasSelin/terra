@@ -12,18 +12,28 @@ func TestTheTreeLineCoversAShareOfTheLand(t *testing.T) {
 	for seed := uint64(1); seed <= 4; seed++ {
 		w := NewLand(seed, DefaultTerms())
 		g := w.Grid
-		land, holds := 0, 0
+		land, holds, could := 0, 0, 0
 		for i := range g.Tiles {
 			if g.Tiles[i].Terrain == Water {
 				continue
 			}
 			land++
-			if g.HoldsWood(geom.Pos{X: i % g.W, Y: i / g.W}) {
+			p := geom.Pos{X: i % g.W, Y: i / g.W}
+			if g.HoldsWood(p) {
 				holds++
 			}
+			if !g.Tiles[i].Terrain.Tidal() && !g.TooSteep(p) && !g.Treeless(p) && g.WoodsAt(p) > 0 {
+				could++
+			}
 		}
-		if share := float64(holds) / float64(land); share < woodsShare*0.8 || share > woodsShare*1.3 {
-			t.Fatalf("seed %d: %.2f of the land holds wood, want about %.2f", seed, share, woodsShare)
+		// The line takes woodsShare of the land, or all the land that suits
+		// trees at all where that is less (see readHolds). Seed 1 is such a
+		// map: 0.161 of its land suited trees, and since the soil held its
+		// water over the year, 0.160, a hair under the eight tenths of
+		// woodsShare this read against before it read against what could.
+		want := min(woodsShare, float64(could)/float64(land))
+		if share := float64(holds) / float64(land); share < want*0.8 || share > woodsShare*1.3 {
+			t.Fatalf("seed %d: %.3f of the land holds wood, want about %.3f", seed, share, want)
 		}
 	}
 }

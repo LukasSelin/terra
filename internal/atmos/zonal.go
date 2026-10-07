@@ -98,35 +98,43 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 	}
 	z := &ZonalYear{land: *land, sea: *sea}
 	tl, ts, es := &z.tl, &z.ts, &z.es
-	dt := 86400.0 / ebmSteps
-	days := 365.25
-	stepsYear := int(math.Round(days * ebmSteps))
+	// The calendar's year, as ebm.go steps it since A1 (#71): clock.Year
+	// days from the spring equinox, each a Year'th of secondsPerYear.
+	days := float64(Year)
+	dt := secondsPerYear / days / ebmSteps
+	stepsYear := Year * ebmSteps
 	out := &ebmClimate{}
 	var sumL, sumS, cL, sL, cS, sS [n]float64
-	sunDays := int(math.Ceil(days))
+	var eqSum, eqC, eqS [3]float64
+	var band [n]float64
+	sunDays := Year
 	sunOf := make([]float64, sunDays*n)
+	today := Today()
 	for d := 0; d < sunDays; d++ {
 		for k := 0; k < n; k++ {
-			sunOf[d*n+k] = insolation(phi[k], float64(d)+0.5)
+			sunOf[d*n+k] = today.insolation(phi[k], float64(d)+0.5)
+		}
+	}
+	var annualSun [n]float64
+	for k := range tl {
+		var q float64
+		for d := 0; d < sunDays; d++ {
+			q += sunOf[d*n+k] / days
+		}
+		annualSun[k] = q
+		if from == nil {
+			t0 := (q*(1-iceAlbedo(x[k], 10)) - a) / (olrB + 2*p.d)
+			tl[k], ts[k], es[k] = t0, t0, t0*p.cs
 		}
 	}
 	if from != nil {
 		*tl, *ts, *es = from.tl, from.ts, from.es
-	} else {
-		for k := range tl {
-			var q float64
-			for d := 0; d < 365; d++ {
-				q += sunOf[d*n+k] / 365
-			}
-			t0 := (q*(1-iceAlbedo(x[k], 10)) - a) / (olrB + 2*p.d)
-			tl[k], ts[k], es[k] = t0, t0, t0*p.cs
-		}
 	}
 	for year := 0; year < years; year++ {
 		last := year == years-1
 		for s := 0; s < stepsYear; s++ {
 			j := float64(s) / ebmSteps
-			sun := sunOf[min(int(j), sunDays-1)*n:]
+			sun := sunOf[int(j)*n:]
 			for k := range tl {
 				fl := sun[k]*(1-iceAlbedoWith(p, x[k], tl[k])) - (a + olrB*tl[k]) + p.nu*sea[k]*(ts[k]-tl[k])
 				alb := albedoIce
@@ -147,6 +155,15 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 			if last {
 				th := 2 * math.Pi * j / days
 				c, sn := math.Cos(th), math.Sin(th)
+				for k := range band {
+					band[k] = land[k]*tl[k] + sea[k]*ts[k]
+				}
+				for q, field := range [3]*[n]float64{&band, tl, ts} {
+					lat := warmestLat(field, &x)
+					eqSum[q] += lat
+					eqC[q] += lat * c
+					eqS[q] += lat * sn
+				}
 				for k := range tl {
 					sumL[k] += tl[k]
 					sumS[k] += ts[k]
@@ -166,7 +183,7 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 			a, b := 2*c/m, 2*s/m
 			amp := math.Hypot(a, b)
 			peak := math.Atan2(b, a) / (2 * math.Pi) * days
-			solstice := 172.0
+			solstice := days / 4
 			if x[k] < 0 {
 				solstice += days / 2
 			}
@@ -179,6 +196,39 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 		out.swingL[k], out.lagL[k] = ampLag(cL[k], sL[k])
 		out.swingS[k], out.lagS[k] = ampLag(cS[k], sS[k])
 	}
+	// The rest of the balance's reading as ebm.go has it since A1 (#71): the
+	// warmest latitude's year, Held and Hou's contrast, the tropopause and
+	// the land's and the sea's time constants.
+	for q := range out.equator {
+		a, b := 2*eqC[q]/m, 2*eqS[q]/m
+		amp := math.Hypot(a, b)
+		peak := math.Atan2(b, a) / (2 * math.Pi) * days
+		lag := math.Mod(peak-days/4+2*days, days)
+		if lag > days/2 {
+			lag -= days
+		}
+		if math.Abs(lag) > days/4 {
+			amp = -amp
+			lag = math.Mod(lag+days/2+2*days, days)
+			if lag > days/2 {
+				lag -= days
+			}
+		}
+		out.equator[q] = yearOf{mean: eqSum[q] / m, swing: amp, lag: lag}
+	}
+	var p2 float64
+	for k := range annualSun {
+		re := (annualSun[k]*(1-(p.a0+p.a2*legendre2(x[k]))) - a) / olrB
+		p2 += re * legendre2(x[k]) * 5 / n
+	}
+	var global float64
+	for k := range out.mean {
+		global += out.mean[k] / n
+	}
+	out.contrast = -1.5 * p2 / (global + 273.15)
+	out.tropopause = (out.at(&out.mean, 0) + 273.15 - tropopauseTemp) / Lapse
+	out.tauLand = math.Tan(yearOmega*out.at(&out.lagL, Temperate)) / yearOmega
+	out.tauSea = math.Tan(yearOmega*out.at(&out.lagS, Temperate)) / yearOmega
 	z.c = out
 	return z
 }

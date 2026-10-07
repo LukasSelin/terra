@@ -15,9 +15,10 @@ import (
 // - which gave every map the same climate and made every river a share of a
 // whole rather than an amount of water. Here it is carried: the wind brings
 // water off the sea, the ground it crosses wrings some of it out on the way
-// up, what is left over the top is dry, and the warmth of a place decides how
-// much of what fell goes straight back into the air. What runs off is what the
-// rivers carry, in real quantities, so a wet country and a dry one have
+// up, what is left over the top is dry, and the warmth of a place and the
+// water its soil holds over from one season to the next decide how much of
+// what fell goes back into the air (see soilwater.go). What runs off is what
+// the rivers carry, in real quantities, so a wet country and a dry one have
 // different rivers and not just different colours.
 //
 // The scale of the air is a fiction and worth being plain about. A tile is
@@ -61,7 +62,10 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 	a.Dy = airSpan / km
 	if c.globe {
 		a.Dy = 20015 / float64(g.H)
+		a.Forcing = c.forcing
 	}
+	// Every row of a valley is the one latitude, and shares its table.
+	var valleyPET []float64
 	for y := 0; y < g.H; y++ {
 		lat, mean := Temperate, MeanTemp
 		dx := airSpan / km
@@ -70,7 +74,15 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
 		}
 		a.Lat[y], a.Mean[y], a.Dx[y] = lat, mean, dx
-		a.PET[y] = atmos.PetTable(lat)
+		switch {
+		case c.globe:
+			a.PET[y] = atmos.PetTable(a.Forcing, lat)
+		case valleyPET == nil:
+			valleyPET = atmos.PetTable(a.Forcing, lat)
+			fallthrough
+		default:
+			a.PET[y] = valleyPET
+		}
 	}
 	return a
 }
@@ -213,7 +225,10 @@ func (g *Grid) weatherStale() bool {
 	return float64(flips) > weatherFlips*float64(len(g.Tiles)) || moved > weatherDrift*stood
 }
 
-// rainOn is the rain and the runoff of g under the winds it has.
+// rainOn is the rain and the runoff of g under the winds it has, and the
+// soil's year of water under them: each tile's runoff is what its soil's
+// bucket sheds through the four phases (see atmos.Bucket), and no longer
+// the year's rain less Budyko's share of it.
 func (g *Grid) rainOn() {
 	defer phase.Start("rainOn")()
 	a := g.air
@@ -230,12 +245,20 @@ func (g *Grid) rainOn() {
 		}
 	}
 
-	carried, lift, given := atmos.RainCells(&g.Map, a, w, ground)
+	g.soilBucket()
+	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw)
+	g.petShare = share
+	if n := len(g.Tiles) * atmos.Phases; len(g.soilWater) != n {
+		g.rainIn, g.soilWater, g.runoffIn = make([]float32, n), make([]float32, n), make([]float32, n)
+		g.snowWater, g.snowCover, g.meltIn = make([]float32, n), make([]float32, n), make([]float32, n)
+		g.soilHold, g.ice = make([]float32, len(g.Tiles)), make([]float32, len(g.Tiles))
+	}
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
 	// out of the air there.
 	g.EachRow(func(y int) {
 		fy := (float64(y)+0.5)/float64(e.Cell) - 0.5
+		swingSea, swingLand := g.snowSwings(y)
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
 			fx := (float64(x)+0.5)/float64(e.Cell) - 0.5
@@ -261,11 +284,47 @@ func (g *Grid) rainOn() {
 				g.rainWarm[i] = float32((summer + (each[1]+each[3])/2) / total)
 			}
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
-			if !g.sunk(i) {
-				t := a.Mean[y] - Lapse*g.lapseHeight(i)
-				pe := atmos.PetAt(a.PET[y], t)
-				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
-				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
+			g.soilHold[i], g.ice[i] = 0, 0
+			at := i * atmos.Phases
+			fell, water, shed := g.rainIn[at:at+atmos.Phases], g.soilWater[at:at+atmos.Phases], g.runoffIn[at:at+atmos.Phases]
+			snow, cover, melt := g.snowWater[at:at+atmos.Phases], g.snowCover[at:at+atmos.Phases], g.meltIn[at:at+atmos.Phases]
+			for k := range atmos.Phases {
+				fell[k] = float32(each[k] / atmos.Phases)
+			}
+			clear(water)
+			clear(shed)
+			clear(snow)
+			clear(cover)
+			clear(melt)
+			if g.sunk(i) {
+				continue
+			}
+			t := a.Mean[y] - Lapse*g.lapseHeight(i)
+			pe := atmos.PetAt(a.PET[y], t, g.yearCont(i))
+			g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
+			pe *= float64(g.dayRange[i])
+			// The ground's year: the phase's rain into the soil's bucket, and
+			// what the air could take up in the phase shared out as the air
+			// cell's is, evenly where the cell's year is frozen through.
+			var rain, take [atmos.Phases]float64
+			var shares float64
+			for k := range atmos.Phases {
+				shares += share[k][cell]
+			}
+			for k := range atmos.Phases {
+				rain[k] = each[k] / atmos.Phases
+				take[k] = pe / atmos.Phases
+				if shares > 0 {
+					take[k] *= share[k][cell] * atmos.Phases / shares
+				}
+			}
+			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), g.rootOf(i, pe/math.Max(p, 1e-9)))
+			mean, swing := g.snowYearOn(i, t, swingSea, swingLand)
+			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
+			g.runoff[i], g.soilHold[i], g.ice[i] = b.Shed(), float32(hold), float32(b.Ice)
+			for k := range atmos.Phases {
+				water[k], shed[k] = float32(b.Water[k]), float32(b.Runoff[k])
+				snow[k], cover[k], melt[k] = float32(b.Snow[k]), float32(b.Cover[k]), float32(b.Melt[k])
 			}
 		}
 	})
@@ -299,11 +358,21 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.lapseHeight(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.lapseHeight(i), g.yearCont(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}
 	return p
+}
+
+// yearCont is the continentality the evaporation's year at tile i is read
+// at: the land round it on a globe, and on a valley the middling ground whose
+// year is the valley's, Swing. See atmos.PetTable.
+func (g *Grid) yearCont(i int) float64 {
+	if !g.Wrap {
+		return atmos.ContMiddling
+	}
+	return g.contAt(i)
 }
 
 // rangeCont is the continentality the day's range at tile i is read at: the

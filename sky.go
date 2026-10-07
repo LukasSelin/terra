@@ -79,6 +79,33 @@ func (g *Grid) PressureOn(i, day int) float64 {
 	return w.PressureOn(i, day)
 }
 
+// SubsidenceOn is how fast the air comes down over tile i on a day of the
+// year, in metres a second at 500 hPa: the Hadley cell's descending branch,
+// under the subtropical highs, which dries the horse latitudes and lays the
+// trade-wind inversion over them (see atmos.Env.Subsides). It is nothing
+// where the air rises or the cells do not reach, and on a map whose weather
+// has not been read.
+func (g *Grid) SubsidenceOn(i, day int) float64 {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return 0
+	}
+	return w.SubsidenceOn(i, day)
+}
+
+// InversionOn is the height of the trade-wind inversion over tile i on a day
+// of the year, in metres over the sea: the lid the descent lays over the
+// trades, which the rain's convection and the ground's lift go no higher
+// than. It is infinite where the air does not come down, and on a map whose
+// weather has not been read.
+func (g *Grid) InversionOn(i, day int) float64 {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return math.Inf(1)
+	}
+	return w.InversionOn(i, day)
+}
+
 // SeaWarmth is how many degrees the sea over tile i stands warmer than the
 // mean of its latitude, for the currents: warm in a western current, cold in
 // an eastern one and colder where the water comes up from under. It is

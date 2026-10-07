@@ -104,7 +104,7 @@ func (c Climate) TempAt(y int) float64 {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	season := atmos.SwingUnder(c.forcing, lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagAt(atmos.ContMiddling))
+	season := atmos.SwingUnder(c.forcing, lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagUnder(c.forcing, atmos.ContMiddling))
 	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
@@ -243,7 +243,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 	}
 	i := p.Y*g.W + p.X
 	cont := g.contAt(i)
-	t := c.MeanAt(p.Y) + atmos.SwingUnder(c.forcing, c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagAt(cont)) + c.Drift - Lapse*h
+	t := c.MeanAt(p.Y) + atmos.SwingUnder(c.forcing, c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagUnder(c.forcing, cont)) + c.Drift - Lapse*h
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}

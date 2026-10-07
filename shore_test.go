@@ -210,7 +210,9 @@ func estuary() *Grid {
 // (internal/atmos/thermocline.go), which moves the cold of the water that
 // comes up and so the rain of every coast, moved its own reading to the
 // third. On the merged world every one of the eight has flats and the
-// second has the most of them, so the second is read.
+// second has the most of them, so the second is read. (Before the rock
+// stack, once a cold year's precipitation came to lie as snow, see snow.go,
+// the snow's branch read the eighth.)
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string

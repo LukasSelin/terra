@@ -62,9 +62,10 @@ func (g *Grid) parts(i int) [Grains]float64 {
 
 // hold is how much of the soil on tile i the creep moves in an age, by what is
 // growing or standing on it and by what the soil itself is made of. Roots are
-// what hold a hillside together against its own weight; a roof or a road takes
-// the ground it covers out of the weather altogether; and loose sand goes where
-// clay stays, whatever is growing on either.
+// what hold a hillside together against its own weight, as much as the cover
+// over it lets them (see holdAt); a roof or a road takes the ground it covers
+// out of the weather altogether; and loose sand goes where clay stays,
+// whatever is growing on either.
 //
 // The water is charged differently: by the rock, which is rockErodibility, and
 // by what grows, as a stress to clear and not a share - see criticalFall.
@@ -73,7 +74,7 @@ func (g *Grid) hold(i int) float64 {
 	if t.Mark != None {
 		return 0
 	}
-	return t.Terrain.Hold() * g.washAt(i)
+	return g.holdAt(i) * g.washAt(i)
 }
 
 // Water on the ground: how deep it runs, how wide, and the stress it puts on
@@ -217,6 +218,13 @@ func (w *Land) Erode() {
 	// holds no soil to age.
 	g.drownSoils()
 	g.resoil(was)
+	// What grows on the land lives the age through on the ground and the
+	// water it now has, and under the climate's rules a wood whose trees have
+	// died back is a wood no longer. See vegetation.go.
+	if g.vegLaid() {
+		g.growVegetation(int(ageYears / yr))
+		g.dieBackWoods()
+	}
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
 	// has cut into may not.
@@ -303,8 +311,10 @@ func (g *Grid) wear(years float64) {
 				switch {
 				case c.soil[i] <= 0 || h <= 0:
 					clearSoil(t)
+					g.stripPools(i, 1)
 				default:
 					strip(t, lost[i]/c.soil[i])
+					g.stripPools(i, lost[i]/c.soil[i])
 				}
 			}
 			if surface {
@@ -529,15 +539,23 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 	}
 	n := len(g.Tiles)
 	// The creep's scratch is the Grid's, kept between ages: see creepScratch.
-	// nb, diag and z are written on every tile below; k is only written on
-	// the pairs that creep and only read on them, and is cleared anyway.
+	// nb, diag, z and held are written on every tile below; k is only
+	// written on the pairs that creep and only read on them, and is cleared
+	// anyway.
 	cs := &g.creepScratch
 	cs.fit(n, len(pairs))
-	nb, k, diag, z := cs.nb, cs.k, cs.diag, cs.z
+	nb, k, diag, z, held := cs.nb, cs.k, cs.diag, cs.z, cs.held
 	clear(k)
 	for i := range g.Tiles {
 		z[i], diag[i] = g.Height[i], 1
 	}
+	// What holds each tile, read once a tile rather than once a pair: it
+	// reads the vegetation, or the climate where there is none. See hold.
+	g.EachRow(func(y int) {
+		for i := y * g.W; i < (y+1)*g.W; i++ {
+			held[i] = g.hold(i)
+		}
+	})
 	for i := range g.Tiles {
 		a := &g.Tiles[i]
 		p := g.PosOf(i)
@@ -564,7 +582,7 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 			// An eighth each, so that a tile standing above all eight of its
 			// neighbours on SoilScale of soil gives up no more than the share of
 			// its height over them.
-			kk := share / 8 * pr.near * g.hold(over) * depth(over) / (1 - fall*fall)
+			kk := share / 8 * pr.near * held[over] * depth(over) / (1 - fall*fall)
 			if kk <= 0 {
 				continue
 			}
@@ -633,8 +651,8 @@ func (g *Grid) creep(years float64, change []float64, gained [][Grains]float64, 
 // creepScratch is creep's working memory, kept on the Grid between ages: see
 // fit. nb and k are the pairs, four to a tile; the rest are by tile.
 type creepScratch struct {
-	nb                           []int32
-	k, diag, z, next, sum, gives []float64
+	nb                                 []int32
+	k, diag, z, next, sum, gives, held []float64
 }
 
 // fit gives the scratch its size for n tiles with pairs pairs each.
@@ -646,6 +664,7 @@ func (s *creepScratch) fit(n, pairs int) {
 	s.next = sized(s.next, n)
 	s.sum = sized(s.sum, n)
 	s.gives = sized(s.gives, n)
+	s.held = sized(s.held, n)
 }
 
 // soils is what SoilAt reads on every tile, for resoil to read the age's
@@ -808,11 +827,24 @@ func (g *Grid) waterStep(years float64) fluvial {
 			c.abrade[i] = abrasion(run[i])
 			// What grows on it holds its soil until the water's stress in a
 			// flood clears what it stands, and what settles is what a flood
-			// lets fall: see floodFlow, criticalFall and settleShare.
+			// lets fall: see floodFlow, criticalFall, shearAt and settleShare.
 			q := g.Flow[i] * floodFlow
 			fall := (g.Height[i] - g.Height[recv[i]]) / run[i]
 			w := flowWidth(t, q, fall, run[i])
-			c.drop[i] = math.Min(criticalFall(q, w, t.Terrain.Shear())*run[i], math.MaxFloat64)
+			if g.deep > 0 {
+				// A tile of a history is a piece of a planet, a hundred
+				// kilometres across, and its water runs in a network of
+				// channels too fine for it to draw. Read as a sheet that wide
+				// it put no stress on anything, and read as settling over the
+				// whole run it laid every grain of sand back where it was cut:
+				// either way the ranges rose for ever, to two hundred
+				// kilometres by the sixteenth epoch of a small globe. What a
+				// planet's rivers carry off a tile settles where they stop, in
+				// its basins and its seas - see stillWork - and the beds of its
+				// channels grow nothing.
+				continue
+			}
+			c.drop[i] = math.Min(criticalFall(q, w, g.shearAt(i))*run[i], math.MaxFloat64)
 			// A river in flood is not the width of its channel. Its sand goes
 			// along the bed and settles there, over the channel; its silt and
 			// clay are held up in the water, which spreads over the ground

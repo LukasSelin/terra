@@ -98,9 +98,12 @@ func (g *Grid) waterRatio(i int) float64 {
 // was made with, and it moves when the weather moves the ground under it.
 //
 // Under the climate's rules - see Terms.Woods - it is the climate's reading
-// instead, over the same limit of slope: half of the water tile has against
-// what a forest needs, up to one, and nothing at all under the ice, above the
-// tree line or under Holdridge's polar biotemperature. See climateLine.
+// instead, over the same limit of slope: how much of the canopy's room the
+// trees of the land's vegetation take (see vegetation.go), and nothing at all
+// under the ice or above the tree line. A map whose vegetation has not been
+// laid reads the climate as it was read before there was any: half of the
+// water tile has against what a forest needs, up to one, and nothing under
+// Holdridge's polar biotemperature. See climateLine.
 func (g *Grid) WoodsAt(p geom.Pos) float64 {
 	if !g.In(p) || g.TooSteep(p) {
 		return 0
@@ -109,6 +112,9 @@ func (g *Grid) WoodsAt(p geom.Pos) float64 {
 		i := g.Index(p)
 		if g.Treeless(p) || g.Barren(p) {
 			return 0
+		}
+		if g.vegLaid() {
+			return g.woodsOn(p)
 		}
 		if len(g.warm) == len(g.Tiles) && atmos.Biotemperature(g.meanOn(i, g.Elevation(i)), float64(g.swing[i])) < atmos.HoldridgePolar {
 			return 0

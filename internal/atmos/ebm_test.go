@@ -36,6 +36,7 @@ func TestTheLandsYearIsLargeAndEarly(t *testing.T) {
 	if land < 12 || land > 25 || sea < 1.5 || sea > 6 {
 		t.Errorf("at %v degrees the land swings %.1f and the sea %.1f", Temperate, land, sea)
 	}
+	lagLand, lagSea := LagAt(1), LagAt(0)
 	if lagLand < 20 || lagLand > 50 || lagSea < 55 || lagSea > 95 {
 		t.Errorf("the land lags %.0f days and the sea %.0f", lagLand, lagSea)
 	}
