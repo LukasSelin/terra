@@ -40,10 +40,11 @@ func TestTheSeaStandsWhereItsWaterFills(t *testing.T) {
 	}{{"small globe 1", 1, smallGlobe()}, {"small globe 2", 2, smallGlobe()}, {"small globe 3", 3, smallGlobe()}, {"globe 1", 1, GlobeTerms()}} {
 		seas := historySeas(c.seed, c.terms, nil)
 		var b strings.Builder
-		fmt.Fprintf(&b, "%s\n%6s %9s %7s %7s %10s %8s %8s %8s\n", c.name, "epoch", "rise, m", "land", "shelf", "floor, Myr", "ridge", "sed.", "rest")
+		fmt.Fprintf(&b, "%s\n%6s %9s %7s %7s %10s %8s %8s %8s %8s\n", c.name, "epoch", "rise, m", "land", "shelf", "floor, Myr", "ridge", "sed.", "cooling", "rest")
 		var xs, ys []float64
 		for e, r := range seas {
-			fmt.Fprintf(&b, "%6d %9.0f %7.3f %7.3f %10.1f %8.0f %8.0f %8.0f\n", e, r.rise, r.land, r.shelf, r.floorAge, r.ridge, r.sediment, r.rise-r.ridge-r.sediment)
+			cooled := r.heat - seas[0].heat
+			fmt.Fprintf(&b, "%6d %9.0f %7.3f %7.3f %10.1f %8.0f %8.0f %8.0f %8.0f\n", e, r.rise, r.land, r.shelf, r.floorAge, r.ridge, r.sediment, cooled, r.rise-r.ridge-r.sediment-cooled)
 			xs, ys = append(xs, r.floorAge), append(ys, r.rise-r.sediment)
 		}
 		corr := correlation(xs, ys)

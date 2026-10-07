@@ -153,15 +153,23 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // The current, the upwelling and the water's temperature are kept beside the
 // warmth they make, and keeping them changes it not at all: the hash is of
 // Warm and Coast on twoOceans. It was taken on 53eb8bf, before they were
-// kept, and taken again when the gyres were solved in two dimensions
-// (docs/ocean-model-plan.md, M1), and again when the water that comes up
-// was given the thermocline's depth (M2), both of which move them on
-// purpose; and again on the air's calendar (A1) and its belts placed by the
-// circulation (A2), which move the wind the currents are driven by: on A
-// and M together it is 0xe032409d6d6e389e, the hash the integration (#82)
-// took on the same merge. And the warmth
-// is the kept temperature over its latitude's mean, held to seaWarmMost, and
-// to nothing over it where the water is under ice.
+// kept, and taken again each time the world was moved on purpose: when the
+// air came to swing the energy balance's year (see atmos.Env.seasonTemp),
+// when its belts came to be placed by the circulation (see
+// atmos.Env.beltsAt), both of which move the wind the currents are driven
+// by; when the gyres were solved in two dimensions (docs/ocean-model-plan.md,
+// M1); when the water that comes up was given the thermocline's depth (M2);
+// on the integration branch, where all four meet; when the Hadley cell's
+// rise was laid across it, so that the trades blow hardest where the earth's
+// do (#88; see atmos's hadley); and when the sea and the air were solved
+// together (#28), the air's pressure reading the sea's warmth and the
+// currents worked out again under the wind it makes; and when the heat the
+// ground gives the tropical air, and the waves the westerlies stand, were
+// added to the wind (#35; see atmos's waves); and when the sea came to carry
+// its own heat in two layers, into the energy balance (#22). And the warmth
+// is the kept temperature over its latitude's mean, as far as it stands (it
+// was held to ten degrees either way before #22), and nothing over it where
+// the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -174,10 +182,9 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xe032409d6d6e389e); got != want {
+	if got, want := h.Sum64(), uint64(0xdae7bf2cb5adf204); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
-	const most = 10 // atmos.seaWarmMost
 	for i, w := range e.Warm {
 		if e.Sea[i] <= 0.5 {
 			continue
@@ -186,9 +193,6 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 		if float64(e.WaterTemp[i]) < SeaFreeze {
 			// Under ice: the air over it takes none of the water's warmth.
 			over = math.Min(0, over)
-		}
-		if math.Abs(over) >= most {
-			over = math.Copysign(most, over)
 		}
 		// The temperature is kept in single precision: some microdegrees.
 		if math.Abs(over-w) > 1e-4 {
@@ -224,12 +228,12 @@ func TestTheWesternBoundaryCurrentRunsPoleward(t *testing.T) {
 		lo, hi := min(20*hemi, 40*hemi), max(20*hemi, 40*hemi)
 		west := band(g, lo, hi, 40, 44, north)
 		inside := band(g, lo, hi, 70, 110, gyre)
-		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.3f", hemi, west, inside)
+		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.4f", hemi, west, inside)
 		if west*hemi < 0.05 {
 			t.Errorf("at 20 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
 		}
 		if inside*hemi > 0 || math.Abs(inside) > math.Abs(west) {
-			t.Errorf("at 20 to 40 degrees %+v the interior runs %+.3f m/s north against the western current's %+.3f", hemi, inside, west)
+			t.Errorf("at 20 to 40 degrees %+v the interior runs %+.4f m/s north against the western current's %+.3f", hemi, inside, west)
 		}
 	}
 	// And the cold coast is where the water comes up.
@@ -273,25 +277,22 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 // they come north toward California, where the western Pacific's go on to
 // Japan. The same storm over the same water with the currents left out lives.
 //
-// Known gap (A2 x M2; the integration's #88, #82, closes it): the western
-// water at 18 degrees is 26.0 against the 26.5 a storm needs, and the storm
-// over it ages as fast as over the cold current. M2's Ekman pumping has the
-// right sign everywhere, but A2's year-mean trades peak at 22 degrees, some
-// seven poleward of the earth's, which puts the tropical cyclonic-curl band
-// (the earth's thermocline ridge near 10N) at 9-20 degrees: the water comes
-// up there over a thermocline 44-75 m deep, at 16-17 degrees (traced on #86,
-// 11a09a2). With the trades where the earth's are (#88, on #82) the western
-// water is warm enough again. Until then the eastern water stays too cold
-// for a storm, the water with no currents warm enough, and the storm over
-// the cold current ages faster than over the same water with none; the
-// western water is held at stormWestGap and fails under it, or once it is
-// warm enough, so that the marker comes off.
-const stormWestGap = 26.0
-
+// It failed under A2's belts and M2's pumping (#86): the water off the
+// western shore at 18°N was 26.0, under the 26.5 a storm needs, because the
+// trades blew hardest at 22°N and the tropical band of cyclonic curl, whose
+// upwelling raises the earth's thermocline ridge at about 10°N, lay at
+// 9-20°N; the thermocline came up to 44-75 m at 18°N and to its floor at 16°N
+// and below. With the trades strongest at seventeen degrees (#88) that band
+// lies south of fourteen: at 18°N the water barely rises (0.005 m/day against
+// 0.07), the thermocline is 225 m deep, and the July sea is 27.0, where the
+// ridge, 45 m deep, is at 10°N.
 func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	// A storm is set down on the water a degree off the eastern shore, and
-	// six off the western, so that a day of the trades that steer it leaves
-	// it over the water off each.
+	// eight and three quarters off the western, so that a day of the trades
+	// that steer it leaves it over the water off each. It was six off the
+	// western: under the trades' new strength at eighteen degrees a day
+	// carries it six degrees west and three south, and from six it came down
+	// on the shore.
 	day := func(lon float64, currents bool) (age, sea, warm float64) {
 		wx := weatherOver(twoOceans())
 		if !currents {
@@ -306,28 +307,17 @@ func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	// The first ocean runs from -123.75 degrees to 0.
 	cold, coldSea, coldWarm := day(-1, true)
 	still, _, stillWarm := day(-1, false)
-	warm, warmSea, warmWarm := day(-117.5, true)
+	warm, warmSea, warmWarm := day(-115, true)
 	t.Logf("off the eastern shore the sea is %.1f degrees and a storm ages %.0f days in a day; with no currents %.1f and %.0f; off the western shore %.1f and %.0f (a storm needs %.1f)",
 		coldWarm, cold, stillWarm, still, warmWarm, warm, atmos.StormSea)
 	if coldSea < 0.9 || warmSea < 0.9 {
 		t.Fatalf("the storms came down on sea %.2f and %.2f, not open water", coldSea, warmSea)
 	}
-	// The known gap: the western water short of a storm's warmth, and the
-	// storm over it ageing as fast as over the cold current.
-	gap := stormWestGap > 0 && warmWarm < atmos.StormSea
-	switch {
-	case gap && warmWarm >= stormWestGap:
-		t.Logf("known gap (A2 x M2; #88 closes it): the western water at 18 degrees is %.2f, against the %.1f a storm needs", warmWarm, atmos.StormSea)
-	case gap:
-		t.Errorf("the western water at 18 degrees is %.2f, where the known gap (A2 x M2) is %.2f", warmWarm, stormWestGap)
-	case stormWestGap > 0:
-		t.Errorf("the western water at 18 degrees is %.2f, over the %.1f a storm needs: the known gap (A2 x M2) has closed, so take stormWestGap off", warmWarm, atmos.StormSea)
-	}
-	if coldWarm >= atmos.StormSea || (warmWarm < atmos.StormSea && !gap) || stillWarm < atmos.StormSea {
+	if coldWarm >= atmos.StormSea || warmWarm < atmos.StormSea || stillWarm < atmos.StormSea {
 		t.Errorf("the sea is %.1f off the eastern shore, %.1f off the western and %.1f with no currents, against the %.1f a storm needs",
 			coldWarm, warmWarm, stillWarm, atmos.StormSea)
 	}
-	if cold <= still || (cold <= warm && !gap) {
+	if cold <= still || cold <= warm {
 		t.Errorf("a storm over the cold current aged %.0f days, over the same water with no currents %.0f, over the warm western water %.0f", cold, still, warm)
 	}
 }

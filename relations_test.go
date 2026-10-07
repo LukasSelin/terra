@@ -77,23 +77,26 @@ func related(f *Features, from, to FeatureID, k RelationKind) (Relation, bool) {
 //
 // Known gap (M1 x O3, for M3, #22): the gyres are solved linear (Stommel and
 // Munk), and no water crosses the line of nought ψ between two gyres. The
-// 58 degree coasts' water comes, along Feeds, from the subpolar drift and
-// the subpolar gyre's own western current, going equatorward; the warm
-// western current feeds the subtropical gyre's drift, which leads nowhere
-// near the coast. On the earth the Gulf Stream crosses into the North
-// Atlantic Drift by inertial overshoot and the eddies at the gyres' boundary,
-// and the overturning carries some fifteen sverdrups north across it. Eddy
-// diffusion of the warmth across that boundary would move warmth and not
-// water: Feeds follows the current (Grid.follow), so it would leave this
-// chain as it is. What this test asks for needs water across the boundary:
-// an inertial term in the gyres (M3, #22), or the overturning (#23, #24).
-// Until then the test holds what is there: each coast is warmed by its
-// current, the warmth is its region's, and a warm western current runs
-// poleward in its hemisphere. westUnfed is how many of the two coasts are
-// fed from none; it fails if the coast's warmth goes, and fails when the gap
-// closes, so that the marker comes off.
+// 58°N coast's water comes, along Feeds, from the subpolar drift (-4.64
+// degrees, 14 Sv) and the subpolar gyre's own western current, going south
+// (-2.34); the warm western current (+4.11, 28 Sv) feeds the subtropical
+// gyre's drift at 43°N (+2.84, 6 Sv), which leads nowhere near the coast.
+// On the earth the Gulf Stream crosses into the North Atlantic Drift by
+// inertial overshoot and the eddies at the gyres' boundary, and the
+// overturning carries some fifteen sverdrups north across it. Eddy diffusion
+// of the warmth across that boundary (an eddy diffusivity of 1000-2000 m²/s,
+// Abernathey and Marshall, 2013), cheap in the warmth's solve, would move
+// warmth and not water: Feeds follows the current (Grid.follow), so it would
+// leave this chain as it is, and is M3's to add with the rest of its eddy
+// mixing. What this test asks for needs water across the boundary: an
+// inertial term in the gyres, or the overturning (#23, #24). Until then the
+// test holds what is there: each coast is warmed by its current, the warmth
+// is its region's, and a warm western current runs poleward in its
+// hemisphere. westUnfed is how many of the two coasts are fed from none; it
+// fails if the coast's warmth goes, and fails when the gap closes, so that
+// the marker comes off.
 func TestTheMildWestCoastIsWarmedFromAWesternCurrent(t *testing.T) {
-	const westUnfed = 2 // of the two, on M1 (#73)
+	const westUnfed = 2 // of the two, on the integration (#82)
 	g := relatedOceans()
 	f := g.Features()
 	unfed := 0
@@ -185,7 +188,7 @@ func TestRelationsAreFoundFromBothEnds(t *testing.T) {
 			}
 		}
 		unit := map[RelationKind]string{Warms: "°C", Cools: "°C", Dries: "share", Waters: "share", PartOf: "", Feeds: "Sv",
-			Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s"}[r.Kind]
+			Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s", Subsides: "mm/s"}[r.Kind]
 		if r.Unit != unit {
 			t.Errorf("%v has unit %q", r.Kind, r.Unit)
 		}

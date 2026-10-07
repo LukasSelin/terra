@@ -94,10 +94,17 @@ var ContMiddling = middlingOf(ebm())
 // gave, and the stronger exchange a globe's winters want is a fact about
 // continents a valley does not have. Like ContMiddling it is a share of
 // ground, and today's: a valley reads no forcing.
-var ContValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}, Today()))
+// It is the balance as it stood then in its carrying too: one diffusion of
+// valleyDiffusion down the moist energy for the air and the sea together,
+// before the sea carried its own (see ebmSeaDiffusion).
+var ContValley = middlingOf(solveEBMWith(ebmParams{d: valleyDiffusion, a0: albedoA0, a2: albedoA2, cl: heatLand, cs: heatSea, nu: valleyExchange}, Today()))
 
-// valleyExchange is landSeaExchange as it stood when the valley was tuned.
-const valleyExchange = 3.0
+// valleyExchange is landSeaExchange as it stood when the valley was tuned,
+// and valleyDiffusion ebmDiffusion.
+const (
+	valleyExchange  = 3.0
+	valleyDiffusion = 0.44
+)
 
 // middlingOf is the continentality at which balance e keeps the temperate
 // swing at Temperate.

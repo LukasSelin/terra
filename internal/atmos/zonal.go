@@ -60,7 +60,7 @@ func SolveZonal(land, sea *[ZonalBands]float64, years int, from *ZonalYear) *Zon
 // is some 3.7 (5.35 ln 2, Myhre et al. 1998). It stands in for A0's Forcing
 // until that is merged: see docs/deep-time-climate.md.
 func SolveZonalForced(land, sea *[ZonalBands]float64, years int, from *ZonalYear, forcing float64) *ZonalYear {
-	return solveZonalWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, landSeaExchange}, land, sea, years, from, forcing)
+	return solveZonalWith(ebmReference(landSeaExchange), land, sea, years, from, forcing)
 }
 
 // Mean is the year's mean at sea level at a latitude, land and sea together
@@ -91,11 +91,19 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 		x[k] = -1 + (float64(k)+0.5)*dx
 		phi[k] = math.Asin(x[k])
 	}
-	var face [n + 1]float64
+	var face, faceSea [n + 1]float64
 	for k := 1; k < n; k++ {
 		xf := -1 + float64(k)*dx
 		face[k] = p.d * (1 - xf*xf) / (dx * dx)
+		faceSea[k] = p.ds * (1 - xf*xf) / (dx * dx)
 	}
+	// The sea's own carrying (M3, #22), as ebm.go has it: down the warmth of
+	// its water, per square metre of sea, or what a planet's own sea brings
+	// each band; across a face it is the two bands' sea's mean share.
+	perFace := 2 * math.Pi * planetRadius * planetRadius * dx
+	var flow [n + 1]float64
+	var airNorth, seaNorth [n + 1]float64
+	var seaIn [n]float64
 	z := &ZonalYear{land: *land, sea: *sea}
 	tl, ts, es := &z.tl, &z.ts, &z.es
 	// The calendar's year, as ebm.go steps it since A1 (#71): clock.Year
@@ -103,7 +111,7 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 	days := float64(Year)
 	dt := secondsPerYear / days / ebmSteps
 	stepsYear := Year * ebmSteps
-	out := &ebmClimate{}
+	out := &ebmClimate{params: p}
 	var sumL, sumS, cL, sL, cS, sS [n]float64
 	var eqSum, eqC, eqS [3]float64
 	var band [n]float64
@@ -149,10 +157,35 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 				es[k] += dt * fs
 			}
 			diffuseZonal(&face, tl, ts, es, land, sea, p, dt)
+			if p.sea == nil {
+				for k := 1; k < n; k++ {
+					flow[k] = faceSea[k] * (seaWater(es[k-1], p.cs) - seaWater(es[k], p.cs))
+				}
+				for k := range es {
+					es[k] += dt * (flow[k] - flow[k+1])
+				}
+			} else {
+				for k := range es {
+					es[k] += dt * p.sea[k]
+				}
+			}
 			for k := range ts {
 				ts[k] = seaSurfaceUnder(es[k], p.cs, sun[k], a)
 			}
 			if last {
+				for k := 1; k < n; k++ {
+					hs := moistEnergy(land[k-1]*tl[k-1] + sea[k-1]*ts[k-1])
+					hn := moistEnergy(land[k]*tl[k] + sea[k]*ts[k])
+					airNorth[k] += face[k] * (hs - hn) * perFace
+					seaNorth[k] += (sea[k-1] + sea[k]) / 2 * flow[k] * perFace
+				}
+				for k := range seaIn {
+					if p.sea != nil {
+						seaIn[k] += p.sea[k]
+					} else {
+						seaIn[k] += flow[k] - flow[k+1]
+					}
+				}
 				th := 2 * math.Pi * j / days
 				c, sn := math.Cos(th), math.Sin(th)
 				for k := range band {
@@ -176,6 +209,12 @@ func solveZonalWith(p ebmParams, land, sea *[ebmBands]float64, years int, from *
 		}
 	}
 	m := float64(stepsYear)
+	for k := range airNorth {
+		out.airNorth[k], out.seaNorth[k] = airNorth[k]/m, seaNorth[k]/m
+	}
+	for k := range seaIn {
+		out.seaIn[k] = seaIn[k] / m
+	}
 	for k := range tl {
 		out.meanL[k], out.meanS[k] = sumL[k]/m, sumS[k]/m
 		out.mean[k] = land[k]*out.meanL[k] + sea[k]*out.meanS[k]

@@ -56,7 +56,13 @@ var soilYardsticks = []realYardstick{
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
 	},
-		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only a few times deeper: 3.015x on main, 2.11x once the land's winters softened",
+		// And it opened again with the basins (subside.go, #45): the land's
+		// rock is the floodplains' own sorted fill now, mud where the base
+		// ranked a third of it sandstone, and the high country's hillslopes
+		// hold 0.20 m and more. Over five builds of that change it read 2.52
+		// to 3.32, against 3.82 on main; main's softer winters had already
+		// brought it to 2.11.
+		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only a few times deeper: 3.015x on main, 2.11x once the land's winters softened, 2.52 to 3.32 over builds of #45 before them",
 	},
 
 	// 10. Clay against the climate. On the same rock a soil formed warm holds
@@ -118,8 +124,13 @@ var soilYardsticks = []realYardstick{
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Oxisols ~7.5% of ice-free land",
 		measure: func() float64 { return soilOrderShare(globes(), Oxisol) },
 	},
-		gap: "known gap: I - the hot humid land is young: its surfaces are a median of fourteen thousand years old, and few have weathered out three quarters of their minerals (SoilOrderOf): 0.024",
+		gap: "known gap: M3 (#22) x #28/#35 - with the sea carrying its own heat the subtropical cells bring their cold return water up along the equator in every ocean, the equator's year stands 25.3 where it stood 26.0, and the hot humid land along it is the cooler for it: 0.0490 where it was 0.0503. On the earth the trades' Walker tilt keeps the cold tongue to the east of the Pacific and the warm pool to the west, which the year's mean wind on the equator here has nothing of",
 	},
+	// It was a known gap (I: the hot humid land is young, its surfaces a
+	// median of fourteen thousand years old, and few have weathered out
+	// three quarters of their minerals; 0.024) until the Earth-system stack
+	// met on the integration branch, where it reads 0.0575: the marker is
+	// off.
 	{yardstick: yardstick{
 		name: "land share of Mollisols", unit: "", scale: "ground", lo: 0.05, hi: 0.09, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Mollisols ~6.9% of ice-free land",
