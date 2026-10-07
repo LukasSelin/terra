@@ -6,6 +6,101 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The sea and the air solved together (#28)
+
+**What this is.** On `claude/sea-air-coupled`, from
+`claude/earth-integration` (c848a76). The air's pressure reads the sea's
+warmth, and the wind and the currents are worked out again under it
+(`internal/atmos/coupled.go`, `gill.go`):
+
+- **Outside the tropics** the sea's warmth over each cell is added to the
+  air temperature `Solve` reads the pressure off, over the marine layer's
+  kilometre, as the land's warmth already was.
+- **Within the Hadley cells** it reaches the wind two ways:
+  - The trades' layer (Lindzen and Nigam 1987): 3 km deep, the warmth
+    falling to nothing at its top, the drag 2.5 days.
+  - Gill's (1980) answer to the heat of the rain over warm water: c 30
+    m/s, ε 2 days (Zebiak and Cane 1987), the heating 3 mm/day of rain a
+    degree over the row's sea.
+  - Gill's equations are solved exactly: an FFT round the parallels, then
+    a three-banded solve down the rows for each wavenumber. No iterating.
+- **Rounds.** Each reading of the weather does one damped round, at 0.15,
+  after its first solve. It starts from the sea's warmth the last reading
+  left, carried as the vapour budget is, so the rounds add up through the
+  history.
+- **Gyres.** The gyres' equations are written once a reading. The second
+  GMRES solve starts from the first's answer.
+
+**Phases**, `TERRA_PHASES=1`, `BenchmarkNewLand/globe`, 1x. The machine was
+loaded by other sessions' suites throughout, so these are not quiet
+baselines (base two runs, branch one):
+
+| pass | base s (calls) | branch s (calls) |
+|---|---|---|
+| Generate | 56.7, 61.3 | 62.7 |
+| weather | 16.6, 17.7 (20) | 21.4 (20) |
+| windsFor | 6.8, 7.9 (20) | 12.0 (20) |
+| airEnv.currents | 5.6, 6.4 (20) | 8.8 (40) |
+| airEnv.gyres | 3.9, 4.7 (20) | 5.5 (40) |
+| airEnv.couple | - | 4.7 (20; 4.4 of it is its currents) |
+
+- **The ocean's budget.** The ocean is `currents` plus the coupling's own
+  ~0.3 s. It was 0.34 of the weather's time on the base under this load
+  and is 0.43 on the branch. The plan proposes 0.2 (ocean-model-plan.md),
+  and the base was already over it since M1's gyres.
+- **Warm start.** Without it, and with two rounds a reading, `currents`
+  was 14.3 s over 60 calls, and Generate 69.3.
+
+**Heap.** Budget rewritten. globe128: 529.5 -> 733.5 MiB (+38.5%), 35515
+-> 52259 allocations, peak 35.9 -> 37.5 MiB. It is the second `Solve` and
+`currents` of each reading (Solve 63 -> 135 MB, gmres 25 -> 52, channel 20
+-> 41, the blurs 46 -> 78), and `walker` 40. Valley and ancient are
+unchanged.
+
+**Convergence.**
+- **Within a world.** The world as made leaves the air reading the sea
+  1.25 °C rms off the sea's own warmth (1.13 in the tropics). Each epoch
+  moves the coasts and the currents, so the carried state never catches
+  up.
+- **On fixed ground.** Reading the made globe's weather again ten times
+  brings that to 0.26 rms (0.25 in the tropics), where it stays. Cells a
+  few degrees off the equator whose upwelling the wind turns on and off
+  hold it there.
+- **The damping.** Damped at 0.5 the broadest ocean's warm pool and cold
+  tongue swung from round to round. At 0.3 the swing grew from +4 to −6
+  °C, and at 0.15 the rounds settle.
+
+**Readings** (globe seed 1, `TestOceanEquatorialContrast`), base -> branch:
+
+| reading | base | branch |
+|---|---|---|
+| year-mean equatorial wind, broadest ocean | −0.43 m/s | −0.26 m/s |
+| west−east SST | −0.16 °C | −0.20 °C |
+| thermocline W/E | 128/128 m | 129/128 m |
+| cold tongue | none (coldest −1.28) | 11 km (coldest −1.04) |
+
+No Walker state on this world, and the issue's acceptance (stronger trades
+over the cold tongue) is not met. The stress goes as the square of the
+wind, so from the doldrums' year-mean calm the Bjerknes feedback has
+nothing to grow from: A3 (#35).
+
+Where the gain was pushed past the physics, on the base's history, the
+Walker state came:
+- the trades' layer at five times its depth: −5.0 m/s and +2.4 °C;
+- the rain's heating at the coupled models' strength (0.031 m² s⁻³ K⁻¹):
+  −9 m/s and +8.6 °C, the eastern thermocline at its 10 m floor;
+- the 3 mm/day heating, damped at 0.3 over 20 rounds: −2.2 m/s and
+  +0.8 °C, thermocline 142/128.
+
+Of these, only the last settled.
+
+**Digest rewritten**: globe128 ce4309c543bf810d -> 4f8fdf447904f307; valley
+and ancient unchanged to the bit (a valley has no currents).
+
+**Not run.** `scripts/perf.sh check`: the machine was never quiet.
+
+---
+
 ## 2026-10-07 - Integration: the Earth-system stack, merged and measured
 
 **What this is.** On `claude/earth-integration`, from `main` (2c51bea):

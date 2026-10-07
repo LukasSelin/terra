@@ -2,7 +2,7 @@
 
 Generated from `couplings.go` by `TERRA_COUPLINGS=write go test -run TestCouplingsDoc -timeout 60m .`; do not edit it by hand.
 
-Which pass of world creation reads which of the world's fields and writes which, and the feedback loops that makes. The declaration is held to the code by `couplings_test.go`: each pass's source is read for the fields it touches, and worlds are made stage by stage and every field a stage changes has to be one of that stage's passes' writes. A loop a later change adds - the climate of each epoch (#57), the carbon thermostat (#58), albedo from the surface (#59), land and air trading water (#60), the ice ages (#61), mountains and climate (#62), sea and air together (#28), fog over cold water (#29) - is one line in `couplings`, and a field it brings one line in `worldFields`.
+Which pass of world creation reads which of the world's fields and writes which, and the feedback loops that makes. The declaration is held to the code by `couplings_test.go`: each pass's source is read for the fields it touches, and worlds are made stage by stage and every field a stage changes has to be one of that stage's passes' writes. A loop a later change adds - the climate of each epoch (#57), the carbon thermostat (#58), albedo from the surface (#59), land and air trading water (#60), the ice ages (#61), mountains and climate (#62), fog over cold water (#29) - is one line in `couplings`, and a field it brings one line in `worldFields`; a loop one pass closes within one field, as the weather closes the sea and the air's (#28), is one entry in `innerLoops`.
 
 ## The fields
 
@@ -460,3 +460,9 @@ Every loop of up to 3 fields, found by walking the graph: each field drives the 
 - cover -(tides, cover)-> fertility -(cover)-> woods -(cover)-> cover [land and life]
 
 </details>
+
+## Loops within a pass
+
+Loops a pass closes within one field, between quantities the graph above holds as one, each driving the next and the last the first, and what solves them.
+
+- **weather**, within wind (#28): the sea's warmth (atmos.Env.Warm, WaterTemp) -> the air's pressure: over the sea in the warmth it is read off, the trades' layer's and the rain's heating's in the tropics (Winds.P, Env.Walk) -> the wind (Winds.U, Winds.V) -> the currents, the thermocline and the upwelling (Env.Cu, Cv, Psi, Thermocline, Rise) -> back to the first. Solved by atmos.Winds.couple: coupleRounds rounds a reading of the weather, damped, from where the last reading over the same map left the sea's warmth.

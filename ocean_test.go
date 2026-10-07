@@ -159,9 +159,11 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // atmos.Env.beltsAt), both of which move the wind the currents are driven
 // by; when the gyres were solved in two dimensions (docs/ocean-model-plan.md,
 // M1); when the water that comes up was given the thermocline's depth (M2);
-// and on the integration branch, where all four meet. And the warmth is the
-// kept temperature over its latitude's mean, held to seaWarmMost, and to
-// nothing over it where the water is under ice.
+// on the integration branch, where all four meet; and when the sea and the
+// air were solved together (#28), the air's pressure reading the sea's
+// warmth and the currents worked out again under the wind it makes. And the
+// warmth is the kept temperature over its latitude's mean, held to
+// seaWarmMost, and to nothing over it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -174,7 +176,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xe032409d6d6e389e); got != want {
+	if got, want := h.Sum64(), uint64(0xf5dd852c08964372); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost

@@ -129,6 +129,10 @@ type flow struct {
 	shift float64
 
 	levels []*level
+	// last is the unknowns of the last solve of these equations, which the
+	// next starts from: the coupled solve (coupled.go) works the gyres out
+	// again under a wind a little changed.
+	last []float64
 }
 
 // level is the equations at one coarseness: the unknowns of the cells, row
@@ -154,10 +158,13 @@ type level struct {
 
 // gyres is the transport streamfunction ψ, in cubic metres a second, under
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
-// it is the level of the landmass. It is for a globe only.
-func (e *Env) gyres(tx, ty []float64) []float64 {
+// it is the level of the landmass. It is for a globe only. f is the
+// equations newFlow wrote down for the ground, or nil to write them now.
+func (e *Env) gyres(tx, ty []float64, f *flow) []float64 {
 	defer phase.Start("airEnv.gyres")()
-	f := e.newFlow()
+	if f == nil {
+		f = e.newFlow()
+	}
 	x := f.solve(f.forcing(tx, ty))
 	return f.spread(x)
 }
@@ -725,9 +732,29 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 	return b
 }
 
-// solve is x with A x = b, to flowSettled of b.
+// solve is x with A x = b, to flowSettled of b. Where the equations were
+// solved before, it is solved for what that answer leaves of b, held to the
+// same flowSettled of b itself, and added to it.
 func (f *flow) solve(b []float64) []float64 {
-	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
+	if f.last == nil {
+		x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
+		f.last = x
+		return x
+	}
+	r := make([]float64, len(b))
+	f.apply(f.last, r)
+	for i := range r {
+		r[i] = b[i] - r[i]
+	}
+	settled := flowSettled
+	if rn := norm(r); rn > 0 {
+		settled = math.Min(1, flowSettled*norm(b)/rn)
+	}
+	x, _, _ := gmres(r, f.apply, f.precondition, settled, flowRestart, flowMost)
+	for i := range x {
+		x[i] += f.last[i]
+	}
+	f.last = x
 	return x
 }
 
