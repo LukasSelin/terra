@@ -412,7 +412,25 @@ func (g *Grid) cutBack() {
 		}
 	}
 	g.slideScratch = q.at[:0]
+	soiled := len(g.Soil) == n
 	for i := range g.Tiles {
+		// What is cut comes off the top, and the soil is the top: it goes
+		// first, and the rock after. A cut tile that kept its soil kept a
+		// column thicker than the ground the cut left, and what took the
+		// soil afterwards - the waves' winnowing - took the ground with it,
+		// to hundreds of metres under the sea (#121). The scar takes what
+		// time made of the soil it took, as landslide's does: see strip.
+		if cut := g.Height[i] - h[i]; cut > 0 && soiled {
+			if soil := float64(g.Soil[i]); soil > cut {
+				strip(&g.Tiles[i], cut/soil)
+				g.stripPools(i, cut/soil)
+				g.Soil[i] = float32(soil - cut)
+			} else {
+				clearSoil(&g.Tiles[i])
+				g.stripPools(i, 1)
+				g.Soil[i] = 0
+			}
+		}
 		g.Height[i] = h[i]
 	}
 }

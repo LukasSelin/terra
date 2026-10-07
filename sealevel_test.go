@@ -116,23 +116,11 @@ func shelfValley() *Land {
 // taken to hold half of it at its greatest, which puts its low sea tens of
 // metres down, as a real ocean's is.
 //
-// Known gap (#121; it was L2-L4's, which L5, #99, took off, and the
-// integration, #82, brings it back): the still run makes a hollow of one
-// tile, and stillWork lets a hollow keep all its river brings it, with no
-// room cap. On the integration branch merged with main it is the tile at
-// (38, 14), still water at 100.5 m against the sea's 100 after the fourth
-// stage, which the fifth brings 2236 m of sediment; cutBack takes the tower
-// down to 116.7 m and leaves its 2245 m of soil, the waves' winnowing then
-// takes the soil's silt and clay out of that column and the tile to -549 m,
-// and cutBack cuts the shelf back to the hole: the still run's sea over the
-// valley's mouth reads 24104 m, where main reads 348.8 and the integration
-// before this merge 346.5. Neither side makes the hollow alone; #94's
-// settled rain and main's L2-L7 together move the runoff onto that tile.
-// While the hole is there the still run says nothing about the valley, so
-// the glacial run is held against main's still reading, 348.8, by the same
-// factor; and a still run without the hole fails here, so that the marker
-// comes off.
-const stillHollowGap = true
+// The still run once made a hollow of one tile there that kept all its river
+// brought it, 2236 m in one step, and lost it to the waves' winnowing down to
+// -549 m (#121): its sea over the valley's mouth read 24104 m. A hollow keeps
+// only what it has room for now, and cutBack takes the soil with the ground;
+// the still run's deepest ground is held above that hole.
 
 func TestTheLowSeaLeavesDrownedValleys(t *testing.T) {
 	// The fixture's deepest drawn floor is 40 m; ground a hundred metres
@@ -159,15 +147,11 @@ func TestTheLowSeaLeavesDrownedValleys(t *testing.T) {
 	}
 	still, _, deepest := drowned(func(float64) float64 { return 0 })
 	glacial, low, _ := drowned(func(before float64) float64 { return glacialFall(before) / glacialLow * oceanDepth / 2 })
-	switch {
-	case stillHollowGap && deepest < hole:
-		t.Logf("known gap (#121): the still run's hollow stands at %.1f m and its sea over the valley's mouth reads %.1f; after a glacial cycle %.1f m, held against main's still 348.8", deepest, still, glacial)
-		if !(glacial > 1.2*348.8) {
-			t.Errorf("after a glacial cycle %.1f m of sea stands over the valley's mouth, and cut at today's sea on main 348.8", glacial)
-		}
-	case stillHollowGap:
-		t.Errorf("the still run has no hollow's hole (its deepest ground %.1f m): the known gap (#121) has closed, so take stillHollowGap off", deepest)
-	case !(glacial > 1.2*still):
+	if deepest < hole {
+		t.Errorf("the still run dug a hollow's hole: its deepest ground stands at %.1f m", deepest)
+	}
+	t.Logf("still %.1f m of sea over the valley's mouth, glacial %.1f", still, glacial)
+	if !(glacial > 1.2*still) {
 		t.Errorf("after a glacial cycle %.1f m of sea stands over the valley's mouth, and cut at today's sea %.1f", glacial, still)
 	}
 	if !(low < 100-10) {

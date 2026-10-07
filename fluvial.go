@@ -276,6 +276,8 @@ type stepScratch struct {
 	fill                                            []float64
 	root                                            []bool
 	edge, keep, room                                []float64
+	spill                                           []float64
+	from, over                                      []int32
 	floor                                           []float64
 	shelf                                           shelfScratch
 	solve                                           solveScratch
@@ -364,6 +366,10 @@ type fluvial struct {
 	trap  [][Grains]float64
 	surf  []int32
 	sands []float64
+	// over is, at each still root - a hollow's floor, a lake's - the tile
+	// what it has no room for goes on to, and -1 everywhere else; nil where
+	// there is no still water. See stillWork.
+	over []int32
 	// mouth is, in a history, what each root sends to the sea by grain: the
 	// same load as is counted to exported, kept by the root it leaves from,
 	// so that it can be laid on the margin off that mouth and not lost. It is
@@ -389,6 +395,11 @@ type solveScratch struct {
 	tree, order, start, pos, chunk []int32
 	// booked is account's load.
 	booked [][Grains]float64
+	// left is how much room each still root has once it has kept what
+	// reached it, and rootOf the root each tile's water ends at: what a full
+	// hollow spills is carried on with them. See spillOn.
+	left   []float64
+	rootOf []int32
 }
 
 // treeGrain is about how many tiles a goroutine is handed at once in solve:
@@ -676,6 +687,11 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 	load := s.booked
 	clear(load)
 	pooled := make([][Grains]float64, len(c.shoal))
+	var spilt []spilling
+	if c.over != nil {
+		s.left = sized(s.left, n)
+		clear(s.left)
+	}
 	for k := len(c.stack) - 1; k >= 0; k-- {
 		i := c.stack[k]
 		r := c.recv[i]
@@ -703,15 +719,21 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 					for gr := range kept {
 						kept[gr] = load[i][gr] * hold / total
 					}
-					if lay != nil {
-						lay(i, kept)
-					} else {
-						for gr := range kept {
-							change[i] += kept[gr]
-							gained[i][gr] += kept[gr]
-						}
-					}
+					c.keepAt(i, kept, change, gained, lay)
 				}
+			}
+			if c.over != nil && c.over[i] >= 0 {
+				// Still water, full: what it has no room for spills on. See
+				// spillOn.
+				s.left[i] = c.room[i] - carrying(kept)
+				var rest [Grains]float64
+				for gr := range rest {
+					rest[gr] = load[i][gr] - kept[gr]
+				}
+				if carrying(rest) > 0 {
+					spilt = append(spilt, spilling{i, rest})
+				}
+				continue
 			}
 			cut := c.edgeCut(i, next[i])
 			change[i] -= cut
@@ -745,6 +767,9 @@ func (c *fluvial) account(next []float64, change []float64, gained [][Grains]flo
 				gained[i][gr] += laid[gr]
 			}
 		}
+	}
+	if len(spilt) > 0 {
+		c.spillOn(s, spilt, change, gained, lay, pooled, &exported)
 	}
 	// What the rivers brought each bay, carried over all of its shoals: the
 	// mud over each is the bay's load over the shoals' tiles, and a
@@ -817,14 +842,30 @@ func (g *Grid) edgeWork(c *fluvial, recv []int32, years float64) {
 	}
 }
 
-// stillWork has still water keep what reaches it. A lake, a salt flat and the
-// bottom of a hollow are roots of the water's step, because the water goes no
-// further down the ground from them; and a root sends what reaches it to the
-// sea, which is right for the sea and the edge of a valley and nowhere else.
-// Anywhere else what the water carried stops where the water does, and that
-// is how a lake silts up and a basin fills.
+// stillWork has still water keep what reaches it, as far as it has room. A
+// lake, a salt flat and the bottom of a hollow are roots of the water's step,
+// because the water goes no further down the ground from them; and a root
+// sends what reaches it to the sea, which is right for the sea and the edge of
+// a valley and nowhere else. Anywhere else what the water carried stops where
+// the water does, and that is how a lake silts up and a basin fills.
+//
+// It fills to where the hollow spills and no further. A hollow is a lake's
+// worth of room - see lake.go - and what reaches it once its floor stands at
+// the lowest point of its rim goes over that rim and on down the ground
+// beyond, as the water does when a lake is full. room is that, read off the
+// ground flooded from the sea and the map's edges up: how far the root stands
+// under the level its hollow spills at. over is the tile its spill goes on
+// to: the one the flood came over the rim from. Where nothing drains off the
+// map at all there is no rim to spill over, and a hollow keeps all it is
+// brought, as it always did.
+//
+// It used to keep all of it everywhere. A hollow of one tile just above a
+// valley's sea, brought a river's load in a step, stood 2236 m high on it;
+// cut back, it kept a soil column that thick, and the waves winnowed the tile
+// to 549 m under the sea (#121).
 func (g *Grid) stillWork(c *fluvial, recv []int32) {
 	n := len(g.Tiles)
+	still := false
 	for i := range n {
 		if int(recv[i]) != i || g.sunk(i) {
 			continue
@@ -840,5 +881,162 @@ func (g *Grid) stillWork(c *fluvial, recv []int32) {
 			clear(c.room)
 		}
 		c.keep[i], c.room[i] = 1, math.Inf(1)
+		still = true
+	}
+	if !still {
+		return
+	}
+	s := &g.stepScratch
+	s.spill, s.from, s.over = sized(s.spill, n), sized(s.from, n), sized(s.over, n)
+	spill, from, rim := s.spill, s.from, s.over
+	// The flood: from every tile of the sea and the map's edge, the lowest
+	// first, each neighbour reached standing at its ground or at the water
+	// that reached it, whichever is higher. from is the tile it was reached
+	// from, -1 for where the flood began and -2 for not reached yet.
+	q := slideQueue{at: g.slideScratch[:0]}
+	for i := range n {
+		from[i] = -2
+		if p := g.PosOf(i); g.sunk(i) || g.outlet(p.X, p.Y) {
+			spill[i], from[i] = c.h[i], -1
+			q.push(spill[i], int32(i))
+		}
+	}
+	if len(q.at) == 0 {
+		g.slideScratch = q.at[:0]
+		return
+	}
+	for len(q.at) > 0 {
+		i := q.pop()
+		// rim is, for every tile, the tile of the rim its hollow spills over:
+		// the first one the flood stood at the ground of, on its way from
+		// the sea to it. A tile it stood at the ground of is its own.
+		if f := from[i]; f >= 0 && spill[i] > c.h[i] {
+			rim[i] = rim[f]
+		} else {
+			rim[i] = i
+		}
+		p := g.PosOf(int(i))
+		for _, off := range Dirs {
+			nb := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if !g.In(nb) {
+				continue
+			}
+			j := int32(g.Index(nb))
+			if from[j] != -2 {
+				continue
+			}
+			spill[j], from[j] = math.Max(c.h[j], spill[i]), i
+			q.push(spill[j], j)
+		}
+	}
+	g.slideScratch = q.at[:0]
+	// And over, written over rim root by root: where a full hollow's spill
+	// goes. Every tile but a still root is -1.
+	c.over = rim
+	for i := range n {
+		if int(recv[i]) != i || !math.IsInf(c.room[i], 1) {
+			c.over[i] = -1
+			continue
+		}
+		c.room[i] = math.Max(0, spill[i]-c.h[i])
+		r := rim[i]
+		if from[r] >= 0 {
+			r = from[r]
+		}
+		c.over[i] = r
+	}
+}
+
+// keepAt lays what root i keeps: through lay where there is one, and onto
+// the root itself where there is not.
+func (c *fluvial) keepAt(i int32, kept [Grains]float64, change []float64, gained [][Grains]float64, lay func(i int32, laid [Grains]float64)) {
+	if lay != nil {
+		lay(i, kept)
+		return
+	}
+	for gr := range kept {
+		change[i] += kept[gr]
+		gained[i][gr] += kept[gr]
+	}
+}
+
+// spilling is what a full hollow at root has no room for.
+type spilling struct {
+	root int32
+	load [Grains]float64
+}
+
+// spillOn carries what full hollows spill on down the ground, as lake.go
+// pours what a full basin cannot hold into the next: over the rim to the tile
+// beyond it, and with the water from there to the root it ends at. Still
+// water there keeps what it has room for and spills the rest on in turn; the
+// sea, a bay or the edge of a valley takes it as it takes any root's load.
+// It is carried as the river's wash, settling nowhere on the way: what a lake
+// passes over its outlet is what stays up in the water. The spills are taken
+// in the order account met their hollows, so a world repeats.
+//
+// Every hop goes over a rim to ground the flood reached first, so a spill
+// runs downhill to the sea; the count of hops is only a guard, and what
+// outlives it is let go to the sea with the rest.
+func (c *fluvial) spillOn(s *solveScratch, spilt []spilling, change []float64, gained [][Grains]float64, lay func(i int32, laid [Grains]float64), pooled [][Grains]float64, exported *[Grains]float64) {
+	n := len(c.h)
+	s.rootOf = sized(s.rootOf, n)
+	for _, i := range c.stack {
+		if r := c.recv[i]; r == i {
+			s.rootOf[i] = i
+		} else {
+			s.rootOf[i] = s.rootOf[r]
+		}
+	}
+	for _, sp := range spilt {
+		load := sp.load
+		at := sp.root
+		for hop := 0; carrying(load) > 0; hop++ {
+			r := s.rootOf[c.over[at]]
+			if c.over[r] < 0 || hop >= n {
+				c.sendOut(r, load, pooled, exported)
+				break
+			}
+			total := carrying(load)
+			if hold := math.Min(total, s.left[r]); hold > 0 {
+				var kept [Grains]float64
+				for gr := range kept {
+					kept[gr] = load[gr] * hold / total
+					load[gr] -= kept[gr]
+				}
+				s.left[r] -= hold
+				c.keepAt(r, kept, change, gained, lay)
+				if hold >= total {
+					break
+				}
+			}
+			at = r
+		}
+	}
+}
+
+// sendOut is what a root that keeps nothing does with a load: a bay's tide
+// takes it, and the sea or the edge of the map anything else, the surf's
+// share of its sand to the waves.
+func (c *fluvial) sendOut(i int32, load [Grains]float64, pooled [][Grains]float64, exported *[Grains]float64) {
+	if c.bay != nil && c.bay[i] >= 0 {
+		if c.surf != nil && c.surf[i] >= 0 {
+			c.sands[i] += load[Sand]
+			load[Sand] = 0
+		}
+		for gr := range load {
+			pooled[c.bay[i]][gr] += load[gr]
+		}
+		return
+	}
+	for gr := range load {
+		exported[gr] += load[gr]
+		if c.mouth != nil {
+			c.mouth[i][gr] += load[gr]
+		}
+	}
+	if c.surf != nil && c.surf[i] >= 0 {
+		c.sands[i] += load[Sand]
+		exported[Sand] -= load[Sand]
 	}
 }

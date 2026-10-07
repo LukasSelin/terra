@@ -2,6 +2,7 @@ package terra
 
 import (
 	"math"
+	"slices"
 	"testing"
 )
 
@@ -372,5 +373,86 @@ func TestAHardBandHoldsAnEscarpment(t *testing.T) {
 	}
 	if !band(steepest) {
 		t.Errorf("the steepest fall is at tile %d, off the granite band", steepest)
+	}
+}
+
+// A hollow keeps what its river brings it up to where it spills, and what it
+// has no room for goes over its rim and on, here to a second hollow and then
+// to the sea: nothing kept over the room, nothing lost (#121).
+func TestAHollowKeepsOnlyWhatItHasRoomFor(t *testing.T) {
+	// 0 is the sea and 1 and 3 hollows: 5 drains through 4 into 3, which
+	// spills to 2, which drains into 1, which spills to the sea. 5 carries
+	// the load.
+	c := fluvial{
+		h:      []float64{-10, 0, 3, 1, 4, 5},
+		recv:   []int32{0, 1, 1, 3, 3, 4},
+		f:      make([]float64, 6),
+		settle: make([][Grains]float64, 6),
+		parts:  make([][Grains]float64, 6),
+		keep:   []float64{0, 1, 0, 1, 0, 0},
+		room:   []float64{0, 0.5, 0, 1.25, 0, 0},
+		over:   []int32{-1, 0, -1, 2, -1, -1},
+		supply: make([][Grains]float64, 6),
+	}
+	c.stack = stackOf(c.recv)
+	c.supply[5] = [Grains]float64{Sand: 1, Silt: 2, Clay: 1}
+	change := make([]float64, 6)
+	gained := make([][Grains]float64, 6)
+	exported := c.account(slices.Clone(c.h), change, gained, nil)
+	if kept := carrying(gained[3]); math.Abs(kept-1.25) > 1e-12 {
+		t.Errorf("the upper hollow kept %.4f m with room for 1.25", kept)
+	}
+	if kept := carrying(gained[1]); math.Abs(kept-0.5) > 1e-12 {
+		t.Errorf("the lower hollow kept %.4f m with room for 0.5", kept)
+	}
+	if gone := carrying(exported); math.Abs(gone-2.25) > 1e-12 {
+		t.Errorf("%.4f m went to the sea, not the 2.25 the hollows had no room for", gone)
+	}
+	if r := gained[3][Silt] / carrying(gained[3]); math.Abs(r-0.5) > 1e-12 {
+		t.Errorf("the hollow kept a load half silt as %.3f silt", r)
+	}
+}
+
+// Over the small globes, still water on the made world keeps no more in a
+// step than fills it to where its hollow spills, and the ground adds up: what
+// the step took is what it laid and what went to the sea.
+func TestNoHollowKeepsMoreThanItsRoom(t *testing.T) {
+	if testing.Short() {
+		t.Skip("three small globes")
+	}
+	for seed, w := range smallGlobes(3) {
+		g := w.Clone()
+		most, mostRoom, full, hollows := 0.0, 0.0, 0, 0
+		for range 2 {
+			c := g.waterStep(ageYears)
+			next := c.solve(settleIters)
+			n := len(g.Tiles)
+			change := make([]float64, n)
+			gained := make([][Grains]float64, n)
+			exported := c.account(next, change, gained, nil)
+			sum := 0.0
+			for i := range n {
+				sum += change[i]
+				if c.over == nil || c.over[i] < 0 {
+					continue
+				}
+				hollows++
+				kept := carrying(gained[i])
+				if kept > c.room[i]*(1+1e-9)+1e-12 {
+					t.Errorf("small globe %d: the hollow at %v kept %.4g m with room for %.4g", seed+1, g.PosOf(i), kept, c.room[i])
+				}
+				if kept > most {
+					most, mostRoom = kept, c.room[i]
+				}
+				if kept > 0 && kept >= c.room[i]*(1-1e-9) {
+					full++
+				}
+			}
+			if gone := carrying(exported); math.Abs(sum+gone) > 1e-6*math.Max(1, gone) {
+				t.Errorf("small globe %d: the ground changed by %.6g and %.6g went to the sea", seed+1, sum, gone)
+			}
+			g.wear(ageYears)
+		}
+		t.Logf("small globe %d: %d hollows over two steps, %d filled to their spill; the largest fill %.4g m, with room for %.4g", seed+1, hollows, full, most, mostRoom)
 	}
 }
