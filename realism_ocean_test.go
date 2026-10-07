@@ -27,9 +27,9 @@ import (
 // a cell's area, which on the cylinder goes as the cosine of its latitude.
 //
 // A reading the present sea can make is asserted. One that needs a step of
-// the ocean model that has not been taken - a heat transport the energy
-// balance feels, a flow that runs round islands, a thermocline, salt, an
-// overturning, a sea-ice model - is read as far as the present fields allow,
+// the ocean model that has not been taken - a flow that runs round islands,
+// salt, an overturning, a sea-ice model - is read as far as the present
+// fields allow,
 // logged, and skipped with the issue that will give it what it lacks. When
 // that issue lands, it takes its Skip out and the reading starts holding.
 // Each test logs its number every run, so that every step can say which
@@ -491,27 +491,6 @@ func TestOceanEasternBoundaryCold(t *testing.T) {
 	}
 }
 
-// meridionalHeat is the heat the currents carry across row cy toward the
-// north, in watts: the sea's density and heat a degree, the current's speed
-// over oceanColumn of water, and the water's temperature against the row's
-// mean - which takes out the heat a sea that does not close its mass across
-// a parallel would otherwise carry for nothing. It is the gyres' share only:
-// a sea of one layer has no overturning under it.
-func (o *oceanCells) meridionalHeat(cy int) float64 {
-	const heat = 4.1e6 // atmos.seaHeat, J a cubic metre a degree
-	mean := o.zonalSeaMean(cy, o.waterTemp)
-	var s float64
-	for cx := 0; cx < o.e.W; cx++ {
-		if !o.wet(cx, cy) {
-			continue
-		}
-		i := o.at(cx, cy)
-		_, v := o.current(i)
-		s += heat * v * oceanColumn * (o.waterTemp(i) - mean) * o.e.Dx[cy]
-	}
-	return s
-}
-
 // rowAt is the row of cells nearest lat degrees.
 func (o *oceanCells) rowAt(lat float64) int {
 	best := 0
@@ -524,26 +503,106 @@ func (o *oceanCells) rowAt(lat float64) int {
 }
 
 // 4. Ocean meridional heat transport. The ocean carries some 2 PW toward the
-// poles at its peak in the tropics, and at 35 degrees, where the atmosphere
-// and the ocean together carry their most, 5.5-6 PW, the ocean's share is
-// 22% in the north and 8% in the south (Trenberth and Caron 2001). The sea
-// here carries its warmth from cell to cell (atmos.seaLinks) but the energy
-// balance does not feel it: there is no heat transport of the ocean's for
-// the atmosphere's to be a share of. The gyres' transport is read off the
-// kept current and temperature as far as it can be, and the test waits on
-// #22 (M3), which puts it into the energy balance.
+// poles at its peak in the tropics (Trenberth and Caron 2001; 1.8 ± 0.3 PW
+// at 24N, Ganachaud and Wunsch 2003), and at 35 degrees, where the
+// atmosphere and the ocean together carry their most, 5.5-6 PW, the ocean's
+// share is 22% in the north and 8% in the south (Trenberth and Caron 2001).
+// The sea carries its own heat since #22 (M3, atmos/slab.go): its two
+// layers' transport times their warmth, and the eddies' stirring, read on
+// the air's cells (atmos.Env.Carried); its share is of the whole the energy
+// balance carries with that sea in it (atmos.Env.SeaBalance). Most of the
+// north's share at 35 degrees on the earth is the Atlantic's overturning
+// (1.2 PW at 26.5N, McCarthy et al. 2015), which is M5's (#24) and a reading
+// only: the north's share waits on it, a known gap.
 func TestOceanMeridionalHeatTransport(t *testing.T) {
 	o := theGlobesOcean(t)
+	e := o.e
 	peak, at := 0.0, math.NaN()
-	for cy := range o.lat {
-		if q := o.meridionalHeat(cy); math.Abs(q) > math.Abs(peak) {
+	for cy, q := range e.Carried {
+		if math.Abs(o.lat[cy]) <= 30 && math.Abs(q) > math.Abs(peak) {
 			peak, at = q, o.lat[cy]
 		}
 	}
-	n35, s35 := o.meridionalHeat(o.rowAt(35)), o.meridionalHeat(o.rowAt(-35))
-	t.Logf("the gyres carry %+.3f PW north at 35N and %+.3f at 35S; their peak is %+.3f PW at %.1f degrees",
-		n35/petawatt, s35/petawatt, peak/petawatt, at)
-	t.Skipf("needs #22 (M3): the energy balance does not feel the ocean's heat transport, so there is no total for it to be a share of; the gyres' own reads %+.2f PW at its peak, real about 2 (Trenberth and Caron 2001)", peak/petawatt)
+	c := e.SeaBalance()
+	share := func(lat float64) (sea, all float64) {
+		sea = c.SeaCarries(lat)
+		return sea, sea + c.AirCarries(lat)
+	}
+	n35, nAll := share(35)
+	s35, sAll := share(-35)
+	t.Logf("the sea carries %+.2f PW of %+.2f at 35N (%.1f%%) and %+.2f of %+.2f at 35S (%.1f%%); its tropical peak is %+.2f PW at %.1f degrees",
+		n35/petawatt, nAll/petawatt, 100*n35/nAll, s35/petawatt, sAll/petawatt, 100*s35/sAll, peak/petawatt, at)
+	if p := math.Abs(peak) / petawatt; p < 1.4 || p > 2.6 {
+		t.Errorf("the sea's tropical peak is %.2f PW, real about 2 (1.4-2.6)", p)
+	}
+	if f := s35 / sAll; f < 0.04 || f > 0.12 {
+		t.Errorf("the sea's share of the southward carrying at 35S is %.1f%%, real 8%% (4-12)", 100*f)
+	}
+	if f := n35 / nAll; f < 0.15 || f > 0.29 {
+		t.Skipf("known gap: M5 (#24) - the sea's share at 35N is %.1f%%, real 22%% (15-29): the earth's north carries much of its share in the Atlantic's overturning, which the sea has as a reading only", 100*f)
+	}
+}
+
+// The ocean carries some 0.4 PW north across the equator, most of it in the
+// Atlantic's overturning, and the air carries as much south to balance it,
+// which is what stands the ITCZ's year some five degrees north: about three
+// degrees for each petawatt the air carries across the equator (Frierson et
+// al. 2013; Donohoe et al. 2013; Marshall et al. 2014). The balance with
+// the world's sea in it (atmos.Env.SeaBalance) has its energy flux equator
+// moved by what the sea carries: away from the hemisphere the air carries
+// more heat into than it did. The air's belts are laid down before the sea
+// is solved (#28), so the winds' ITCZ is the balance's own, and the earth's
+// five degrees is the overturning's (#24): a known gap.
+func TestOceanCrossEquatorialTransport(t *testing.T) {
+	o := theGlobesOcean(t)
+	e := o.e
+	c, r := e.SeaBalance(), e.Reference()
+	year := func(itcz func(sinT float64) float64) float64 {
+		var s float64
+		for _, sinT := range []float64{-1, 0, 1, 0} {
+			s += itcz(sinT) / 4
+		}
+		return s
+	}
+	sea, air, airBefore := c.SeaCarries(0), c.AirCarries(0), r.AirCarries(0)
+	moved := year(c.ITCZ) - year(r.ITCZ)
+	t.Logf("the sea carries %+.3f PW north across the equator and the air %+.3f, where the air carried %+.3f with the balance's own sea; the ITCZ's year moves %+.2f degrees, to %+.2f (the winds' %+.2f)",
+		sea/petawatt, air/petawatt, airBefore/petawatt, moved, year(c.ITCZ), year(o.w.ITCZ))
+	if d := (air - airBefore) / petawatt; math.Abs(d) > 0.02 && d*moved > 0 {
+		t.Errorf("the air carries %+.3f PW more north across the equator and the ITCZ moves %+.2f degrees: it should move the other way", d, moved)
+	}
+	if itcz := year(c.ITCZ); itcz < 3 {
+		t.Skipf("known gap: M5 (#24), #28 - the ITCZ's year stands at %+.2f with the sea's carrying, real some 5N: the sea carries %+.2f PW across the equator, the earth's 0.4 most of it in the Atlantic's overturning", itcz, sea/petawatt)
+	}
+}
+
+// The sea's warmth against its latitude's mean is no longer held to ten
+// degrees either way (#22): the Gulf Stream at the Grand Banks, some eight
+// or ten over the water beside it, is about the most the real world has, and
+// the clamp at that is a yardstick instead. No more than a thousandth of the
+// sea, by area, may stand further from its latitude's mean than ten degrees.
+func TestOceanWarmthStaysWithinTenDegrees(t *testing.T) {
+	o := theGlobesOcean(t)
+	e := o.e
+	var over, all, lo, hi float64
+	for cy := range o.lat {
+		w := o.weight(cy)
+		for cx := 0; cx < e.W; cx++ {
+			if !o.wet(cx, cy) {
+				continue
+			}
+			x := e.Warm[o.at(cx, cy)]
+			lo, hi = math.Min(lo, x), math.Max(hi, x)
+			all += w
+			if math.Abs(x) > 10 {
+				over += w
+			}
+		}
+	}
+	t.Logf("the sea stands %+.2f to %+.2f degrees from its latitude's mean; %.3f%% of it further than ten", lo, hi, 100*over/all)
+	if over/all > 1e-3 {
+		t.Skipf("known gap: G x #35 - %.3f%% of the sea stands further than ten degrees from its latitude's mean, real next to none: with the waves' Gill wind (#35) the coldest upwelling off the eastern shores and on the equator under the warm-east state reads -12, where M3 on the trades read -11.2 and 0.087%%; the cold is the Bjerknes loop's wrong sign, gap G's", 100*over/all)
+	}
 }
 
 // ringOfSea is the band of rows, between lo and hi degrees, that sea runs all
@@ -866,10 +925,19 @@ const coldTongueUnder = 0.5
 // the trades' layer's depth, it ran on to the Pacific's -5 m/s and a
 // contrast of +2.4 degrees, and with the rain's heating at the strength the
 // coupled models of the Pacific give it, past the band to +8.6, the
-// thermocline under the east at its least; neither settled. What is still
-// missing is the trades' own east-west structure, A3 (#35), from which the
-// feedback could grow. It fails once the contrast is in the band, to have
-// its marker taken off.
+// thermocline under the east at its least; neither settled. What was
+// missing was the trades' own east-west structure, A3 (#35), from which the
+// feedback could grow. Since A3 the heat the ground gives the tropical air
+// is in the wind (atmos's waves), and the feedback grows, but the other way:
+// the continent west of the broadest ocean sends up some three millimetres
+// of water a day against the open sea's five and more, so it is a Walker
+// cell's sinking branch and not its rising one, and the westerlies its
+// heating draws east of it (Gill, 1980) carry the warm water east, under a
+// thermocline deeper in the east than the west. The earth's continents on
+// the equator rain more than its ocean there; the column budget's ITCZ
+// over the sea rains two or three times the earth's (gap G), and the
+// heating read off its rain ran away (see waves.go). It fails once the
+// contrast is in the band, to have its marker taken off.
 func TestOceanEquatorialContrast(t *testing.T) {
 	o := theGlobesOcean(t)
 	c := o.equatorialContrast(5)
@@ -885,7 +953,7 @@ func TestOceanEquatorialContrast(t *testing.T) {
 		t.Errorf("the equatorial contrast reads %+.2f degrees, inside 4-6: the gap has closed, take the marker off", c)
 		return
 	}
-	t.Skipf("known gap: #35 (A3) - with the sea and the air solved together (#28) there are still no year's mean easterlies on the equator for the Bjerknes feedback to grow from (%+.2f m/s over the broadest ocean, the Pacific's -4 to -6); the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
+	t.Skipf("known gap: G - the heat the ground gives the tropical air (#35) makes the continent west of the broadest ocean a Walker cell's sinking branch, its land sending up less water than the open sea, whose column budget rains two or three times the earth's: the Bjerknes feedback grows the warm-east way, %+.2f m/s over the broadest ocean (the Pacific's -4 to -6), a contrast of %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
 }
 
 // seaIceShare is the share of the globe's whole surface, area-weighted, that

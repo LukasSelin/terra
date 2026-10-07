@@ -38,8 +38,8 @@ import "math"
 //     some twenty-four degrees toward its pole. A map's ITCZ is read between
 //     them by the land under the tropics of the hemisphere the summer is in.
 //     It is the zonal mean's: the trough that bends over a continent in its
-//     summer, and the monsoon it draws, are the heating's (Gill, 1980), a
-//     later step's.
+//     summer, and the monsoon it draws, are the heating's (Gill, 1980): see
+//     waves.go.
 //   - The subtropical highs stand at the cell's edges, which follow the ITCZ
 //     north and south by edgeShare of its swing: the summer's cell shrinks
 //     and the winter's reaches across the equator (Lindzen and Hou, 1988).

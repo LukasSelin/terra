@@ -236,13 +236,14 @@ type Env struct {
 	climb []float64
 
 	// Warm is how many degrees the sea over each cell stands over its
-	// latitude's mean for the currents, and Coast what that is worth to the
-	// country round it: see currents. Both are nil on a valley.
+	// latitude's mean for the currents and what the sea carries, and Coast
+	// what that is worth to the country round it: see currents. Both are nil
+	// on a valley.
 	Warm, Coast []float64
 	// Cu and Cv are the sea's current over each cell, metres a second toward
 	// the east and the north; Rise how fast water comes up from under it,
 	// metres a second, off a shore and in the open ocean; and WaterTemp the water's temperature, degrees: the
-	// latitude's mean and Warm, before Warm is held to seaWarmMost. Land
+	// latitude's mean and Warm, where it is not under ice. Land
 	// has no current and no upwelling; the land along a shore is given the
 	// temperature of the sea beside it, and the land away from the sea its
 	// latitude's mean. All are nil on a valley.
@@ -279,6 +280,20 @@ type Env struct {
 	// through the trades' layer and the heat of the rain over warm water:
 	// the Walker circulation's. See walker. Nil on a valley.
 	Walk [3][]float32
+	// Waves is what the heating of the rain and the land, and the ground
+	// the westerlies cross, add to the air in each phase of the year: Gill's
+	// answer to the heating and the stationary waves aloft. See waves.go.
+	// Empty on a valley.
+	Waves [Phases]Wave
+	// Carried is the heat the sea carries toward the north across each row
+	// of cells, watts over the whole parallel, and SeaHeat what that leaves
+	// in each band of the energy balance's sea column, W a square metre of
+	// sea: see slab.go. Nil and nought on a valley.
+	Carried []float64
+	SeaHeat [ebmBands]float64
+	// seaShift is how many degrees warmer each band of the energy balance
+	// stands for the sea's carrying against the balance's own sea's.
+	seaShift [ebmBands]float64
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's
@@ -596,6 +611,7 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64, was *Winds, s *Scratch)
 	// together. See ocean.go and coupled.go.
 	if e.Wrap {
 		e.carry(was, s)
+		e.waves(was, s)
 	}
 	w.solve(s)
 	if e.Wrap {
@@ -622,7 +638,9 @@ func (w *Winds) solve(s *Scratch) {
 	}
 	inParallel(Phases-1, workers, func(k, _ int) {
 		wk := s.phaseWork(k)
-		e.solve(wk, phaseSin[k], e.airTempIn(wk, slotAirTemp, phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
+		var m [Phases]float64
+		m[k] = 1
+		e.solve(wk, phaseSin[k], &m, e.airTempIn(wk, slotAirTemp, phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
 	})
 	copy(w.U[3], w.U[1])
 	copy(w.V[3], w.V[1])
@@ -696,12 +714,16 @@ func hypsometric(p, temp, depth float64) float64 {
 // the north's summer, over air at sea level of temp degrees. extra is pressure added to what the climate lays down,
 // in hPa, and warm the degrees the day's weather has carried in; either may be
 // nil. The wind and the pressure are written to u, v and p.
+// The waves the heating and the ground stand in the air are added, the
+// phases' on either side of sinT in proportion (see waves.go).
 func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32) {
-	e.solve(nil, sinT, temp, extra, warm, u, v, p)
+	m := waveWeights(sinT)
+	e.solve(nil, sinT, &m, temp, extra, warm, u, v, p)
 }
 
-// solve is Solve worked out in w: see Scratch.
-func (e *Env) solve(w *work, sinT float64, temp, extra, warm []float64, u, v, p []float32) {
+// solve is Solve worked out in w (see Scratch), with each phase's waves
+// worth m of it, or none.
+func (e *Env) solve(w *work, sinT float64, m *[Phases]float64, temp, extra, warm []float64, u, v, p []float32) {
 	n := e.W * e.H
 
 	// The warmth of the air at sea level, with what the sea under it adds
@@ -746,6 +768,8 @@ func (e *Env) solve(w *work, sinT float64, temp, extra, warm []float64, u, v, p 
 			}
 		}
 	}
+	// The waves aloft, as far as they reach the ground: see waves.go.
+	e.addWaves(m, pres, nil, true)
 
 	// The wind the pressure drives, against the turning of the planet and the
 	// drag of the ground; then what the ground in its way does to it.
@@ -783,6 +807,8 @@ func (e *Env) solve(w *work, sinT float64, temp, extra, warm []float64, u, v, p 
 			pres[i] += float64(e.Walk[2][i])
 		}
 	}
+	// And the heating's.
+	e.addWaves(m, pres, &wind, false)
 	for i := 0; i < n; i++ {
 		uu, vv := wind[0][i], wind[1][i]
 		if s := math.Hypot(uu, vv); s > WindMost {

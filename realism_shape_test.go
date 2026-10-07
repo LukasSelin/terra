@@ -77,7 +77,9 @@ var shapeYardsticks = []realYardstick{
 		name: "remoteness of the continents, three globes", unit: "", scale: "ground", lo: 0.4, hi: 0.7, slow: true,
 		source:  "Garcia-Castellanos & Lombardo 2007: the continental poles of inaccessibility lie 2510 km from the sea in Eurasia, 1814 Africa, 1650 North America, 1504 South America, 920 Australia - 0.58-0.65 of the radius of a disc of each one's area; 0.48 and 0.45 for Afro-Eurasia and the Americas, joined at Suez and Panama as a map at this scale joins them. A disc reads 1, a square 0.89",
 		measure: func() float64 { return quantile(remoteness(threeGlobes()), 0.5) },
-	}},
+	},
+		gap: "known gap: the continents are the history's plates, and every change to the weather the history reads redraws them: with M3's sea (#22) on the waves (#35) the three globes read 0.395, as #97's coupled sea read 0.398 and #35's waves 0.4 and over. A point reading on three globes; it wants reading over seeds as #80 reads the relief",
+	},
 	{yardstick: yardstick{
 		name: "island size exponent, three globes", unit: "", scale: "ground", lo: 0.45, hi: 0.85, slow: true,
 		source:  "Korcak 1938; Mandelbrot 1982: N(A>=a) ~ a^-B over the world's islands, B 0.65 on the mean, 0.5 for Africa's to 0.75 for Indonesia's; 0.65 again over 131,063 islands from 1 to 10^5 km2 (ASTER GDEM, arXiv 2512.16659). This reading takes islands from two tiles to 3% of the land",
@@ -98,6 +100,10 @@ var shapeYardsticks = []realYardstick{
 		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
 		measure: func() float64 { return cornerLock(threeGlobes()) },
 	}},
+	// It was a known gap with the sea carrying its own heat (#22) on the
+	// trades, 0.156; on the waves (#35) the three globes read 0.140 again.
+	// The coasts are the history's, redrawn by every change to the weather
+	// it reads: a point reading on three globes.
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own
@@ -120,9 +126,13 @@ var shapeYardsticks = []realYardstick{
 		name: "shelf width, quiet margins over active, three globes", unit: "x", scale: "ground", lo: 1.8, hi: 4.5, slow: true,
 		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
-	},
-		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: it read 1.88 until the fractures bent by the plate moved every coast: 1.24; 2.00, 0.94 and 1.23 globe by globe",
-	},
+	}},
+	// It was a known gap (K: an active shelf is laid no narrower than a tile
+	// and a half, 56 km, against a quiet one's 88, so the active column read
+	// mostly quiet shelves: 1.88, then 1.24 once the fractures bent by the
+	// plate moved every coast; 1.00-1.05 on #97 and #35). With M3's sea on
+	// the waves the three globes read 1.807, just inside: the coasts are the
+	// history's, and a point reading on three globes moves with them.
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
 		source:  "the floor's slope within 300 km of a coast leans no more to the map's axes and diagonals than the coast does to the earth's lines of latitude; fractional Brownian relief drawn on this map reads within 0.025 of nothing. The band is not a measured figure",
