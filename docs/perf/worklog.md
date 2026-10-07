@@ -6,6 +6,144 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Air A2: the general circulation worked out (#34)
+
+**What this is.** On `claude/air-circulation`, stacked on
+`claude/air-calendar` (A1, #71) at cfdd360. `beltPressure`'s fixed belts
+(0, 32, 62 and 88 degrees, moved five with the sun) are replaced by
+`internal/atmos/circulation.go`:
+
+- The Hadley edge is Held and Hou's (1980) φ_H = (5/3 gHΔ_H/Ω²a²)^½, taken
+  as a ratio to today's and anchored on today's real edge, 32 degrees.
+  Δ_H is the P2 term of the balance's own radiative equilibrium (annual sun
+  on the ice-free albedo, against Budyko's line), over its mean warmth. H is
+  where the tropics' air reaches a fixed 200 K anvil at the lapse rate.
+  Today: Δ_H 0.484, H 15.5 km, raw φ_H 43.1 degrees.
+- The ITCZ is the balance's energy flux equator, its warmest latitude,
+  recorded step by step over the last year as a first harmonic for the band,
+  its land and its sea. It is read between them by the land under the summer
+  hemisphere's tropics (0-30 degrees).
+- The edges follow the ITCZ by half its swing. The subpolar lows and the
+  lows' birth band lie 30 degrees poleward of the edges, and the highs' birth
+  band is the edge -6 to +14. The depths go as (edge/32)², and the subpolar
+  lows as the balance's 30-60 fall of warmth.
+- The descent (`Env.Subsides`, a hump between ITCZ+8 and edge+5, 4 mm/s at
+  its peak) lays a trade inversion at 1 km × peak/descent (Lilly 1968). It
+  caps the column's rain by the share of the vapour under it, and the
+  ground's lift by clipping the ground at it.
+
+**The digest.** Rewritten, as meant: valley 73f082af4d753060, ancient
+41825e11f3d2b74d, globe128 4a301c92396eee7a.
+
+**The heap.** Budget rewritten. Valley 10.0 MiB in 1313 allocations (1330),
+ancient 56.9 MiB in 8848 (8700, +1.4% bytes), globe128 402.1 MiB in 29639
+(393.8 MiB, +2.1%). These are the four `Subsides` fields an Env keeps, the
+three per-phase `stable` slices in `RainCells`, and the moved world's own
+work. The first try clipped the ground into a tile-sized copy for each
+phase, which cost globe128 +4%. The clip is now read inline. The full globe
+allocates 11.03 GB against 11.22.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, three runs each, back to back,
+with the machine otherwise idle but not quiet:
+
+| phase | cfdd360 | this |
+|---|---|---|
+| Generate | 56.4 / 53.5 / 52.7 s | 54.1 / 52.4 / 54.6 s |
+| history | 42.0 / 40.8 / 39.2 | 41.5 / 39.1 / 41.5 |
+| weather | 15.2 / 14.1 / 13.7 | 14.2 / 13.6 / 14.0 |
+| rainOn | 11.8 / 11.1 / 10.8 | 11.0 / 10.6 / 11.0 |
+| orographic | 5.91 / 5.49 / 5.23 | 5.58 / 5.30 / 5.46 |
+| windsFor | 3.41 / 2.95 / 2.89 | 3.19 / 2.94 / 2.94 |
+
+Within the noise: the circulation is a few hundred operations a Solve, and
+the clip is one bilinear read per tile per patch. `scripts/perf.sh check`
+was not run on a quiet machine.
+
+**What it reads.** On globe 1, the zonal-mean sea-level pressure:
+
+| | highs N | highs S | trough | subpolar N | subpolar S |
+|---|---|---|---|---|---|
+| equinox (base) | 31.8 | -31.8 | -0.2 | 61.0 | -61.0 |
+| equinox (A2) | 31.8 | -32.2 | -0.9 | 61.0 | -61.3 |
+| July (base) | 36.0 | -27.9 | +4.4 | 65.6 | -57.8 |
+| July (A2) | 36.0 | -27.9 | +7.9 | 65.6 | -58.2 |
+| January (base) | 27.9 | -36.0 | -4.4 | 58.2 | -65.9 |
+| January (A2) | 27.9 | -36.0 | -8.3 | 57.8 | -65.9 |
+
+The belts stand within half a degree of where they were. The trough now
+swings ±8 degrees on globe 1 (34% tropical land) and ±6.3 on small globe 1
+(21%), against a fixed ±5. On small globe 1, land rain at 20-30 degrees
+fell from 365 to 277 mm and at 40-55 rose from 530 to 558. The tropics
+(0-10) went from 2625 to 2548.
+
+The balance's own circulation, `CirculationUnder`:
+
+- Today: edges 27.2/-36.8 in January and 36.4/-27.6 in July. The ITCZ
+  swings ±9.3 (sea ±4.8, land ±24.1) about a year's mean of -0.4.
+- 30 degrees of obliquity: Δ_H 0.444, edge 30.4 in the year's mean. The
+  northern edge ranges 24.1 to 36.3, and the ITCZ -12.6 to +11.6.
+- 40 degrees: Δ_H 0.369, edge 27.3, northern edge 18.3 to 35.6, and the
+  ITCZ -18.1 to +16.6.
+
+That is Held and Hou's narrowing with the smaller annual contrast, and
+Lindzen and Hou's wider seasonal excursion. Carbon barely moves the edge
+(31.8 to 32.3 from 100 to 3000 ppm): the contrast shrinks as the tropopause
+rises.
+
+The yardsticks, `TestRealNumbers|TestTheRealWorld`, cfdd360 against this.
+Each reading changed, and every other is within a few per cent:
+
+| yardstick | cfdd360 | A2 | real |
+|---|---|---|---|
+| midlatitude over subtropical rain, globe | 0.959 fail | 1.348 | 1.1-2 |
+| equatorial over subtropical rain (gap G) | 5.11 gap | 5.91 gap | 1.8-4 |
+| latitude of the driest belt, globe | 32.5 | 30 | |
+| mean land rain, 2x over 1x | 1.260 fail | 1.195 fail | 0.85-1.15 |
+| channel concavity, small globe | 0.3499 fail | 0.4093 | 0.35-0.6 |
+| hypsometric integral, 2x less 1x | -0.070 fail | +0.010 | -0.05-0.05 |
+| drainage area exceedance, small globe | 0.500 fail | 0.414 | 0.39-0.46 |
+| ridge-valley wavelength, small globe | 400 fail | 145.5 | 24-224 |
+| discharge exceedance, small globe | 0.480 fail | 0.467 fail | 0.40-0.46 |
+| land share of Aridisols | 0.065 fail | 0.066 fail | 0.09-0.15 |
+| land share of Gelisols | 0.117 fail | 0.119 fail | 0.06-0.11 |
+| Hack exponent, 2x less 1x | 0.016 | 0.073 fail | -0.05-0.05 |
+| channel concavity, 2x less 1x | +0.085 | -0.132 fail | -0.1-0.1 |
+| land relief intermittency C1 | 0.087 | 0.058 fail | 0.08-0.18 |
+| hypsometric integral, small globe | 0.358 | 0.3185 fail | 0.32-0.6 |
+| Hack exponent, small globe | 0.561 | 0.529 fail | 0.54-0.6 |
+| Hack exponent, globe | 0.590 | 0.601 fail | 0.54-0.6 |
+| valley floor over hillslope soil (gap I) | 2.12 gap | 3.44 closed | 3-50 |
+
+Nine failures before, ten now. Five came inside the band and six went out.
+The climate reading the issue is about came in: midlatitude over
+subtropical rain. The six new failures are all readings of the small
+globes' river networks and relief. These are the history's, and the
+history rains under the new belts from its first epoch: drier horse
+latitudes and a wider tropical belt redraw every network. These readings
+are the seed-level chaos earlier entries describe. Before A1, the globe's
+Hack exponent read 0.6005 and failed, and the C1 marker was on at 0.075.
+None was tuned. The soil gap closed (0.47 m to 0.83 m on the floors) and
+its marker is off.
+
+**The tests it moved.**
+
+- The hot continent's summer wind at its south coast is onshore again,
+  +1.1 m/s (A1: -0.8). It is held again rather than logged.
+- The step lakes' window is 0.95-0.98 of the valley's rain (`dryStep`
+  0.965), because the valley's rain rose some 3%.
+- The ocean's warmth hash is retaken.
+- The western boundary current test reads 25-40 degrees. Its old 20-40
+  band straddled the gyre's turn, where the interior read ±0.0004 m/s.
+- Flats are read on small globe 2. Globes 1-8 hold 0, 2, 0, 1, 0, 1, 0, 2.
+- The golden ancient tile is 987 again.
+- `TestTheWeatherChangesFromDayToDay` read 849 hPa on small globe 3: two
+  tropical cyclones were born the same day 70 km apart, and their depths
+  added. A storm is now born no nearer than 1000 km to another
+  (`stormApart`, the Fujiwhara merger), and the reading is 916 hPa. This
+  changes the day's weather only, not the digest.
+
+---
+
 ## 2026-10-07 - Air A1: one calendar and one seasonal swing (#33)
 
 **What this is.** On `claude/air-calendar`, stacked on `claude/air-forcings`

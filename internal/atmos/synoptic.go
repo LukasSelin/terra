@@ -112,6 +112,10 @@ const (
 	lowsADay   = 2.0
 	highsADay  = 0.8
 	stormsADay = 0.45
+	// stormApart is how near, in kilometres, a tropical cyclone is born to
+	// one that is already there at the least: some thousand, the reach of a
+	// mature storm's circulation.
+	stormApart = 1000.0
 	// StormSea is the warmth, in degrees, the sea under a storm has to have
 	// for it to be born or live: twenty-six and a half, the real threshold
 	// (Gray, 1968; Dare and McBride, 2011). It used to be read against a
@@ -277,7 +281,7 @@ func (wx *Weather) Step(day int) {
 				for range 12 {
 					lat, lon := hemi*(7+13*r.Float64()), 360*r.Float64()-180
 					fx, fy, on := e.CellOf(lat, lon)
-					if sst := e.SeaTemp(fx, fy, sinT); on && e.Sample(e.Sea, fx, fy) > 0.8 && sst >= StormSea {
+					if sst := e.SeaTemp(fx, fy, sinT); on && e.Sample(e.Sea, fx, fy) > 0.8 && sst >= StormSea && !wx.stormNear(lat, lon) {
 						// Few storms reach the most the sea could make of them:
 						// the share they do is spread from a fifth to four fifths
 						// (Emanuel, 2000).
@@ -289,6 +293,25 @@ func (wx *Weather) Step(day int) {
 			}
 		}
 	}
+}
+
+// stormNear reports whether a tropical cyclone already stands within
+// stormApart of lat, lon. None is born inside another's circulation: two that
+// come that near draw round one another and merge (Fujiwhara, 1921), and the
+// day's pressure, which adds what each takes off, would have one twice as
+// deep as the sea under it allows.
+func (wx *Weather) stormNear(lat, lon float64) bool {
+	for _, s := range wx.Systems {
+		if s.Kind != Storm {
+			continue
+		}
+		dy := (s.Lat - lat) * 111.2
+		dx := wrapLon(s.Lon-lon) * 111.32 * math.Cos((s.Lat+lat)/2*math.Pi/180)
+		if dx*dx+dy*dy < stormApart*stormApart {
+			return true
+		}
+	}
+	return false
 }
 
 // baroclinic is where a low is born in a hemisphere: somewhere in the middle
