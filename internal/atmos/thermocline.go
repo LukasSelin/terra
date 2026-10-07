@@ -94,7 +94,8 @@ const (
 	// where the ocean is mixed from top to bottom in winter. The water that
 	// comes up is drawn from under the mixed layer, some fifty metres down:
 	// where the thermocline lies thermoMid metres down, what comes up is
-	// half the way from the surface's warmth to the deep's cold, and the
+	// half the way from the warm water's - the layer's under the mixed layer
+	// (slab.go) - to the deep's cold, the latitude's mean less this, and the
 	// change from one to the other is over some thermoSpread metres either
 	// way. Off Peru, the thermocline fifty metres down, it comes up some
 	// twelve degrees colder than the surface; under the warm pool, a hundred
@@ -107,16 +108,17 @@ const (
 // thermocline is the depth of the warm layer on every cell, in metres, from
 // the gyres' transport psi in cubic metres a second and the wind's stress
 // along the parallels tx in newtons a square metre. It is nought on land.
-func (e *Env) thermocline(psi, tx []float64) []float64 {
+// It and what it works out on the way are in all's slots (see Scratch).
+func (e *Env) thermocline(psi, tx []float64, all *work) []float64 {
 	n := e.W * e.H
-	h := make([]float64, n)
+	h := all.floats(slotThermo, n)
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 	east := reducedGravity * thermoEast * thermoEast / 2
 	ring := reducedGravity * thermoMean * thermoMean / 2
-	tx = e.guided(tx)
+	tx = e.guided(tx, all.floats(slotGuided, len(tx)))
 	// Each row works in its own stretch of these, so that the rows can be
 	// spread over goroutines.
-	phi, runs := make([]float64, n), make([]int, n)
+	phi, runs := all.floats(slotLevel, n), make([]int, n)
 	e.rows(func(cy int) {
 		row := cy * e.W
 		dx, f := e.Dx[cy], e.f[cy]
@@ -200,18 +202,19 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 }
 
 // pumping is how fast, in metres a second over the year, the water under
-// each sea cell is drawn up by the parting of the wind's drift over it, from
-// the wind of each phase of the year u, v: the divergence of the drift, the
-// drift against a shore left to the coast's own upwelling. Where the drifts
-// meet the surface water is pressed down, which leaves it as warm as it was,
-// so a phase's pumping counts only where it draws water up: the equator,
-// where the year's mean wind is the doldrums' calm and its drifts meet, has
-// the trades of one hemisphere or the other blowing across it for half the
-// year, and the water comes up then.
-func (e *Env) pumping(u, v [Phases][]float32) []float64 {
+// each sea cell is drawn up by the parting of the wind's drift over it, and
+// how fast it is pressed down where the drifts meet, from the wind of each
+// phase of the year u, v: the divergence of the drift, the drift against a
+// shore left to the coast's own. Each phase counts the way it goes: the
+// equator, where the year's mean wind is the doldrums' calm and its drifts
+// meet, has the trades of one hemisphere or the other blowing across it for
+// half the year, and the water comes up then. What is pressed down goes
+// under the mixed layer, to the water under it (slab.go); what comes up comes
+// from there, or from the thermocline under that.
+func (e *Env) pumping(u, v [Phases][]float32, all *work) (up, down []float64) {
 	n := e.W * e.H
-	mx, my := make([]float64, n), make([]float64, n)
-	w := make([]float64, n)
+	mx, my := all.floats(slotDriftX, n), all.floats(slotDriftY, n)
+	up, down = all.floats(slotPumped, n), all.floats(slotSunk, n)
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 	for k := range Phases {
 		for i := range n {
@@ -243,18 +246,12 @@ func (e *Env) pumping(u, v [Phases][]float32) []float64 {
 				no, so := pick(north*e.W+cx), pick(south*e.W+cx)
 				div := (mx[ea]-mx[we])/(2*e.Dx[cy]) +
 					(my[no]*e.Dx[no/e.W]-my[so]*e.Dx[so/e.W])/(2*e.Dy*e.Dx[cy])
-				w[i] += math.Max(0, div) / Phases
+				up[i] += math.Max(0, div) / Phases
+				down[i] += math.Max(0, -div) / Phases
 			}
 		})
 	}
-	return w
-}
-
-// upwelled is the temperature, in degrees, of the water that comes up from
-// under a cell on row cy where the thermocline is h metres down.
-func (e *Env) upwelled(cy int, h float64) float64 {
-	c := math.Cos(e.lat[cy] * math.Pi / 180)
-	return e.Mean[cy] - deepContrast*c*c/(1+math.Exp((h-thermoMid)/thermoSpread))
+	return up, down
 }
 
 // guided is the wind's stress along the parallels tx as the thermocline
@@ -266,8 +263,7 @@ func (e *Env) upwelled(cy int, h float64) float64 {
 // equator is tilted by the trades either side of it as well as by the wind on
 // it, which under the rising air of the doldrums is little. Land takes no
 // part.
-func (e *Env) guided(tx []float64) []float64 {
-	out := make([]float64, len(tx))
+func (e *Env) guided(tx, out []float64) []float64 {
 	c := math.Sqrt(reducedGravity * thermoMean)
 	e.rows(func(cy int) {
 		beta := 2 * omega * math.Cos(e.lat[cy]*math.Pi/180) / planetRadius

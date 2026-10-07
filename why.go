@@ -507,7 +507,7 @@ func (g *Grid) whyCover(i int, p geom.Pos) []Cause {
 			chain = append(chain, Cause{Kind: Barren})
 		}
 		if len(g.warm) == len(g.Tiles) {
-			chain = append(chain, Cause{Kind: Warmth, Quantity: g.meanOn(i, g.Height[i]), Unit: "°C"})
+			chain = append(chain, Cause{Kind: Warmth, Quantity: g.meanOn(i, g.Elevation(i)), Unit: "°C"})
 		}
 		if i < len(g.rain) && g.air != nil {
 			chain = append(chain,

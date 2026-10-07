@@ -248,16 +248,16 @@ func keepRuns(runs []seaRun, run []int32, label []uint16, keep func(r seaRun) bo
 	return place, kept
 }
 
-// readSea reads the sea's features off the currents of the weather w and adds
+// readSeaFeatures reads the sea's features off the currents of the weather w and adds
 // them to all: the currents, then the gyres, then the upwellings, each kind in
 // the order of its lowest tile. A map with no currents worked out - a valley,
 // or one whose weather has not been read - has none.
-func (g *Grid) readSea(f *Features, all []Feature, stack []int32, w *Winds) ([]Feature, []int32) {
+func (g *Grid) readSeaFeatures(f *Features, all []Feature, stack []int32, w *Winds) ([]Feature, []int32) {
 	n := len(g.Tiles)
 	if w == nil || w.Cu == nil || w.W*w.Cell != g.W || w.H*w.Cell != g.H {
 		return all, stack
 	}
-	defer phase.Start("readSea")()
+	defer phase.Start("readSeaFeatures")()
 
 	// The sea under each tile - not a lake, whatever its height - and the
 	// current over it, read between the air's cells; and the water going

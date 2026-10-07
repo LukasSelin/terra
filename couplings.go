@@ -56,7 +56,7 @@ func writes(fields ...string) []string {
 var couplings = []coupling{
 	{"newGround", is("Land.newGround"), in("ground"), reads(), writes("energy")},
 	{"historyGround", is("Land.historyGround"), in("ground"), reads(), writes("energy")},
-	{"history", is("Land.history"), in("ground"), reads("energy", "sea", "height", "rock", "plates", "drainage", "soil", "cover"), writes("sea", "height", "rock", "plates", "book", "soil")},
+	{"history", is("Land.history"), in("ground"), reads("energy", "sea", "height", "rock", "plates", "book", "drainage", "load", "soil", "cover"), writes("sea", "height", "rock", "plates", "book", "load", "soil")},
 	{"flood", is("Land.flood"), in("ground"), reads(), writes()},
 	{"move", is("Land.move"), in("ground"), reads("height", "rock", "plates", "soil"), writes("height", "rock", "plates", "soil", "cover")},
 	{"joinUp", is("Grid.joinUp"), in("ground"), reads("plates"), writes("plates")},
@@ -72,15 +72,17 @@ var couplings = []coupling{
 	{"expose", is("Grid.expose"), in("ground", "shape", "cut", "coast"), reads("height", "rock"), writes("rock")},
 	{"pour", is("Grid.pour", "Grid.repour"), in("sea", "cut", "coast"), reads("sea", "height", "floor", "cover"), writes("sea", "cover", "woods", "stocks")},
 	{"level", is("Grid.flood", "Grid.relevel"), in("sea", "cut", "coast"), reads("sea", "height", "cover"), writes("sea", "cover", "woods", "stocks")},
+	{"layCountry", is("Grid.layCountry"), in("sea"), reads("height", "sea"), writes("height")},
 	{"shape", is("Grid.shape"), in("shape"), reads("energy", "wind", "rain", "sea", "height", "floor", "rock", "cover"), writes("height", "rock")},
 	{"texture", is("Land.texture"), in("shape"), reads("floor", "height", "sea"), writes("height")},
 	{"denude", is("Grid.denude"), in("shape"), reads("cover", "height", "lakes", "rock", "sea"), writes("height")},
-	{"landslide", is("Grid.landslide"), in("ground", "shape", "cut"), reads("cover", "energy", "floor", "height", "rain", "rock", "soil", "wind"), writes("height", "soil")},
+	{"landslide", is("Grid.landslide"), in("ground", "shape", "cut"), reads("cover", "energy", "floor", "height", "rain", "rock", "sea", "soil", "wind"), writes("height", "soil")},
 	{"drain", is("Grid.drain"), in("ground", "shape", "cut", "coast"), reads("floor", "height", "rain", "sea", "wind"), writes()},
 	{"weather", is("Grid.weather"), in("ground", "shape", "cut", "coast"), reads("energy", "wind", "rain", "sea", "height", "floor", "rock", "moisture", "soil"), writes("wind", "rain", "moisture")},
 	{"defaultAir", is("Grid.ensureAir"), in("ground", "shape", "cut", "coast"), reads("energy"), writes("energy")},
 	{"pool", is("Grid.pool"), in("ground", "shape", "cut", "coast"), reads("energy", "wind", "rain", "sea", "height", "floor", "lakes"), writes("lakes")},
 	{"flow", is("Grid.flow"), in("ground", "shape", "cut", "coast"), reads("energy", "wind", "rain", "sea", "height", "floor", "drainage", "lakes"), writes("drainage", "lakes")},
+	{"gradeCountry", is("Grid.gradeCountry"), in("shape", "cut", "coast"), reads("sea", "height", "drainage"), writes()},
 	{"cutValleys", is("Grid.cutValleys"), in("cut"), reads(), writes()},
 	{"cutThroughCycle", is("Grid.cutThroughCycle"), in("cut"), reads("cover", "energy", "floor", "height", "rain", "rock", "sea", "soil", "wind"), writes("height", "sea", "soil")},
 	{"carve", is("Grid.carve"), in("cut"), reads("sea", "height", "drainage", "lakes", "cover"), writes("cover", "woods", "stocks")},
@@ -88,17 +90,64 @@ var couplings = []coupling{
 	{"wear", is("Grid.wear"), in("ground", "cut"), reads("energy", "wind", "rain", "year", "sea", "tide", "height", "floor", "rock", "book", "drainage", "load", "lakes", "soil", "cover"), writes("height", "book", "load", "soil")},
 	{"creep", is("Grid.creep"), in("ground", "cut"), reads("cover", "drainage", "floor", "height", "soil"), writes()},
 	{"waterStep", is("Grid.waterStep"), in("ground", "cut", "coast"), reads("energy", "wind", "rain", "year", "sea", "tide", "height", "rock", "drainage", "load", "lakes", "soil", "cover"), writes("load")},
-	{"year", is("Land.stageCoast"), in("coast"), reads("height", "sea", "wind"), writes("year")},
-	{"freeze", is("Grid.freeze"), in("coast"), reads("cover", "floor", "height", "lakes", "year"), writes("cover", "stocks")},
+	{"year", is("Land.stageCoast"), in("coast"), reads("wind", "sea", "height"), writes("year")},
+	{"freeze", is("Grid.freeze"), in("coast"), reads("cover", "floor", "height", "lakes", "sea", "year"), writes("cover", "stocks")},
 	{"tides", is("Grid.tides"), in("coast"), reads("energy", "wind", "rain", "year", "sea", "tide", "height", "floor", "rock", "drainage", "lakes", "soil", "cover"), writes("tide", "cover", "woods", "fertility", "stocks")},
 	{"silt", is("Grid.silt"), in("coast"), reads("sea", "tide", "height", "soil"), writes("height", "soil")},
-	{"cover", is("Land.stageCover"), in("cover"), reads("energy", "wind", "rain", "year", "height", "floor", "drainage", "soil", "cover", "woods", "fertility"), writes("cover", "woods", "fertility", "stocks")},
-	{"readWoods", is("Grid.readWoods"), in("cover"), reads("energy", "wind", "rain", "year", "height", "floor", "drainage", "cover", "woods"), writes("woods")},
-	{"soilTexture", is("Grid.soilTexture"), in("ground", "cover"), reads("energy", "height", "rain", "rock", "wind"), writes("soil")},
-	{"laySoil", is("Grid.laySoil"), in("cover"), reads("cover", "drainage", "energy", "floor", "height", "rain", "rock", "soil", "wind", "year"), writes("soil")},
-	{"recount", is("Grid.Recount"), in("cover"), reads("height", "floor"), writes()},
+	{"cover", is("Land.stageCover"), in("cover"), reads("energy", "wind", "rain", "year", "sea", "height", "floor", "drainage", "soil", "cover", "woods", "fertility"), writes("cover", "woods", "fertility", "stocks")},
+	{"readWoods", is("Grid.readWoods"), in("cover"), reads("energy", "wind", "rain", "year", "sea", "height", "floor", "drainage", "cover", "woods"), writes("woods")},
+	{"soilTexture", is("Grid.soilTexture"), in("ground", "cover"), reads("cover", "energy", "height", "rain", "rock", "sea", "wind"), writes("soil")},
+	{"laySoil", is("Grid.laySoil"), in("cover"), reads("cover", "drainage", "energy", "floor", "height", "rain", "rock", "sea", "soil", "wind", "year"), writes("soil")},
+	{"recount", is("Grid.Recount"), in("cover"), reads("sea", "height", "floor"), writes()},
 	{"readFeatures", is("Grid.readFeatures"), in("cover"), reads("energy", "wind", "rain", "year", "sea", "height", "plates", "book", "drainage", "lakes", "cover"), writes("features")},
 	{"readRelations", is("Grid.readRelations"), in("cover"), reads("energy", "wind", "rain", "sea", "height", "plates", "lakes"), writes()},
+}
+
+// An innerLoop is a feedback loop one pass closes within itself, between
+// quantities that all live in one of the world's fields: the graph, field to
+// field, cannot see it, since a pass that reads and writes its own field is
+// not a loop there (onePass). Each is declared with the pass that closes it,
+// the quantities round it, each driving the next and the last the first,
+// what solves it, and the issue it came in with.
+type innerLoop struct {
+	pass, field string
+	steps       []string
+	solved      string
+	issue       string
+}
+
+// innerLoops is every loop a pass closes within itself.
+var innerLoops = []innerLoop{
+	{
+		pass: "weather", field: "wind",
+		steps: []string{
+			"the sea's warmth (atmos.Env.Warm, WaterTemp)",
+			"the air's pressure: over the sea in the warmth it is read off, the trades' layer's and the rain's heating's in the tropics (Winds.P, Env.Walk)",
+			"the wind (Winds.U, Winds.V)",
+			"the currents, the thermocline and the upwelling (Env.Cu, Cv, Psi, Thermocline, Rise)",
+		},
+		solved: "atmos.Winds.couple: coupleRounds rounds a reading of the weather, damped, from where the last reading over the same map left the sea's warmth",
+		issue:  "#28",
+	},
+}
+
+// A CouplingInnerLoop is a feedback loop one pass closes within one of the
+// world's fields: see CouplingInnerLoops.
+type CouplingInnerLoop struct {
+	Pass, Field string
+	Steps       []string
+	Solved      string
+}
+
+// CouplingInnerLoops is every feedback loop a pass closes within itself,
+// between quantities of one world field, which the field-to-field graph
+// does not show.
+func CouplingInnerLoops() []CouplingInnerLoop {
+	out := make([]CouplingInnerLoop, len(innerLoops))
+	for k, l := range innerLoops {
+		out[k] = CouplingInnerLoop{Pass: l.pass, Field: l.field, Steps: slices.Clone(l.steps), Solved: l.solved}
+	}
+	return out
 }
 
 // A worldField is one of the world's fields as the graph has it: its name,
@@ -120,14 +169,14 @@ var worldFields = []worldField{
 	{"year", "air", "each tile's year at sea level: its mean and its swing", []string{"warm", "swing"}},
 	{"sea", "sea", "the level of the sea and of the water the air takes its fill from", []string{"sea", "base"}},
 	{"tide", "sea", "the tide's reach and the flats it lays bare", []string{"tide", "tidal", "ebb"}},
-	{"height", "rock", "the ground's height", []string{"Height"}},
+	{"height", "rock", "the ground's height, and on a globe the height of the country it lies in at the planet's scale", []string{"Height", "country", "planetHeight"}},
 	{"floor", "rock", "the deep sea floor: where it stood before its age laid it down, how fast the rock rose, how old the crust is", []string{"abyss", "uplift", "floorAge"}},
 	{"rock", "rock", "the rock: each tile's bed, the epoch it was laid in, and the beds under it", []string{"Tiles.Bedrock", "Tiles.Formed", "strata"}},
 	{"plates", "rock", "which plate each tile rides, which plate each has been welded into, and the hotspots", []string{"Tiles.Plate", "plateRoot", "hot", "welds"}},
 	{"book", "rock", "the book the history kept of what it did to each tile, and how many epochs it ran", []string{"ledger", "epochs"}},
 	{"drainage", "water", "where each tile's water goes and how much runs through it, and how far it stands over it", []string{"Flow", "Drain", "area", "water", "down", "route"}},
 	{"moisture", "water", "the soil's water through the year: each phase's rain, what the soil holds and sheds of it, and how much it can hold", []string{"rainIn", "soilWater", "runoffIn", "soilHold", "paw"}},
-	{"load", "water", "the ground the water carries: off the land, and off the banks of its bends", []string{"exported", "bankLoad"}},
+	{"load", "water", "the ground the water carries: off the land, and off the banks of its bends", []string{"exported", "bankLoad", "toSea"}},
 	{"lakes", "water", "the standing water: the lakes, their level, and the salt pans", []string{"Lakes", "lakeLevel", "lakeOf", "pans"}},
 	{"soil", "land and life", "the soil: how deep, what it is made of, and what time has made of it", []string{"Soil", "Sand", "Clay", "Tiles.Leached", "Tiles.Exposed", "Tiles.Lime", "Tiles.Salt", "Tiles.Carbon", "pedons"}},
 	{"cover", "land and life", "what each tile is: open ground, forest, water, ice, outcrop, tidal flat, salt", []string{"Tiles.Terrain"}},
@@ -146,7 +195,7 @@ var frameFields = []string{
 	"Tiles.Mark", "Tiles.Owner", "Tiles.Fenced", "Traffic", "Kinds", "CW", "CH", "Chunks", "PW", "PH", "patches", "Active", "lenders",
 	"regions", "regionStack", "regionsStale", "waters", "router", "landmarks", "islanded",
 	"seam", "seamQueue", "floodScratch", "slideScratch", "fillScratch", "poolScratch",
-	"flowScratch", "stepScratch", "creepScratch",
+	"flowScratch", "stepScratch", "creepScratch", "airWork",
 }
 
 // Coupling is one pass of world creation as the coupling graph has it: the
@@ -379,8 +428,9 @@ func CouplingsMarkdown() string {
 	p("The declaration is held to the code by `couplings_test.go`: each pass's source is read for the fields it touches, ")
 	p("and worlds are made stage by stage and every field a stage changes has to be one of that stage's passes' writes. ")
 	p("A loop a later change adds - the climate of each epoch (#57), the carbon thermostat (#58), albedo from the surface (#59), ")
-	p("land and air trading water (#60), the ice ages (#61), mountains and climate (#62), sea and air together (#28), fog over cold water (#29) - ")
-	p("is one line in `couplings`, and a field it brings one line in `worldFields`.\n\n")
+	p("land and air trading water (#60), the ice ages (#61), mountains and climate (#62), fog over cold water (#29) - ")
+	p("is one line in `couplings`, and a field it brings one line in `worldFields`; a loop one pass closes within one field, ")
+	p("as the weather closes the sea and the air's (#28), is one entry in `innerLoops`.\n\n")
 
 	p("## The fields\n\n| System | Field | What it is |\n|---|---|---|\n")
 	for _, s := range systems {
@@ -463,5 +513,12 @@ func CouplingsMarkdown() string {
 		line(l)
 	}
 	p("\n</details>\n")
+
+	p("\n## Loops within a pass\n\n")
+	p("Loops a pass closes within one field, between quantities the graph above holds as one, each driving the next and the last the first, ")
+	p("and what solves them.\n\n")
+	for _, l := range innerLoops {
+		p("- **%s**, within %s (%s): %s -> back to the first. Solved by %s.\n", l.pass, l.field, l.issue, strings.Join(l.steps, " -> "), l.solved)
+	}
 	return b.String()
 }

@@ -55,3 +55,31 @@ func TestTheSeaIceHoldsItsSurfaceAtMelting(t *testing.T) {
 		t.Errorf("open water holding five degrees of heat stands at %.1f C", got)
 	}
 }
+
+// A map's sea is handed to the balance as the balance's linear response to
+// what it carries against the balance's own sea (respond), where working the
+// whole seasonal year out again is most of a second. For a sea that leaves
+// the tropics four watts a square metre more and the poles eight less - more
+// than a globe's sea differs from the balance's own by - the response is the
+// seasonal year's own to some hundredths of a degree, and a tenth at sixty,
+// where the ice's albedo, which it leaves out, comes in.
+func TestTheBalanceAnswersTheSeaAsItsYearDoes(t *testing.T) {
+	ref := ebm()
+	var dq, q [ebmBands]float64
+	for k := range dq {
+		x := -1 + (float64(k)+0.5)*2/ebmBands
+		dq[k] = -8 * legendre2(x)
+		q[k] = ref.seaIn[k] + dq[k]
+	}
+	p := ebmReference(landSeaExchange)
+	p.ds, p.sea = 0, &q
+	year := solveEBMWith(p, Today())
+	lin := ref.respond(&dq)
+	for _, lat := range []float64{-60, -45, -30, -15, 0, 15, 30, 45, 60} {
+		got, want := ebmRead(&lin, lat), year.at(&year.mean, lat)-ref.at(&ref.mean, lat)
+		t.Logf("%+3.0f degrees: the response %+.2f, the year %+.2f", lat, got, want)
+		if math.Abs(got-want) > 0.3+0.2*math.Abs(want) {
+			t.Errorf("at %v degrees the balance's response to the sea is %+.2f and its year's %+.2f", lat, got, want)
+		}
+	}
+}

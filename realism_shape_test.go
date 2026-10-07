@@ -77,7 +77,9 @@ var shapeYardsticks = []realYardstick{
 		name: "remoteness of the continents, three globes", unit: "", scale: "ground", lo: 0.4, hi: 0.7, slow: true,
 		source:  "Garcia-Castellanos & Lombardo 2007: the continental poles of inaccessibility lie 2510 km from the sea in Eurasia, 1814 Africa, 1650 North America, 1504 South America, 920 Australia - 0.58-0.65 of the radius of a disc of each one's area; 0.48 and 0.45 for Afro-Eurasia and the Americas, joined at Suez and Panama as a map at this scale joins them. A disc reads 1, a square 0.89",
 		measure: func() float64 { return quantile(remoteness(threeGlobes()), 0.5) },
-	}},
+	},
+		gap: "known gap: the continents are the history's plates, and every change to the weather the history reads redraws them: with M3's sea (#22) on the waves (#35) the three globes read 0.395, as #97's coupled sea read 0.398 and #35's waves 0.4 and over. A point reading on three globes; it wants reading over seeds as #80 reads the relief",
+	},
 	{yardstick: yardstick{
 		name: "island size exponent, three globes", unit: "", scale: "ground", lo: 0.45, hi: 0.85, slow: true,
 		source:  "Korcak 1938; Mandelbrot 1982: N(A>=a) ~ a^-B over the world's islands, B 0.65 on the mean, 0.5 for Africa's to 0.75 for Indonesia's; 0.65 again over 131,063 islands from 1 to 10^5 km2 (ASTER GDEM, arXiv 2512.16659). This reading takes islands from two tiles to 3% of the land",
@@ -97,7 +99,13 @@ var shapeYardsticks = []realYardstick{
 		name: "right angles of the continents' coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.15, slow: true,
 		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
 		measure: func() float64 { return cornerLock(threeGlobes()) },
-	}},
+	},
+		// It was a known gap with the sea carrying its own heat (#22) on the
+		// trades, 0.156; on the waves (#35) the three globes read 0.140 again.
+		// The coasts are the history's, redrawn by every change to the weather
+		// it reads: a point reading on three globes.
+		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) it keeps two to two and a half times the land over its sea, and the continents' outlines are its margins, which gather at right angles a shade more than the band, itself not a measured figure: 0.153 on G2b, 0.153-0.161 over its builds, 0.156 with the country the history's own height",
+	},
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own
@@ -121,7 +129,21 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
 	},
-		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: it read 1.88 until the fractures bent by the plate moved every coast: 1.24; 2.00, 0.94 and 1.23 globe by globe",
+	// It was known gap K: an active shelf is laid no narrower than a tile and
+	// a half, 56 km, against a quiet one's 88, and most coasts with a seam
+	// within 150 km are quiet margins as laid, so the active column reads
+	// mostly quiet shelves. It read 1.88 until the fractures bent by the plate
+	// moved every coast, then 1.24 (2.00, 0.94 and 1.23 globe by globe), and
+	// 1.37 on the rift's halves (#98). With the sea standing where its water
+	// fills the basins (seawater.go) it reads 1.85, inside the band by a
+	// hair: a point reading off three globes, which can fall out again.
+	// On the integration it was a known gap (K: an active shelf is laid no
+	// narrower than a tile and a half, 56 km, against a quiet one's 88, so
+	// the active column read
+	// mostly quiet shelves: 1.88, then 1.24 once the fractures bent by the
+	// plate moved every coast; 1.00-1.05 on #97 and #35). With M3's sea on
+	// the waves the three globes read 1.807, just inside: the coasts are the
+	// history's, and a point reading on three globes moves with them.
 	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,
@@ -142,18 +164,20 @@ var shapeYardsticks = []realYardstick{
 	// 0.175 as the shaping took it up, and the shaping laid it again as one
 	// hillslope on every tile off the rivers. With the history's ground
 	// floating on its crust (isostasy.go) the uplift the shaping grades by is
-	// the rock's, rebound and all, and it reads 0.091.
+	// the rock's, rebound and all, and it reads 0.091. It opened again when
+	// the history's ground came down by its relief (denude.go).
 	{yardstick: yardstick{
 		name: "land relief intermittency C1, three globes", unit: "", scale: "ground", lo: 0.08, hi: 0.18, slow: true,
-		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
-		measure: func() float64 { c1, _ := reliefIntermittency(threeGlobes()); return c1 },
+		source: "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
+		seeded: &seeded{worlds: eachOf(threeGlobes), read: pooled(intermittencyC1)},
 	},
-	// It was a known gap (K: the history leaves its relief gathered, 0.175 as
-	// the shaping takes it up, and the shaping lays it again as one hillslope
-	// on every tile off the rivers; 0.075) until the air came to swing the
-	// energy balance's year (see atmos.Env.seasonTemp); it read 0.087 then,
-	// near the floor, and nothing in the shaping changed. The crust floating
-	// on its thickness (isostasy.go) closed it on its own as well, at 0.091.
+		// It was a known gap (K: the history leaves its relief gathered, 0.175 as
+		// the shaping takes it up, and the shaping lays it again as one hillslope
+		// on every tile off the rivers; 0.075) until the air came to swing the
+		// energy balance's year (see atmos.Env.seasonTemp); it read 0.087 then,
+		// near the floor, and nothing in the shaping changed. The crust floating
+		// on its thickness (isostasy.go) closed it on its own as well, at 0.091.
+		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) its interiors are plateaus behind escarpments, and the shaping lays the map's ground again from their order alone: the country (hypsometry.go) is the history's height and Height is not, so it does not reach this. 0.091 on G2, 0.052-0.057 on four builds since, its three globes 0.040-0.064 a globe: 0.052",
 	},
 }
 

@@ -58,14 +58,37 @@ const (
 	// degree.
 	olrA = 203.3
 	olrB = 2.09
-	// ebmDiffusion is D, the heat the air and the sea carry down the gradient,
-	// in W/m² a degree in North's form: 0.44, the figure of North and
-	// Coakley's seasonal model. It is the gradient of the moist energy it is
+	// ebmDiffusion is D, the heat the air carries down the gradient, in W/m²
+	// a degree in North's form. It is the gradient of the moist energy it is
 	// carried down here and not of the temperature (see moistEnergy); carried
-	// down the temperature's at 0.44, the equator came out at thirty-seven
-	// degrees and the poles at minus twenty-three, and no figure between 0.44
-	// and 1 gave a tropics under twenty-eight and poles under minus ten.
-	ebmDiffusion = 0.44
+	// down the temperature's at North and Coakley's 0.44, the equator came
+	// out at thirty-seven degrees and the poles at minus twenty-three, and no
+	// figure between 0.44 and 1 gave a tropics under twenty-eight and poles
+	// under minus ten.
+	//
+	// It carried the sea's heat too, at 0.44, until the sea came to carry its
+	// own (slab.go). It is now the air's share: fitted, with the sea's
+	// ebmSeaDiffusion, so that the sea carries the share of the whole at
+	// thirty-five degrees that the real one does on the mean of the two
+	// hemispheres, 15% (22% in the north and 8% in the south, Trenberth and
+	// Caron, 2001), and the balance's zonal means still stand within half a
+	// degree of Legates and Willmott's (1990) at the equator, fifteen,
+	// thirty, forty-five and sixty degrees. 0.38 and 0.25 give the sea 14.8%
+	// at 35 and the five 27.3, 25.4, 20.0, 11.3 and 0.6 (0.49 rms), where
+	// 0.44 alone gave 27.3, 25.5, 20.1, 11.2 and 0.0 (0.60). Pairs a little
+	// nearer the five (0.39 and 0.27, 0.44 rms) stood the tropics three
+	// tenths colder, 25.2 at fifteen, and a storm over the warm western
+	// water at eighteen degrees north no longer found the 26.5 it needs. The
+	// balance's whole carrying at 35 is 7.4 PW, against the real world's
+	// 5.5-6: the albedo and Budyko's line it was fitted with ask for more
+	// than the earth's, and the shares are what the fit holds to.
+	ebmDiffusion = 0.38
+	// ebmSeaDiffusion is the sea's carrying in a balance that has no sea of
+	// its own worked out, D in North's form down the warmth of the sea's
+	// column, the water under ice at the freezing point: the balance a
+	// planet's climate is read from before its own sea is solved, and the
+	// history's. A map's own sea is handed in in its place: see slab.go.
+	ebmSeaDiffusion = 0.25
 	// albedoA0 and albedoA2 are the ice-free albedo's mean and its second
 	// Legendre term in x, which carries the clouds and the low sun of the high
 	// latitudes (North, Cahalan and Coakley, 1981, fit a0 near a third and a2
@@ -123,6 +146,16 @@ type ebmClimate struct {
 	// the band's, its land's and its sea's - which is where the heat the air
 	// carries poleward turns round: see circulation.go.
 	equator [3]yearOf
+	// airNorth and seaNorth are the heat the air and the sea carry toward the
+	// north across the face below each band, watts over the whole parallel,
+	// over the year: the faces at the poles carry nothing. seaIn is the heat
+	// the sea's carrying leaves in each band's sea column, W a square metre of
+	// sea. Where the balance was given a sea's heat (ebmParams.sea) seaIn is
+	// that and seaNorth nought.
+	airNorth, seaNorth [ebmBands + 1]float64
+	seaIn              [ebmBands]float64
+	// params are the figures it was worked out with.
+	params ebmParams
 	// contrast is Held and Hou's Δ_H: how far the radiative equilibrium's
 	// equator stands over its pole, as a share of the planet's mean warmth in
 	// kelvin. tropopause is how high the tropics' tropopause stands, metres.
@@ -174,7 +207,7 @@ func iceAlbedoWith(p ebmParams, x, temp float64) float64 {
 // solveEBMUnder runs the balance under forcing f from a uniform start until
 // its year repeats and reads the last year's harmonics.
 func solveEBMUnder(f Forcing) *ebmClimate {
-	return solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, landSeaExchange}, f)
+	return solveEBMWith(ebmReference(landSeaExchange), f)
 }
 
 // The sea ice, as Wagner and Eisenman (2015) put it into the seasonal
@@ -250,6 +283,58 @@ func diffuse(face *[ebmBands + 1]float64, tl, ts, es *[ebmBands]float64, p ebmPa
 	}
 }
 
+// seaWater is the temperature of the water of a sea column of enthalpy e
+// J/m² with a mixed layer holding cs J/m²K: its surface's, or the freezing
+// point under ice.
+func seaWater(e, cs float64) float64 { return math.Max(0, e/cs) }
+
+// respond is how many degrees warmer each band of the balance c stands, in
+// the mean of its year, for dq more watts a square metre of heat brought into
+// its sea column: the balance linearized about its year's mean and settled,
+//
+//	B δT_k - Σ face (s_j δT_j - s_k δT_k) = (1 - ebmLand) δq_k
+//
+// with s the slope of the moist energy at the band's mean, the air carrying
+// the heat on down its gradient as diffuse does. The land and the sea of a
+// band share it, as the balance's columns share the air's carrying; what the
+// heat does to the ice's albedo and its season is left out. It is a few
+// microseconds, where the balance's twenty years are most of a second.
+func (c *ebmClimate) respond(dq *[ebmBands]float64) [ebmBands]float64 {
+	const n = ebmBands
+	dx := 2.0 / n
+	var face [n + 1]float64
+	for k := 1; k < n; k++ {
+		xf := -1 + float64(k)*dx
+		face[k] = c.params.d * (1 - xf*xf) / (dx * dx)
+	}
+	var s, lo, mid, hi, rhs [n]float64
+	for k := range s {
+		t := c.mean[k]
+		s[k] = (moistEnergy(t+0.05) - moistEnergy(t-0.05)) / 0.1
+	}
+	for k := range mid {
+		mid[k] = olrB + (face[k]+face[k+1])*s[k]
+		if k > 0 {
+			lo[k] = -face[k] * s[k-1]
+		}
+		if k < n-1 {
+			hi[k] = -face[k+1] * s[k+1]
+		}
+		rhs[k] = (1 - ebmLand) * dq[k]
+	}
+	for k := 1; k < n; k++ {
+		w := lo[k] / mid[k-1]
+		mid[k] -= w * hi[k-1]
+		rhs[k] -= w * rhs[k-1]
+	}
+	var dT [n]float64
+	dT[n-1] = rhs[n-1] / mid[n-1]
+	for k := n - 2; k >= 0; k-- {
+		dT[k] = (rhs[k] - hi[k]*dT[k+1]) / mid[k]
+	}
+	return dT
+}
+
 // moistEnergy is the moist static energy of air near the ground at temp
 // degrees, over its heat capacity: the temperature and the latent heat its
 // water carries at a relative humidity of moistHumidity. What the air carries
@@ -277,8 +362,22 @@ const (
 	moistHumidity = 0.8    // the relative humidity of the air near the ground
 )
 
-// ebmParams are the balance's figures, gathered so that they can be probed.
-type ebmParams struct{ d, a0, a2, cl, cs, nu float64 }
+// ebmParams are the balance's figures, gathered so that they can be probed:
+// the air's diffusion d, the albedo's a0 and a2, the land's and the sea's heat
+// cl and cs, the exchange nu between them, the sea's own diffusion ds, and
+// sea, where it is not nil, the heat the ocean brings each band's sea column,
+// W a square metre of sea, in place of what ds carries.
+type ebmParams struct {
+	d, a0, a2, cl, cs, nu, ds float64
+	sea                       *[ebmBands]float64
+}
+
+// ebmReference is the balance a planet's climate is read from before its own
+// sea is known: the air's share carried down the moist energy, and the sea's
+// down its own warmth. See ebmSeaDiffusion.
+func ebmReference(nu float64) ebmParams {
+	return ebmParams{d: ebmDiffusion, a0: albedoA0, a2: albedoA2, cl: heatLand, cs: heatSea, nu: nu, ds: ebmSeaDiffusion}
+}
 
 // solveEBMWith is the balance's settled year with figures p under forcing f.
 func solveEBMWith(p ebmParams, f Forcing) *ebmClimate {
@@ -292,17 +391,24 @@ func solveEBMWith(p ebmParams, f Forcing) *ebmClimate {
 		phi[k] = math.Asin(x[k])
 	}
 	// The diffusion's conductance across the face above each band.
-	var face [n + 1]float64
+	var face, faceSea [n + 1]float64
 	for k := 1; k < n; k++ {
 		xf := -1 + float64(k)*dx
 		face[k] = p.d * (1 - xf*xf) / (dx * dx)
+		faceSea[k] = p.ds * (1 - xf*xf) / (dx * dx)
 	}
+	// A watt a square metre across a face, in the units the faces carry it
+	// in, is this many watts toward the north across the whole parallel.
+	perFace := 2 * math.Pi * planetRadius * planetRadius * dx
+	var flow [n + 1]float64 // the sea's carrying, W a square metre of sea
+	var airNorth, seaNorth [n + 1]float64
+	var seaIn [n]float64
 	var tl, ts, es [n]float64
 	// The calendar's year, of which a day is a Year'th: see above.
 	days := float64(Year)
 	dt := secondsPerYear / days / ebmSteps
 	stepsYear := Year * ebmSteps
-	out := &ebmClimate{}
+	out := &ebmClimate{params: p}
 	var sumL, sumS, cL, sL, cS, sS [n]float64
 	// The warmest latitude of the band, its land and its sea, step by step
 	// over the last year, gathered as sums for its harmonic.
@@ -348,10 +454,38 @@ func solveEBMWith(p ebmParams, f Forcing) *ebmClimate {
 				es[k] += dt * fs
 			}
 			diffuse(&face, &tl, &ts, &es, p, dt)
+			// The sea's own carrying: down the warmth of its water, which
+			// under ice is at the freezing point, or what a planet's own sea
+			// brings each band.
+			if p.sea == nil {
+				for k := 1; k < n; k++ {
+					flow[k] = faceSea[k] * (seaWater(es[k-1], p.cs) - seaWater(es[k], p.cs))
+				}
+				for k := range es {
+					es[k] += dt * (flow[k] - flow[k+1])
+				}
+			} else {
+				for k := range es {
+					es[k] += dt * p.sea[k]
+				}
+			}
 			for k := range ts {
 				ts[k] = seaSurface(es[k], p.cs, sun[k], a)
 			}
 			if last {
+				for k := 1; k < n; k++ {
+					hs := moistEnergy(ebmLand*tl[k-1] + (1-ebmLand)*ts[k-1])
+					hn := moistEnergy(ebmLand*tl[k] + (1-ebmLand)*ts[k])
+					airNorth[k] += face[k] * (hs - hn) * perFace
+					seaNorth[k] += (1 - ebmLand) * flow[k] * perFace
+				}
+				for k := range seaIn {
+					if p.sea != nil {
+						seaIn[k] += p.sea[k]
+					} else {
+						seaIn[k] += flow[k] - flow[k+1]
+					}
+				}
 				th := 2 * math.Pi * j / days
 				c, sn := math.Cos(th), math.Sin(th)
 				for k := range band {
@@ -375,6 +509,12 @@ func solveEBMWith(p ebmParams, f Forcing) *ebmClimate {
 		}
 	}
 	m := float64(stepsYear)
+	for k := range airNorth {
+		out.airNorth[k], out.seaNorth[k] = airNorth[k]/m, seaNorth[k]/m
+	}
+	for k := range seaIn {
+		out.seaIn[k] = seaIn[k] / m
+	}
 	// The northern solstice falls a quarter of the way into the calendar's
 	// year; a band's lag is read from its own hemisphere's.
 	for k := range tl {
@@ -465,6 +605,12 @@ func warmestLat(field, x *[ebmBands]float64) float64 {
 // at reads a field of the balance at a latitude in degrees, between the
 // bands' centres.
 func (c *ebmClimate) at(field *[ebmBands]float64, lat float64) float64 {
+	return ebmRead(field, lat)
+}
+
+// ebmRead is a field on the balance's bands read at a latitude in degrees,
+// between the bands' centres.
+func ebmRead(field *[ebmBands]float64, lat float64) float64 {
 	x := math.Sin(lat * math.Pi / 180)
 	f := (x+1)/(2.0/ebmBands) - 0.5
 	f = math.Max(0, math.Min(ebmBands-1, f))
