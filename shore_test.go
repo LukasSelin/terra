@@ -204,12 +204,14 @@ func estuary() *Grid {
 // the sea grades it. The first held its two through that change, and lost
 // them when the air came to swing the energy balance's year (see
 // atmos.Env.seasonTemp): small globes 1-8 hold 0, 1, 3, 0, 0, 1, 2 and 0, and
-// the third is the one read.
+// the third was the one read. With the belts placed by the circulation (see
+// atmos.Env.beltsAt) they hold 0, 2, 0, 1, 0, 1, 0 and 2, and the second is
+// the one read.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 3", yardWorld("small", 3, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})

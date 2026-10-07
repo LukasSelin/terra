@@ -125,6 +125,11 @@ const (
 	// 1982). It is the wind near the ground and the thermal wind's shear over
 	// that height, g/(f T) times the fall of the air's warmth across it.
 	steerHeight = 5500.0
+	// highFrom and highReach are where the day's highs are born, in degrees
+	// from the Hadley cell's edge: from six degrees inside it to fourteen
+	// past, today's twenty-five to forty-five.
+	highFrom  = -6.0
+	highReach = 20.0
 	// frontShare is how much of the steering wind a low or a high goes at.
 	frontShare = 0.65
 	// steerLeast is the latitude, in degrees, the turning of the planet is read
@@ -250,15 +255,19 @@ func (wx *Weather) Step(day int) {
 	wx.Systems = live
 
 	r := wx.rng
+	// Where the circulation stands today: the lows are born poleward of the
+	// Hadley cell's edge, and the highs about it.
+	b := e.beltsAt(sinT)
 	for _, hemi := range []float64{1, -1} {
 		winter := -sinT * hemi
+		from, to := b.stormBand(hemi)
 		for range poisson(r, lowsADay*(1+0.3*winter)) {
-			lat, lon := wx.baroclinic(r, hemi, sinT)
+			lat, lon := wx.baroclinic(r, hemi, sinT, from, to)
 			wx.Systems = append(wx.Systems, System{Kind: Low, Lat: lat, Lon: lon,
 				Depth: 12 + 20*r.Float64(), Radius: 600 + 500*r.Float64(), Life: 4 + 4*r.Float64()})
 		}
 		for range poisson(r, highsADay) {
-			wx.Systems = append(wx.Systems, System{Kind: High, Lat: hemi * (25 + 20*r.Float64()), Lon: 360*r.Float64() - 180,
+			wx.Systems = append(wx.Systems, System{Kind: High, Lat: hemi * (from + highFrom + highReach*r.Float64()), Lon: 360*r.Float64() - 180,
 				Depth: 6 + 10*r.Float64(), Radius: 1000 + 800*r.Float64(), Life: 5 + 5*r.Float64()})
 		}
 		if summer := -winter; summer > 0.2 {
@@ -283,13 +292,15 @@ func (wx *Weather) Step(day int) {
 }
 
 // baroclinic is where a low is born in a hemisphere: somewhere in the middle
-// latitudes, and more readily where the warmth of the air changes fastest
-// from one place to the next, which is where lows get their energy - the
-// polar front, and the edge of a continent in winter.
-func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT float64) (lat, lon float64) {
+// latitudes, between from and to degrees from the equator - the storm track,
+// poleward of the Hadley cell's edge (see belts.stormBand) - and more readily
+// where the warmth of the air changes fastest from one place to the next,
+// which is where lows get their energy - the polar front, and the edge of a
+// continent in winter.
+func (wx *Weather) baroclinic(r *rand.Rand, hemi, sinT, from, to float64) (lat, lon float64) {
 	e := wx.Env
 	for range 8 {
-		lat, lon = hemi*(32+30*r.Float64()), 360*r.Float64()-180
+		lat, lon = hemi*(from+(to-from)*r.Float64()), 360*r.Float64()-180
 		fx, fy, _ := e.CellOf(lat, lon)
 		// How fast a wave on the front would grow here, by Eady's rate,
 		// against how fast it grows under the planet's own fall of warmth.
