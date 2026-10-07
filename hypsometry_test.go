@@ -3,6 +3,7 @@ package terra
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -12,14 +13,70 @@ import (
 func TestTheEarthsLandRisesAllTheWay(t *testing.T) {
 	last := -1.0
 	for k := 0; k <= 1000; k++ {
-		h := earthHeightAt(float64(k) / 1000)
+		h := cogleyAt(float64(k) / 1000)
 		if h < last {
 			t.Fatalf("the earth's land falls from %.1f m to %.1f m at %.3f of the way up", last, h, float64(k)/1000)
 		}
 		last = h
 	}
-	if lo, hi := earthHeightAt(0), earthHeightAt(1); lo != 0 || hi != 8000 {
+	if lo, hi := cogleyAt(0), cogleyAt(1); lo != 0 || hi != 8000 {
 		t.Errorf("the earth's land runs from %.0f m to %.0f m, not from the sea to 8 km", lo, hi)
+	}
+}
+
+// The floor the country's lowest fifth is laid to is the earth's own land at
+// those shares.
+func TestTheCountrysFloorIsTheEarthsLowland(t *testing.T) {
+	for k := 0; k <= 100; k++ {
+		f := lowShare * float64(k) / 100
+		if got, want := lowTop*f/lowFloor, cogleyAt(f); math.Abs(got-want) > 1e-9 {
+			t.Fatalf("at %.3f of the land the floor is %.2f m, the earth's land %.2f m", f, got, want)
+		}
+	}
+}
+
+// The country graded along a drainage never rises from a tile to the one its
+// water goes to, keeps what it had in all, and pools what it has to pool at
+// the mean: a tile standing over the tile above it takes it in.
+func TestTheGradedCountryNeverRisesDownstream(t *testing.T) {
+	// 0 <- 1 <- 2, and 3 <- 4, 3 <- 5; 6 is outside.
+	below := []int32{-1, 0, 1, -1, 3, 3, -2}
+	v := []float64{5, 1, 3, 4, 1, 6, 9}
+	var fit isotone
+	fit.fit(v, func(i int32) int32 { return below[i] }, []int32{0, 3, 6, 1, 4, 5, 2})
+	want := []float64{3, 3, 3, 2.5, 2.5, 6, 9}
+	for i := range v {
+		if math.Abs(v[i]-want[i]) > 1e-12 {
+			t.Fatalf("graded %v, want %v", v, want)
+		}
+	}
+
+	// And on a forest drawn at random.
+	r := rand.New(rand.NewPCG(1, 2))
+	n := 5000
+	below = make([]int32, n)
+	v = make([]float64, n)
+	order := make([]int32, n)
+	sum := 0.0
+	for i := range below {
+		below[i] = -1
+		if i > 0 && r.Float64() < 0.98 {
+			below[i] = int32(r.IntN(i))
+		}
+		v[i] = 1000 * r.Float64()
+		order[i] = int32(i)
+		sum += v[i]
+	}
+	fit.fit(v, func(i int32) int32 { return below[i] }, order)
+	got := 0.0
+	for i := range v {
+		got += v[i]
+		if d := below[i]; d >= 0 && v[d] > v[i]+1e-9 {
+			t.Fatalf("tile %d stands at %.3f under the %.3f of the tile below it", i, v[i], v[d])
+		}
+	}
+	if math.Abs(got-sum) > 1e-6*sum {
+		t.Fatalf("the country held %.3f in all and holds %.3f graded", sum, got)
 	}
 }
 
@@ -81,12 +138,14 @@ func weightedAt(h, weight []float64, f float64) float64 {
 }
 
 // The globe's land against the earth's: a lowland heaped just above the sea
-// and a tail to several kilometres (Cogley 1984), which is what the country
-// under it is laid to and what the map's own ground on top of it moves it
-// from. Logged at the earth's quantiles, beside the earth's, with the share
-// of the land in each of ETOPO5's bands; held only to the acceptance of G1,
-// that the highest ranges stand in kilometres and the middle of the land a
-// few hundred metres up.
+// and a tail to several kilometres (Cogley 1984). The country is the
+// history's own height and not the earth's curve (only its lowest fifth is
+// laid no lower than the earth's), so this is the curve held as a test, and
+// the map's own ground on top of the country moves it a little further.
+// Logged at the earth's quantiles, beside the earth's, with the share of the
+// land in each of ETOPO5's bands; held to the acceptance of G1, that the
+// highest ranges stand in kilometres and the middle of the land a few hundred
+// metres up.
 func TestTheGlobeStandsAtTheEarthsHeights(t *testing.T) {
 	if testing.Short() {
 		t.Skip("makes globes")
@@ -99,7 +158,7 @@ func TestTheGlobeStandsAtTheEarthsHeights(t *testing.T) {
 	}
 	fmt.Fprintf(&b, "\n%-16s", "earth")
 	for _, f := range shares {
-		fmt.Fprintf(&b, "%8.0f", earthHeightAt(f))
+		fmt.Fprintf(&b, "%8.0f", cogleyAt(f))
 	}
 	bands := []float64{0, 200, 500, 1000, 2000, 3000, 4000, 5000, math.Inf(1)}
 	type reading struct {
@@ -155,33 +214,36 @@ func TestTheGlobeStandsAtTheEarthsHeights(t *testing.T) {
 			t.Errorf("%s: the highest land stands %.0f m above the sea, short of the kilometres its ranges were raised to", r.name, r.top)
 		}
 		if r.middle < 100 || r.middle > 1000 {
-			t.Errorf("%s: half the land stands under %.0f m, where the earth's is under %.0f", r.name, r.middle, earthHeightAt(0.5))
+			t.Errorf("%s: half the land stands under %.0f m, where the earth's is under %.0f", r.name, r.middle, cogleyAt(0.5))
 		}
 	}
 }
 
 // The rivers are graded on Height, which is the map's ground, and the
-// country is laid in the history's order, which is not the shaping's: so a
-// river's step from one tile to the next can climb in Elevation where it falls
-// in Height. How often it does is logged, as a share of the steps the
-// water takes over dry land, of every tile's and of the rivers' - the tiles
-// carrying meanderFlow and more - beside the same share in Height, which is
-// the grading's own (a step into a lake's hollow, or along its flat, can
-// climb there). It is not held: the country is not graded, and a reading of
-// it is what a later change to it would be held against.
+// country is the history's, which is not the shaping's: so a river's step
+// from one tile to the next could climb in Elevation where it falls in
+// Height. The country is graded along the drainage for that (gradeCountry),
+// and the water climbs it no more often than it climbs the ground. Logged
+// as a share of the steps the water takes over dry land, of every tile's
+// and of the rivers' - the tiles carrying meanderFlow and more - beside the
+// same share in Height, which is the grading's own (a step into a lake's
+// hollow, or along its flat, can climb there). Held: the steps that climb
+// in Elevation and not in Height are no more than countryClimbs of them.
+// Laid off the history and not graded, 7 to 12 in a hundred did (and 10 to
+// 11 in a hundred when the country was the earth's curve by rank, #67).
 func TestHowOftenARiverClimbsTheCountry(t *testing.T) {
 	if testing.Short() {
 		t.Skip("makes globes")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-10s %10s %12s %12s %12s %12s", "", "steps", "climb, all", "in Height", "rivers", "in Height")
+	fmt.Fprintf(&b, "%-10s %10s %12s %12s %12s %12s %12s", "", "steps", "climb, all", "in Height", "rivers", "in Height", "country only")
 	for _, c := range []struct {
 		name  string
 		seed  uint64
 		terms Terms
 	}{{"globe", 1, GlobeTerms()}, {"globe", 2, GlobeTerms()}, {"globe", 3, GlobeTerms()}, {"small", 1, smallGlobe()}, {"small", 2, smallGlobe()}} {
 		g := yardWorld(c.name, c.seed, c.terms)
-		var steps, climbs, heightClimbs, rivers, riverClimbs, riverHeightClimbs int
+		var steps, climbs, heightClimbs, rivers, riverClimbs, riverHeightClimbs, country int
 		for i := range g.Tiles {
 			if g.Tiles[i].Wet() || g.sunk(i) {
 				continue
@@ -200,6 +262,9 @@ func TestHowOftenARiverClimbsTheCountry(t *testing.T) {
 			if upHeight {
 				heightClimbs++
 			}
+			if up && !upHeight {
+				country++
+			}
 			if g.Flow[i] >= meanderFlow {
 				rivers++
 				if up {
@@ -211,19 +276,29 @@ func TestHowOftenARiverClimbsTheCountry(t *testing.T) {
 			}
 		}
 		share := func(k, n int) float64 { return float64(k) / math.Max(1, float64(n)) }
-		fmt.Fprintf(&b, "\n%-10s %10d %12.4f %12.4f %12.4f %12.4f", fmt.Sprintf("%s %d", c.name, c.seed), steps,
-			share(climbs, steps), share(heightClimbs, steps), share(riverClimbs, rivers), share(riverHeightClimbs, rivers))
+		fmt.Fprintf(&b, "\n%-10s %10d %12.4f %12.4f %12.4f %12.4f %12.4f", fmt.Sprintf("%s %d", c.name, c.seed), steps,
+			share(climbs, steps), share(heightClimbs, steps), share(riverClimbs, rivers), share(riverHeightClimbs, rivers),
+			share(country, steps))
+		if share(country, steps) > countryClimbs {
+			t.Errorf("%s %d: %d of %d steps climb the country where the ground falls", c.name, c.seed, country, steps)
+		}
 	}
 	t.Logf("the share of the water's steps over dry land that climb in Elevation, and in Height:\n%s", b.String())
 }
+
+// countryClimbs is the share of the water's steps over dry land that may
+// climb the country where the ground under them falls: the drainage is
+// taken again after the country is last graded where the tide lays its
+// mud (see silt), and a step that moved there is not graded.
+const countryClimbs = 0.001
 
 // earthShareUnder is the share of the earth's land under h metres.
 func earthShareUnder(h float64) float64 {
 	if math.IsInf(h, 1) {
 		return 1
 	}
-	for k := 1; k < len(earthHeights); k++ {
-		lo, hi := earthHeights[k-1], earthHeights[k]
+	for k := 1; k < len(cogleyLand); k++ {
+		lo, hi := cogleyLand[k-1], cogleyLand[k]
 		if h <= hi.height {
 			return lo.share + (hi.share-lo.share)*(h-lo.height)/(hi.height-lo.height)
 		}

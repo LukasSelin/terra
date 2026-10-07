@@ -1091,6 +1091,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	if water > 0 {
 		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
+		if g.Wrap {
+			d.country = g.countryOf()
+		}
 	}
 	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean)
@@ -1111,6 +1114,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 type deepStage struct {
 	ocean                                  []bool
 	depths, shares, uplift, ages, sediment []float64
+	// country is how high each tile stood over the history's sea when the
+	// history ended, in a planet's metres, on a globe: see countryOf.
+	country []float64
 	// book is the history's book of what was done to each tile, where the
 	// feet of the piles are still to be laid on the map: a history run on a
 	// grid coarser than the map. See handDown.
@@ -1130,6 +1136,7 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 		w.basins(g, d.ocean)
 		g.restrata(was, g.heights(), d.ocean)
 		g.uplift = d.uplift
+		g.planetHeight = d.country
 	} else {
 		w.normalise(g)
 		g.restrata(was, g.heights(), nil)

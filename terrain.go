@@ -140,6 +140,7 @@ func (w *Land) stageShape(g *Grid, cfg Terms) {
 	// has too. See strata.go.
 	g.expose()
 	g.drain()
+	g.gradeCountry()
 }
 
 // stageCut is the valleys cut, and the sea levelled on what that leaves.
@@ -160,6 +161,7 @@ func (w *Land) stageCut(g *Grid, cfg Terms) {
 		g.relevel(cfg.SeaShare)
 	}
 	g.drain()
+	g.gradeCountry()
 	g.carve(w.RNG)
 	g.height()
 }

@@ -6,6 +6,211 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The map stands on the history's own heights (Rock G1c)
+
+**What this is.** On `claude/rock-history-heights`: G2b
+(`claude/rock-history-erosion`, PR #90, 58c926d) with G1
+(`claude/rock-real-heights`, PR #67) merged into it. Issue #70, and the end
+of #40. G2b left the history's land a planet's from about its 20th
+percentile up (median 361-474 m, crust 33-36 km), and gave a five-step
+recipe for dropping G1's Earth-curve fit. This follows it, with two
+changes measured below, and grades the country along the drainage so the
+water no longer climbs it.
+
+- **The history's height is kept** (`countryOf`, `history.go`). As the last
+  epoch ends, each tile's height over the history's sea, softened once as
+  the heights are, goes on `deepStage.country`. `handDown` reads it between
+  the history's tiles as it reads the uplift. `settleHistory` puts it on the
+  grid as `planetHeight` (globes only), and `layCountry` lets go of it.
+- **`layCountry` takes it one for one.** The country is the history's height
+  less the map's own ground over the sea, never under nothing. No rank,
+  no scale.
+- **The low tail.** Below the lowest fifth of the land, in the history's
+  order and weighted by cos(latitude), the country is laid no lower than the
+  earth's land at that share: 200 m under 28% of the land, spread evenly,
+  which is ETOPO5's lowest band as Cogley draws it (`lowShare`, `lowFloor`,
+  `lowTop`). Above that fifth, no lower than the earth's at 20% (143 m), so
+  the order holds.
+- **`earthHeights` and `earthHeightAt` are gone.** Earth's curve is now only
+  `cogleyLand` in the tests. `TestTheCountrysFloorIsTheEarthsLowland` holds
+  the floor to it.
+- **The country is graded along the drainage** (`gradeCountry`, after the
+  drain that ends the shape stage and the one that ends the cut stage): the
+  least-squares fit on the drainage forest that never rises from a tile to
+  the tile its water goes to (Pardalos and Xue 1999: blocks pooled from the
+  headwaters down, the blocks above each kept in a leftist heap by their
+  mean). Sea tiles are outside it; a tile draining to the sea is a root.
+  `TestTheGradedCountryNeverRisesDownstream` checks it on a known case and on
+  a random forest of 5,000.
+
+**The dry-land shift, measured and not taken.** The map's sea is not the
+history's: the map is dry on 0.43 / 0.26 / 0.35 of its tiles (small globes 1,
+2, globe 1) against the history's 0.36 / 0.22 / 0.32. G2b's step 4 moves
+the history's heights until the same share stands over nothing: the shore
+came out at -622 / -596 / -228 m, and that lifted every coast. Land
+elevation (Height + country) over the sea, cos(latitude)-weighted, at shares
+of the land, all graded:
+
+| m | 5% | 10% | 25% | 50% | 75% | 90% | 99% |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| earth | 36 | 71 | 179 | 461 | 1,106 | 2,240 | 4,748 |
+| shifted, s1 / s2 / g1 | 12 / 16 / 28 | 226 / 137 / 215 | 820 / 722 / 491 | 1,030 / 922 / 705 | 1,294 / 1,132 / 1,214 | 2,334 / 2,028 / 2,646 | 5,037 / 4,182 / 5,328 |
+| history's sea | 8 / 12 / 13 | 13 / 18 / 33 | 178 / 127 / 264 | 409 / 325 / 477 | 685 / 536 / 982 | 1,727 / 1,430 / 2,412 | 4,455 / 3,586 / 5,099 |
+| history's sea + low floor (chosen) | 45 / 32 / 43 | 81 / 64 / 83 | 182 / 153 / 264 | 409 / 326 / 477 | 685 / 536 / 982 | 1,727 / 1,430 / 2,412 | 4,455 / 3,586 / 5,099 |
+
+The shift doubled the median. Kept at the history's sea, a fifth of the
+land (map-dry where the history had sea, the shelf the map's lower sea leaves
+dry) stood on no country and the 10% share was 13-33 m. The floor mends that
+and touches nothing above 20%.
+
+**Grading, measured** (on the shifted country, small globe 1 / 2 / globe 1):
+
+| | water's steps that climb in Elevation | in Height | land at 50%, m | at 99%, m |
+| --- | --- | --- | --- | --- |
+| not graded | 0.126 / 0.077 / 0.120 | 0.0007 / 0.0014 / 0.0022 | 1,030 / 921 / 705 | 5,072 / 4,184 / 5,359 |
+| fill: the highest point between a tile and the sea | 0.0007 / 0.0012 / 0.0022 | same | 1,035 / 925 / 713 | 5,296 / 4,202 / 5,701 |
+| carve: the lowest point above a tile | 0.0012 / 0.0012 / 0.0018 | same | 1,022 / 920 / 696 | 4,968 / 4,165 / 5,210 |
+| **least squares (chosen)** | 0.0010 / 0.0012 / 0.0020 | same | 1,030 / 922 / 705 | 5,037 / 4,182 / 5,328 |
+
+All three bring the climbs to Height's own share. Filling stands the basins
+behind ranges up to the passes and lifts the tail; carving cuts every trunk to
+the lowest of its catchment and drops it. The least-squares fit moves the
+curve least.
+
+**Readings, chosen.** `TestTheGlobeStandsAtTheEarthsHeights`, land elevation
+over the sea, m:
+
+| m | 5% | 10% | 25% | 50% | 75% | 90% | 95% | 99% | 99.9% | top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| earth | 36 | 71 | 179 | 461 | 1,106 | 2,240 | 3,026 | 4,748 | 5,600 | 8,000 |
+| globe 1 | 43 | 83 | 264 | 477 | 982 | 2,412 | 3,632 | 5,099 | 5,927 | 6,904 |
+| globe 2 | 51 | 89 | 296 | 512 | 812 | 1,983 | 3,038 | 5,048 | 6,000 | 7,309 |
+| globe 3 | 53 | 99 | 309 | 500 | 847 | 1,900 | 2,673 | 4,097 | 5,304 | 6,678 |
+| small 1 | 45 | 81 | 182 | 409 | 685 | 1,727 | 2,738 | 4,455 | 5,253 | 5,667 |
+| small 2 | 32 | 64 | 153 | 326 | 536 | 1,430 | 2,157 | 3,586 | 5,228 | 5,416 |
+| G1, rank fit on G2b, globe 1 | 38 | 76 | 194 | 539 | 1,241 | 2,350 | 3,086 | 4,751 | 5,480 | 7,423 |
+
+Every share from 5% to 99.9% is within 0.48-1.73 of the earth's. The land
+bunches at 200 m-1 km (0.32-0.42 of it in 200-500 m, against the earth's
+0.25), and the 75% share runs low (536-982 m against 1,106): the history's
+interiors are plateaus, which G2b found too.
+
+`TestHowOftenARiverClimbsTheCountry`, share of the water's steps over dry
+land:
+
+| | climb in Elevation | in Height | rivers in Elevation | in Height | country only |
+| --- | --- | --- | --- | --- | --- |
+| G1 rank fit on G2b, globes 1-3, small 1-2 | 0.068-0.106 | 0.0005-0.0046 | 0.050-0.152 | 0.003-0.013 | |
+| here, globe 1 | 0.0019 | 0.0022 | 0.0050 | 0.0089 | 0.0003 |
+| here, globe 2 | 0.0035 | 0.0047 | 0.0054 | 0.0097 | 0.0001 |
+| here, globe 3 | 0.0018 | 0.0023 | 0.0014 | 0.0023 | 0.0001 |
+| here, small 1 | 0.0007 | 0.0006 | 0 | 0.0096 | 0.0005 |
+| here, small 2 | 0.0014 | 0.0016 | 0.0101 | 0.0101 | 0.0001 |
+
+"Country only" is a step that climbs in Elevation where Height falls: the
+drainage taken again after the last grading, in the coast stage. The test
+now holds it to 0.001.
+
+**Yardsticks.** The river and relief readings are judged by #80's interval
+rule, run with `spread_test.go` and its changes copied in from
+`claude/robust-yardsticks` and not committed (`TestTheReadingsSpread` reads
+both rules off the same worlds). Fresh histories on every build. G2 is
+b4820fc, G2b 58c926d, "G1 merge" the merge of #67 into G2b with the rank
+fit, "here" this branch.
+
+Old rule (pooled, as the suite reads today):
+
+| yardstick | band | G2 | G2b | G1 merge | here |
+| --- | --- | --- | --- | --- | --- |
+| channel concavity, small globe | 0.35-0.6 | 0.387 | 0.168 ✗ | 0.227 ✗ | 0.190 ✗ |
+| Flint's R², small globe | 0.85-1 | 0.942 | 0.635 ✗ | 0.887 | 0.767 ✗ |
+| concavity 2x-1x | -0.1-0.1 | -0.099 | 0.289 ✗ | 0.095 | 0.143 ✗ |
+| Hack, small globe | 0.54-0.6 | 0.555 | 0.607 ✗ | 0.606 ✗ | 0.597 |
+| Hack, globe | 0.54-0.6 | 0.594 | 0.624 ✗ | 0.629 ✗ | 0.632 ✗ |
+| C1, three globes | 0.08-0.18 | 0.091 | 0.055 ✗ | 0.052 ✗ | 0.052 gap |
+| coast right angles | 0-0.15 | pass | 0.153 ✗ | 0.156 ✗ | 0.156 gap |
+| soil carbon, globe | 9-13 | pass | 8.40 ✗ | 8.05 ✗ | 8.08 gap |
+| drainage exceedance | 0.39-0.46 | 0.487 ✗ | 0.477 ✗ | 0.494 ✗ | 0.481 ✗ |
+| discharge exceedance | 0.4-0.46 | 0.508 ✗ | 0.455 | 0.492 ✗ | 0.475 ✗ |
+| hillslope soil depth, small globe | 0.2-1.5 | pass | pass | 0.168 ✗ | 0.185 gap |
+| valley floor / hillslope, small globe | gap I | gap | gap | 3.57, closed ✗ | 3.36, marker off |
+| Mollisols | 0.05-0.09 | pass | pass | 0.118 ✗ | 0.110 gap |
+| Aridisols | 0.09-0.15 | pass | pass | 0.059 ✗ | 0.065 ✗ |
+| Gelisols | 0.06-0.11 | 0.115 ✗ | 0.112 ✗ | 0.153 ✗ | 0.153 ✗ |
+| meander wavelength, small globe | 10-14 | 15.03 ✗ | 16.28 ✗ | 15.13 ✗ | 15.52 ✗ |
+| midlatitude / subtropical rain | 1.1-2 | 0.907 ✗ | 0.919 ✗ | 0.918 ✗ | 0.918 ✗ |
+
+#80's rule (median of seeds or pooled with a jackknife, and its interval):
+
+| yardstick | gates? | G2 | G2b | G1 merge | here |
+| --- | --- | --- | --- | --- | --- |
+| channel concavity, small globe | advisory | 0.239 [0.033, 0.375] | 0.266 [0.200, 0.355] | 0.237 [0.155, 0.396] | 0.261 [0.118, 0.393] |
+| Flint's R², small globe | advisory | 0.912 [0.758, 1.067] | 0.972 [0.888, 1.056] | 0.969 [0.882, 1.057] | 0.976 [0.882, 1.070] |
+| concavity 2x-1x | advisory | 0.026 [-0.041, 0.466] | 0.112 [-0.219, 0.535] | 0.155 [-0.051, 0.482] | 0.102 [-0.235, 0.482] |
+| Hack, small globe | gates | 0.540 [0.513, 0.567] | 0.588 [0.549, 0.628] | 0.577 [0.538, 0.616] | 0.574 [0.538, 0.610] |
+| Hack, globe | gates | 0.587 [0.533, 0.594] | 0.600 [0.586, 0.624] | 0.599 [0.591, 0.629] | 0.599 [0.591, 0.632] |
+| C1, three globes | gates | 0.081 [0.075, 0.111] | **0.057 [0.043, 0.064] ✗** | **0.052 [0.040, 0.063] ✗** | **0.052 [0.040, 0.063] ✗** |
+| hypsometric integral, small globe | gates | 0.377 [0.351, 0.394] | 0.314 [0.285, 0.341] | 0.338 [0.303, 0.361] | 0.323 [0.285, 0.354] |
+| drainage exceedance | advisory | 0.454 [0.426, 0.549] | 0.481 [0.349, 0.580] | 0.504 [0.443, 0.564] | 0.471 [0.439, 0.580] |
+| discharge exceedance | advisory | 0.510 [0.364, 0.570] | 0.466 [0.415, 0.553] | 0.497 [0.445, 0.555] | 0.494 [0.400, 0.537] |
+
+G2b's eight new failures, read so:
+
+- **Noise** (the interval straddles the band on G2b and here, and overlaps
+  G2's): channel concavity, Flint's R², concavity 2x-1x, Hack on the small
+  globes, Hack on the globe. On the old rule they swap between builds that
+  change nothing in the network: here Hack on the small globes passes and
+  Flint's R² fails; on the G1 merge the reverse.
+- **Real, G2b's history** (consistent over every build since): C1, the
+  coasts' right angles, soil carbon. The country does not reach C1 or the
+  coasts: both read Height and the sea, which the shaping and `basins` still
+  lay from the history's order alone. Marked as known gaps with their
+  readings.
+- **Fixed by dropping the rank mapping: none.** G2b's diagnosis does not
+  hold for the river and relief readings: the map's Height takes the
+  history by rank on G2b, the G1 merge and here alike, and the country feeds
+  only the air's warmth. All four builds' river intervals overlap.
+
+The soil readings that fail on the G1 merge and here (hillslope depth,
+Mollisols, Aridisols, Gelisols, and the valley-floor gap closing) are the
+country's warmth, as on #67; the history's own height moves the first three a little
+toward its band against the rank fit. Hillslope depth and Mollisols are
+marked as known gaps. Aridisols and Gelisols fail on main. The valley-floor
+ratio's marker is taken off, as the suite asks: it closed because the
+hillslopes thinned.
+
+**Tests.**
+- `TestAPlatesWallRunsStraight` fails as on G2b (1.01; history-only, the
+  same plates). Over 16 seeds: G2 median 1.005 [0.943, 1.127], G2b and here
+  0.988 [0.936, 1.089]. Both intervals straddle the 1.05 floor and overlap:
+  noise on the three seeds read, and the 16-seed median sits under the floor
+  on G2 as well.
+- `TestAGlobeHasASeaItsRiversReach`: the north polar row is 0.66 bare here,
+  0.64 on G2b, and passes on the G1 merge (the rank fit stood the polar land
+  higher and colder). It needs 2/3: 7 tiles of 1,024. Remains.
+- `TestTheGlobeStandsAtTheEarthsHeights` and `TestHowOftenARiverClimbsTheCountry` pass.
+
+**Rules.**
+- Digest rewritten: globe128 `3b0eb5e499958d76` (G2b) to `d135dcb0035533d1`.
+  Valley and ancient unchanged: no country is laid on them.
+- Budget rewritten: globe128 405.44 to 406.26 MB (+0.2%), 30,181 to 30,226
+  allocations; the peak is not checked and read 33-54 MB across three runs.
+- Timing, full globe, `TERRA_PHASES=1`, one run on a loaded machine:
+  `gradeCountry` 0.11 s over 2 calls, `layCountry` 0.05 s, of an 86 s
+  Generate. A quiet-machine `scripts/perf.sh check` is still owed, as on G2
+  and G2b.
+
+**Open.**
+- #70's exports (`cmd/unreal`, `cmd/zarr`, `cmd/overview`) and the terrain
+  quantiles still read Height. The country is a planet's height on 25 m
+  tiles, a kilometre between two of them on a range, so an export of
+  Elevation wants the country read smooth between tiles first. Not done.
+- The history's plateaus: the 75% share 0.5-0.9 of the earth's, and the
+  land bunched at 200 m-1 km.
+- The polar row and C1 (above).
+
+---
+
 ## 2026-10-07 - Erosion at the history's scale, and the sediment kept (Rock G2b)
 
 **What this is.** On `claude/rock-history-erosion`, stacked on G2

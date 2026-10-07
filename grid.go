@@ -136,6 +136,12 @@ type Grid struct {
 	// map's own ground; nil on any other map. See hypsometry.go.
 	country []float64
 
+	// planetHeight is, on a globe made by a history, how high each tile stood
+	// over the history's sea when the history ended, in a planet's metres,
+	// from the end of the history until layCountry has laid the country off
+	// it; nil on any other map, and after that. See hypsometry.go.
+	planetHeight []float64
+
 	// pedons says the soil's age and chemistry have been laid and are kept
 	// from here on, which they are from the end of the making of a map. See
 	// pedogenesis.go.
@@ -340,7 +346,7 @@ func (g *Grid) Clone() *Grid {
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
 	c.abyss, c.uplift, c.floorAge = g.abyss, g.uplift, g.floorAge       // laid once, and never written again
-	c.country = g.country                                               // and so is this
+	c.country, c.planetHeight = g.country, g.planetHeight               // and so are these
 	c.hot, c.welds, c.deep, c.planet = g.hot, g.welds, g.deep, g.planet // hot, like abyss, is never written once drawn
 	c.ledger, c.epochs, c.plateRoot = slices.Clone(g.ledger), g.epochs, g.plateRoot
 	c.features = g.features // built once, and never written again; Erode builds the copy its own

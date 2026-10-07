@@ -3,6 +3,8 @@ package terra
 import (
 	"math"
 	"slices"
+
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The height a globe's land stands at: the planet's, and the map's on top of
@@ -40,38 +42,53 @@ import (
 // and that is what the air reads its warmth off, since a glacier on a range
 // four kilometres high is there for the height and not for the slope.
 //
-// What the country is. Read straight off the history - a planet's metres to
-// the map's metres, one for one - it is not a planet's land. On the first
-// globe and the first two small ones, the history's continental crust stood
+// What the country is: the history's own height over its own sea, one metre
+// for one (countryOf, handed down as uplift is). The history's crust floats
+// on its thickness (isostasy.go) and its ground comes down at the pace its
+// relief sets (denude.go), so the heights it ends with are a planet's land:
+// half of it under 361 to 474 m on the first globe and the first two small
+// ones against the earth's 461, and each share of it from a quarter to the
+// ninety-ninth hundredth within 0.6 to 1.6 times the earth's
+// (TestTheHistoryStandsOnItsCrust). Before the crust floated the history's
+// land was a plateau a few hundred metres over its sea, and the country took
+// the history's order and the earth's spread: each tile was given, by its
+// rank, the height the earth's land has at the same rank. Nothing ranks it
+// now.
 //
-//	                    1%      5%     25%    50%    75%    95%    99%    top
-//	globe 1         -3,229  -1,562     153    331    456    547    620   1,915
-//	small globe 1   -1,787    -832      87    403    794    932  1,004   1,254
-//	small globe 2   -1,169    -552     108    656    787    882  1,006   1,901
+// The map's sea is not the history's. The map pours its own onto the ground
+// basins laid, and leaves more of the planet dry: 0.26 to 0.43 of its tiles
+// on those three worlds, against the 0.22 to 0.36 the history had over its
+// sea. Moved until as much of it stood over nothing as the map has dry land,
+// the history's height put its shore 230 to 620 m down its margins, and the
+// land the map has dry over that shelf lifted all the rest: half the land
+// stood over 705 to 1,030 m. So the shore is the history's sea, and the land
+// the map has dry where the history had sea stands on no country of its own:
+// it is the shelf the map's lower sea has left dry, the earth's coastal
+// plains and deltas, which the history's rivers do not build.
 //
-// metres above the history's own sea, and its ocean crust a couple of
-// hundred metres under its land: the median of the globe's floor stood 143 m
-// above its sea. That is a plateau with a tail going down, where the earth's
-// land is a lowland with a tail going up, and the floor at the land's height
-// says why: the history has
-// no isostasy. Its freeboard is two fixed levels and a plate settling toward
-// them over 25 Myr (settleTime), and four million years of wear an epoch
-// takes the ranges down with nothing to buoy the root back up, so the
-// highest of a planet's land stands a kilometre over its sea and its floor
-// is not where its age puts it either (abyss.go lays the floor again by age
-// for that reason). G2 is the isostasy. Until then the history's heights are
-// right in their order - the ranges are where the plates met, the lowlands
-// where they did not - and wrong in their spread.
+// What that leaves short is the low tail: the lowest tenth of the land
+// stood within 13 to 67 m of the sea, against 71 on the earth, and the
+// lowest twentieth within 8 to 20 m. So below the fifth of the land the
+// history holds lowest, the country is laid at least as high as the earth's
+// land stands at the same share: its lowest band, two hundred metres under
+// 28 in a hundred of the land, laid evenly (lowShare, lowTop and lowFloor).
+// That is all of the earth's curve that is left in the making; the rest of
+// it is a test's (cogleyLand). Above that fifth the history's own height is
+// the country, and on the five worlds TestTheGlobeStandsAtTheEarthsHeights
+// reads half the land stands under 326 to 512 m.
 //
-// So the country keeps the history's order and takes the earth's spread: the
-// land is ranked by its height as the history left it, and the tile at each
-// place in that order is given the height the earth's land has at that place
-// in its own (earthHeights). The highest tile of the history's land is the
-// highest of the earth's, the hundredth-highest the hundredth, and the
-// lowlands a few hundred metres up, with the tail to several kilometres
-// that Cogley (1984) has for the continents. When G2 makes the history's
-// heights a planet's, earthHeights comes out and the history's own heights are
-// the country, one metre for one.
+// And the water does not climb it. The rivers run on Height and the
+// country is the history's, so where the two disagree about which way is
+// down - a hollow the history left that the map's water fills and spills,
+// a flat the shaping's roughness turned - a river's step climbs the country:
+// laid off the history and not graded, 7 to 12 in a hundred of the water's
+// steps over dry land climbed in Elevation, against 0.06 to 0.2 in Height.
+// So once the drainage is taken the country is graded along it
+// (gradeCountry): the nearest country, in least squares, that never rises
+// from a tile to the tile its water goes to. A river crossing a range the
+// history left across its way is a gorge through it, the basin behind the
+// range a little higher, both at the mean of what they were. Graded so, the
+// share that climbs in Elevation is the share that climbs in Height.
 //
 // Only on a globe. A valley's history is a planet two hundred kilometres a
 // tile read onto eighty tiles of a field, and a valley keeps its drawn
@@ -97,95 +114,83 @@ import (
 // their bands with it. The cap is the air's work (A2 and A3), and until it is
 // there the ranges' rain waits for it.
 
-// earthHeights is the earth's land by height: the share of the land above the
-// sea that stands lower than each height, in metres. It is ETOPO5's (NOAA
-// 1988, five-minute grid) land area in bands of 500 m, which is the curve
-// Cogley (1984) draws for the continents, read above the sea: half the land
-// under 460 m, nine tenths under 2.2 km, one hundredth over 4.7 km,
-// and the highest at 8 km. ETOPO5 reads the top of the ice, so Antarctica's
-// and Greenland's sheets stand in the 2 to 4 km bands, which a map with no
-// ice sheets (G8) will be a little high in. The lowest band is split at 200
-// m, 28 in a hundred of the land under it, so that the land heaps up just
-// above the sea, as the earth's does: its elevations peak near 100 m
-// (Britannica's hypsometry; ETOPO1, Amante & Eakins 2009).
-var earthHeights = [...]struct{ share, height float64 }{
-	{0, 0},
-	{0.28, 200},
-	{0.53315, 500},
-	{0.72805, 1000},
-	{0.83184, 1500},
-	{0.88328, 2000},
-	{0.91815, 2500},
-	{0.94883, 3000},
-	{0.97095, 3500},
-	{0.98211, 4000},
-	{0.98706, 4500},
-	{0.99299, 5000},
-	{0.99878, 5500},
-	{0.99988, 6000},
-	{0.99999, 6500},
-	{1, 8000},
-}
+// The earth's lowest land, which the country is laid no lower than below
+// lowShare of the way up the land's order: lowFloor of the land stands under
+// lowTop metres, spread evenly (ETOPO5's land, NOAA 1988, in its lowest band
+// split at 200 m as Cogley 1984 draws it: its elevations peak near 100 m).
+const (
+	lowShare = 0.2
+	lowFloor = 0.28
+	lowTop   = 200.0
+)
 
-// earthHeightAt is the height of the earth's land at share f of the way up its
-// order: the height that much of the land stands lower than. Between two
-// heights of the table the land is spread evenly.
-func earthHeightAt(f float64) float64 {
-	f = clamp01(f)
-	for k := 1; k < len(earthHeights); k++ {
-		lo, hi := earthHeights[k-1], earthHeights[k]
-		if f <= hi.share {
-			return lo.height + (hi.height-lo.height)*(f-lo.share)/(hi.share-lo.share)
-		}
+// countryOf is how high each tile of a globe's history stands over the
+// history's sea as its last epoch ends, in a planet's metres, and below
+// nothing under that sea. It is softened as the heights are when the history
+// is over, so that it lies where they do (see smoothing).
+func (g *Grid) countryOf() []float64 {
+	c := make([]float64, len(g.Tiles))
+	for i := range c {
+		c[i] = g.Height[i] - g.base
 	}
-	return earthHeights[len(earthHeights)-1].height
+	for k := 0; k < g.passes(smoothing); k++ {
+		c = g.spread(c)
+	}
+	return c
 }
 
 // layCountry gives a globe's dry land the height its country stands at. It is
-// laid once, when the sea has been poured and before the ground is shaped:
-// the heights the map has then are the history's, put in its order by basins
-// and laid at the drawn map's spread, so ranking them is ranking the history.
+// laid once, when the sea has been poured and before the ground is shaped,
+// off the heights the history ended at (planetHeight), which it lets go of.
 //
 // The map's own ground already stands some way above the sea, at the drawn
-// spread, and the country is the rest of the way to the earth's height at that
-// place in the order: the earth's height less the map's at the same rank, and
-// never less than nothing. The map's ground is then laid again by the shaping,
-// at the same scale but in its own order, so the two heights added are the
-// earth's curve as near as the shaping leaves it; see TestTheGlobeStandsAtTheEarthsHeights,
-// which logs it.
-//
-// Each rank's country is at least the one below it, so the country is in the
-// history's order whatever the map's spread did between them.
+// spread, and the country is the rest of the way to the history's height:
+// that height less the map's, and never less than nothing. Below lowShare of
+// the land, in the history's order and by the ground each tile stands for on
+// a sphere, the height it is laid to is at least the earth's at that share;
+// above it, at least the earth's at lowShare, so that the order is kept.
 func (g *Grid) layCountry() {
-	if g.sea < 0 || !g.Wrap {
+	defer phase.Start("layCountry")()
+	deep := g.planetHeight
+	g.planetHeight = nil
+	if g.sea < 0 || !g.Wrap || len(deep) != len(g.Tiles) {
 		return
 	}
 	var dry []int32
+	total := 0.0
 	for i := range g.Tiles {
 		if !g.sunk(i) {
 			dry = append(dry, int32(i))
+			total += g.rowArea(i / g.W)
 		}
 	}
 	if len(dry) == 0 {
 		return
 	}
 	slices.SortFunc(dry, func(a, b int32) int {
-		ha, hb := g.Height[a], g.Height[b]
-		switch {
-		case ha < hb:
+		switch da, db := deep[a], deep[b]; {
+		case da < db:
 			return -1
-		case ha > hb:
+		case da > db:
 			return 1
 		}
 		return int(a - b) // ties by position, so a world repeats
 	})
 	g.country = make([]float64, len(g.Tiles))
-	least := 0.0
-	for k, i := range dry {
-		f := (float64(k) + 0.5) / float64(len(dry))
-		least = math.Max(least, earthHeightAt(f)-(g.Height[i]-g.sea))
-		g.country[i] = least
+	run := 0.0
+	for _, i := range dry {
+		w := g.rowArea(int(i) / g.W)
+		f := math.Min(lowShare, (run+w/2)/total)
+		run += w
+		at := math.Max(deep[i], lowTop*f/lowFloor)
+		g.country[i] = math.Max(0, at-(g.Height[i]-g.sea))
 	}
+}
+
+// rowArea is how much of a sphere's surface a tile of row y of a globe
+// stands for, against a tile on the equator.
+func (g *Grid) rowArea(y int) float64 {
+	return math.Cos((90 - 180*(float64(y)+0.5)/float64(g.H)) * math.Pi / 180)
 }
 
 // countryAt is the height of the country under tile i, or nothing where
@@ -213,3 +218,113 @@ func (g *Grid) Elevation(i int) float64 { return g.Height[i] + g.countryAt(i) }
 // Elevation is how high this tile stands, with the country it lies in:
 // Grid.Elevation at this tile.
 func (v TileView) Elevation() float64 { return v.g.Elevation(v.i) }
+
+// gradeCountry lays a globe's country along the drainage as it stands: the
+// country nearest the one laid, in least squares, that never rises from a
+// tile to the tile its water goes to. The sea's tiles are outside it, and a
+// tile whose water goes to the sea, or nowhere, is free of anything below
+// it. It is taken again wherever the drainage is taken for good: at the end
+// of the shaping and of the cutting. See the note above.
+func (g *Grid) gradeCountry() {
+	defer phase.Start("gradeCountry")()
+	n := len(g.Tiles)
+	if g.country == nil || len(g.down) != n || len(g.route) != n {
+		return
+	}
+	var t isotone
+	t.fit(g.country, func(i int32) int32 {
+		if g.sunk(int(i)) {
+			return -2
+		}
+		d := g.down[i]
+		if d < 0 || g.sunk(int(d)) {
+			return -1
+		}
+		return d
+	}, g.route)
+}
+
+// isotone is the least-squares fit to values on a forest that never rises
+// from a tile to the one below it (Pardalos and Xue 1999): each tile starts a
+// block of its own, and a block that stands over the lowest of the blocks
+// above it takes that one in, until none does. The blocks above a block are
+// kept in a leftist heap by their mean.
+type isotone struct {
+	sum, w      []float64
+	left, right []int32
+	dist        []int32
+	heap        []int32 // the heap of the blocks above each tile's block
+	owner       []int32 // the block a tile's block was taken into, or itself
+}
+
+func (t *isotone) mean(b int32) float64 { return t.sum[b] / t.w[b] }
+
+func (t *isotone) meld(a, b int32) int32 {
+	if a < 0 {
+		return b
+	}
+	if b < 0 {
+		return a
+	}
+	if t.mean(b) < t.mean(a) || t.mean(b) == t.mean(a) && b < a {
+		a, b = b, a
+	}
+	t.right[a] = t.meld(t.right[a], b)
+	l, r := t.left[a], t.right[a]
+	if l < 0 || r >= 0 && t.dist[l] < t.dist[r] {
+		t.left[a], t.right[a] = r, l
+	}
+	if t.right[a] < 0 {
+		t.dist[a] = 0
+	} else {
+		t.dist[a] = t.dist[t.right[a]] + 1
+	}
+	return a
+}
+
+// fit fits v in place. below is the tile below each tile: -1 at a root, -2
+// for a tile outside the forest. order has every tile after the one below
+// it.
+func (t *isotone) fit(v []float64, below func(int32) int32, order []int32) {
+	n := len(v)
+	t.sum, t.w = make([]float64, n), make([]float64, n)
+	t.left, t.right, t.dist = make([]int32, n), make([]int32, n), make([]int32, n)
+	t.heap, t.owner = make([]int32, n), make([]int32, n)
+	for i := range v {
+		t.sum[i], t.w[i] = v[i], 1
+		t.left[i], t.right[i], t.heap[i], t.owner[i] = -1, -1, -1, int32(i)
+	}
+	for k := len(order) - 1; k >= 0; k-- {
+		i := order[k]
+		d := below(i)
+		if d == -2 {
+			continue
+		}
+		h := t.heap[i]
+		for h >= 0 && t.mean(h) < t.mean(i) {
+			t.sum[i] += t.sum[h]
+			t.w[i] += t.w[h]
+			t.owner[h] = i
+			rest := t.meld(t.left[h], t.right[h])
+			h = t.meld(rest, t.heap[h])
+		}
+		t.heap[i] = h
+		t.left[i], t.right[i], t.dist[i] = -1, -1, 0
+		if d >= 0 {
+			t.heap[d] = t.meld(t.heap[d], i)
+		}
+	}
+	for _, i := range order {
+		if below(i) == -2 {
+			continue
+		}
+		if o := t.owner[i]; o != i {
+			t.owner[i] = t.owner[o] // the block below in the order is settled first
+		}
+	}
+	for _, i := range order {
+		if below(i) != -2 {
+			v[i] = t.mean(t.owner[i])
+		}
+	}
+}

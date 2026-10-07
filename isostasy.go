@@ -20,7 +20,8 @@ import (
 // few hundred metres over its sea (median 331 m, the highest 1.9 km) with its
 // ocean floor at the land's own height: G1 (#40) had to give the map the
 // earth's curve in the history's order, since the history's own spread was not
-// a planet's.
+// a planet's. With the crust floating, the country is the history's own height
+// (hypsometry.go).
 //
 // So the crust has a thickness now, carried with it as the plates carry their
 // ground: continent starts at continentCrust and ocean floor at oceanCrust,
