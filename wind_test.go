@@ -107,6 +107,19 @@ func continent(lat float64) *Grid {
 // A continent warms through its summer far more than the sea beside it and
 // draws a low over itself, and the sea's air blows in toward it: the monsoon.
 // In its winter it cools and the wind blows out.
+//
+// What is held is the turn: the summer's wind across the south coast is more
+// than a metre a second further onshore than the winter's, and the continent
+// stands under the sea's pressure in its summer and over it in its winter;
+// and that the summer's wind at seven degrees blows onto the land, against
+// the trades. That last was let go for a while: under the energy balance's
+// year the land between five and fifteen degrees swings under four degrees,
+// and with the trough moved a fixed five degrees with the sun the summer's
+// wind there was the trades' less the monsoon's turn, offshore. The ITCZ on
+// the balance's energy flux equator goes further into the summer's
+// hemisphere - some six degrees on this planet of sea with one continent -
+// and draws the coast's air north across it. The monsoon worked out from
+// the heating, Gill's (1980), is a later step of the air's (#35).
 func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 	g := continent(25)
 	g.weather()
@@ -125,8 +138,11 @@ func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 	}
 	summer, winter := onshore(Year/4), onshore(3*Year/4)
 	t.Logf("across the south coast: %.1f m/s toward land in summer, %.1f in winter", summer, winter)
-	if summer <= 0 || summer <= winter+1 {
+	if summer <= winter+1 {
 		t.Errorf("the summer wind blows %.1f m/s onto the land and the winter wind %.1f", summer, winter)
+	}
+	if summer <= 0 {
+		t.Errorf("the summer wind at the south coast blows %.1f m/s offshore", -summer)
 	}
 	low := func(day int) float64 {
 		return g.PressureOn(g.W*32+96, day) - g.PressureOn(g.W*32+200, day)

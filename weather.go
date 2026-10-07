@@ -61,7 +61,10 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 	a.Dy = airSpan / km
 	if c.globe {
 		a.Dy = 20015 / float64(g.H)
+		a.Forcing = c.forcing
 	}
+	// Every row of a valley is the one latitude, and shares its table.
+	var valleyPET []float64
 	for y := 0; y < g.H; y++ {
 		lat, mean := Temperate, MeanTemp
 		dx := airSpan / km
@@ -70,7 +73,15 @@ func (c Climate) airFor(g *Grid, wetness float64) *Air {
 			dx = 40030 * math.Max(0.05, math.Cos(lat*math.Pi/180)) / float64(g.W)
 		}
 		a.Lat[y], a.Mean[y], a.Dx[y] = lat, mean, dx
-		a.PET[y] = atmos.PetTable(lat)
+		switch {
+		case c.globe:
+			a.PET[y] = atmos.PetTable(a.Forcing, lat)
+		case valleyPET == nil:
+			valleyPET = atmos.PetTable(a.Forcing, lat)
+			fallthrough
+		default:
+			a.PET[y] = valleyPET
+		}
 	}
 	return a
 }
@@ -263,7 +274,7 @@ func (g *Grid) rainOn() {
 			g.rain[i], g.runoff[i], g.dayRange[i] = p, 0, 1
 			if !g.sunk(i) {
 				t := a.Mean[y] - Lapse*g.laidHeight(i)
-				pe := atmos.PetAt(a.PET[y], t)
+				pe := atmos.PetAt(a.PET[y], t, g.yearCont(i))
 				g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
 				g.runoff[i] = p - atmos.Fu(p, pe*float64(g.dayRange[i]))
 			}
@@ -299,11 +310,21 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i), g.yearCont(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}
 	return p
+}
+
+// yearCont is the continentality the evaporation's year at tile i is read
+// at: the land round it on a globe, and on a valley the middling ground whose
+// year is the valley's, Swing. See atmos.PetTable.
+func (g *Grid) yearCont(i int) float64 {
+	if !g.Wrap {
+		return atmos.ContMiddling
+	}
+	return g.contAt(i)
 }
 
 // rangeCont is the continentality the day's range at tile i is read at: the

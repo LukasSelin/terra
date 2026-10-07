@@ -728,7 +728,7 @@ func (e *Env) Damp(c, k int) float64 {
 		k = 1 // the autumn is the spring
 	}
 	cy := c / e.W
-	sst := e.Mean[cy] + seasonTemp(e.hemi[cy], phaseSin[k], 0) + seaOverAir
+	sst := e.Mean[cy] + e.seasonTemp(cy, phaseSin[k], 0) + seaOverAir
 	return saturation(sst+e.Warm[c]) / saturation(sst)
 }
 

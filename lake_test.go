@@ -226,7 +226,7 @@ func steps(wetness float64) *Grid {
 // Two hollows, one above the other. The upper spills into the lower, and the
 // lower fills with its own water and the upper's before it goes on.
 func TestAnUpperLakeSpillsIntoTheOneBelowIt(t *testing.T) {
-	g := steps(1)
+	g := steps(wetStep)
 	settle(g)
 	upper, ok := g.LakeAt(geom.Pos{X: 4, Y: 5})
 	if !ok {
@@ -367,14 +367,23 @@ func TestSaltLakesStandInDryCountry(t *testing.T) {
 }
 
 // dryBowl, dryStep and dryValley are how much of a temperate valley's rain the
-// dry cases below are given. The steps' trough is walled thirty metres high,
-// and under the column budget its floors get some seven tenths of a metre a
-// year at the valley's own rain; at 0.92 to 0.96 of that the upper hollow runs
-// over and the lower does not.
+// dry cases below are given, and wetStep the wet case above. The steps' trough
+// is walled thirty metres high, and under the column budget its floors get
+// some seven tenths of a metre a year at the valley's own rain; at 0.95 to
+// 0.98 of that the upper hollow runs over and the lower does not, and from
+// 0.99 both do. The valley's own rain was in the second span until the air
+// over it swung the energy balance's year and not one and three fifths of the
+// valley's (see atmos.Env.seasonTemp): a summer three degrees cooler holds
+// less water, and the valley's rain fell some seven parts in a hundred. The
+// window was 0.97 to 1.01 until the belts followed the balance's ITCZ (see
+// atmos.Env.beltsAt), a little less far north in the summer than the five
+// degrees they were moved, and the valley's rain rose some three in a
+// hundred.
 const (
 	dryBowl   = 0.4
-	dryStep   = 0.94
+	dryStep   = 0.965
 	dryValley = 0.3
+	wetStep   = 1.1
 )
 
 // Asked to be dry, a valley keeps its water: some of its hollows hold salt

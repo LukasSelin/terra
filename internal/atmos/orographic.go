@@ -93,8 +93,12 @@ func orographicPatch(a *Air) int {
 // orographic is what the ground's lift would rain out of saturated air, in
 // kg/m²/s on each tile, under the wind u, v of one phase over air at sea level
 // of temp degrees, both on the air cells, over a map m under the air a. ground
-// is the height of each tile over the water the air takes its fill from.
-func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64) []float32 {
+// is the height of each tile over the water the air takes its fill from, and
+// sink how fast the air comes down over each air cell, which lays the
+// trade-wind inversion over it (see circulation.go): the ground over the
+// inversion lifts no air that has water in it, and the air under it has
+// only its share of the column's water to give. A valley has no inversion.
+func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink []float64) []float32 {
 	defer phase.Start("orographic")()
 	if !m.Wrap {
 		return orographicWhole(m, a, e, u, v, temp, ground)
@@ -102,6 +106,15 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []floa
 	size := orographicPatch(a)
 	step := size / 2
 	out := make([]float32, m.W*m.H)
+	// The ground the air climbs: no higher than the trade-wind inversion over
+	// it, where the descent lays one.
+	climb := func(i int) float64 { return ground[i] }
+	if sink != nil {
+		climb = func(i int) float64 {
+			fx, fy := e.CellAt(i)
+			return math.Min(ground[i], lid(e.Sample(sink, fx, fy)))
+		}
+	}
 	// The taper: sin² over a patch, which with the patches half a patch apart
 	// adds to one everywhere.
 	taper := make([]float64, size)
@@ -177,7 +190,7 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []floa
 		clear(buf)
 		for dy := 0; dy < size; dy++ {
 			for dx := 0; dx < size; dx++ {
-				buf[(dy+pad)*box+dx+pad] = complex(ground[at(pt.x0+dx, pt.y0+dy)]*taper[dx]*taper[dy], 0)
+				buf[(dy+pad)*box+dx+pad] = complex(climb(at(pt.x0+dx, pt.y0+dy))*taper[dx]*taper[dy], 0)
 			}
 		}
 		if !liftField(buf, col, box, box, e.Sample32(u, fx, fy), e.Sample32(v, fx, fy), e.Sample(temp, fx, fy), a.Dx[my]*km, a.Dy*km) {
@@ -214,6 +227,18 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []floa
 	}
 	for i, p := range acc {
 		out[i] = float32(math.Max(0, p))
+	}
+	if sink != nil {
+		// Under a lid the air has only the water under it to give.
+		eachTileRow(m, func(y int) {
+			for x := 0; x < m.W; x++ {
+				i := y*m.W + x
+				if out[i] > 0 {
+					c := e.CellOfTile(i)
+					out[i] = float32(float64(out[i]) * lidKeeps(lid(sink[c]), temp[c]))
+				}
+			}
+		})
 	}
 	return out
 }

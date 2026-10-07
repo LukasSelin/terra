@@ -17,6 +17,17 @@
 // against these units - "a fortnight", "three years" - and never as bare
 // tick counts, so that changing the calendar changes the world with it.
 //
+// The year is the planet's, and the only one there is. The sun goes round
+// the sky once in it: tick zero is the spring equinox, the northern solstice
+// is a quarter of the way in, and the air's year - the energy balance that
+// works out how warm each latitude is and how far its seasons swing - steps
+// these same 360 days (see internal/atmos/ebm.go). It is not cut down from
+// the real 365.25: a year here lasts as long as a real one, and every rate
+// the world is made by that is written "a year" - a metre of rain, a
+// millimetre of uplift - means one. So a day of the calendar is a 360th of
+// that, some twenty-one minutes longer than the sun's day, which nothing
+// that lives by it can tell.
+//
 // The one place the calendar is compressed is a life: an agent is grown at
 // five and old at fifty, which is not a human childhood. It is what lets a
 // run of twenty thousand days turn a settlement over three or four times,

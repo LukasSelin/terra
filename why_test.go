@@ -121,8 +121,13 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // crust was broken into fractures before its plates were grown (see
 // fractureWall) and every plate on the map came out somewhere else; then tile
 // 2628, raised by an arc in the first epoch by some 11 km, until the fractures
-// were bent by the plate spacing and not the tile (see fractureBend). Tile 987
-// is now the one an arc raised in the first epoch, by some 12 km.
+// were bent by the plate spacing and not the tile (see fractureBend); then
+// tile 987, raised by an arc in the first epoch by some 12 km, until the air
+// came to swing the energy balance's year (see atmos.Env.seasonTemp) and the
+// sea laid lime over its pluton; then tile 1307, raised in the first epoch
+// by some 12 km, until the belts of the air were worked out from the
+// circulation (see atmos.Env.beltsAt) and the lime came over 1307's pluton
+// instead. Tile 987 is the one again, by some 12 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
 	p := g.PosOf(987)

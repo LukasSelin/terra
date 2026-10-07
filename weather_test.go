@@ -222,3 +222,69 @@ func TestTheShadowReachesPastTheFootOfTheRange(t *testing.T) {
 		}
 	}
 }
+
+// islands is an ocean globe with a high island, a ridge running north and
+// south across the wind, at each of the given latitudes.
+func islands(lats ...float64) *Grid {
+	g := oceanGlobe(256, 128)
+	c := Climate{rows: g.H, globe: true}
+	for i := range g.Tiles {
+		x, y := i%g.W, i/g.W
+		for _, lat := range lats {
+			dx, dy := float64(x-128), (c.latitude(y)-lat)/1.4
+			if h := 4000 * math.Exp(-dx*dx/2) * math.Exp(-dy*dy/(2*3*3)); h > 30 {
+				g.Height[i] = h
+			}
+		}
+	}
+	return g
+}
+
+// A range in the trades rains only from the air under the trade-wind
+// inversion the subtropical highs' descent lays over them: Hawaii's windward
+// slopes are among the wettest ground on earth up to two kilometres, and dry
+// over it. What the ground wrings out of the air over the island in the
+// trades is less than half what it is with none, and over two kilometres,
+// above the lid, no more; the same island in the westerlies, under no
+// descent, wrings out the same to a part in a thousand.
+func TestTheTradeInversionCapsTheRangesRain(t *testing.T) {
+	g := islands(20, 55)
+	g.weather()
+	ground := make([]float64, len(g.Tiles))
+	for i := range ground {
+		ground[i] = math.Max(0, g.Height[i])
+	}
+	_, capped, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground)
+	for k := range g.winds.Subsides {
+		g.winds.Subsides[k] = make([]float64, len(g.winds.Subsides[k]))
+	}
+	_, open, _ := atmos.RainCells(&g.Map, g.air, g.winds, ground)
+	c := Climate{rows: g.H, globe: true}
+	island := func(lift [atmos.Phases][]float32, lat float64) (all, high float64) {
+		for i := range g.Tiles {
+			if g.Height[i] <= 30 || math.Abs(c.latitude(i/g.W)-lat) > 10 {
+				continue
+			}
+			for k := range lift {
+				all += float64(lift[k][i])
+				if g.Height[i] > 2000 {
+					high += float64(lift[k][i])
+				}
+			}
+		}
+		return all, high
+	}
+	trades, tradesHigh := island(capped, 20)
+	free, freeHigh := island(open, 20)
+	west, _ := island(capped, 55)
+	westFree, _ := island(open, 55)
+	t.Logf("the island in the trades wrings out %.3g, %.3g of it over two kilometres; with no inversion %.3g and %.3g",
+		trades, tradesHigh, free, freeHigh)
+	t.Logf("the island in the westerlies wrings out %.3g, and %.3g with no inversion", west, westFree)
+	if trades >= free/2 || tradesHigh > freeHigh {
+		t.Errorf("the island in the trades wrings out %.3g, %.3g high up, against %.3g and %.3g with no inversion", trades, tradesHigh, free, freeHigh)
+	}
+	if math.Abs(west-westFree) > 1e-3*westFree {
+		t.Errorf("the island in the westerlies wrings out %.4g, and %.4g with no inversion", west, westFree)
+	}
+}

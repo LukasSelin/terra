@@ -23,8 +23,13 @@ type Air struct {
 	// weather.
 	Wetness float64
 	// PET is how much water the air could take up in a year, in mm, on each
-	// row at each whole degree of the year's mean from petLo up: see petOf.
+	// row at each whole degree of the year's mean from petLo up, on ground of
+	// each of petConts: see PetTable and PetAt.
 	PET [][]float64
+	// Forcing is the sun, the orbit and the air's carbon the air's year is
+	// worked out under: the map's on a globe, and the zero one, today's, on
+	// a valley.
+	Forcing Forcing
 }
 
 // The degrees the evaporation table covers. Colder than petLo the air takes
@@ -65,61 +70,79 @@ const budykoShape = 2.6
 // pet, both in mm: Budyko's curve in Fu's form. Where the air could take
 // little, it takes nearly all it could; where it could take a great deal, it
 // takes nearly all the rain. It is never more than either.
+//
+// The curve meets p from under it, and in floating point it can cross by a
+// rounding where the air could take far more than falls: a runoff a
+// rounding under nothing, whose discharge the water's cutting took the root
+// of, and a planet's ground went to NaN from the one tile. So it is held to
+// its own promise.
 func Fu(p, pet float64) float64 {
 	if p <= 0 || pet <= 0 {
 		return 0
 	}
 	phi := pet / p
-	return p * (1 + phi - math.Pow(1+math.Pow(phi, budykoShape), 1/budykoShape))
+	return math.Min(math.Min(p, pet), p*(1+phi-math.Pow(1+math.Pow(phi, budykoShape), 1/budykoShape)))
 }
 
 // PetTable is how much water the air at a latitude could take up in a year,
-// for each whole degree of the year's mean from petLo to petHi: Hargreaves's
-// reading (Hargreaves and Samani, 1985), month by month, with the sun's reach
-// at the top of the air by FAO-56 and the year's swing turning over south of
-// the equator as the temperature does.
-func PetTable(lat float64) []float64 {
-	const (
-		solar = 0.0820 // MJ a square metre a minute
-		span  = tableRange
-	)
+// under forcing f, for each whole degree of the year's mean from petLo to
+// petHi and on ground of each of petConts: Hargreaves's reading (Hargreaves
+// and Samani, 1985), month by month of the calendar, with the sun's reach at
+// the top of the air the energy balance's (see insolation) and the year's
+// swing and lag the ground's - SwingUnder and LagUnder at that latitude - so
+// that the evaporation's summer is the summer the ground and the wind have.
+//
+// It used to keep a year of its own: the valley's twelve degrees, growing
+// with the latitude up to Temperate and no further, the same over the sea as
+// inside a continent, and peaking on the same day everywhere. That was the
+// year the rivers were tuned on; read at the ground's, the high latitudes'
+// longer warm months took up more of the rain, and moving it was left as a
+// question for the water. It is answered here, with the rest of the year.
+func PetTable(f Forcing, lat float64) []float64 {
+	const span = tableRange
+	f = f.OrDefault()
 	phi := lat * math.Pi / 180
-	// The evaporation keeps the year it was calibrated on - the temperate
-	// swing capped at Temperate's - and not solarSwing's, which the ground and
-	// the wind read. Read at the growing swing, the high latitudes' longer
-	// warm months took up more of the rain, and on eight small globes the
-	// discharge exceedance exponent went from 0.447 to 0.502, out of the real
-	// networks' 0.40-0.46 (Rodriguez-Iturbe et al., 1992) while the drainage
-	// area's stayed in it: the rivers are tuned to this year, and moving it is
-	// a question for the water and not for the thresholds.
-	hemi := math.Copysign(math.Min(1, math.Abs(lat)/Temperate), lat)
-	var ra, swing [12]float64
-	days := [12]float64{31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-	day := 0.0
+	// The sun on the middle day of each month, in MJ a square metre a day of
+	// the sun's, and how many of the sun's days a month of the calendar is.
+	const months = Year / Month
+	var ra [months]float64
 	for m := range ra {
-		j := day + days[m]/2
-		day += days[m]
-		d := 0.409 * math.Sin(2*math.Pi*j/365.25-1.39)
-		dr := 1 + 0.033*math.Cos(2*math.Pi*j/365.25)
-		ws := math.Acos(math.Max(-1, math.Min(1, -math.Tan(phi)*math.Tan(d))))
-		ra[m] = 24 * 60 / math.Pi * solar * dr * (ws*math.Sin(phi)*math.Sin(d) + math.Cos(phi)*math.Cos(d)*math.Sin(ws))
-		swing[m] = hemi * Swing * math.Cos(2*math.Pi*(j-196)/365.25)
+		ra[m] = f.insolation(phi, float64(m*Month)+Month/2.0) * 86400 / 1e6
 	}
-	out := make([]float64, petHi-petLo+1)
-	for k := range out {
-		mean := float64(petLo + k)
-		total := 0.0
-		for m := range ra {
-			t := mean + swing[m]
-			if t <= 0 || ra[m] <= 0 {
-				continue
-			}
-			total += 0.0023 * (ra[m] / 2.45) * (t + 17.8) * math.Sqrt(span) * days[m]
+	sunDays := float64(Month) * secondsPerYear / 86400 / Year
+	out := make([]float64, len(petConts)*petRows)
+	for c, cont := range petConts {
+		swing, lag := SwingUnder(f, lat, cont), LagUnder(f, cont)
+		var t [months]float64
+		for m := range t {
+			t[m] = swing * SeasonAt(m*Month+Month/2, lag)
 		}
-		out[k] = total
+		table := out[c*petRows : (c+1)*petRows]
+		for k := range table {
+			mean := float64(petLo + k)
+			total := 0.0
+			for m := range ra {
+				tm := mean + t[m]
+				if tm <= 0 || ra[m] <= 0 {
+					continue
+				}
+				total += 0.0023 * (ra[m] / 2.45) * (tm + 17.8) * math.Sqrt(span) * sunDays
+			}
+			table[k] = total
+		}
 	}
 	return out
 }
+
+// petConts are the continentalities PetTable works a row's evaporation out
+// on - the open sea, the middle and a continent's heart - and PetAt reads
+// between. The swing is a line in the continentality and the evaporation
+// nearly one in the swing, bent where a month crosses freezing, so three are
+// enough.
+var petConts = [...]float64{0, 0.5, 1}
+
+// petRows is the length of one continentality's table.
+const petRows = petHi - petLo + 1
 
 // The day's range of temperature Hargreaves's reading takes the sun's
 // strength from. The table is read at tableRange, and each place at its own:
@@ -143,8 +166,18 @@ func Diurnal(cont, dryness float64) float64 {
 	return math.Sqrt(span / tableRange)
 }
 
-// PetAt reads a row's evaporation table at a year's mean of t degrees.
-func PetAt(table []float64, t float64) float64 {
+// PetAt reads a row's evaporation tables at a year's mean of t degrees, on
+// ground cont continental.
+func PetAt(tables []float64, t, cont float64) float64 {
+	c := clamp01(cont) * float64(len(petConts)-1)
+	k := min(int(c), len(petConts)-2)
+	lo := petRow(tables[k*petRows:(k+1)*petRows], t)
+	hi := petRow(tables[(k+1)*petRows:(k+2)*petRows], t)
+	return lo + (hi-lo)*(c-float64(k))
+}
+
+// petRow reads one continentality's table at a year's mean of t degrees.
+func petRow(table []float64, t float64) float64 {
 	f := math.Max(0, math.Min(float64(len(table)-1), t-petLo))
 	k := int(f)
 	if k >= len(table)-1 {
@@ -153,13 +186,9 @@ func PetAt(table []float64, t float64) float64 {
 	return table[k] + (table[k+1]-table[k])*(f-float64(k))
 }
 
-// springDay is the day of the calendar year, from the first of January, that
-// tick zero - the spring equinox - falls on; and firstRain the rain, mm a year,
-// the land is taken to have before any has been worked out.
-const (
-	springDay = 80.0
-	firstRain = 700.0
-)
+// firstRain is the rain, mm a year, the land is taken to have before any has
+// been worked out.
+const firstRain = 700.0
 
 // annualRain is the rain, mm a year, a budget last gave cell i, or nothing
 // where it has not been worked out.
@@ -182,6 +211,17 @@ func cellCont(e *Env, i int) float64 {
 	return e.Cont[i]
 }
 
+// yearCont is the continentality the evaporation's year over air cell i is
+// read at: the country round it on a globe, and on a valley the middling
+// ground whose year is the valley's own, Swing (see ContMiddling), so that
+// the water a valley's air takes up has the summer its ground has.
+func yearCont(e *Env, i int) float64 {
+	if !e.Wrap {
+		return ContMiddling
+	}
+	return e.Cont[i]
+}
+
 // RainCells is the air's half of the rain on a map m under the air a and the
 // winds w, whose budget it works out and keeps: what each phase's air rains on
 // low ground, carried, in mm a year on the air cells; what the ground's lift
@@ -200,7 +240,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 		temp[k] = e.AirTemp(phaseSin[k])
 		sst[k] = make([]float64, n)
 		for cy := 0; cy < e.H; cy++ {
-			season := seasonTemp(e.hemi[cy], phaseSin[k], 0)
+			season := e.seasonTemp(cy, phaseSin[k], 0)
 			for cx := 0; cx < e.W; cx++ {
 				i := cy*e.W + cx
 				sst[k][i] = e.Mean[cy] + season + seaOverAir
@@ -217,7 +257,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
 	for k := range Phases - 1 {
-		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground)
+		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k])
 	}
 	lift[3] = lift[1]
 	liftCell := func(k int) []float64 {
@@ -232,13 +272,21 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 		liftCells[k] = liftCell(k)
 	}
 	liftCells[3] = liftCells[1]
-	var stable []float64
-	if e.Coast != nil {
-		stable = make([]float64, n)
-		for i := range stable {
-			stable[i] = inversion(e.Coast[i])
+	// How much of its rain the air keeps: held down by the cold water under
+	// it, on a globe, and under the subtropical highs capped by the
+	// trade-wind inversion, which its convection goes no higher than (see
+	// circulation.go).
+	var stable [Phases][]float64
+	for k := range Phases - 1 {
+		stable[k] = make([]float64, n)
+		for i := range stable[k] {
+			stable[k][i] = lidKeeps(lid(e.Subsides[k][i]), temp[k][i])
+			if e.Coast != nil {
+				stable[k][i] *= inversion(e.Coast[i])
+			}
 		}
 	}
+	stable[3] = stable[1]
 
 	// What the land could send back to the air in a year, and how that is
 	// shared out over the phases: as Hargreaves shares it, by the sun at the
@@ -252,7 +300,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 		row := min(cy*e.Cell+e.Cell/2, m.H-1)
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			pet[i] = PetAt(a.PET[row], e.Mean[cy]-Lapse*e.Height[i])
+			pet[i] = PetAt(a.PET[row], e.Mean[cy]-Lapse*e.Height[i], yearCont(e, i))
 			if r := annualRain(w.Budget, i); r > 0 {
 				pet[i] *= Diurnal(cellCont(e, i), pet[i]/r)
 			} else {
@@ -263,8 +311,8 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 			for k := range Phases {
 				if t := temp[k][i] - Lapse*e.Height[i]; t > 0 {
 					// The autumn's sun is the spring's.
-					day := springDay + float64(dayOf[min(k, 2)])*365.25/Year
-					each[k] = math.Max(0, insolation(e.lat[cy]*math.Pi/180, day)) * (t + 17.8)
+					day := float64(dayOf[min(k, 2)])
+					each[k] = math.Max(0, e.forcing.insolation(e.lat[cy]*math.Pi/180, day)) * (t + 17.8)
 				}
 				total += each[k]
 			}
@@ -318,7 +366,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64) (carried, lift [
 			}
 			budget[k] = e.vapour(vapourIn{
 				u: w.U[k], v: w.V[k], temp: temp[k], sst: sst[k],
-				landEvap: landEvap[k], stable: stable, oro: oro, w: budget[k].w,
+				landEvap: landEvap[k], stable: stable[k], oro: oro, w: budget[k].w,
 			})
 		})
 		budget[3] = budget[1]
