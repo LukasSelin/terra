@@ -401,7 +401,7 @@ func (g *Grid) readFeatures() {
 
 	// The sea's currents, gyres and upwellings, read off the currents the
 	// weather worked out. See features_sea.go.
-	f.All, stack = g.readSea(f, f.All, stack, g.winds)
+	f.All, stack = g.readSeaFeatures(f, f.All, stack, g.winds)
 
 	// The woods: forest, joined where it touches.
 	f.wood = make([]FeatureID, n)

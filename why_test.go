@@ -121,24 +121,23 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // crust was broken into fractures before its plates were grown (see
 // fractureWall) and every plate on the map came out somewhere else; then tile
 // 2628, raised by an arc in the first epoch by some 11 km, until the fractures
-// were bent by the plate spacing and not the tile (see fractureBend); then
-// tile 987, raised by an arc in the first epoch by some 12 km, until the air
-// came to swing the energy balance's year (see atmos.Env.seasonTemp) and the
-// sea laid lime over its pluton; then tile 1307, raised in the first epoch
-// by some 12 km, until the belts of the air were worked out from the
-// circulation (see atmos.Env.beltsAt) and the lime came over 1307's pluton
-// instead, and tile 987 was the one again. Three branches each moved it on
-// their own - the soil holding its water from one season to the next (see
-// soilwater.go) to tile 1791, the crust floating on its thickness (see
-// isostasy.go) to tile 1228 - and on the integration branch, where they all
-// meet, 987 is a collision's of 48 million years ago, 1228, 1307 and 1791
-// lie under lime, and the relations across the systems (relations_land.go)
-// name a range's rain shadow on every pluton an arc raised in the first
-// epoch: the rain's chain gains that link. Tile 1149, the lowest such tile,
-// raised by an arc in the first epoch by some 12.7 km, is the one now.
+// were bent by the plate spacing and not the tile (see fractureBend); then tile
+// 987, raised by an arc in the first epoch by some 12 km, until the crust
+// floated on its thickness (see isostasy.go) and the ancient valley's plates
+// met elsewhere; then tile 1228, raised by an arc in the first epoch by some
+// 17 km, until the history's ground came down by its relief and not by
+// stream power (see denude.go), and no tile an arc raised in the first epoch
+// was worn down far enough to bare the granite under it; then tile 2232,
+// the oldest of the arc's tiles that had, raised by an arc fifty-two million
+// years before the present by some 11 km, until a rift split a plate into
+// halves (see split) and the ancient valley's plates met elsewhere again.
+// Tile 667 is now the oldest of them: raised by an arc in the first epoch,
+// by some 9 km. On main's rock stack (the history's heights, the rift fix and
+// the poured sea) the air reaching it crosses a range that wrings a rain
+// shadow's worth out of it, so its rain's chain ends in RainShadow too.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(1149)
+	p := g.PosOf(667)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -157,7 +156,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 1149 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 667 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {

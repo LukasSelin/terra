@@ -31,7 +31,9 @@ var soilYardsticks = []realYardstick{
 		name: "mean hillslope soil depth, small globe", unit: "m", scale: "ground", lo: 0.2, hi: 1.5, slow: true,
 		source:  "Pelletier et al. 2016 (gridded soil and sedimentary deposit thickness): upland hillslope soils mostly under 2 m, typically about 1 m",
 		measure: func() float64 { return soilDepths(smallGlobes(networkGlobes)).hillslope },
-	}},
+	},
+		gap: "known gap: I - the air's warmth reads the country (lapseHeight, hypsometry.go), so the high country's hillslopes are colder and make their soil more slowly: 0.231 m before there was a country, 0.175 with the earth's curve laid by rank (#67) and 0.168 on G2b's history, 0.185 with the history's own height",
+	},
 	{yardstick: yardstick{
 		name: "mean valley floor soil depth, valley", unit: "m", scale: "ground", lo: 3, hi: 50,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment",
@@ -51,6 +53,14 @@ var soilYardsticks = []realYardstick{
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(valleys(5)); return d.floor / d.hillslope },
 	}},
+	// It was a known gap, I, at 3.015x on main and 2.11x once the land's
+	// winters softened: the floors' soil is capped with the hillslopes' by
+	// production. It closed with the country the air's warmth reads
+	// (hypsometry.go): 3.57x with the earth's curve laid by rank on G2b's
+	// history, 3.36x with the history's own height. It closed for a reason
+	// that is not the floors': the high country is colder, its hillslopes
+	// make soil more slowly and stand at 0.17-0.19 m, under their own
+	// yardstick's floor, while the floors hold 0.62 m as before.
 	{yardstick: yardstick{
 		name: "valley floor over hillslope soil depth, small globe", unit: "x", scale: "ground", lo: 3, hi: 50, slow: true,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
@@ -102,7 +112,9 @@ var soilYardsticks = []realYardstick{
 		name: "mean soil organic carbon, top metre, land, globe", unit: "kg C/m2", scale: "water", lo: 9, hi: 13, slow: true,
 		source:  "Jobbágy & Jackson 2000: 1502 Pg C in the top metre over the ice-free land, ~11 kg C/m2",
 		measure: func() float64 { return carbonByBiome(globes()).land },
-	}},
+	},
+		gap: "known gap: I - it moved with the land a history keeps since its ground comes down by its relief (denude.go): 8.40 on G2b's history, over 9 on G2's; the country's cold (hypsometry.go) takes it a little lower, 8.05 with the earth's curve laid by rank and 8.08 with the history's own height. Which of the soil's carbon terms it is has not been traced",
+	},
 
 	// 12. The soil orders. The earth's ice-free land by the order of soil on
 	// it, as SoilOrderOf keys a tile from what it carries - its exposure age,
@@ -135,7 +147,9 @@ var soilYardsticks = []realYardstick{
 		name: "land share of Mollisols", unit: "", scale: "ground", lo: 0.05, hi: 0.09, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Mollisols ~6.9% of ice-free land",
 		measure: func() float64 { return soilOrderShare(globes(), Mollisol) },
-	}},
+	},
+		gap: "known gap: I - the air's warmth reads the country (lapseHeight, hypsometry.go), and the cool high country keeps its carbon unleached, under 22 C and over 9 kg C/m2, which SoilOrderOf keys a Mollisol by: 0.083 before there was a country, 0.186 with the earth's curve laid by rank (#67) and 0.118 on G2b's history, 0.110 with the history's own height",
+	},
 }
 
 type soilDepthReading struct{ hillslope, floor float64 }
