@@ -62,6 +62,15 @@ import (
 // the overriding plate - the Ganges in front of the Himalaya, on India; the
 // Molasse in front of the Alps, on Europe - and the plate that stays up
 // floats its own columns over the reach of the bend (forelands).
+//
+// And what fills a basin is what arrives in it. The beds an epoch leaves were
+// laid at a fixed rate wherever the ground lay low; they are what the weather
+// laid on the land and what the shelves took off the rivers' mouths now,
+// metre for metre (keepBook), sorted on the way: the sand settles out within
+// a few tens of kilometres of a mouth and the mud is carried out over the
+// shelf and down the slope (shelfReach), and on the land a load's sand is
+// worn finer the further it has come (fineAt). A bed is a sandstone or a
+// shale by its own grains (laidAs), and not by its rank among the world's.
 
 // rifted is what tile i's crust keeps of being stretched: stretch is β, the
 // length it has been stretched to over the length it had, nought read as
