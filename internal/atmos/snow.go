@@ -25,8 +25,8 @@ import "math"
 // models of the ice sheets take them (Reeh, 1991; Calov and Greve, 2005).
 // The share of the precipitation that falls as snow is then the mean over
 // those days of a ramp from all snow at snowCold to all rain at snowWarm,
-// and the degree-days are the mean of the days' warmth over freezing: both
-// exact for a normal scatter, so the steps cost nothing for being exact.
+// and the degree-days are the mean of the days' warmth over freezing, both
+// of them exact for a normal scatter.
 //
 // Snow that outlasts the year is a glacier. Where more snow falls in a year
 // than the year can melt, the pack never melts out and the ground under it

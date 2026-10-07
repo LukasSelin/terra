@@ -6,6 +6,114 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Land L2: snowpack and glaciers on today's map (#50)
+
+**What this is.** On `claude/land-snow`, stacked on `claude/land-soil-water`
+(L1, #74) at 104d710. A phase's precipitation falls as snow on its cold
+days and lies, and melts by degree-days into L1's bucket in the fortnight it
+melts in (`internal/atmos/snow.go`, `atmos.BucketCold`). Each of a phase's
+six steps reads the year's sine at its own place, with the days scattered
+normally about it by 3.5 °C: the snow's share is the mean of a ramp from all
+snow at 0 °C to all rain at 2 °C (Jennings et al. 2018), the melt 3 mm a
+degree-day (Hock 2003), both exact for the normal scatter and read off a
+table. The air takes its PET off the snow in proportion to the ground the
+snow covers, tanh(SWE/10 mm) (Roesch et al. 2001), and off the soil for the
+rest. Snow that outlasts the year is a glacier: its balance is what the
+year lays down less what it melts and the air takes, the surplus goes to
+the rivers with the melt, and `Barren` is that balance over nothing, in
+place of Ohmura's line. The air cells' buckets in the vapour budget take
+the same snow. `Grid.SnowWater`, `SnowCover`, `MeltIn` and `IceBalance`
+keep it, 52 bytes a tile. No ice flow (G8).
+
+**The digest.** Rewritten, as meant: valley 7e92ba58566301c4, ancient
+1fbbf274d45930f3, globe128 3194a451a139d1f9.
+
+**The heap.** Budget rewritten: valley 10.3 MiB in 1310 allocations (10.1
+in 1308), ancient 56.7 MiB in 8787 (56.6 in 8791), globe128 398.7 MiB in
+29417 (397.8 in 29092): the four phases' snow, cover and melt and the
+year's ice, kept per tile. The full globe allocates 11.02 GB against 10.99.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, three runs each, under other
+sessions' load: Generate 54.8-56.2 s on 104d710 and 54.8-60.5 here; rainOn
+11.9-12.2 against 13.2-13.9 (+13 %); weather 14.7-15.2 against 16.0-17.1;
+stage.ground 43.1-45.4 against 43.7-47.8. The first cut doubled rainOn
+(25 s): the exponentials and error functions of every step, the snow spun
+two years from the spring, the PET-less winter's tanh and math.Max's call.
+A table at 1/64 of a degree, a year run from the end of the summer (most
+packs are steady in the one year read), the cover only where it is read or
+the air takes something, and the builtin max and min brought it here.
+`scripts/perf.sh check` was not run on a quiet machine.
+
+**What it reads.**
+- The snow's equilibrium line is Ohmura's: the precipitation at which a
+  year's snow just lasts is 0.74-1.35 of Ohmura, Kasser and Funk's (1992)
+  over summers of 0-6 °C where the year swings 10 °C or more; a maritime
+  year of 6 °C wants up to twice their snow at a 6 °C summer
+  (`TestSnowLineIsOhmuras`). Lifting each land tile of small globes 1-2 till
+  its snow outlasts the year puts the ice's line 188 m over Ohmura's on the
+  median, quartiles 88 and 338 m (`TestTheIceIsOhmuras`).
+- Snow-fed land (melt half its runoff or more): 0.973 of the globe's and
+  0.902 of the small globes' peaks in its hemisphere's spring or summer
+  (Barnett et al. 2005; new yardstick, 0.8-1). A unit continental year,
+  mean -2 °C, swing 16, 600 mm even: runoff 0/323/36/32 mm by phase
+  (winter, spring, summer, autumn) with snow, 132/147/37/74 without.
+- The north's land snow-covered, by phase (winter, spring, summer,
+  autumn): globe 0.407, 0.276, 0.041, 0.210; small globes 0.430, 0.259,
+  0.030, 0.193. The earth's: some 46 of 100 million km2 in February and
+  2-3 in August (Robinson & Frei; Rutgers Global Snow Lab), 0.46 and 0.03.
+  By band on the globe, 40-50 N is 0.73 covered in the winter and 50-60 N
+  0.98.
+- Ice: none on any globe, by the balance or by Ohmura's line, as on
+  104d710 (the earth: a tenth of the land with the ice sheets, a two
+  hundredth without). The energy balance's poles are -10.5 °C and no
+  globe's ground stands high enough; a gap of the air and the rock, logged.
+- Where the year freezes, the land's runoff over what Budyko-Fu leaves of
+  its rain: small globes 1.098 without snow, 1.042 with it; globe 1.035 and
+  0.995; valley 0.988 and 0.972. Half of L1's cold surplus was the winter's
+  rain filling a bucket the air took nothing from.
+
+The yardsticks, `TestRealNumbers|TestTheRealWorld`, 104d710 against this:
+
+| yardstick | cfdd360 | L1 104d710 | L2 | real |
+|---|---|---|---|---|
+| Flint's law fit R2, small globe | 0.960 pass | 0.832 fail | **0.957 pass** | 0.85-1 |
+| channel concavity, 2x less 1x | 0.085 pass | 0.186 fail | **0.207 fail** | -0.1-0.1 |
+| land relief intermittency C1 | 0.0867 pass | 0.0672 fail | **0.0731 fail** | 0.08-0.18 |
+| channel concavity, small globe | 0.3499 fail | 0.245 fail | 0.293 fail | 0.35-0.6 |
+| drainage area exceedance, small globe | 0.500 fail | 0.468 fail | 0.459 pass | 0.39-0.46 |
+| ridge-valley wavelength, small globe | 400 m fail | 178 m pass | 400 m fail | 24-224 |
+| midlatitude over subtropical rain, globe | 0.959 fail | 0.946 fail | 0.963 fail | 1.1-2 |
+| mean land rain, 2x over 1x | 1.260 fail | 1.251 fail | 1.250 fail | 0.85-1.15 |
+| land share of Aridisols | 0.065 fail | 0.082 fail | 0.084 fail | 0.09-0.15 |
+| land share of Gelisols | 0.117 fail | 0.121 fail | 0.113 fail | 0.06-0.11 |
+| Hack exponent, small globe | - | 0.576 pass | 0.548 pass | 0.54-0.6 |
+| seasonal land peaking in or after its wet season | - | 0.998 pass | 0.898 pass | 0.8-1 |
+| land evaporation over land rain, globe | - | 0.584 pass | 0.593 pass | 0.55-0.70 |
+| Budyko-Fu ω fitted to the land, globe | - | 2.34 pass | 2.46 pass | 1.8-3.6 |
+| snow-fed land peaking in spring or early summer (new) | - | - | 0.973 pass | 0.8-1 |
+
+Of L1's three new failures, Flint's fit is back (0.957 against cfdd360's
+0.960); C1 is two fifths of the way back; the concavity's difference between
+the scales moved further off. The one new failure, the ridge-valley
+wavelength, is the reading cfdd360 had: the spectrum's peak over its power
+law is an argmax over 30 bins, and 400 m is the window's longest admissible
+wavelength, where it sat before L1 moved it. The seasonal land's share
+peaking in or after its wet season falls from 0.998 to 0.898 because
+snowmelt rivers whose wet season is the autumn or the winter peak in the
+spring, which Dettinger & Diaz's own caveat ("snowmelt rivers later") says
+they do.
+
+**The tests it moved.** The ancient chain reads tile 1871, since lime was
+laid over 1791's pluton. The tide's flats are read on small globe 8 (0, 0, 0,
+0, 0, 0, 3 and 6 flats on globes 1-8). `TestSeasonalRiversRunAfterTheRain`
+reads only tiles no snow lies on, since a mild winter's snow sends its water
+to the spring and the phases either side of the wet one are no longer
+alike; its unfrozen test also took the hemisphere's sign off the swing,
+which counted the south's tiles as unfrozen by their mean plus their swing.
+After over before reads 1.76.
+
+---
+
 ## 2026-10-07 - Land L1: soil moisture and the seasons of water (#49)
 
 **What this is.** On `claude/land-soil-water`, stacked on
