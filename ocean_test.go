@@ -163,7 +163,9 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // rise was laid across it, so that the trades blow hardest where the earth's
 // do (#88; see atmos's hadley); and when the sea and the air were solved
 // together (#28), the air's pressure reading the sea's warmth and the
-// currents worked out again under the wind it makes. And the warmth is the
+// currents worked out again under the wind it makes; and when the heat the
+// ground gives the tropical air, and the waves the westerlies stand, were
+// added to the wind (#35; see atmos's waves). And the warmth is the
 // kept temperature over its latitude's mean, held to seaWarmMost, and to
 // nothing over it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
@@ -178,7 +180,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xab03a8340eecd4be); got != want {
+	if got, want := h.Sum64(), uint64(0x6eaeaf823e1689b2); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost

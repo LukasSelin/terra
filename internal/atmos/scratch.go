@@ -201,6 +201,20 @@ const (
 	slotsWalker
 )
 
+// The waves (waves.go), before the wind: the ground's height smoothed, in
+// the shared work, and in each phase's the waves' forcing and their
+// streamfunction, beside the heating and Gill's answer to it in the Walker
+// circulation's slots.
+const (
+	slotWaveHeight = slotsBoth + iota
+	slotWaveBlur
+)
+
+const (
+	slotWaveForce = slotWalkBlur
+	slotWavePsi   = slotWalkWarm
+)
+
 // The rain: RainCells and orographic phase by phase, and the vapour's budget
 // within each; and RainCells all the phases at once.
 const (
