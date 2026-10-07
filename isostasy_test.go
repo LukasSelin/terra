@@ -88,7 +88,7 @@ func TestARangeStandsOnARoot(t *testing.T) {
 		}
 	}
 	g.isostasy(cr, 0, nil, 0)
-	at := func(x int) float64 { return g.Height[64*256+x] - levelOf(continentCrust, false, 0) }
+	at := func(x int) float64 { return g.Height[64*256+x] - levelOf(continentCrust, false, 0, 0) }
 	axis, beside := at(128), at(128+6+3)
 	t.Logf("a belt 13 tiles wide thickened by %.0f km: its axis stands %.0f m up, %.0f m on Airy's alone; %.0f m beside it",
 		by/km, axis, airyRise*by, beside)

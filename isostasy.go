@@ -152,11 +152,15 @@ var flexuralParameter = math.Pow(4*flexuralRigidity/(mantleDensity*gravity), 0.2
 // where ocean says so and of age years: Airy's for a continent, about seaCrust,
 // and GDH1's for a floor, about oceanCrust. Both are read under water where
 // they stand below the sea.
-func levelOf(thick float64, ocean bool, age float64) float64 {
+//
+// warm is how far, in metres under water, a stretched continent still stands
+// over where it will once the heat the stretching brought up under it is
+// lost (see subside.go). A floor's own heat is in its age.
+func levelOf(thick float64, ocean bool, age, warm float64) float64 {
 	if ocean {
 		return seaDatum - floorDepth(age/myr) + wetRise*(thick-oceanCrust)
 	}
-	e := airyRise * (thick - seaCrust)
+	e := airyRise*(thick-seaCrust) + waterLoad*warm
 	if e < 0 {
 		e *= mantleDensity / (mantleDensity - seaDensity)
 	}
@@ -176,7 +180,7 @@ func (cr *crust) ageAt(i, epoch int) float64 {
 
 // levelAt is the height tile i's crust floats at in epoch epoch.
 func (cr *crust) levelAt(i, epoch int) float64 {
-	return levelOf(float64(cr.thick[i]), cr.ocean[i], cr.ageAt(i, epoch))
+	return levelOf(float64(cr.thick[i]), cr.ocean[i], cr.ageAt(i, epoch), float64(cr.rift[i].warm))
 }
 
 // layCrust gives the first plates their crust and floats them on it. The two
@@ -199,6 +203,11 @@ func (cr *crust) layCrust(g *Grid) {
 	}
 	for i := range g.Tiles {
 		cr.thick[i] = float32(t[i])
+	}
+	// The margins are continent thinned by the rifting that opened the first
+	// oceans, and are still sinking as it cools. See subside.go.
+	cr.firstMargins(g)
+	for i := range g.Tiles {
 		cr.sag[i] = 0
 		by := cr.levelAt(i, 0)
 		g.Height[i] += by
@@ -233,13 +242,33 @@ func (g *Grid) isostasy(cr *crust, epoch int, worn []float64, relax float64) {
 			cr.local[i] = g.Height[i] + float64(cr.sag[i]) - cr.levelAt(i, epoch)
 		}
 	})
-	bend := cr.flexure(g, cr.local)
+	// Where a collision has broken the plates, the plate that stays up is not
+	// bent by the range on the other: it floats its own columns. See
+	// forelands.
+	load := cr.local
+	if cr.broken {
+		if len(cr.load) != n {
+			cr.load = make([]float64, n)
+		}
+		load = cr.load
+		for i := range load {
+			load[i] = cr.local[i]
+			if cr.fore[i] < 0 {
+				load[i] = 0
+			}
+		}
+	}
+	bend := cr.flexure(g, load)
 	for i := range g.Tiles {
+		b := bend[i]
+		if cr.broken && cr.fore[i] < 0 {
+			b = cr.local[i]
+		}
 		if worn != nil && worn[i] > 0 && !cr.ocean[i] && g.Height[i] > g.base {
 			cr.eroded += worn[i]
-			cr.rebound += float64(cr.sag[i]) - bend[i]
+			cr.rebound += float64(cr.sag[i]) - b
 		}
-		sag := bend[i] + relax*(cr.local[i]-bend[i])
+		sag := b + relax*(cr.local[i]-b)
 		rise := float64(cr.sag[i]) - sag
 		cr.sag[i] = float32(sag)
 		g.Height[i] += rise
