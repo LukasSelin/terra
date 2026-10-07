@@ -129,7 +129,7 @@ var shapeYardsticks = []realYardstick{
 	// mostly quiet shelves. It read 1.88 until the fractures bent by the plate
 	// moved every coast, then 1.24 (2.00, 0.94 and 1.23 globe by globe), and
 	// 1.37 on the rift's halves (#98). With the sea standing where its water
-	// fills the basins (seawater.go) it reads 1.84, inside the band by a
+	// fills the basins (seawater.go) it reads 1.85, inside the band by a
 	// hair: a point reading off three globes, which can fall out again.
 	},
 	{yardstick: yardstick{
