@@ -221,29 +221,7 @@ func TestWornRiversKeepFlintsLaw(t *testing.T) {
 	if len(xs) < 4 {
 		t.Fatalf("only %d bins of river to read", len(xs))
 	}
-	theta := -fit(xs, ys)
-	if flintGap > 0 && theta >= flintGap && theta < 0.35 {
-		t.Logf("known gap (L2-L4, closed by L5, #99): worn rivers fall as area^-%.3f; real rivers are 0.35 to 0.7", theta)
-		return
-	}
-	if flintGap > 0 && theta >= 0.35 && theta <= 0.7 {
-		t.Errorf("worn rivers fall as area^-%.3f, in the band: the known gap has closed, so take flintGap off", theta)
-	}
-	if !(theta >= 0.35 && theta <= 0.7) {
+	if theta := -fit(xs, ys); !(theta >= 0.35 && theta <= 0.7) {
 		t.Errorf("worn rivers fall as area^-%.3f; real rivers are 0.35 to 0.7", theta)
 	}
 }
-
-// flintGap is the least concavity TestWornRiversKeepFlintsLaw takes as its
-// known gap, or nothing where there is none.
-//
-// Known gap (L2-L4; L5, #99, takes it off): the snow (L2) holds the year's
-// cold-season water and lets it go as melt, and the rivers' discharge
-// through the forty ages moves with it; the three valleys' concavity reads
-// 0.345 on L2 and 0.347 on L3 and L4, where L1 read 0.368. Until L5 the
-// ground's critical shear and creep are two constants per terrain; L5 reads
-// them off what grows on the ground, which holds the small hillslope
-// channels and steepens them against the trunks, and reads 0.385. The gap
-// holds the worst reading on the stack, 0.344: a concavity under it fails,
-// and one back in the band fails too, so that the marker comes off.
-const flintGap = 0.344
