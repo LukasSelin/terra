@@ -6,6 +6,44 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-06 - Ocean yardsticks
+
+**What this is.** Test code only, on `claude/ocean-yardsticks` from
+`claude/ocean-fields` (O1): `realism_ocean_test.go`, issue #17. One test per
+reading of `docs/ocean-model-plan.md`, "What it is measured against", each
+read on yardWorld's globe (seed 1) on the air's cells and logged every run,
+area-weighted wherever it is a share or a mean.
+
+**The readings, on the present sea.**
+
+| Reading | Got | Real | |
+| --- | --- | --- | --- |
+| Sverdrup closure, gyre current (6 gyres together) | 0.885; each 0.79-1.01 | 0.8-1.25; each 0.5-2 | pass |
+| Western boundary peak, N / S | 1.84 / 0.86 m/s, 2.0x / 2.4x the interior | 0.5-2 m/s, over the interior | pass |
+| Eastern boundary cold, 15-30N | -3.32 °C | -3 to -8 | pass |
+| Eastern boundary cold, 15-30S | -2.83 °C | -3 to -8 | known gap, #21 |
+| Ocean heat transport (gyres only) | +0.69 PW at 35N, -0.95 at 35S, peak 1.47 | ~2 PW; 22% / 8% at 35° | skip, #22 |
+| Circumpolar transport | no ring of sea on seed 1 | 130-175 Sv | skip, #19 |
+| Throughflow, three largest islands | 6-23 Sv a passage | 16 ± 4 Sv | skip, #19 |
+| Equatorial west-east SST | -0.04 °C | 4-6 | skip, #21 |
+| Sea ice, area-weighted | 5.48% | 3-8% | pass |
+| Subtropical salinity | no field | ~37 psu | skip, #23 |
+| Overturning | no field | 17.2 Sv, 1.22 PW | skip, #24 |
+
+The surface current is the gyre's plus the wind's Ekman drift over 50 m,
+and the drift runs poleward under the trades across the whole ocean: read
+with it, every gyre closed negative (-0.65 together). The closure reads the
+gyre's own current, the kept current less the drift worked out again from
+the mean wind (`ekmanDrift`).
+
+**Cost.** Nothing new is made: the tests read the full globe the climate and
+polar tests already share, and skip under `-short`. 13 s on their own with
+the history kept, 54 s with a fresh one; nothing in the whole suite.
+
+**The world.** Unchanged: `TERRA_DIGEST=check` passes. No heap, no timing.
+
+---
+
 ## 2026-10-06 - Two short-tier tests that read the draw
 
 **What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at
