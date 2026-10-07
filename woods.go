@@ -116,7 +116,7 @@ func (g *Grid) WoodsAt(p geom.Pos) float64 {
 		if g.vegLaid() {
 			return g.woodsOn(p)
 		}
-		if len(g.warm) == len(g.Tiles) && atmos.Biotemperature(g.meanOn(i, g.Height[i]), float64(g.swing[i])) < atmos.HoldridgePolar {
+		if len(g.warm) == len(g.Tiles) && atmos.Biotemperature(g.meanOn(i, g.Elevation(i)), float64(g.swing[i])) < atmos.HoldridgePolar {
 			return 0
 		}
 		return clamp01(climateLine * g.waterRatio(i))

@@ -151,8 +151,9 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // warmth they make, and keeping them changes it not at all: the hash is of
 // Warm and Coast on twoOceans as main made them before they were kept
 // (53eb8bf), taken again when the air came to swing the energy balance's year
-// (see atmos.Env.seasonTemp), which moves the wind the currents are driven
-// by. And the warmth is the kept temperature over its latitude's
+// (see atmos.Env.seasonTemp) and when its belts came to be placed by the
+// circulation (see atmos.Env.beltsAt), each of which moves the wind the
+// currents are driven by. And the warmth is the kept temperature over its latitude's
 // mean, held to seaWarmMost.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
@@ -166,7 +167,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0x5c27094618a35742); got != want {
+	if got, want := h.Sum64(), uint64(0x37e26f8c491bf23b); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost
@@ -188,20 +189,28 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 // The water a gyre drives toward the equator across an ocean comes back
 // toward the pole in the narrow current against its western shore: north in
 // the north, south in the south. The interior drifts the other way, slower.
+//
+// It is read from twenty-five degrees to forty. It was read from twenty, but
+// the interior turns poleward south of twenty-five, under the trades' side
+// of the gyre, and from twenty to forty the two halves came to some three
+// ten-thousandths of a metre a second either way: when the belts came to
+// follow the balance's ITCZ, whose year's mean lies some two fifths of a
+// degree south for the sun's being nearer in the south's summer, the south's
+// went from +0.0004 to -0.0005, and the sign the test read was the noise's.
 func TestTheWesternBoundaryCurrentRunsPoleward(t *testing.T) {
 	g := twoOceans()
 	g.weather()
 	north := func(i int) float64 { _, v := g.SeaCurrent(i); return v }
 	for _, hemi := range []float64{1, -1} {
-		lo, hi := min(20*hemi, 40*hemi), max(20*hemi, 40*hemi)
+		lo, hi := min(25*hemi, 40*hemi), max(25*hemi, 40*hemi)
 		west := band(g, lo, hi, 40, 44, north)
 		inside := band(g, lo, hi, 70, 110, north)
-		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.3f", hemi, west, inside)
+		t.Logf("at 25 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.4f", hemi, west, inside)
 		if west*hemi < 0.05 {
-			t.Errorf("at 20 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
+			t.Errorf("at 25 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
 		}
 		if inside*hemi > 0 || math.Abs(inside) > math.Abs(west) {
-			t.Errorf("at 20 to 40 degrees %+v the interior runs %+.3f m/s north against the western current's %+.3f", hemi, inside, west)
+			t.Errorf("at 25 to 40 degrees %+v the interior runs %+.4f m/s north against the western current's %+.3f", hemi, inside, west)
 		}
 	}
 	// And the cold coast is where the water comes up.

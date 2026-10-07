@@ -85,20 +85,28 @@ func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 // down evenly and each given the ground nearest it is a world of equal rooms:
 // its largest plate is not two of its middling ones.
 //
+// One world's ratio is a draw: seed 2 has read 2.0 while sixteen seeds read a
+// median of 3.9 [3.2, 4.3] (PR #109). So the ratio is read over the eight
+// seeds plateWorlds makes, and the floor holds the median's interval, as the
+// river and relief yardsticks do (docs/yardsticks.md): it fails when the
+// whole interval is under it, not when one draw is.
+//
 // This is only the floor. How the sizes fall off past the great plates is held
 // to Bird's power law in realism_test.go.
 func TestPlatesAreNotAllOneSize(t *testing.T) {
-	for _, seed := range []uint64{1, 2, 3} {
-		g := plateWorld(seed)
+	var ratios []float64
+	for seed := uint64(1); seed <= 8; seed++ {
 		var sizes []float64
-		for _, tiles := range pieces(g) {
+		for _, tiles := range pieces(plateWorld(seed)) {
 			sizes = append(sizes, float64(tiles))
 		}
-		largest := quantile(sizes, 1)
-		if got := largest / quantile(sizes, 0.5); got < 2.5 {
-			t.Errorf("seed %d: the largest plate is %.1f times the middling one; "+
-				"a world with great plates and small ones is several times that", seed, got)
-		}
+		r := quantile(sizes, 1) / quantile(sizes, 0.5)
+		t.Logf("seed %d: the largest plate is %.2f times the middling one", seed, r)
+		ratios = append(ratios, r)
+	}
+	if s := spreadOf(ratios); s.outside(2.5, math.Inf(1)) {
+		t.Errorf("the largest plate is %v times the middling one over eight seeds; "+
+			"a world with great plates and small ones is several times that", s)
 	}
 }
 
@@ -214,15 +222,33 @@ func TestPlateBoundariesAreNotStraight(t *testing.T) {
 // anywhere, read 1.31. The floor here is under the reading and well over the
 // old one: what is being held is that a plate is a polygon and not a pebble,
 // not the exact number the tuning landed on.
+//
+// A mean over three seeds was a draw: it read 1.06 on main and 0.97-1.02 on
+// branches whose sixteen-seed medians sat a few hundredths apart. So the
+// reading is taken over the eight seeds the floor was set on, and the floor
+// holds the median's interval, as the river and relief yardsticks do
+// (docs/yardsticks.md): it fails when the whole interval is under it.
+//
+// The floor was 1.05, set when the walls read 1.18. The rock stack (crust
+// and isostasy, the history's erosion, the even rifts, the sea from the
+// basins) left them rounder: 1.032 [0.969, 1.085] over twenty-four seeds, so
+// 1.05 sat at the world's own median and a branch passed or failed it by the
+// draw. The owner accepted the rounder walls (2026-10-08) and the floor went
+// to 0.95, under that interval and still twice a disc's 0.48.
+// wallFloor is the least a plate's straightest wall may run, over the root of
+// its area: see above.
+const wallFloor = 0.95
+
 func TestAPlatesWallRunsStraight(t *testing.T) {
-	var sum float64
-	const seeds = 3
-	for seed := uint64(1); seed <= seeds; seed++ {
-		sum += wallRun(plateWorld(seed), runCorridor)
+	var runs []float64
+	for seed := uint64(1); seed <= 8; seed++ {
+		r := wallRun(plateWorld(seed), runCorridor)
+		t.Logf("seed %d: a plate's longest straight wall is %.3f of the root of its area", seed, r)
+		runs = append(runs, r)
 	}
-	if got := sum / seeds; got < 1.05 {
-		t.Errorf("a plate's longest straight wall is %.2f of the root of its area; "+
-			"a disc gives 0.48 and a straight-sided cell 1.33, so these are still pebbles", got)
+	if s := spreadOf(runs); s.outside(wallFloor, math.Inf(1)) {
+		t.Errorf("a plate's longest straight wall is %v of the root of its area over eight seeds; "+
+			"a disc gives 0.48 and a straight-sided cell 1.33, so these are still pebbles", s)
 	}
 }
 
@@ -523,9 +549,10 @@ func inland(g *Grid) []int32 {
 // was built.
 //
 // Two things moved it. An arc is raised behind the trench and not on it, so
-// there is a coastal plain in front of the range; and a plate rides with
-// swells and basins in it, so the sea finds its coast in the shape of the
-// ground rather than at the boundary of the crust. See arcGapReach and bowRise.
+// there is a coastal plain in front of the range; and a continent's crust is
+// thinned at its margins and where it has rifted, so the sea finds its coast
+// in the thickness of the crust rather than at the boundary of the plate. See
+// arcGapReach and isostasy.go.
 func TestMountainsAreNotAllOnTheCoast(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)

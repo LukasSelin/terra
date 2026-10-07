@@ -18,7 +18,8 @@ import (
 //
 // Here the land is the leavings of a history instead, run forward from a
 // world too hot to have a surface worth the name. It is not geology and does
-// not pretend to be: there is no mantle in it, no heat budget, no isostasy.
+// not pretend to be: there is no mantle in it beyond what floats the crust (see
+// isostasy.go), and no heat budget.
 // What it has that a picture cannot have is causes - a range stands where two
 // plates met, the rock in it is what that meeting made of what was there, the
 // basin beside it is full of the range's own debris, and the good ground at
@@ -464,10 +465,10 @@ const (
 // historySea is how much of a young world is under water while its history
 // runs. A world has oceans whatever the map cut out of it at the end does -
 // the default valley asks for no sea at all - and what lay under one age
-// after age is where limestone comes from. So a history floods itself to this
-// share, records who was drowned, and hands the finished ground to the map's
-// own sea share, which is why a valley with no sea in it can still have
-// limestone country: that ground was a seabed once.
+// after age is where limestone comes from. So a history floods at least this
+// share of itself in its first epoch, records who was drowned, and hands the
+// finished ground to the map's own sea share, which is why a valley with no
+// sea in it can still have limestone country: that ground was a seabed once.
 //
 // A share of the map and not a level read off where the two kinds of crust
 // are riding, which was tried and is the better-sounding rule: the water
@@ -476,6 +477,11 @@ const (
 // happens to them, so on two seeds of five the level came out under
 // everything and nothing was ever drowned - no seabed, and so no limestone
 // anywhere on the map. A share always drowns something.
+//
+// It is the first epoch's alone now. What the share pours is the planet's
+// water, and the epochs after keep the water and not the share: the land
+// share is what the basins make of it (seawater.go). Water kept drowns
+// something as surely as a share does, since it has to stand somewhere.
 const historySea = 0.35
 
 // marineMud is how much a sea bed off a shore takes in an epoch, against the
@@ -657,9 +663,9 @@ func deepSpan(g *Grid) float64 {
 // one for no gain in how gentle they were.
 const smoothing = 1
 
-// marginRamp is how far the step at the edge of a plate is spread, in passes
-// of a nine-tile average - so a handful of tiles either side, which is a
-// continental margin at this scale.
+// marginRamp is how far the first plates' crust is spread across the edge of a
+// continent, in passes of a nine-tile average - so a handful of tiles either
+// side, which is a continental margin at this scale. See layCrust.
 const marginRamp = 6
 
 // How fast a plate goes at the start of the plate era and at the end of it, in
@@ -748,81 +754,15 @@ const (
 	rifting  = riftRate * epochYears
 )
 
-// How high a plate floats before anything happens at its edges: a continent
-// stands above the ocean floor because it is thicker and lighter, and that
-// one fact is what gives a world coasts at all rather than an even skin of
-// water. The floor is not at nothing, because a height of nothing is where
-// the ground stops being allowed to fall - see wear - and a sea floor pinned
-// against that stop comes out as a dead flat plain: half the map at a slope
-// of a hundredth, against a tenth on a drawn one. What matters is the
-// distance between the two levels and not either figure, since normalise
-// rescales the lot.
-//
-// settling is how much of the way to its own level a plate comes in an
-// epoch, so that crust which changes hands rises or sinks over an age rather
-// than jumping. It moves a whole plate by what its middle is short of, so a
-// plate keeps the country it is carrying; see tectonics. It is written as a
-// time, settleTime, which is no measured figure: a load on the mantle is
-// compensated in some ten thousand years, and what is slow here is a plate as
-// a whole coming to the level of the crust it has gathered, which stands in
-// for the isostasy this model does not have. Twenty-five million years is the
-// fifteen in a hundred an epoch it was tuned at.
-//
-// The distance between the levels is the real one: the continents' mean
-// stands 4.5 kilometres above the abyssal floor, +0.8 against -3.7 (Cogley
-// 1984). It was 240 metres, beside a range that rose 45 an epoch; with the
-// range at its real rate the step has to be real too, or every coast is a
-// seam. The floor stands six kilometres above nothing, which is about how far
-// the deepest trenches go below it.
-const (
-	oceanFreeboard     = 6 * km
-	continentFreeboard = oceanFreeboard + 4.5*km
-	settleTime         = 25 * myr
-	// bowRise is how far a plate's own ground stands off its level, either
-	// way, and bowSpan is how broad one of those swells or basins is, in
-	// tiles. bowPull is how much of the way to that shape the ground comes in
-	// an epoch.
-	//
-	// A plate does not ride flat. Without saying so, the only thing that ever
-	// varies a plate's height is its edges, so a continent is a table two
-	// hundred and forty metres above the floor beside it and the sea fills
-	// the floor exactly: the coastline is the plate boundary, tile for tile,
-	// on every map. And since the boundary is also where every mountain is
-	// built, every mountain on the map stands on a coast - which is not what
-	// a world looks like. Given a bow of the same order as that freeboard,
-	// the sea reaches into the low parts of continents and leaves the high
-	// parts of ocean floor standing, so where the water stops and where the
-	// plates meet are two different questions again.
-	//
-	// The span is in tiles and not in plate widths. Drawn at two and a half
-	// plate widths, which was the first try, it is not a bow but a tilt: the
-	// whole of one plate up and the whole of the next down, which moved the
-	// coast nowhere and put long smooth ramps beside the ranges. What is
-	// wanted is country inside a plate, so it is drawn at the size of the
-	// country.
-	//
-	// bowPull is a pull toward a shape and not toward a level, which is the
-	// whole difference between this and the settling above it. Settling had
-	// to be applied to a plate whole, because pulling every tile toward a
-	// level of its own takes a share of whatever texture the ground has every
-	// epoch, and sixteen of those is all of it. Pulling toward a bow puts
-	// texture in rather than taking it out.
-	//
-	// A kilometre, which is the dynamic topography a mantle holds a plate's
-	// ground up or down by (Hager and others 1985; Braun 2010). It was two
-	// hundred metres beside a freeboard of 240; the freeboard is real now, and
-	// so is this.
-	bowRise = 1 * km
-	bowSpan = 64.0
-	// bowLeast is the finest octave of it: below this the weather and the
-	// water are already saying what the ground does at that size.
-	bowLeast = 6.0
-	bowPull  = 0.30
-)
-
-// settling is the share of the way to its level a plate comes in an epoch of
-// settleTime.
-var settling = 1 - math.Exp(-epochYears/settleTime)
+// How high a plate floats is its crust's: see isostasy.go. It was two fixed
+// levels, a continent's 4.5 km over the floor's, with every plate brought a
+// share of the way to the level of the crust it carried each epoch (over a
+// settleTime of 25 million years, which the code called a stand-in for the
+// isostasy it did not have) and a field of noise a kilometre either way, the
+// bow, warping the ground inside a plate so that the sea did not find its
+// coast at the plate boundaries. The crust's thickness does both now: a
+// continent rifted thin is a shelf under the sea, one thickened by a
+// collision a range on a root, and the floor stands as deep as its age.
 
 // How many places in a world are fed from below rather than at their edges,
 // and how far each one's works reach. They stay where they are while the
@@ -1056,8 +996,21 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
 	}
 	cr.firstFloorAges(g, epochs)
+	// The crust is as thick as it is made, and floats at that.
+	cr.layCrust(g)
+	// What the bow was drawn from - the field of swells a kilometre either
+	// way that the plates rode in before they floated on their crust, in
+	// octaves from sixty-four tiles to six - is drawn still and thrown away,
+	// so that the grain, the hotspots and the plates' breaking, which are
+	// drawn after it, are drawn as they were. What moves a world is then what
+	// its crust does, and not a new draw of everything after it: over eight
+	// small globes the plates' straight walls read 1.05 with the draws kept
+	// and 1.00 without, against 1.08 before, and the draw alone is that far
+	// from seed to seed.
+	for span := math.Min(float64(g.Span())/2, 64/g.coarseness()); span >= 6/g.coarseness(); span /= 2 {
+		w.lattice(g, span)
+	}
 	grain := w.grain(g)
-	bow := w.bow(g)
 	book := make([]record, len(g.Tiles))
 	// And the part of it that is kept when the history is over. See ledger.
 	g.openBook(epochs)
@@ -1084,7 +1037,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		for i := range touch {
 			touch[i] = 0
 		}
-		w.tectonics(g, plates, cr, book, e, arcGapOn(g, standing(plates)), touch, weld, grain, bow)
+		w.tectonics(g, plates, cr, book, e, arcGapOn(g, standing(plates)), touch, weld, grain)
 		// An age of weather between the ages of the earth. What was raised
 		// this epoch starts coming down in the next, and what comes off it is
 		// what fills the basins - which is where a finished map's sandstone
@@ -1093,9 +1046,34 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		// before it is asked to cut it: the cutting walks from each tile to
 		// the one its water goes to, and the hollows the plates have made
 		// hold what the water brings them: see stillWork.
-		g.base = g.historyBase()
+		// The sea stands where the planet's water fills the basins the
+		// plates have just left. See seawater.go.
+		g.pourSea(cr, e)
 		g.drain()
+		worn := cr.worn(g)
+		cr.was = append(cr.was[:0], worn...)
+		if len(g.toSea) != len(g.Tiles) {
+			g.toSea = make([][Grains]float64, len(g.Tiles))
+		}
+		clear(g.toSea)
 		g.wear(epochYears)
+		// What the rivers brought the sea is laid on the margins off their
+		// mouths, and is crust there. See shelve.
+		var shelf denudation
+		shelf.shelved, shelf.spilt, shelf.lost = g.shelve(g.toSea, e, book)
+		// What the weather took off is crust gone, and what it laid down is
+		// crust laid; and the plate floats up under what it lost while it
+		// was losing it, which is the rebound. See isostasy.go.
+		for i := range worn {
+			worn[i] -= g.Height[i]
+			by := cr.thicken(i, -worn[i])
+			cr.sed[i] = float32(math.Max(0, float64(cr.sed[i])+by))
+		}
+		d := readDenudation(g, cr, cr.was, worn)
+		d.shelved, d.spilt, d.lost = shelf.shelved, shelf.spilt, shelf.lost
+		cr.denuded = append(cr.denuded, d)
+		g.isostasy(cr, e, worn, relaxing)
+		cr.riseBy()
 		g.keepBook(book, e)
 		// What the epoch floored with lava, filled or silted over is a new
 		// surface, and its soil starts from nothing. See pedogenesis.go.
@@ -1109,6 +1087,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		}
 	}
 
+	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
+
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet, and once the plates are kept,
 	// since how wide a shelf is depends on which plate the continent beside it
@@ -1118,6 +1098,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	if water > 0 {
 		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
 		d.uplift = g.upliftOf(cr)
+		if g.Wrap {
+			d.country = g.countryOf()
+		}
 	}
 	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean)
@@ -1138,6 +1121,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 type deepStage struct {
 	ocean                                  []bool
 	depths, shares, uplift, ages, sediment []float64
+	// country is how high each tile stood over the history's sea when the
+	// history ended, in a planet's metres, on a globe: see countryOf.
+	country []float64
 	// book is the history's book of what was done to each tile, where the
 	// feet of the piles are still to be laid on the map: a history run on a
 	// grid coarser than the map. See handDown.
@@ -1157,6 +1143,7 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 		w.basins(g, d.ocean)
 		g.restrata(was, g.heights(), d.ocean)
 		g.uplift = d.uplift
+		g.planetHeight = d.country
 	} else {
 		w.normalise(g)
 		g.restrata(was, g.heights(), nil)
@@ -1705,39 +1692,6 @@ func (w *Land) fractures(g *Grid, reach float64) []float64 {
 	return wall
 }
 
-// bow is the shape a plate rides in, in metres off its own level: swells and
-// basins the size of a country. Like the rough ground and the grain it is drawn once
-// for a world and stays where it is, so the ground keeps its shape from age to
-// age rather than being redrawn under itself every epoch.
-//
-// It is a field over the map and not over each plate, which is the wrong way
-// round for a raft and the right way round for what is being modelled - what
-// holds a continent's middle up or lets it down is underneath it, so a plate
-// that drifts over a swell is lifted while it is over it. Drawn per plate it
-// carried the inland seas about with the continents, which looked like the
-// continents were holding them.
-func (w *Land) bow(g *Grid) []float64 {
-	// Octaves down to a few tiles, and not the one broad swell it started as.
-	// A single lattice is a field of round lumps, and since the sea now finds
-	// its coast in this rather than at the plate boundaries, round lumps is
-	// what the coastlines came out as - bays like bites and headlands like
-	// thumbs, all of them the same size. The finer octaves are what make a
-	// coast a coast.
-	out := make([]float64, len(g.Tiles))
-	amp, total := 1.0, 0.0
-	for span := math.Min(float64(g.Span())/2, bowSpan/g.coarseness()); span >= bowLeast/g.coarseness(); span, amp = span/2, amp/2 {
-		l := w.lattice(g, span)
-		for i := range out {
-			out[i] += amp * (l[i] - 0.5)
-		}
-		total += amp / 2
-	}
-	for i := range out {
-		out[i] *= bowRise / math.Max(1e-9, total)
-	}
-	return out
-}
-
 // grain is how hard a seam is working at each place along it, in [1-beltVary,
 // 1+beltVary], down to the spurs and hollows of a single flank. Like the rough ground under the floods it is drawn once for a world and stays where it
 // is, so a range keeps the same shape age after age instead of shimmering
@@ -1812,15 +1766,38 @@ type crust struct {
 	// made of wherever it is carried and whichever plate it is carried on,
 	// and a plate's own kind is only what most of its crust is. See kinds.
 	ocean []bool
-	// built is how much volcanic ground has been raised on each tile of
-	// ocean crust, in metres over the whole history. Enough of it and the
-	// crust is continent. See accrete.
-	built []float64
 	// rise is how fast each tile's rock has lately been rising, in metres a
 	// year, carried with the crust; lifted is what the epoch being run has
 	// raised it by, in metres. See upliftOf.
 	rise, nrise []float64
 	lifted      []float64
+	// thick is how thick each tile's crust is, in metres, and sag how far the
+	// plate under it is bent down, in metres: both are the crust's and go
+	// with it. See isostasy.go.
+	thick, nthick []float32
+	sag, nsag     []float32
+	// sed is how much of each tile's crust is what the weather has laid on
+	// it, in metres: a margin's wedge of sediment, or a basin's fill. It is
+	// crust and floats as crust, but it is not what makes a floor a
+	// continent: see accrete.
+	sed, nsed []float32
+	// local is isostasy's working, and plan its transform's. eroded and
+	// rebound are what the weather has taken off the land over the history,
+	// and what the land rose by in the same epochs as it was taken: the
+	// history's reading of its own rebound.
+	local, wear     []float64
+	was             []float64
+	plan            *flexPlan
+	eroded, rebound float64
+	// denuded is what each epoch's weather took off the land. See
+	// readDenudation.
+	denuded []denudation
+	// oceanWater is how much water the planet has, in the measure of
+	// roomUnder, poured in the first epoch at firstLevel over a floor
+	// firstFloor deep on the mean; seas is each epoch's sea. See
+	// seawater.go.
+	oceanWater, firstLevel, firstFloor float64
+	seas                               []seaReading
 	// fed is how many tiles of crust went down, or were crumpled up, at each
 	// place this epoch. It is what feeds the arcs and the ranges: see
 	// tectonics.
@@ -1836,7 +1813,6 @@ type crust struct {
 	nborn         []uint8
 	naged         []float32
 	nocean        []bool
-	nbuilt        []float64
 	// off is how far each tile's crust truly stands from the tile it is
 	// shown on, which only a turn makes anything of: a turn puts a tile on
 	// the tile nearest where it goes, and without the remainder kept a
@@ -1881,9 +1857,25 @@ func (cr *crust) kinds(g *Grid, plates []Plate) {
 // there, and that is how continents grow. Left as floor, an arc stood out of
 // the sea as a range for as long as the history lasted and then went under a
 // continent with the rest of its plate, and no continent ever got any bigger.
+//
+// Enough is accreteEnough more crust than a ridge makes, which was read off
+// the volcanic ground raised on the floor before the crust had a thickness:
+// thirty-one kilometres, the thick end of what an island arc's crust is (20 to
+// 35 km, Calvert 2011), where it stands about at the sea. Read off the
+// thickness, it is every way of thickening a floor that makes it continent: a
+// collision's belt carried onto the floor at its edge as well as the arcs and
+// the hotspots. Left to the volcanic ground alone, a floor a collision had
+// thickened to forty kilometres stayed floor, floated as floor does under the
+// sea, and the plate held it up as a ridge ten kilometres over its level.
+//
+// What the rivers have laid on a floor is not counted (sed). A margin's wedge
+// of sediment is floor with mud on it until something thickens the floor
+// itself; counted, the wedges off every long-lived coast became continent,
+// and the plates' kinds, and so which of them goes down where they meet,
+// moved with them.
 func (cr *crust) accrete() {
-	for i, b := range cr.built {
-		if cr.ocean[i] && b >= accreteEnough {
+	for i, t := range cr.thick {
+		if cr.ocean[i] && float64(t-cr.sed[i]) >= oceanCrust+accreteEnough {
 			cr.ocean[i] = false
 		}
 	}
@@ -1897,8 +1889,10 @@ func newCrust(g *Grid) *crust {
 	return &crust{
 		born: make([]uint8, n), fed: make([]float64, n),
 		ocean: make([]bool, n), nocean: make([]bool, n),
-		built: make([]float64, n), nbuilt: make([]float64, n),
 		rise: make([]float64, n), nrise: make([]float64, n), lifted: make([]float64, n),
+		thick: make([]float32, n), nthick: make([]float32, n),
+		sed: make([]float32, n), nsed: make([]float32, n),
+		sag: make([]float32, n), nsag: make([]float32, n),
 		plate: make([]uint8, n), nplate: make([]uint8, n),
 		org: make([]int32, n), norg: make([]int32, n),
 		fresh: make([]bool, n), nfresh: make([]bool, n),
@@ -2002,11 +1996,9 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 		g.Soil[j], g.Sand[j], g.Clay[j] = cr.soil[cr.org[j]], cr.sand[cr.org[j]], cr.clay[cr.org[j]]
 		if cr.fresh[j] {
 			// New floor, with the soil of the tile beside it: basalt, dated
-			// from now, at the level ocean floor rides at. Set higher, as a
-			// ridge fresh from below really stands, every parting seam on a
-			// globe left a line of it above the sea, and the oceans came out
-			// drawn over with the outlines of where plates used to be.
-			g.Height[j] = oceanFreeboard
+			// from now, of a ridge's crust and at the level a ridge floats
+			// at, two and a half kilometres under the sea. See isostasy.go.
+			g.Height[j] = cr.levelAt(j, epoch)
 			t.Bedrock, t.Formed = Basalt, uint8(epoch)
 			book[j] = record{melt: 2 * madeEnough, whole: [makings]bool{makingMelt: true}}
 			g.strata[j] = basement(Basalt, uint8(epoch), g.Height[j])
@@ -2110,7 +2102,8 @@ func (cr *crust) land(plates []Plate, i, j int) {
 		}
 	}
 	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i], cr.aged[i]
-	cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[i], cr.built[i], cr.rise[i]
+	cr.nocean[j], cr.nrise[j] = cr.ocean[i], cr.rise[i]
+	cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[i], cr.sag[i], cr.sed[i]
 	cr.noff[j] = cr.off[i]
 }
 
@@ -2124,8 +2117,10 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 	cr.born, cr.nborn = cr.nborn, cr.born
 	cr.aged, cr.naged = cr.naged, cr.aged
 	cr.ocean, cr.nocean = cr.nocean, cr.ocean
-	cr.built, cr.nbuilt = cr.nbuilt, cr.built
 	cr.rise, cr.nrise = cr.nrise, cr.rise
+	cr.thick, cr.nthick = cr.nthick, cr.thick
+	cr.sed, cr.nsed = cr.nsed, cr.sed
+	cr.sag, cr.nsag = cr.nsag, cr.sag
 	cr.off, cr.noff = cr.noff, cr.off
 }
 
@@ -2258,7 +2253,8 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 					continue
 				}
 				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = k, cr.org[best], cr.fresh[best], cr.born[best], cr.aged[best]
-				cr.nocean[j], cr.nbuilt[j], cr.nrise[j] = cr.ocean[best], cr.built[best], cr.rise[best]
+				cr.nocean[j], cr.nrise[j] = cr.ocean[best], cr.rise[best]
+				cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[best], cr.sag[best], cr.sed[best]
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
@@ -2349,7 +2345,9 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 		for r, j := range ring {
 			cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.nocean[j] = picks[r].plate, picks[r].from, true, cr.now, true
 			cr.naged[j] = 0
-			cr.nbuilt[j], cr.nrise[j] = 0, 0
+			cr.nrise[j] = 0
+			// A ridge makes ocean crust, standing as it floats.
+			cr.nthick[j], cr.nsag[j], cr.nsed[j] = oceanCrust, 0, 0
 			cr.noff[j] = [2]float32{}
 		}
 		next = next[:0]
@@ -2611,7 +2609,7 @@ func (g *Grid) eachNear(i int, f func(j int)) {
 // edge nothing happens at all, which is why the middle of a plate is the
 // oldest, flattest ground on a map and everything worth looking at is at the
 // seams.
-func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain, bow []float64) {
+func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain []float64) {
 	defer phase.Start("tectonics")()
 	g.piles()
 	n := len(g.Tiles)
@@ -2731,70 +2729,12 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		}
 	}
 
-	// Where each plate floats. A plate rides at its own level because of what
-	// it is made of, and it carries whatever country it has on its back while
-	// it does: so the whole plate is moved by what its middle is short of,
-	// and not each tile by what it is short of itself. Pulling every tile
-	// toward the level directly was the first way this was written, and over
-	// sixteen epochs it left nothing but plains and cliffs - a tenth of a
-	// slope was the ninetieth percentile of the drawn map and this could not
-	// manage it at the fiftieth, because each pass took another seventh of
-	// whatever texture the ground had.
-	//
-	// The level a plate floats at is that of the crust it carries, tile for
-	// tile: a continent riding a plate that is mostly floor holds it up by
-	// its share of it, and stands above the floor round it by as much as it
-	// always did, because a plate is moved whole.
-	var sum, count, want [256]float64
-	for i := range g.Tiles {
-		k := g.Tiles[i].Plate
-		sum[k] += g.Height[i]
-		count[k]++
-		if cr.ocean[i] {
-			want[k] += oceanFreeboard
-		} else {
-			want[k] += continentFreeboard
-		}
-	}
-	var shift [256]float64
-	for k := range plates {
-		if count[k] > 0 {
-			shift[k] = (want[k] - sum[k]) / count[k] * settling
-		}
-	}
-	// Spread the step at the edge of a plate into a ramp. A continent stands
-	// a quarter of a kilometre above the floor beside it, and where the two
-	// meet is a margin - a shelf, and a slope down off it - rather than a
-	// wall. Applied as a step, that one boundary was the steepest ground on
-	// the map by a mile: on two seeds of four the steepest tenth came out at
-	// three times a drawn map's, and no amount of softening the finished
-	// heights could undo it, because a step a tile wide is where the height
-	// actually is.
-	// And the shape it rides in. The step above says where the raft floats;
-	// this says how it is warped, and it is what a plate has on it that is
-	// not a seam. See bowRise.
-	var mean [256]float64
-	for k := range plates {
-		if count[k] > 0 {
-			mean[k] = sum[k] / count[k]
-		}
-	}
-	rise := make([]float64, len(g.Tiles))
-	for i := range g.Tiles {
-		k := g.Tiles[i].Plate
-		rise[i] = shift[k] + bowPull*settling*(bow[i]-(g.Height[i]-mean[k]))
-	}
-	for k := 0; k < g.passes(marginRamp); k++ {
-		rise = g.spread(rise)
-	}
-
+	// What happens at the seams is laid on the crust: see below, and
+	// isostasy.go for how the plate then answers it.
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		col := &g.strata[i]
-		g.Height[i] += rise[i]
-		cr.lifted[i] = rise[i]
-		// What floats the ground up floats the beds under it with it.
-		col.lift(rise[i])
+		cr.lifted[i] = 0
 
 		if s := g.seam[i]; s.found {
 			// Eased and not cut, so that a range has feet. The drawn
@@ -2812,8 +2752,31 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				continue
 			}
 			by := s.lift * grain[i] * profile(s.makes, s.away, wide, gap*grain[i])
-			g.Height[i] += by
-			cr.lifted[i] += by
+			// What of that is laid on the ground. A collision, an arc or
+			// islands thicken the crust by what they raise, and most of it
+			// goes down as root once the plate answers (see isostasy.go). A
+			// rift stretches the crust, and drops the ground by a share of
+			// the crust there is: a continent's full rate thins thirty-five
+			// kilometres of crust by six an epoch. Floor parting from floor
+			// is a ridge, and stands where its age puts it, so it is not
+			// dropped; nor is anything made past crustMost. A trench is the
+			// floor bent down under the slab pulling it, and no crust is
+			// lost or made by it: it is laid on the ground alone, no deeper
+			// than trenchDeepest, and the plate pushes back what of it is
+			// broad.
+			laid := by
+			switch {
+			case s.makes == nothing:
+				laid = math.Min(0, math.Max(by, seaDatum-trenchDeepest-g.Height[i]))
+			case by < 0 && cr.ocean[i]:
+				laid = 0
+			case by < 0:
+				laid = cr.thicken(i, by*math.Min(1, float64(cr.thick[i])/continentCrust))
+			default:
+				laid = cr.thicken(i, by)
+			}
+			g.Height[i] += laid
+			cr.lifted[i] += laid
 			// And the book, where this is the most any meeting has done to
 			// the tile. See ledger.
 			g.ledger[i].meet(s.side, s.with, s.raisedBy(), epoch, by)
@@ -2821,7 +2784,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			// A belt is raised most at its axis and least at its feet, so the
 			// beds on its flanks are left tipped away from it: the hogbacks
 			// and the scarps of an old range are those beds, worn into.
-			col.lift(by)
+			col.lift(laid)
 			if s.makes == crushed {
 				// A collision does not only lift its beds, it crumples them:
 				// they buckle into folds running along the belt, a few tiles
@@ -2832,9 +2795,6 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				for k := 1; k < int(col.n); k++ {
 					col.top[k] += float32(fold)
 				}
-			}
-			if s.makes == melt && by > 0 && cr.ocean[i] {
-				cr.built[i] += by
 			}
 			// Where the fire is, which for an arc is under the arc and not at
 			// the trench six tiles in front of it. Left at the seam, moving
@@ -2916,8 +2876,16 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	}
 	w.hotspot(g, book, cr, epoch)
 	cr.accrete()
-	// What the epoch raised, folded into how fast the ground has lately been
-	// rising. See upliftMemory.
+	// And the plate answers what was laid on it, before the weather starts on
+	// it: a range rises by what its crust is thickened by, less the root it
+	// sinks into it.
+	g.isostasy(cr, epoch, nil, 0)
+}
+
+// riseBy folds what the epoch raised the rock by - the seams, the hotspots,
+// and the plate's answer to both and to the weather - into how fast the
+// ground has lately been rising. See upliftMemory.
+func (cr *crust) riseBy() {
 	keep := math.Exp(-epochYears / upliftMemory)
 	for i, by := range cr.lifted {
 		cr.rise[i] = keep*cr.rise[i] + (1-keep)*by/epochYears
@@ -3042,7 +3010,7 @@ func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []floa
 	// the way an epoch, its ranges stood out of the sea to the end of the
 	// history as islands of granite in the middle of an ocean.
 	ceiling := plateCeiling * float64(len(g.Tiles))
-	for k := 0; k < stride; k++ {
+	for k := 0; k < len(plates); k++ {
 		r := rootOf(plates, uint8(k))
 		if int(r) != k || area[r] <= ceiling || len(plates) >= plateCap {
 			continue
@@ -3065,7 +3033,15 @@ func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []floa
 		plates[to].DX, plates[to].DY = g.velocity(&whole, plates[to].cx, plates[to].cy, scale)
 		plates[to].DX += driftFast * ux
 		plates[to].DY += driftFast * uy
-		area[r] /= 2
+		// Each half is asked again whether it is too large: the old one now,
+		// and the new one when the loop comes to it. A plate that welded more
+		// than a ceiling's worth on in an epoch was halved once and left over
+		// the ceiling with it, epoch after epoch: on the third small globe of
+		// TestNoPieceOfCrustIsASliverOrAHemisphere the largest plate stood at
+		// half the world before its rift and a third after it, the last four
+		// epochs running.
+		area[r], area[to] = g.plateArea(r), g.plateArea(to)
+		k--
 	}
 
 	// And small pieces breaking off. Nothing above makes a plate smaller than
@@ -3207,15 +3183,102 @@ func enclosedBy(plates []Plate, touch []float64, r uint8, stride int) (uint8, bo
 
 // split rifts plate of in two, giving the part of it on one side to plate to,
 // and says which way that part lies from the rest. A line is drawn across the
-// plate at random, the tiles of it furthest along that line either way are
-// flooded from at the same rate over the plate's own ground, and whatever the
-// far flood reaches first is the new plate - so the rift is ragged, and the
-// two halves are near enough halves.
+// plate at random, the tiles a quarter of the way along it from either end
+// are flooded from at the same rate over the plate's own ground, and whatever
+// the far flood reaches first is the new plate - so the rift is ragged, and
+// the two halves are near enough halves.
+//
+// They were not. The floods started from the plate's furthest tiles either
+// way, which are on its edge, and a plate's edges lie along the fractures the
+// floods are slowest across (see flood): one flood would be walled in where it
+// started and the other take the plate. On the small globes the halves came
+// out anywhere from even to a few tiles against the rest - a third of the
+// world rifted into a twentieth and the rest. Started a quarter of the way
+// in, a flood starts on open ground; and a line is drawn up to splitTries
+// times, the first that leaves the smaller half splitEven of the whole kept
+// (or the most even of them).
 func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, uy float64, ok bool) {
-	a := 2 * math.Pi * w.RNG.Float64()
-	ux, uy = math.Cos(a), math.Sin(a)
-	first, lo, hi := -1, -1, -1
-	low, high := math.Inf(1), math.Inf(-1)
+	// The new plate floods at its parent's rate and along its parent's grain,
+	// so neither half is favoured.
+	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
+		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
+	best, bestA := -1.0, 0.0
+	for range splitTries {
+		a := 2 * math.Pi * w.RNG.Float64()
+		even, ok := g.riftAlong(fl, plates, of, to, a)
+		if !ok {
+			continue
+		}
+		if even > best {
+			best, bestA = even, a
+		}
+		if even >= splitEven {
+			break
+		}
+	}
+	if best < 0 {
+		return 0, 0, false
+	}
+	if g.riftShare(of, to) != best {
+		g.riftAlong(fl, plates, of, to, bestA)
+	}
+	return math.Cos(bestA), math.Sin(bestA), true
+}
+
+// riftShare is the smaller of plates of and to's shares of the two together.
+func (g *Grid) riftShare(of, to uint8) float64 {
+	var a, b float64
+	for i := range g.Tiles {
+		switch g.Tiles[i].Plate {
+		case of:
+			a++
+		case to:
+			b++
+		}
+	}
+	if a+b == 0 {
+		return 0
+	}
+	return math.Min(a, b) / (a + b)
+}
+
+// plateArea is how many tiles plate p holds.
+func (g *Grid) plateArea(p uint8) float64 {
+	var n float64
+	for i := range g.Tiles {
+		if g.Tiles[i].Plate == p {
+			n++
+		}
+	}
+	return n
+}
+
+// splitTries is how many lines a rift is drawn along at most, and splitEven
+// the share of the plate the smaller half has to have for the first to do.
+const (
+	splitTries = 4
+	splitEven  = 0.3
+)
+
+// riftAlong rifts plates of and to, which were one plate, along a line at
+// angle a, and says what share of it the smaller half is.
+func (g *Grid) riftAlong(fl *flooding, plates []Plate, of, to uint8, a float64) (float64, bool) {
+	for i := range g.Tiles {
+		if g.Tiles[i].Plate == to {
+			g.Tiles[i].Plate = of
+		}
+	}
+	ux, uy := math.Cos(a), math.Sin(a)
+	type at struct {
+		along float64
+		i     int
+	}
+	var line []at
+	first := -1
+	var across func(i int) float64
+	if g.Wrap {
+		across = g.lineAcross(&plates[of], ux, uy)
+	}
 	for i := 0; i < len(g.Tiles); i += 3 {
 		if g.Tiles[i].Plate != of {
 			continue
@@ -3223,36 +3286,56 @@ func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, u
 		if first < 0 {
 			first = i
 		}
-		// Measured from one tile of the plate, the short way round a globe.
-		dx := float64(i%g.W - first%g.W)
-		if g.Wrap {
-			if dx > float64(g.W)/2 {
-				dx -= float64(g.W)
-			} else if dx < -float64(g.W)/2 {
-				dx += float64(g.W)
-			}
+		var along float64
+		if across != nil {
+			along = across(i)
+		} else {
+			along = float64(i%g.W-first%g.W)*ux + float64(i/g.W-first/g.W)*uy
 		}
-		along := dx*ux + float64(i/g.W-first/g.W)*uy
-		if along < low {
-			low, lo = along, i
-		}
-		if along > high {
-			high, hi = along, i
-		}
+		line = append(line, at{along, i})
 	}
-	if first < 0 || lo == hi {
-		return 0, 0, false
+	if len(line) < 2 {
+		return 0, false
+	}
+	sort.SliceStable(line, func(p, q int) bool { return line[p].along < line[q].along })
+	lo, hi := line[len(line)/4].i, line[len(line)*3/4].i
+	if lo == hi {
+		return 0, false
 	}
 	seeds := []middle{
 		{X: float64(lo%g.W) + 0.5, Y: float64(lo/g.W) + 0.5, at: of},
 		{X: float64(hi%g.W) + 0.5, Y: float64(hi/g.W) + 0.5, at: to},
 	}
-	// The new plate floods at its parent's rate and along its parent's grain,
-	// so neither half is favoured.
-	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
-		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
 	g.floodOver(plates, seeds, fl, int(of))
-	return ux, uy, true
+	return g.riftShare(of, to), true
+}
+
+// lineAcross is how far along a line through plate p's middle, running ux, uy
+// across the map (x to the east, y down the rows), each tile of a map that
+// goes round lies.
+//
+// It is measured through the planet: the line is the direction ux, uy on the
+// ground at the plate's middle, and each tile is read as a point on the
+// sphere, so that the furthest tiles of the plate either way along it are the
+// ends of the plate however far round the world it reaches. It was measured
+// on the map from one tile of the plate, the short way round, and a plate
+// more than half the world round folded onto itself: its ends could be a few
+// tiles apart on the ground, and the rift between them cut a sliver off a
+// plate a third of the world. See split.
+func (g *Grid) lineAcross(p *Plate, ux, uy float64) func(i int) float64 {
+	sphere := func(x, y float64) (lon, lat float64) {
+		return 2 * math.Pi * x / float64(g.W), math.Pi * (0.5 - (y+0.5)/float64(g.H))
+	}
+	lon0, lat0 := sphere(p.cx, p.cy)
+	// East and north on the ground at the middle; down the rows is south.
+	ex, ey := -math.Sin(lon0), math.Cos(lon0)
+	nx, ny, nz := -math.Sin(lat0)*math.Cos(lon0), -math.Sin(lat0)*math.Sin(lon0), math.Cos(lat0)
+	tx, ty, tz := ux*ex-uy*nx, ux*ey-uy*ny, -uy*nz
+	return func(i int) float64 {
+		lon, lat := sphere(float64(i%g.W), float64(i/g.W))
+		c := math.Cos(lat)
+		return c*math.Cos(lon)*tx + c*math.Sin(lon)*ty + math.Sin(lat)*tz
+	}
 }
 
 // axisOf is how far from the seam a meeting's fire is: under the arc, where
@@ -3495,6 +3578,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				}
 				lift := hotspotLift * smooth(1-d/reach)
 				j := g.Index(q)
+				lift = cr.thicken(j, lift)
 				g.Height[j] += lift
 				cr.lifted[j] += lift
 				book[j].melt += lift
@@ -3504,23 +3588,9 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				// The book: a hotspot is one plate's, with no other.
 				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, Hotspot, epoch, lift)
 				g.ledger[j].bury(byLava, epoch)
-				if cr.ocean[j] {
-					cr.built[j] += lift
-				}
 			}
 		}
 	}
-}
-
-// historyBase is the sea a history is running against: the lowest historySea
-// of the ground as it stands, which is what the book counts as under water and
-// what the air takes its fill from while there is no sea of the map's own.
-func (g *Grid) historyBase() float64 {
-	h := make([]float64, len(g.Tiles))
-	for i := range g.Tiles {
-		h[i] = g.Height[i]
-	}
-	return quantile(h, historySea)
 }
 
 // keepBook writes down, after an epoch of weather, what the epoch left on

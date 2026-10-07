@@ -268,7 +268,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
 	for k := range Phases - 1 {
-		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground)
+		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k])
 	}
 	lift[3] = lift[1]
 	liftCell := func(k int) []float64 {
@@ -283,13 +283,21 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		liftCells[k] = liftCell(k)
 	}
 	liftCells[3] = liftCells[1]
-	var stable []float64
-	if e.Coast != nil {
-		stable = make([]float64, n)
-		for i := range stable {
-			stable[i] = inversion(e.Coast[i])
+	// How much of its rain the air keeps: held down by the cold water under
+	// it, on a globe, and under the subtropical highs capped by the
+	// trade-wind inversion, which its convection goes no higher than (see
+	// circulation.go).
+	var stable [Phases][]float64
+	for k := range Phases - 1 {
+		stable[k] = make([]float64, n)
+		for i := range stable[k] {
+			stable[k][i] = lidKeeps(lid(e.Subsides[k][i]), temp[k][i])
+			if e.Coast != nil {
+				stable[k][i] *= inversion(e.Coast[i])
+			}
 		}
 	}
+	stable[3] = stable[1]
 
 	// What the land could send back to the air in a year, and how that is
 	// shared out over the phases: as Hargreaves shares it, by the sun at the
@@ -407,7 +415,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 			}
 			budget[k] = e.vapour(vapourIn{
 				u: w.U[k], v: w.V[k], temp: temp[k], sst: sst[k],
-				landEvap: landEvap[k], stable: stable, oro: oro, w: budget[k].w,
+				landEvap: landEvap[k], stable: stable[k], oro: oro, w: budget[k].w,
 			})
 		})
 		budget[3] = budget[1]

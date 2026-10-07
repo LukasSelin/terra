@@ -116,6 +116,9 @@ func (cfg Terms) poured() bool { return cfg.Epochs > 0 && cfg.Water > 0 }
 func (w *Land) stageSea(g *Grid, cfg Terms) {
 	if cfg.poured() {
 		g.pour(cfg.Water, w.RNG)
+		// And a globe's land is stood on the country its history raised,
+		// now that the sea says which of it is land. See hypsometry.go.
+		g.layCountry()
 	} else {
 		g.flood(cfg.SeaShare, w.RNG)
 	}
@@ -137,6 +140,7 @@ func (w *Land) stageShape(g *Grid, cfg Terms) {
 	// has too. See strata.go.
 	g.expose()
 	g.drain()
+	g.gradeCountry()
 }
 
 // stageCut is the valleys cut, and the sea levelled on what that leaves.
@@ -157,6 +161,7 @@ func (w *Land) stageCut(g *Grid, cfg Terms) {
 		g.relevel(cfg.SeaShare)
 	}
 	g.drain()
+	g.gradeCountry()
 	g.carve(w.RNG)
 	g.height()
 }
@@ -214,6 +219,13 @@ func (w *Land) stageCoast(g *Grid, cfg Terms) {
 			g.relevel(cfg.SeaShare)
 		}
 	})
+	// The mud takes the drainage again, round by round, and that is the last
+	// time it is taken: so the country is graded along it once more. Graded
+	// only after the cutting, the water climbed the country where the ground
+	// fell on a step or two in a thousand where the mud had moved it, which
+	// is past what TestHowOftenARiverClimbsTheCountry holds once the plates
+	// rifted into halves (#87) and the coasts came out elsewhere.
+	g.gradeCountry()
 }
 
 // stageCover is what stands on the ground and what it will grow: the woods,

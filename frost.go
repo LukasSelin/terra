@@ -115,7 +115,7 @@ func (g *Grid) groundFrost(i int) (f frost, ok bool) {
 		i < 0 || i >= n || g.Tiles[i].Wet() {
 		return f, false
 	}
-	mean, swing := g.meanOn(i, g.Height[i]), float64(g.swing[i])
+	mean, swing := g.meanOn(i, g.Elevation(i)), float64(g.swing[i])
 	warm, cold := atmos.PhaseDegreeDays(mean, swing)
 	var ddt, ddf, wet float64
 	hold := float64(g.soilHold[i])
