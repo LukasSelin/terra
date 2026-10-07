@@ -201,12 +201,14 @@ func estuary() *Grid {
 // plates are grown (see fractureWall) they hold 2, 0, 1, 0, 1, 3, 1 and 0: the
 // second's coast has seventy-two tiles within a spring's reach of the sea where
 // it had a hundred and six, and the gentlest of them is six times steeper than
-// the sea grades it. The first held its two through that change.
+// the sea grades it. The first held its two through that change, and lost
+// them when the crust came to float on its thickness (see isostasy.go): they
+// hold 0, 8, 0, 0, 0, 0, 0 and 34 now, and the second is read.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 1", yardWorld("small", 1, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})

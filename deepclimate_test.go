@@ -116,14 +116,16 @@ type groundReading struct {
 
 // readGround is the hypsometry and the drainage of a history's grid as its
 // last epoch left it. The land is what stands over the history's own sea
-// level read afresh (historyBase), which is the ground the next epoch's air
-// would read; the rain is over the tiles the last epoch's air read as land.
+// level (g.base, where the planet's water filled the basins as the epoch
+// began: see pourSea; it was the lowest historySea of the ground read
+// afresh, historyBase, before the sea was poured); the rain is over the
+// tiles the last epoch's air read as land.
 func readGround(g *Grid) groundReading {
 	var r groundReading
 	var hs []float64
 	var nLand, ch, nAired int
 	var big, rain, runoff float64
-	base := g.historyBase()
+	base := g.base
 	for i := range g.Tiles {
 		if len(g.aired) == len(g.Tiles) && g.aired[i] >= 0 {
 			nAired++
