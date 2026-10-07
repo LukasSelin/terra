@@ -74,6 +74,22 @@ func related(f *Features, from, to FeatureID, k RelationKind) (Relation, bool) {
 // tile is warmed most by a current, its climate region is Warms-related to
 // that current, and the Feeds relations lead back from it to a warm western
 // boundary current.
+//
+// Known gap (M1 x O3, for M3, #22): the gyres are solved linear (Stommel and
+// Munk), and no water crosses the line of nought ψ between two gyres. The
+// 58°N coast's water comes, along Feeds, from the subpolar drift (-4.64
+// degrees, 14 Sv) and the subpolar gyre's own western current, going south
+// (-2.34); the warm western current (+4.11, 28 Sv) feeds the subtropical
+// gyre's drift at 43°N (+2.84, 6 Sv), which leads nowhere near the coast.
+// On the earth the Gulf Stream crosses into the North Atlantic Drift by
+// inertial overshoot and the eddies at the gyres' boundary, and the
+// overturning carries some fifteen sverdrups north across it. Eddy diffusion
+// of the warmth across that boundary (an eddy diffusivity of 1000-2000 m²/s,
+// Abernathey and Marshall, 2013), cheap in the warmth's solve, would move
+// warmth and not water: Feeds follows the current (Grid.follow), so it would
+// leave this chain as it is, and is M3's to add with the rest of its eddy
+// mixing. What this test asks for needs water across the boundary: an
+// inertial term in the gyres, or the overturning (#23, #24).
 func TestTheMildWestCoastIsWarmedFromAWesternCurrent(t *testing.T) {
 	g := relatedOceans()
 	f := g.Features()
