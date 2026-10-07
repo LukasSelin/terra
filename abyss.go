@@ -578,9 +578,11 @@ func (g *Grid) abyssWater() float64 {
 const upliftMemory = 2.5 * myr
 
 // upliftOf is how fast a history has lately been raising each tile's rock, in
-// metres a year: the plate floating to its level, the bow it rides in, the
-// seams and the hotspots, and none of what the weather took off. It is
-// softened as the heights are, so that it lies where they do. See smoothing.
+// metres a year: the seams and the hotspots, and the plate floating the rock
+// up or letting it down as its crust is thickened, thinned and worn (see
+// isostasy.go) - the rebound under what the weather took off is rock rising,
+// and what it took off is not. It is softened as the heights are, so that it
+// lies where they do. See smoothing.
 func (g *Grid) upliftOf(cr *crust) []float64 {
 	u := append([]float64(nil), cr.rise...)
 	for k := 0; k < g.passes(smoothing); k++ {

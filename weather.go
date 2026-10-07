@@ -92,6 +92,15 @@ func defaultAir(g *Grid) *Air {
 	return Climate{rows: g.H}.airFor(g, 1)
 }
 
+// ensureAir gives a grid made by hand, which has no air, the valley's. A
+// grid a land made was given its air when it was made (see newGround), and
+// keeps it: the weather reads the energy balance and never writes it.
+func (g *Grid) ensureAir() {
+	if g.air == nil {
+		g.air = defaultAir(g)
+	}
+}
+
 // weather reads the air over the map as it now lies: how much rain each tile
 // has in a year, and how much of it runs off. The drainage reads it afresh
 // whenever the ground has moved far enough to matter, because the ground the
@@ -107,9 +116,7 @@ func defaultAir(g *Grid) *Air {
 // winter's offshore one does.
 func (g *Grid) weather() {
 	defer phase.Start("weather")()
-	if g.air == nil {
-		g.air = defaultAir(g)
-	}
+	g.ensureAir()
 	if len(g.rain) != len(g.Tiles) {
 		g.rain = make([]float64, len(g.Tiles))
 		g.runoff = make([]float64, len(g.Tiles))
@@ -291,7 +298,7 @@ func (g *Grid) rainOn() {
 			if g.sunk(i) {
 				continue
 			}
-			t := a.Mean[y] - Lapse*g.laidHeight(i)
+			t := a.Mean[y] - Lapse*g.lapseHeight(i)
 			pe := atmos.PetAt(a.PET[y], t, g.yearCont(i))
 			g.dayRange[i] = float32(atmos.Diurnal(g.rangeCont(i), pe/math.Max(p, 1e-9)))
 			pe *= float64(g.dayRange[i])
@@ -350,7 +357,7 @@ func (g *Grid) Runoff(i int) float64 {
 // has. It is the table's where the rain has not been read.
 func (g *Grid) pet(i int) float64 {
 	y := i / g.W
-	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.laidHeight(i), g.yearCont(i))
+	p := atmos.PetAt(g.air.PET[y], g.air.Mean[y]-Lapse*g.lapseHeight(i), g.yearCont(i))
 	if i < len(g.dayRange) {
 		p *= float64(g.dayRange[i])
 	}
