@@ -6,6 +6,59 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Sea and air solved together, on the trades (#28)
+
+**What this is.** On `claude/sea-air-on-trades`, from `claude/air-trades`
+(0312c61), with #91's coupling (`claude/sea-air-coupled`) merged in.
+Moves the world: digest globe128 `d4a6a6dba4c7cfd3` -> `74ee8008159a4911`;
+valley and ancient unchanged to the bit.
+
+**What changed.** The merge: #91's `WindsFor`, `currents`, `gyres` and
+warm-started `flow.solve` take #86's `Scratch`; the gyres' answer the next
+solve starts from is copied out of the lent room, which the next lend
+clears. Then the pooling, which leaves the world as the merge made it
+(`TERRA_DIGEST=check` passes against the merge): `Solve`'s warmth over the
+sea, `walker` and `gill` (in the first phase's work, before that phase's
+wind), and the currents' thermocline, guided stress, pumping, sea
+equations, gyres' forcing, residual and transport take Scratch slots, the
+later ones taking the earlier ones' once they are done with; the fields
+the currents keep on `Env` are written over in the second round; Thomas's
+working room is made once a Gill solve, not once a wavenumber.
+
+**Heap** (budget, 4 goroutines, globe128):
+
+| | bytes | allocations | peak |
+|---|---|---|---|
+| air-trades | 375.9 MiB | 24,182 | 36.7-38.2 MiB |
+| merged, unpooled | 548.1 MiB (+45.8%) | 43,910 | 39.1 MiB |
+| pooled (this) | 473.5 MiB (+26.0%) | 34,759 | 39.7-40.2 MiB |
+
+What is left over air-trades is the second wind solve's and currents' own
+slots grown again, because the first currents let the wind's slots go
+(`drop`, `lend`) to keep the peak; and the gyres' equations of a world
+whose sea is redrawn. Keeping the slots across the round would cut the
+churn at the cost of the peak through the gyres' solve, which #86 found is
+what bounds the size of world; not done.
+
+**Time** (`TERRA_PHASES=1 BenchmarkNewLand/globe`, one run each, quiet
+machine, back to back):
+
+| | Generate s | weather s | currents s (calls) | windsFor s | ocean share |
+|---|---|---|---|---|---|
+| air-trades | 62.2, 58.4 | 17.8, 17.4 | 5.5, 4.9 (20) | 6.7, 6.1 | 0.31, 0.28 |
+| merged, unpooled | 62.0 | 22.2 | 8.1 (40) | 11.2 | 0.37 |
+| pooled | 63.9, 65.1 | 23.1, 23.8 | 9.0, 8.9 (40) | 12.2, 12.0 | 0.39, 0.37 |
+
+The pooling bought no time within the noise (a first unpooled run read
+76.2 s; retaken, 62.0). The ocean is the currents' second solve each
+reading, and it is 0.37-0.39 of the weather against the plan's 0.2.
+globe256 by hand, six runs each: 184 -> 219 us/tile median (+19%).
+`scripts/perf.sh check` fails against the 2026-09-16 baseline: globe256
++71%, and valley +15% and ancient +19%, which this change does not touch:
+the stack under it has drifted from that baseline too.
+
+---
+
 ## 2026-10-07 - Air: the trades where the earth's are (#88)
 
 **What this is.** On `claude/air-trades`, from `claude/integration-fixups`
