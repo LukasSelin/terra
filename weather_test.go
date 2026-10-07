@@ -251,6 +251,30 @@ func TestTheRainSettlesWhereverItStarts(t *testing.T) {
 	}
 }
 
+// A globe with no sea keeps the water it has. Its land sheds what its bucket
+// does not send back up, and with no sea to take it in and give it back the
+// budget counted it lost: each round of its settling rained less than the
+// last, and a sea-free globe's land settled on a few tens of mm a year and
+// grew nothing (#132). The water lies on the land instead, in its lakes and
+// hollows, and goes back up off them where the air could take more: a
+// planet of land with the rain it is started on keeps most of it.
+func TestADryGlobeKeepsItsWater(t *testing.T) {
+	g := oceanGlobe(256, 128)
+	for i := range g.Height {
+		g.Height[i] = 60
+	}
+	g.weather()
+	var sum float64
+	for i := range g.Tiles {
+		sum += g.rain[i]
+	}
+	mean := sum / float64(len(g.Tiles))
+	t.Logf("a globe of land rains %.0f mm a year", mean)
+	if mean < 300 {
+		t.Errorf("a globe with no sea rains %.0f mm a year: its water ran away", mean)
+	}
+}
+
 // The shadow goes on past the crest: the lee's rain is less than the plain's
 // upwind all the way down the far side and some way beyond its foot, because
 // the air that comes over has left its water on the windward face.
