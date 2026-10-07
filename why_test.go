@@ -131,7 +131,10 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // the oldest of the arc's tiles that had, raised by an arc fifty-two million
 // years before the present by some 11 km, until a rift split a plate into
 // halves (see split) and the ancient valley's plates met elsewhere again.
-// Tile 667 is now the oldest of them: raised by an arc in the first epoch,
+// (This branch had moved it to tile 1791 when the soil came to hold its
+// water from one season to the next, see soilwater.go, before the rock
+// stack, and to 1871 when a cold year's precipitation came to lie as
+// snow, see snow.go.) Tile 667 is now the oldest of them: raised by an arc in the first epoch,
 // by some 9 km. On main's rock stack (the history's heights, the rift fix and
 // the poured sea) the air reaching it crosses a range that wrings a rain
 // shadow's worth out of it, so its rain's chain ends in RainShadow too.

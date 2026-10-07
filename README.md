@@ -39,7 +39,28 @@ rivers are where the water runs off and has the power to cut, and the ground
 wears the way stream power says it does. The moon, and the tide it raises each
 day: springs and neaps, gathered by the shape of each coast, and the tidal
 flats a laden walker can cross at low water one fortnight in two. What grows on it
-and how far along it has come. How worn a path is and how fast it fades.
+and how far along it has come: nine plant functional types on every tile,
+each with the share of the ground it covers, the carbon it holds and the leaf
+area it puts up, grown to the climate's steady state by the year's warmth,
+light, snow and soil water and by competition, and living on through every
+age the ground is worn; the woods a game sees are read off them, and a wood
+whose ground stops suiting it dies back (`Grid.Cover`, `Biomass`, `LeafArea`,
+`LAI`, `BiomeAt`). Its fires, lit by the lightning and spread with the wind
+through the grass and the litter, hold a savanna open where the rain would
+grow a forest, and which of the two a place has is its history's; droughts
+and the storms' gales kill trees too (`Grid.Burned`). The frozen ground, read
+off the temperature at its top under the snow it has, and how deep each
+summer thaws it (`Grid.FrostShare`, `ActiveLayer`); the wet ground, where the
+water coming down through the ground is more than it can pass on and stands
+at the surface, the tundra's thaw flats among it (`Grid.Wetland`,
+`WaterTable`); and the peat that wet ground lays down faster than it rots,
+rising and holding its own water (`Grid.PeatDepth`, `PeatAge`,
+`PeatCarbon`). The land's carbon as stocks: the vegetation's, the litter's,
+the soil's fast, slow and passive pools that turn over in years, decades and
+centuries by the warmth and the water of each season, the peat's, and what
+the frost has churned down into the permafrost; and all of it together, for
+a step of deep time to book (`Grid.Litter`, `SoilPools`, `FrozenCarbon`,
+`SoilTurnover`, `LandCarbon`). How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
 

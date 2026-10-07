@@ -15,7 +15,7 @@ import (
 // what that time has made of it - the bases washed out, the lime and the salt
 // the dry years leave, the carbon what grows puts in (see pedogenesis.go) -
 // and a world drawn rather than made keeps only the depth. These are those,
-// drawn, and the full Köppen–Geiger type the biome map folds together.
+// drawn, and the full Köppen–Geiger type of the climate, which the biome map no longer reads.
 
 // A soil is the one thing that most marks a tile's soil, the way a soil
 // survey's first division does: a salt crust, a lime pan, the bases washed
@@ -182,7 +182,7 @@ func koppenDrawing(land *terra.Land, cls classes, shade func(geom.Pos) float64) 
 	})
 	return drawing{
 		file: "koppen", title: "Köppen–Geiger", legend: legend,
-		about: "Each dry tile's full Köppen–Geiger type, in the colours Beck and others (2018) map the real world's in: A tropical in blue, B dry in red and yellow, C temperate in yellow-green, D continental in violet and cyan, E polar in grey. The biome map folds these into fourteen. Shares are of the dry land's tiles. Water dark, salt flats and tidal mud pale.",
+		about: "Each dry tile's full Köppen–Geiger type, in the colours Beck and others (2018) map the real world's in: A tropical in blue, B dry in red and yellow, C temperate in yellow-green, D continental in violet and cyan, E polar in grey. The biome map is the vegetation's, not these. Shares are of the dry land's tiles. Water dark, salt flats and tidal mud pale.",
 		color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 			k := cls.Koppen[i]
 			if k == "" {

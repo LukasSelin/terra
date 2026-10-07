@@ -167,6 +167,44 @@ type Grid struct {
 	// rainWarm is how much of each tile's year of rain falls in its warmer
 	// half, which is what tells a monsoon from a Mediterranean winter rain.
 	rainWarm []float32
+	// rainIn, soilWater and runoffIn are, for each tile and each phase of the
+	// year, tile by tile and the phases together, how much rain fell on it in
+	// the phase, how much water its soil held on the mean through the phase
+	// and how much it shed to the rivers in it, in mm; soilHold is the most
+	// its soil holds. paw is working memory: the plant-available water of
+	// each tile's soil as the weather reads it. See soilwater.go.
+	rainIn, soilWater, runoffIn []float32
+	soilHold, paw               []float32
+	// snowWater, snowCover and meltIn are, the same way, the snow water
+	// lying on each tile on the mean through each phase, the share of the
+	// ground it covered and what of it melted in the phase, in mm; ice is
+	// the mass balance of the snow that outlasts the year, mm of water a
+	// year, and nothing where it melts out. See snow.go.
+	snowWater, snowCover, meltIn []float32
+	ice                          []float32
+	// petShare is, for each phase of the year and each air cell, the share
+	// of a year's potential evaporation the cell's land has in the phase, as
+	// the air last read it, which a tile's own bucket is run on again from
+	// (see soilYear).
+	petShare [atmos.Phases][]float64
+	// vegCover, vegMass and vegLeaf are what grows on each tile, type by type
+	// and the types of a tile together: the share of its ground each covers
+	// in 255ths, the carbon it holds in grams a square metre, and the leaf
+	// area over its cover in twentieths. Nil until the cover stage lays them.
+	// See vegetation.go.
+	vegCover, vegLeaf []uint8
+	vegMass           []uint16
+	// burned is the share of each tile's ground its fires burn in a year, in
+	// 65535ths. See Burned. npp is what grows on each tile in a year, in kg C
+	// a square metre: see NPP.
+	burned []uint16
+	npp    []float32
+	// peat is the carbon in each tile's peat, in kg a square metre, and
+	// peatAge how long it has been laying down, in years. See wetland.go.
+	peat, peatAge []float32
+	// pools is the carbon in each tile's litter, its soil's fast, slow and
+	// passive pools and its frozen ground: see carbon.go.
+	pools []carbonPools
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -359,6 +397,15 @@ func (g *Grid) Clone() *Grid {
 	c.ebb = append([]float32(nil), g.ebb...)
 	c.rain = append([]float64(nil), g.rain...)
 	c.runoff = append([]float64(nil), g.runoff...)
+	c.rainIn, c.soilWater, c.runoffIn = slices.Clone(g.rainIn), slices.Clone(g.soilWater), slices.Clone(g.runoffIn)
+	c.soilHold = slices.Clone(g.soilHold)
+	c.snowWater, c.snowCover, c.meltIn = slices.Clone(g.snowWater), slices.Clone(g.snowCover), slices.Clone(g.meltIn)
+	c.ice = slices.Clone(g.ice)
+	c.petShare = g.petShare // the air's, never written once read
+	c.vegCover, c.vegMass, c.vegLeaf = slices.Clone(g.vegCover), slices.Clone(g.vegMass), slices.Clone(g.vegLeaf)
+	c.burned, c.npp = slices.Clone(g.burned), slices.Clone(g.npp)
+	c.peat, c.peatAge = slices.Clone(g.peat), slices.Clone(g.peatAge)
+	c.pools = slices.Clone(g.pools)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)
@@ -537,9 +584,21 @@ func (g *Grid) HasNeighbor(p geom.Pos, ok func(*Tile) bool) bool {
 // when the land was made and the height the ground now has. Water is not
 // frozen ground: see Freezing. It is a yes or a no, which the fringe of the
 // real thing is not: how much of a tile is frozen is FrostShare.
+//
+// Once the snow has been read it is the ground's own heat that says, and not
+// the air's year alone: the temperature at the top of the permafrost under
+// the snow the tile has and the water its ground holds (see frost.go). Frozen
+// is then the outer limit of the last isolated patches, frostSpread over
+// nought.
 func (g *Grid) Frozen(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
-	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Elevation(i)) < Permafrost
+	if !ok || g.Tiles[i].Wet() {
+		return false
+	}
+	if f, read := g.groundFrost(i); read {
+		return frostShareOf(f.ttop) > 0
+	}
+	return g.meanOn(i, g.Elevation(i)) < Permafrost
 }
 
 // FrostShare is the share of tile i's ground that is permafrost: none where
@@ -550,13 +609,19 @@ func (g *Grid) Frozen(p geom.Pos) bool {
 // and for what settles a hectare inside the fringe that a map of kilometre
 // tiles cannot know.
 //
-// Nothing in the making of a world reads it, and the making of a world does
-// not change for its being here. It is what a map of the frozen ground is to
-// be drawn from, so that the edge thins out over the hundreds of kilometres
+// The making of a world reads the share where the frozen ground holds the
+// water up and slows the peat's rot (see wetland.go). It is also what a map
+// of the frozen ground is to be drawn from, so that the edge thins out over the hundreds of kilometres
 // it thins out over in Siberia rather than stopping at a line.
+//
+// Once the snow has been read it is the share of the tile's ground whose top
+// of the permafrost is under nought (see frostShareOf).
 func (g *Grid) FrostShare(i int) float64 {
 	if len(g.warm) != len(g.Tiles) || i < 0 || i >= len(g.Tiles) || g.Tiles[i].Wet() {
 		return 0
+	}
+	if f, read := g.groundFrost(i); read {
+		return frostShareOf(f.ttop)
 	}
 	return atmos.FrostShare(g.meanOn(i, g.Elevation(i)), float64(g.swing[i]))
 }
@@ -569,14 +634,28 @@ func (g *Grid) Treeless(p geom.Pos) bool {
 	return ok && !g.Tiles[i].Wet() && g.meanOn(i, g.Elevation(i)) < atmos.TreeLineMean(float64(g.swing[i]))
 }
 
-// Barren reports whether the ground here is under ice: a summer too cold to
-// melt the snow its year brings, by Ohmura's equilibrium line. See iceSummer.
+// Barren reports whether the ground here is under ice: snow that outlasts
+// the year, by its mass balance through the year's seasons (see snow.go).
 // It is the ground that grows nothing, which is what an outcrop is.
+//
+// It was Ohmura's equilibrium line, a summer too cold for the year's
+// precipitation (see atmos.IceSummer), and a map whose weather has not been
+// read still reads that.
 func (g *Grid) Barren(p geom.Pos) bool {
 	i, ok := g.yearIndex(p)
 	if !ok || g.Tiles[i].Wet() {
 		return false
 	}
+	if len(g.ice) == len(g.Tiles) {
+		return g.ice[i] > 0
+	}
+	return g.ohmuraIce(i)
+}
+
+// ohmuraIce reports whether tile i stands above Ohmura's equilibrium line:
+// a summer quarter colder than the one at which its year's precipitation
+// just melts (Ohmura, Kasser and Funk, 1992).
+func (g *Grid) ohmuraIce(i int) bool {
 	summer := g.meanOn(i, g.Elevation(i)) + atmos.SummerPeak*math.Abs(float64(g.swing[i]))
 	return summer < atmos.IceSummer(g.Rain(i))
 }

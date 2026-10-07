@@ -50,8 +50,8 @@ const (
 // there was.
 //
 // OrbitBefore(0) is the real orbit of 1950 - an eccentricity of 0.01672, a
-// tilt of 23.446 degrees, a perihelion at 102.04 - and not Today's, whose
-// figures are FAO-56's rounding of it: see todayEccentricity.
+// tilt of 23.446 degrees, a perihelion at 102.04 - which is Today's: see
+// todayEccentricity.
 func (f Forcing) OrbitBefore(years float64) Forcing {
 	f = f.OrDefault()
 	t := -years // the series run forward in time from 1950

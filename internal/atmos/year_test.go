@@ -46,17 +46,21 @@ func TestTheTreeLineIsTheSummers(t *testing.T) {
 }
 
 // The seasons lag the sun by a month on land and two at sea, and the swing
-// grows toward the poles and inland. The temperate latitude keeps exactly the
-// swing the valley was tuned on.
+// grows toward the poles and inland. The temperate latitude on middling
+// ground keeps exactly the swing the valley was tuned on.
 func TestTheYearLagsAndSwingsByPlace(t *testing.T) {
-	if got, want := LagAt(1), lagLand*Year/365.25; math.Abs(got-want) > 1e-9 {
-		t.Errorf("land lags %.2f days, want %.2f", got, want)
+	e := ebm()
+	if got, want := LagAt(1), e.at(&e.lagL, Temperate); math.Abs(got-want) > 1e-9 {
+		t.Errorf("land lags %.2f days, want the balance's %.2f", got, want)
 	}
-	if got, want := LagAt(0), lagSea*Year/365.25; math.Abs(got-want) > 1e-9 {
-		t.Errorf("sea lags %.2f days, want %.2f", got, want)
+	if got, want := LagAt(0), e.at(&e.lagS, Temperate); math.Abs(got-want) > 1e-9 {
+		t.Errorf("sea lags %.2f days, want the balance's %.2f", got, want)
 	}
-	if solarSwing(Temperate) != 1 || math.Abs(SwingAt(Temperate, ContMiddling)-Swing) > 1e-9 {
-		t.Fatalf("the temperate latitude swings %.4f of the sun's and %.4f degrees", solarSwing(Temperate), SwingAt(Temperate, ContMiddling))
+	if mid := LagAt(0.5); mid <= LagAt(1) || mid >= LagAt(0) {
+		t.Errorf("half land lags %.2f days, between %.2f and %.2f", mid, LagAt(1), LagAt(0))
+	}
+	if math.Abs(SwingAt(Temperate, ContMiddling)-Swing) > 1e-9 {
+		t.Fatalf("the temperate latitude on middling ground swings %.4f degrees", SwingAt(Temperate, ContMiddling))
 	}
 	if !(SwingAt(70, 0.5) > SwingAt(45, 0.5) && SwingAt(45, 0.5) > SwingAt(10, 0.5)) {
 		t.Error("the swing does not grow toward the pole")
@@ -141,6 +145,39 @@ func TestFrostShareRunsFromTheLineToTheContinuousZone(t *testing.T) {
 	for _, mean := range []float64{Permafrost - 0.001, Permafrost - 20} {
 		if s := FrostShare(mean, 0); s != 1 {
 			t.Errorf("a share of %.3f at a mean of %.3f with no swing", s, mean)
+		}
+	}
+}
+
+// The year's degree-days a phase at a time add to the year's, over freezing
+// and under it, and the summer's phase holds the most of the thaw on either
+// side of the equator.
+func TestPhaseDegreeDaysAddToTheYear(t *testing.T) {
+	for _, c := range [][2]float64{{-15, 20}, {-2, 12}, {0, 8}, {5, -18}, {25, 1}, {-30, 0}, {3, 3}} {
+		mean, swing := c[0], c[1]
+		thaw, freeze := PhaseDegreeDays(mean, swing)
+		var th, fr float64
+		for k := range Phases {
+			th += thaw[k]
+			fr += freeze[k]
+			if thaw[k] < 0 || freeze[k] < 0 {
+				t.Fatalf("mean %v swing %v: a phase's degree-days under nothing: %v %v", mean, swing, thaw, freeze)
+			}
+		}
+		if want := DegreeDays(mean, swing, 0); math.Abs(th-want) > 1e-6*(1+want) {
+			t.Errorf("mean %v swing %v: thaw %.6f against the year's %.6f", mean, swing, th, want)
+		}
+		if want := DegreeDays(-mean, swing, 0); math.Abs(fr-want) > 1e-6*(1+want) {
+			t.Errorf("mean %v swing %v: freeze %.6f against the year's %.6f", mean, swing, fr, want)
+		}
+		summer := 2
+		if swing < 0 {
+			summer = 0
+		}
+		for k := range Phases {
+			if thaw[k] > thaw[summer]+1e-9 {
+				t.Errorf("mean %v swing %v: phase %d thaws more than the summer: %v", mean, swing, k, thaw)
+			}
 		}
 	}
 }

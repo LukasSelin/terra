@@ -2,9 +2,18 @@ package atmos
 
 import "math"
 
-// The shape of the year. MeanTemp is the annual mean in degrees, Swing half
-// the distance from midwinter to midsummer. Tick zero is early spring:
+// The valley's year. MeanTemp is its annual mean in degrees, Swing half the
+// distance from its midwinter to its midsummer. Tick zero is early spring:
 // people arrive with the growing season ahead of them, not behind them.
+//
+// They are the valley's and nobody else's. A valley is one temperate
+// latitude's weather, and the settlement's year - what grows in a winter,
+// what the cold costs a body - was tuned on these two figures. A globe's
+// ground and every map's air read the energy balance's year instead: see
+// SwingAt. The air used to read Swing too, on a globe as well as a valley,
+// scaled by a share of the temperate latitudes' swing that stopped growing at
+// Temperate, so that a globe's air and its ground disagreed about summer
+// everywhere poleward of forty-five; see Env.seasonTemp for what it reads now.
 const (
 	MeanTemp = 10.0
 	Swing    = 12.0
@@ -47,23 +56,12 @@ const Lapse = 0.0065
 // where the ground stays frozen and where no tree will stand - reads it here,
 // so that they agree about what summer is.
 
-// solarSwing is how much of the temperate latitudes' swing the sun alone
-// gives the year at lat, signed by hemisphere. The sun's reach at the top of
-// the air swings over the year by very nearly the sine of the latitude (it is
-// the declination's cosine term in the daily insolation; see Hartmann, Global
-// Physical Climatology, 2016, ch. 2), so the swing is quoted against its value
-// at Temperate. The wind still reads the year this way - see seasonTemp - and
-// the ground reads the energy balance's: see swingAt.
-func solarSwing(lat float64) float64 {
-	return math.Sin(math.Abs(lat)*math.Pi/180) / math.Sin(Temperate*math.Pi/180) * math.Copysign(1, lat)
-}
-
 // SwingAt is half the distance from the coldest day of the year to the warmest
 // at latitude lat, on ground cont of whose country round about is land. It is
 // the energy balance's year (see ebm.go): the swing of the balance's sea at
 // that latitude where the country is all water, its land's where it is all
-// land, and between in proportion. It is signed by hemisphere, as solarSwing
-// is.
+// land, and between in proportion. It is signed by hemisphere: the south's
+// year turns over, its summer standing where the north's winter does.
 //
 // It used to be the sun's swing times a share written down for each - a third
 // of it over the open sea and one and three fifths deep in a continent. The
@@ -77,17 +75,16 @@ func SwingAt(lat, cont float64) float64 {
 	return math.Copysign(sea+(land-sea)*clamp01(cont), lat)
 }
 
-// seasonTemp is what the year adds to the mean at a place whose sun has solar
-// of the temperate swing, phase of the way from its mean to its crest, on
-// ground cont continental: the swing the wind and the storms read. See
-// swingSea.
-func seasonTemp(solar, phase, cont float64) float64 {
-	return solar * Swing * phase * (swingSea + (swingLand-swingSea)*cont)
-}
-
 // ContMiddling is the continentality at which a place keeps exactly the
 // temperate swing: the ground a latitude's weather is the weather of when
-// nothing is known about the ground. terra.Climate.TempAt's year is read at it.
+// nothing is known about the ground. terra.Climate.TempAt's year is read at
+// it, and so is a valley's evaporation's, whose ground keeps Swing.
+//
+// It is a share of the ground and not of the sky, so it is today's balance's
+// and does not follow the forcing: the ground on which today's planet at
+// Temperate has the valley's year, some two thirds of it land. A globe under
+// another forcing reads its own swing on that same ground - see SwingUnder -
+// and a planet tilted less has a smaller year there, which is the point.
 var ContMiddling = middlingOf(ebm())
 
 // ContValley is the same for a valley, which has no ground round it to be
@@ -95,7 +92,8 @@ var ContMiddling = middlingOf(ebm())
 // the balance's at the land and the sea's old exchange, valleyExchange,
 // because a valley's rivers and lakes were tuned on the day's range that
 // gave, and the stronger exchange a globe's winters want is a fact about
-// continents a valley does not have.
+// continents a valley does not have. Like ContMiddling it is a share of
+// ground, and today's: a valley reads no forcing.
 var ContValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}, Today()))
 
 // valleyExchange is landSeaExchange as it stood when the valley was tuned.
@@ -114,24 +112,30 @@ func middlingOf(e *ebmClimate) float64 {
 // (North and Coakley, 1979). The lags are the energy balance's at Temperate,
 // where its land's year peaks a month after the solstice and its sea's nearly
 // three - the real lag is a month over the continents and two to three over
-// the open ocean - and a place partly both has a heat capacity partly each.
-var (
-	lagLand = ebm().at(&ebm().lagL, Temperate) // days, in a year of 365.25
-	lagSea  = ebm().at(&ebm().lagS, Temperate)
-)
-
-var (
-	yearOmega = 2 * math.Pi / 365.25
-	tauLand   = math.Tan(yearOmega*lagLand) / yearOmega
-	tauSea    = math.Tan(yearOmega*lagSea) / yearOmega
-)
+// the open ocean - and a place partly both has a heat capacity partly each:
+// the balance's tau, C/B, for each is kept with it (see solveEBMWith), and a
+// place's is between them in proportion.
+//
+// They are days of the calendar, because the balance's year is the
+// calendar's; they used to be days of a year of 365.25 and turned into the
+// calendar's on the way out.
+var yearOmega = 2 * math.Pi / Year
 
 // LagAt is how many days of the calendar the warmest day falls after the
-// sun's highest on ground cont of whose country round about is land.
-func LagAt(cont float64) float64 {
+// sun's highest on ground cont of whose country round about is land, under
+// today's forcing.
+func LagAt(cont float64) float64 { return LagUnder(Today(), cont) }
+
+// LagUnder is LagAt under forcing f.
+func LagUnder(f Forcing, cont float64) float64 {
+	return ebmUnder(f).lagAt(cont)
+}
+
+// lagAt is LagAt off balance e.
+func (e *ebmClimate) lagAt(cont float64) float64 {
 	cont = clamp01(cont)
-	tau := tauSea + (tauLand-tauSea)*cont
-	return math.Atan(yearOmega*tau) / yearOmega * Year / 365.25
+	tau := e.tauSea + (e.tauLand-e.tauSea)*cont
+	return math.Atan(yearOmega*tau) / yearOmega
 }
 
 // SeasonAt is how far into its swing the year is on day tick at ground whose
@@ -179,6 +183,11 @@ func aboveMean(x, a float64) float64 {
 // over the surface, and the line it gives is the one the discontinuous
 // permafrost is mapped to, a mean annual air temperature of some two degrees
 // under freezing.
+//
+// It is the snow of nowhere in particular. A land whose snow has been read
+// reads its ground's frost off the snow it has instead, with the ground's
+// water and its peat (the land's frost.go); this is the frost of a ground
+// whose snow is not known.
 const (
 	Permafrost    = -2.0
 	surfaceOffset = -Permafrost // how much warmer the ground's surface stands than the air
@@ -194,6 +203,70 @@ func frostIndex(mean, swing float64) float64 {
 		return 0.5
 	}
 	return math.Sqrt(ddf) / (math.Sqrt(ddf) + math.Sqrt(ddt))
+}
+
+// The year's degree-days phase by phase. The ground's frost is read off the
+// thawing and the freezing degree-days of the year, and the snow that lies on
+// it lies in some phases and not others: so they are wanted a phase at a
+// time, each phase the quarter of the year round its middle (see stepAngle),
+// on the same sine the snow is read on.
+
+// PhaseDegreeDays is the thawing and the freezing degree-days, over and under
+// freezing, of each phase of a year whose mean is mean, swinging swing either
+// side of it, signed by hemisphere as SwingAt is. They are exact for a sine,
+// and the four of each add to DegreeDays at a base of nought and of its
+// mirror.
+func PhaseDegreeDays(mean, swing float64) (thaw, freeze [Phases]float64) {
+	scale := daysPerYear / (2 * math.Pi)
+	for k := range Phases {
+		mid := float64(k-1) * math.Pi / 2
+		lo, hi := mid-math.Pi/4, mid+math.Pi/4
+		over := overSine(mean, swing, lo, hi)
+		all := mean*(hi-lo) - swing*(math.Cos(hi)-math.Cos(lo))
+		thaw[k] = scale * over
+		freeze[k] = math.Max(0, scale*(over-all))
+	}
+	return thaw, freeze
+}
+
+// overSine is the integral of max(0, a + b·sin θ) over θ from lo to hi, split
+// where the sine crosses nought.
+func overSine(a, b, lo, hi float64) float64 {
+	cuts := [6]float64{lo}
+	n := 1
+	if b != 0 && math.Abs(a) < math.Abs(b) {
+		r := math.Asin(-a / b)
+		for _, root := range [2]float64{r, math.Pi - r} {
+			for _, turn := range [2]float64{-2 * math.Pi, 0} {
+				if x := root + turn; x > lo && x < hi {
+					cuts[n] = x
+					n++
+				}
+				if x := root + turn + 2*math.Pi; turn == 0 && x > lo && x < hi {
+					cuts[n] = x
+					n++
+				}
+			}
+		}
+	}
+	cuts[n] = hi
+	n++
+	s := cuts[1 : n-1]
+	for j := 1; j < len(s); j++ { // a handful: sorted by insertion
+		for m := j; m > 0 && s[m] < s[m-1]; m-- {
+			s[m], s[m-1] = s[m-1], s[m]
+		}
+	}
+	var sum float64
+	for j := 0; j+1 < n; j++ {
+		// Between two cuts the sine does not cross, so the piece is all
+		// over nought or all under it, as its integral is.
+		x0, x1 := cuts[j], cuts[j+1]
+		if piece := a*(x1-x0) - b*(math.Cos(x1)-math.Cos(x0)); piece > 0 {
+			sum += piece
+		}
+	}
+	return sum
 }
 
 // How much of it. Permafrost has no edge. The maps of it (Brown and others,
@@ -366,4 +439,30 @@ func ClimateGrowth(temp, mean, swing, rain float64) float64 {
 		return 0
 	}
 	return math.Max(0, temp-growBase) / gdd * miamiNPP(mean, rain) / nppRef
+}
+
+// DegreeDays is the year's degree-days over base of a year whose mean is
+// mean, swinging swing either side of it: what a plant's growing season is
+// counted in, five degrees for the temperate trees and nought for the frost's
+// thaw. It is exact for a sine.
+func DegreeDays(mean, swing, base float64) float64 {
+	return daysPerYear * aboveMean(mean-base, swing)
+}
+
+// PhaseSun is the mean sun at the top of the air through each phase of the
+// year at latitude lat, in degrees, under f, in W/m²: the daily mean of
+// insolation taken over each phase's days about its middle (see dayOf). The
+// zero Forcing is today's.
+func PhaseSun(f Forcing, lat float64) (sun [Phases]float64) {
+	f = f.OrDefault()
+	phi := lat * math.Pi / 180
+	const days = Year / Phases
+	for k := range Phases {
+		var sum float64
+		for d := range days {
+			sum += f.insolation(phi, float64(dayOf[k]-days/2+d)+0.5)
+		}
+		sun[k] = sum / days
+	}
+	return sun
 }

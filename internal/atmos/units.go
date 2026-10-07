@@ -7,9 +7,12 @@ import (
 	"github.com/LukasSelin/terra/internal/par"
 )
 
-// Year is the calendar's year, over which the air's seasons turn: see
-// clock.Year.
-const Year = clock.Year
+// Year is the calendar's year, over which the air's seasons turn, and Month
+// its twelfth: see clock.Year. The energy balance steps it too: see ebm.go.
+const (
+	Year  = clock.Year
+	Month = clock.Month
+)
 
 // The figures the air is worked out in, which the land has too and under the
 // same names: the acceleration of gravity in m/s², a kilometre in metres, the
