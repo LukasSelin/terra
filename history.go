@@ -1066,6 +1066,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	touch := make([]float64, plateCap*plateCap)
 	weld := make([]float64, plateCap*plateCap)
 
+	// The climate of each epoch, where the study's switch is on: see
+	// deepclimate.go. Nil, and nothing, where it is off.
+	dc := newEpochClimate(g)
 	if epochWatch != nil {
 		epochWatch(g, cr, plates, -1) // the first plates, before any has moved
 	}
@@ -1094,6 +1097,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		// the one its water goes to, and the hollows the plates have made
 		// hold what the water brings them: see stillWork.
 		g.base = g.historyBase()
+		if dc != nil {
+			dc.epoch(g, e)
+		}
 		g.drain()
 		g.wear(epochYears)
 		g.keepBook(book, e)
@@ -1107,6 +1113,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		if epochWatch != nil {
 			epochWatch(g, cr, plates, e)
 		}
+	}
+	if dc != nil {
+		dc.done(g)
 	}
 
 	// The ages of the floor and how fast the ground is rising are read while

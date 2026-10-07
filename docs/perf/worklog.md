@@ -6,6 +6,58 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The climate of each epoch: the cost study
+
+**What this is.** On `claude/deep-climate-study`, from `main` at 2c51bea.
+The first part of #57 (X1): what it would cost to give each history epoch
+its own climate. No world moves: the prototype is behind `deepClimate`
+(`deepclimate.go`), off and set only by `TestDeepClimateCost`;
+`TERRA_DIGEST=check` passes (also with `TERRA_HISTORIES=off`). The full
+write-up is `docs/deep-time-climate.md`.
+
+**What was found first.** The history already reads the weather each
+epoch: sixteen `weather` calls in sixteen epochs on every globe measured,
+each with its own winds, currents and vapour budget on the epoch's ground.
+What is today's is `g.air.Mean`, the energy balance of a planet 0.3 land in
+every band. So the new work is a balance per epoch (`atmos.SolveZonal`, a
+per-band-land copy of `ebm.go`'s, bit-identical to it under a uniform 0.3).
+
+**Measured.** `TERRA_DEEP_CLIMATE=1 TERRA_PHASES=1 go test -run
+TestDeepClimateCost -count=1 -v -timeout 60m .`, seed 1, the `history`
+call alone, minimum of two runs, machine otherwise quiet:
+
+| GlobeTerms | history s | x today | weather s (16 calls) | EBM s |
+| --- | --- | --- | --- | --- |
+| today | 43.06 | 1.00 | 12.53 | - |
+| EBM each epoch, cold 20 yr | 50.86 | 1.18 | 11.33 | 10.26 |
+| EBM each epoch, warm 3 yr | 44.75 | 1.04 | 11.81 | 2.17 |
+| EBM every other epoch | 46.15 | 1.07 | 11.21 | 5.14 |
+| shift by land share | 42.88 | 1.00 | 11.64 | (1.25 once) |
+| EBM each epoch, air 2x coarser | 47.89 | 1.11 | 6.98 | 10.49 |
+| today's air, 2x coarser | 37.86 | 0.88 | 6.92 | - |
+| today's air +0.01 C | 42.38 | 0.98 | 12.09 | - |
+
+Small globe, seeds 1/2/3: today 3.07/3.65/3.77 s; cold each epoch
+13.38/13.58/13.44 (3.6-4.4x); warm 3 yr 5.62/5.90/5.37 (1.4-1.8x); every
+other 8.57/9.28/8.33.
+
+**What it means.** A cold balance is 0.64 s, serial, whatever the map;
+warm-started for three years from the last epoch's state it is 0.10 s and
+within 0.03 degrees of the cold one in every band. Asking for the weather
+again costs nothing (it is stale each epoch anyway). M1's flow would add
+~0.5 s a globe history (its 70 ms a call less its 40 ms of sweeps).
+Recommended: the warm-started balance every epoch, +2.2 s a history
+(globe 1.04x, small globe up to 1.8x), inside the owner's doubling. The
+climate it gives differs from today's by 0.1-0.2 degrees in the planet's
+mean and 0.4-0.7 poleward of 60; under today's forcing its effect on the
+history's ground is inside the history's own noise (+0.01 C moves heights
+459-683 m RMS), while 4x CO2 raises the epochs' land rain 18-75%. Five
+epochs in 64 changed their land rain by 2x for a 0.1-0.3 degree change:
+the history's one-round vapour budget, to be looked at before X1 moves the
+world.
+
+---
+
 ## 2026-10-06 - Two short-tier tests that read the draw
 
 **What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at
