@@ -155,10 +155,14 @@ type level struct {
 // gyres is the transport streamfunction ψ, in cubic metres a second, under
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
 // it is the level of the landmass. It is for a globe only.
-func (e *Env) gyres(tx, ty []float64) []float64 {
+//
+// Its solve keeps its vectors in what s lends it, where s is not nil: see
+// Scratch.lend.
+func (e *Env) gyres(tx, ty []float64, s *Scratch) []float64 {
 	defer phase.Start("airEnv.gyres")()
 	f := e.newFlow()
-	x := f.solve(f.forcing(tx, ty))
+	b := f.forcing(tx, ty)
+	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost, s.lend(gmresRoom(flowRestart), len(b)))
 	return f.spread(x)
 }
 
@@ -723,12 +727,6 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 		}
 	}
 	return b
-}
-
-// solve is x with A x = b, to flowSettled of b.
-func (f *flow) solve(b []float64) []float64 {
-	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
-	return x
 }
 
 // chain is a line of cells and the operator between them, a band of two

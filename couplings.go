@@ -146,7 +146,7 @@ var frameFields = []string{
 	"Tiles.Mark", "Tiles.Owner", "Tiles.Fenced", "Traffic", "Kinds", "CW", "CH", "Chunks", "PW", "PH", "patches", "Active", "lenders",
 	"regions", "regionStack", "regionsStale", "waters", "router", "landmarks", "islanded",
 	"seam", "seamQueue", "floodScratch", "slideScratch", "fillScratch", "poolScratch",
-	"flowScratch", "stepScratch", "creepScratch",
+	"flowScratch", "stepScratch", "creepScratch", "airWork",
 }
 
 // Coupling is one pass of world creation as the coupling graph has it: the

@@ -7,24 +7,31 @@ import "math"
 // and Schultz, 1986), started again every restart directions from where it
 // got, and taking at most most directions. It gives the directions it took
 // and the residual left, as a share of b. Every sum is taken in one order.
-func gmres(b []float64, apply, precondition func(in, out []float64), settled float64, restart, most int) ([]float64, int, float64) {
+//
+// room is where its vectors are kept: gmresRoom(restart) of them, each as
+// long as b and all nought, the first of them x. Where it is nil they are
+// made.
+func gmres(b []float64, apply, precondition func(in, out []float64), settled float64, restart, most int, room [][]float64) ([]float64, int, float64) {
 	n := len(b)
-	x := make([]float64, n)
+	m := restart
+	if room == nil {
+		room = make([][]float64, gmresRoom(m))
+		for k := range room {
+			room[k] = make([]float64, n)
+		}
+	}
+	x := room[0]
 	bn := norm(b)
 	if bn == 0 {
 		return x, 0, 0
 	}
-	m := restart
-	v := make([][]float64, m+1)
-	for k := range v {
-		v[k] = make([]float64, n)
-	}
+	v := room[1 : m+2]
 	hess := make([][]float64, m+1)
 	for k := range hess {
 		hess[k] = make([]float64, m)
 	}
 	cs, sn, g := make([]float64, m), make([]float64, m), make([]float64, m+1)
-	z, t, r := make([]float64, n), make([]float64, n), make([]float64, n)
+	z, t, r := room[m+2], room[m+3], room[m+4]
 	copy(r, b)
 	done := 0
 	for done < most {
@@ -100,6 +107,11 @@ func gmres(b []float64, apply, precondition func(in, out []float64), settled flo
 	}
 	return x, done, norm(r) / bn
 }
+
+// gmresRoom is how many vectors gmres keeps when it starts again every
+// restart directions: the answer, the directions and one more, and three for
+// its working.
+func gmresRoom(restart int) int { return restart + 5 }
 
 func dot(a, b []float64) float64 {
 	var s float64

@@ -125,6 +125,11 @@ func (g *Grid) weather() {
 		g.rainWarm = make([]float32, len(g.Tiles))
 		g.dayRange = make([]float32, len(g.Tiles))
 	}
+	// The reading is worked out in memory of its own, which the wind and the
+	// rain pass between them and which is let go of with the reading: see
+	// atmos.Scratch.
+	g.airWork = new(atmos.Scratch)
+	defer func() { g.airWork = nil }()
 	was := g.winds
 	g.winds = g.windsFor()
 	if was != nil {
@@ -173,7 +178,7 @@ func (g *Grid) airedGround(into []float32) []float32 {
 func (g *Grid) windsFor() *Winds {
 	defer phase.Start("windsFor")()
 	above, wet := g.airGround()
-	return atmos.WindsFor(&g.Map, g.air, above, wet)
+	return atmos.WindsFor(&g.Map, g.air, above, wet, g.airWork)
 }
 
 // airGround is the ground of g as the air reads it, tile by tile: how far each
@@ -246,7 +251,7 @@ func (g *Grid) rainOn() {
 	}
 
 	g.soilBucket()
-	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw)
+	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw, g.airWork)
 	if n := len(g.Tiles) * atmos.Phases; len(g.soilWater) != n {
 		g.rainIn, g.soilWater, g.runoffIn = make([]float32, n), make([]float32, n), make([]float32, n)
 		g.soilHold = make([]float32, len(g.Tiles))

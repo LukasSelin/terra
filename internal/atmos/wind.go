@@ -473,11 +473,16 @@ func (e *Env) Sample(v []float64, fx, fy float64) float64 {
 // cell, which is a different number of cells along a row near a pole than at
 // the equator.
 func (e *Env) blur(v []float64, reach float64) []float64 {
+	return e.blurIn(nil, 0, v, reach)
+}
+
+// blurIn is blur worked out in w, with the answer in w's slot: see Scratch.
+func (e *Env) blurIn(w *work, slot int, v []float64, reach float64) []float64 {
 	across := make([]int, e.H)
 	for cy := range across {
 		across[cy] = int(math.Round(reach / (e.Dx[cy] / 1000)))
 	}
-	return e.box(v, across, int(math.Round(reach/(e.Dy/1000))))
+	return e.boxIn(w, slot, v, across, int(math.Round(reach/(e.Dy/1000))))
 }
 
 // blurCells is v averaged over the square r cells either way of each cell.
@@ -493,7 +498,12 @@ func (e *Env) blurCells(v []float64, r int) []float64 {
 // and down cells either way down each column, clipped at the edges and taken
 // round the seam.
 func (e *Env) box(v []float64, across []int, down int) []float64 {
-	mid := make([]float64, len(v))
+	return e.boxIn(nil, 0, v, across, down)
+}
+
+// boxIn is box worked out in w, with the answer in w's slot: see Scratch.
+func (e *Env) boxIn(w *work, slot int, v []float64, across []int, down int) []float64 {
+	mid := w.floats(slotBoxMid, len(v))
 	e.rows(func(cy int) {
 		r := across[cy]
 		row := cy * e.W
@@ -528,7 +538,7 @@ func (e *Env) box(v []float64, across []int, down int) []float64 {
 			}
 		}
 	})
-	out := make([]float64, len(v))
+	out := w.floats(slot, len(v))
 	down = min(down, e.H)
 	for cx := 0; cx < e.W; cx++ {
 		var s float64
@@ -555,7 +565,10 @@ func (e *Env) box(v []float64, across []int, down int) []float64 {
 // WindsFor works out the climate of the wind over a map m as its ground now
 // lies: see newAirEnv for above and wet. The phases are independent of one
 // another and are worked out side by side; each writes only its own slices.
-func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
+//
+// s is the working memory the reading is worked out in, which the rain is
+// worked out in after it (see Scratch); with none it makes its own.
+func WindsFor(m *geom.Map, a *Air, above, wet []float64, s *Scratch) *Winds {
 	e := NewEnv(m, a, above, wet)
 	w := &Winds{Env: e}
 	n := e.W * e.H
@@ -569,14 +582,15 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
 	// The two equinoxes are the same day to the air, so the autumn's is the
 	// spring's.
 	inParallel(Phases-1, workers, func(k, _ int) {
-		e.Solve(phaseSin[k], e.AirTemp(phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
+		wk := s.phaseWork(k)
+		e.solve(wk, phaseSin[k], e.airTempIn(wk, slotAirTemp, phaseSin[k]), nil, nil, w.U[k], w.V[k], w.P[k])
 	})
 	copy(w.U[3], w.U[1])
 	copy(w.V[3], w.V[1])
 	copy(w.P[3], w.P[1])
 	// The water under the year's wind, on a globe. See ocean.go.
 	if e.Wrap {
-		e.Warm = e.currents(w.U, w.V)
+		e.Warm = e.currents(w.U, w.V, s)
 		e.Coast = e.coastal(e.Warm)
 	}
 	return w
@@ -588,7 +602,12 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64) *Winds {
 // between - so each cell is read at the crest of its own swing, whatever its
 // lag behind the sun. The swing is the one terra.Land.TempAt reads: see seasonTemp.
 func (e *Env) AirTemp(sinT float64) []float64 {
-	temp := make([]float64, e.W*e.H)
+	return e.airTempIn(nil, 0, sinT)
+}
+
+// airTempIn is AirTemp in w's slot: see Scratch.
+func (e *Env) airTempIn(w *work, slot int, sinT float64) []float64 {
+	temp := w.floats(slot, e.W*e.H)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -645,15 +664,20 @@ func hypsometric(p, temp, depth float64) float64 {
 // in hPa, and warm the degrees the day's weather has carried in; either may be
 // nil. The wind and the pressure are written to u, v and p.
 func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32) {
+	e.solve(nil, sinT, temp, extra, warm, u, v, p)
+}
+
+// solve is Solve worked out in w: see Scratch.
+func (e *Env) solve(w *work, sinT float64, temp, extra, warm []float64, u, v, p []float32) {
 	n := e.W * e.H
 
 	// The warmth of the air at sea level, and the pressure it and the belts
 	// make between them.
-	temp = e.blur(e.blur(temp, synopticReach), synopticReach)
+	temp = e.blurIn(w, slotTemp, e.blurIn(w, slotTempBlur, temp, synopticReach), synopticReach)
 	if warm != nil {
-		warm = e.blur(e.blur(warm, synopticReach), synopticReach)
+		warm = e.blurIn(w, slotWarm, e.blurIn(w, slotWarmBlur, warm, synopticReach), synopticReach)
 	}
-	pres := make([]float64, n)
+	pres := w.floats(slotPres, n)
 	b := e.beltsAt(sinT)
 	for cy := 0; cy < e.H; cy++ {
 		row := cy * e.W
@@ -683,8 +707,8 @@ func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32
 
 	// The wind the pressure drives, against the turning of the planet and the
 	// drag of the ground; then what the ground in its way does to it.
-	free := [2][]float64{make([]float64, n), make([]float64, n)}
-	wind := [2][]float64{make([]float64, n), make([]float64, n)}
+	free := [2][]float64{w.floats(slotFreeU, n), w.floats(slotFreeV, n)}
+	wind := [2][]float64{w.floats(slotWindU, n), w.floats(slotWindV, n)}
 	e.rows(func(cy int) {
 		f := e.f[cy]
 		for cx := 0; cx < e.W; cx++ {
@@ -706,7 +730,7 @@ func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32
 			wind[0][i], wind[1][i] = uu, vv
 		}
 	})
-	e.channel(free, wind)
+	e.channel(w, free, wind)
 
 	for i := 0; i < n; i++ {
 		uu, vv := wind[0][i], wind[1][i]
@@ -779,16 +803,16 @@ func (e *Env) Ground(cx, cy int, uu, vv float64) (float64, float64) {
 // the gaps in a range and round its ends. The convergence the free wind had
 // of its own is left, because that is the planet's circulation and not the
 // ground's doing.
-func (e *Env) channel(free, wind [2][]float64) {
+func (e *Env) channel(w *work, free, wind [2][]float64) {
 	n := e.W * e.H
-	fu, fv := make([]float64, n), make([]float64, n)
+	fu, fv := w.floats(slotChannelU, n), w.floats(slotChannelV, n)
 	for i := range fu {
 		fu[i], fv[i] = e.depth[i]*wind[0][i], e.depth[i]*wind[1][i]
 	}
 	// push is how much more air the ground made converge on each cell than
 	// the free wind did: the divergence of the flux the air near the ground
 	// now has, less that of the free wind at the depth over the sea.
-	push := make([]float64, n)
+	push := w.floats(slotPush, n)
 	e.rows(func(cy int) {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -798,7 +822,7 @@ func (e *Env) channel(free, wind [2][]float64) {
 	// Relaxed red and black in turn, over-relaxed: each pass writes the cells
 	// of one colour and reads only those of the other, so the rows can be
 	// taken on as many goroutines as there are and still come out the same.
-	lam := make([]float64, n)
+	lam := w.floats(slotLam, n)
 	for range channelRounds {
 		for colour := range 2 {
 			e.rows(func(cy int) {

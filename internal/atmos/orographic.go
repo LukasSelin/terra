@@ -98,7 +98,9 @@ func orographicPatch(a *Air) int {
 // trade-wind inversion over it (see circulation.go): the ground over the
 // inversion lifts no air that has water in it, and the air under it has
 // only its share of the column's water to give. A valley has no inversion.
-func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink []float64) []float32 {
+//
+// It is worked out in wk (see Scratch); what it gives back is its own.
+func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink []float64, wk *work) []float32 {
 	defer phase.Start("orographic")()
 	if !m.Wrap {
 		return orographicWhole(m, a, e, u, v, temp, ground)
@@ -146,82 +148,49 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink 
 	}
 	// Each patch writes only to its own sum, and the sums are added in order
 	// afterwards, so the rain does not depend on how the patches were dealt.
-	sums := make([][]float32, len(patches))
+	// The patches are taken a run at a time, each run's sums added before the
+	// next is begun, so that only a run's sums are held at once, in room that
+	// is the same run after run: they are added in the same order as they
+	// were when every patch's sum was kept to the end in memory of its own.
 	workers := 1
 	if m.W*m.H >= spreadTiles {
 		workers = workersFor(len(patches))
 	}
+	box := 2 * size
+	run := min(len(patches), max(patchRun, 4*workers))
+	room := make([]float32, run*box*box)
+	sums := make([][]float32, run)
 	bufs := make([][]complex128, workers)
 	cols := make([][]complex128, workers)
-	inParallel(len(patches), workers, func(pi, worker int) {
-		pt := patches[pi]
-		at := func(x, y int) int {
-			y = min(max(y, 0), m.H-1)
-			if m.Wrap {
-				x = ((x % m.W) + m.W) % m.W
-			} else {
-				x = min(max(x, 0), m.W-1)
+	acc := wk.floats(slotOroAcc, m.W*m.H)
+	for first := 0; first < len(patches); first += run {
+		todo := min(run, len(patches)-first)
+		clear(sums)
+		inParallel(todo, min(workers, todo), func(j, worker int) {
+			if s := liftPatch(m, a, e, u, v, temp, ground, climb, taper, size, patches[first+j].x0, patches[first+j].y0, &bufs[worker], &cols[worker], room, j); s != nil {
+				sums[j] = s
 			}
-			return y*m.W + x
-		}
-		top, bottom := 0.0, math.Inf(1)
-		for dy := 0; dy < size; dy++ {
-			for dx := 0; dx < size; dx++ {
-				h := ground[at(pt.x0+dx, pt.y0+dy)]
-				top, bottom = math.Max(top, h), math.Min(bottom, h)
-			}
-		}
-		if top-bottom < reliefLeast {
-			// Ground as flat as this lifts nothing worth a transform.
-			return
-		}
-		// The air over the middle of the patch.
-		mx, my := pt.x0+step, min(max(pt.y0+step, 0), m.H-1)
-		fx, fy := e.CellAt(at(mx, my))
-		// The patch is laid in the middle of a field twice its size, so that
-		// what the waves and the drifting cloud carry past its edges is not
-		// carried round onto its other side.
-		box := 2 * size
-		pad := size / 2
-		if bufs[worker] == nil {
-			bufs[worker], cols[worker] = make([]complex128, box*box), make([]complex128, box)
-		}
-		buf, col := bufs[worker], cols[worker]
-		clear(buf)
-		for dy := 0; dy < size; dy++ {
-			for dx := 0; dx < size; dx++ {
-				buf[(dy+pad)*box+dx+pad] = complex(climb(at(pt.x0+dx, pt.y0+dy))*taper[dx]*taper[dy], 0)
-			}
-		}
-		if !liftField(buf, col, box, box, e.Sample32(u, fx, fy), e.Sample32(v, fx, fy), e.Sample(temp, fx, fy), a.Dx[my]*km, a.Dy*km) {
-			return
-		}
-		sum := make([]float32, box*box)
-		for i := range sum {
-			sum[i] = float32(real(buf[i]))
-		}
-		sums[pi] = sum
-	})
-	acc := make([]float64, m.W*m.H)
-	for pi, sum := range sums {
-		if sum == nil {
-			continue
-		}
-		pt := patches[pi]
-		box, pad := 2*size, size/2
-		for dy := 0; dy < box; dy++ {
-			y := pt.y0 - pad + dy
-			if y < 0 || y >= m.H {
+		})
+		for j, sum := range sums[:todo] {
+			if sum == nil {
 				continue
 			}
-			for dx := 0; dx < box; dx++ {
-				x := pt.x0 - pad + dx
-				if m.Wrap {
-					x = ((x % m.W) + m.W) % m.W
-				} else if x < 0 || x >= m.W {
+			pt := patches[first+j]
+			pad := size / 2
+			for dy := 0; dy < box; dy++ {
+				y := pt.y0 - pad + dy
+				if y < 0 || y >= m.H {
 					continue
 				}
-				acc[y*m.W+x] += float64(sum[dy*box+dx])
+				for dx := 0; dx < box; dx++ {
+					x := pt.x0 - pad + dx
+					if m.Wrap {
+						x = ((x % m.W) + m.W) % m.W
+					} else if x < 0 || x >= m.W {
+						continue
+					}
+					acc[y*m.W+x] += float64(sum[dy*box+dx])
+				}
 			}
 		}
 	}
@@ -241,6 +210,67 @@ func orographic(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground, sink 
 		})
 	}
 	return out
+}
+
+// patchRun is the fewest patches orographic takes at a run.
+const patchRun = 32
+
+// liftPatch is what the ground's lift rains out over the patch whose corner
+// is x0, y0, laid in the middle of a field twice its size, or nil where it
+// lifts nothing: see orographic. buf and col are the worker's room for the
+// transform, made where they are nil, and the answer is written to the jth
+// patch's part of room.
+func liftPatch(m *geom.Map, a *Air, e *Env, u, v []float32, temp, ground []float64, climb func(int) float64, taper []float64, size, x0, y0 int, bufs, cols *[]complex128, room []float32, j int) []float32 {
+	pt := struct{ x0, y0 int }{x0, y0}
+	step := size / 2
+	{
+		at := func(x, y int) int {
+			y = min(max(y, 0), m.H-1)
+			if m.Wrap {
+				x = ((x % m.W) + m.W) % m.W
+			} else {
+				x = min(max(x, 0), m.W-1)
+			}
+			return y*m.W + x
+		}
+		top, bottom := 0.0, math.Inf(1)
+		for dy := 0; dy < size; dy++ {
+			for dx := 0; dx < size; dx++ {
+				h := ground[at(pt.x0+dx, pt.y0+dy)]
+				top, bottom = math.Max(top, h), math.Min(bottom, h)
+			}
+		}
+		if top-bottom < reliefLeast {
+			// Ground as flat as this lifts nothing worth a transform.
+			return nil
+		}
+		// The air over the middle of the patch.
+		mx, my := pt.x0+step, min(max(pt.y0+step, 0), m.H-1)
+		fx, fy := e.CellAt(at(mx, my))
+		// The patch is laid in the middle of a field twice its size, so that
+		// what the waves and the drifting cloud carry past its edges is not
+		// carried round onto its other side.
+		box := 2 * size
+		pad := size / 2
+		if *bufs == nil {
+			*bufs, *cols = make([]complex128, box*box), make([]complex128, box)
+		}
+		buf, col := *bufs, *cols
+		clear(buf)
+		for dy := 0; dy < size; dy++ {
+			for dx := 0; dx < size; dx++ {
+				buf[(dy+pad)*box+dx+pad] = complex(climb(at(pt.x0+dx, pt.y0+dy))*taper[dx]*taper[dy], 0)
+			}
+		}
+		if !liftField(buf, col, box, box, e.Sample32(u, fx, fy), e.Sample32(v, fx, fy), e.Sample(temp, fx, fy), a.Dx[my]*km, a.Dy*km) {
+			return nil
+		}
+		sum := room[j*box*box : (j+1)*box*box : (j+1)*box*box]
+		for i := range sum {
+			sum[i] = float32(real(buf[i]))
+		}
+		return sum
+	}
 }
 
 // liftField turns buf, a field of ground bw by bh tiles of dxm by dym metres

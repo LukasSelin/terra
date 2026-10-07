@@ -132,15 +132,19 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land. The current, the upwelling and the
 // water's temperature it works out on the way are kept on e: see Env.Cu.
-func (e *Env) currents(u, v [Phases][]float32) []float64 {
+func (e *Env) currents(u, v [Phases][]float32, s *Scratch) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 
 	// The wind's stress on the sea, in newtons a square metre, from the year's
 	// mean wind; and the current it drifts the surface at.
-	tx, ty := make([]float64, n), make([]float64, n)
-	cu, cv := make([]float64, n), make([]float64, n)
+	// They are worked out in the first phase's memory, whose wind is worked out by
+	// now; what of it they do not take is let go of. See Scratch.
+	all := s.phaseWork(0)
+	all.drop(slotStressX, slotCurrentV+1)
+	tx, ty := all.floats(slotStressX, n), all.floats(slotStressY, n)
+	cu, cv := all.floats(slotCurrentU, n), all.floats(slotCurrentV, n)
 	for i := range n {
 		var mu, mv float64
 		for k := range Phases {
@@ -168,7 +172,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// read as a current of metres a second. The models of the ocean and the
 	// air on a grid of parallels filter their rows near the poles for the
 	// same reason (Arakawa and Lamb, 1977).
-	psi := e.gyres(tx, ty)
+	psi := e.gyres(tx, ty, s)
 	thermo := e.thermocline(psi, tx)
 	widest := 0.0
 	for _, dx := range e.Dx {
@@ -212,8 +216,8 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// from under, and how cold what comes up is: the colder the shallower
 	// the thermocline under it.
 	rise := e.pumping(u, v)
-	deep := make([]float64, n)
-	land := make([]float64, n)
+	deep := all.floats(slotDeep, n)
+	land := all.floats(slotLand, n)
 	for i := range land {
 		land[i] = 1 - e.Sea[i]
 	}
@@ -250,7 +254,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// latitude's own, all in balance. One equation a cell, swept in the four
 	// orders a current can run in until it settles, the same as the air's
 	// moisture.
-	temp := make([]float64, n)
+	temp := all.floats(slotWaterTemp, n)
 	for i := range temp {
 		temp[i] = e.Mean[i/e.W]
 	}
@@ -291,7 +295,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// the shore.
 	// The water's own temperature is given to the shore the same way; the
 	// land away from any sea keeps its latitude's mean.
-	shore := make([]float64, n)
+	shore := all.floats(slotShore, n)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx

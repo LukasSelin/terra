@@ -239,17 +239,24 @@ func yearCont(e *Env, i int) float64 {
 // it has, and the share of the soil's volume that is water the roots can
 // take (see Hold). A tile with no paw is not land and is not counted; with
 // none given at all the land is taken to have soilMiddling of loam.
-func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []float32) (carried, lift [Phases][]float32, given, share [Phases][]float64) {
+//
+// s is the working memory it is worked out in, which the wind was worked out
+// in before it (see Scratch); with none it makes its own. carried, given and
+// share live in s, and are the caller's to read until s is next used; lift
+// and the budget kept on w are their own.
+func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []float32, s *Scratch) (carried, lift [Phases][]float32, given, share [Phases][]float64) {
 	e := w.Env
 	n := e.W * e.H
+	all := s.sharedWork()
 
 	// What each phase's budget is worked out over: the warmth of the air and
 	// the sea, how fast the air near the ground gathers, and how much of its
 	// rain air held down by the cold water under it keeps.
 	var temp, sst [Phases][]float64
 	for k := range Phases - 1 {
-		temp[k] = e.AirTemp(phaseSin[k])
-		sst[k] = make([]float64, n)
+		wk := s.phaseWork(k)
+		temp[k] = e.airTempIn(wk, slotAirTemp, phaseSin[k])
+		sst[k] = wk.floats(slotSST, n)
 		for cy := 0; cy < e.H; cy++ {
 			season := e.seasonTemp(cy, phaseSin[k], 0)
 			for cx := 0; cx < e.W; cx++ {
@@ -268,11 +275,11 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
 	for k := range Phases - 1 {
-		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k])
+		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k], s.phaseWork(k))
 	}
 	lift[3] = lift[1]
 	liftCell := func(k int) []float64 {
-		c := make([]float64, n)
+		c := s.phaseWork(k).floats(slotLiftCells, n)
 		for i, r := range lift[k] {
 			c[e.CellOfTile(i)] += float64(r) / float64(e.Cell*e.Cell)
 		}
@@ -289,7 +296,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// circulation.go).
 	var stable [Phases][]float64
 	for k := range Phases - 1 {
-		stable[k] = make([]float64, n)
+		stable[k] = s.phaseWork(k).floats(slotStable, n)
 		for i := range stable[k] {
 			stable[k][i] = lidKeeps(lid(e.Subsides[k][i]), temp[k][i])
 			if e.Coast != nil {
@@ -302,9 +309,9 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// What the land could send back to the air in a year, and how that is
 	// shared out over the phases: as Hargreaves shares it, by the sun at the
 	// top of the air and the warmth over freezing.
-	pet := make([]float64, n)
+	pet := all.floats(slotPet, n)
 	for k := range share {
-		share[k] = make([]float64, n)
+		share[k] = s.phaseWork(k).floats(slotShare, n)
 	}
 	for cy := 0; cy < e.H; cy++ {
 		row := min(cy*e.Cell+e.Cell/2, m.H-1)
@@ -348,7 +355,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// Where the air was last worked out over much the same ground - a history
 	// rains on its world every age - its columns and its land's rain are
 	// where this one starts, and once round is enough.
-	annual := make([]float64, n)
+	annual := all.floats(slotAnnual, n)
 	budget := w.Budget
 	rounds := recycleRounds
 	if last := budget[1].Rain; len(last) == n {
@@ -368,10 +375,10 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	if n >= spreadTiles {
 		workers = workersFor(Phases)
 	}
-	cellSoil, cellPaw := soilCells(e, soil, paw)
+	cellSoil, cellPaw := soilCells(e, soil, paw, all)
 	var landEvap [Phases][]float64
 	for k := range Phases {
-		landEvap[k] = make([]float64, n)
+		landEvap[k] = s.phaseWork(k).floats(slotLandEvap, n)
 	}
 	for range rounds {
 		// What the land sends up in each phase is what its bucket gives the
@@ -404,14 +411,15 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		inParallel(Phases-1, workers, func(k, _ int) {
 			// The ground wrings out of air as near saturation as the column
 			// last stood.
-			oro := make([]float64, n)
+			wk := s.phaseWork(k)
+			oro := wk.floats(slotOro, n)
 			for i := range oro {
 				oro[i] = liftCells[k][i] * humidity(budget[k], i)
 			}
 			budget[k] = e.vapour(vapourIn{
 				u: w.U[k], v: w.V[k], temp: temp[k], sst: sst[k],
 				landEvap: landEvap[k], stable: stable[k], oro: oro, w: budget[k].w,
-			})
+			}, wk)
 		})
 		budget[3] = budget[1]
 		for i := range annual {
@@ -426,7 +434,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// How much of what the ground would wring out of each cell's air its
 	// column gave: all of it, unless the air ran dry.
 	for k := range Phases - 1 {
-		given[k] = make([]float64, n)
+		given[k] = s.phaseWork(k).floats(slotGiven, n)
 		for i := range given[k] {
 			if want := liftCells[k][i]; want > 0 {
 				given[k][i] = budget[k].Oro[i] / want
@@ -437,7 +445,7 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 
 	// What each phase's air rains on low ground, in mm a year.
 	for k := range carried {
-		carried[k] = make([]float32, n)
+		carried[k] = s.phaseWork(k).floats32(slot32Carried, n)
 		for i, r := range budget[k].Rain {
 			carried[k][i] = float32(r * secondsPerYear * a.Wetness)
 		}
@@ -456,10 +464,10 @@ const (
 // soilCells is the land's bucket on each air cell: the mean depth of soil
 // and plant-available water of the land tiles in it, soilMiddling of
 // pawMiddling where there are none or none were given.
-func soilCells(e *Env, soil, paw []float32) (depth, water []float64) {
+func soilCells(e *Env, soil, paw []float32, wk *work) (depth, water []float64) {
 	n := e.W * e.H
-	depth, water = make([]float64, n), make([]float64, n)
-	count := make([]float64, n)
+	depth, water = wk.floats(slotSoilDepth, n), wk.floats(slotSoilWater, n)
+	count := wk.floats(slotSoilCount, n)
 	if len(soil) == len(paw) {
 		for i := range soil {
 			if paw[i] <= 0 {
@@ -479,5 +487,6 @@ func soilCells(e *Env, soil, paw []float32) (depth, water []float64) {
 		depth[c] /= count[c]
 		water[c] /= count[c]
 	}
+	wk.let(slotSoilCount)
 	return depth, water
 }
