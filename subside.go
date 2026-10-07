@@ -176,6 +176,12 @@ func (cr *crust) firstMargins(g *Grid) {
 	}
 }
 
+// sourceWear is how fast ground has to be worn, in metres a year, to be where
+// a floodplain's load came from: faster than the median of the world's
+// basins, 0.054 mm/yr (Portenga and Bierman 2011) - the uplands and the
+// ranges, and not the plains that are worn a little everywhere.
+const sourceWear = 0.054 * mm / yr
+
 // laidBy writes into into what has been laid on each tile of g since its
 // heights were from, in metres, and keeps the heights as they are now in
 // step: the weather's deposits since the epoch's heights were taken, and then

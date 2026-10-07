@@ -3638,7 +3638,7 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 	var away []float64
 	for i := range g.Tiles {
 		if (landed[i] > 0 || g.Drain[i] < FloodDepth/2) && g.Height[i] > sea {
-			away = g.awayFrom(func(j int) bool { return worn[j] > 0 && g.Height[j] > sea })
+			away = g.awayFrom(func(j int) bool { return worn[j] > sourceWear*epochYears && g.Height[j] > sea })
 			break
 		}
 	}
