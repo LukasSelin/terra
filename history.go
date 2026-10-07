@@ -465,10 +465,10 @@ const (
 // historySea is how much of a young world is under water while its history
 // runs. A world has oceans whatever the map cut out of it at the end does -
 // the default valley asks for no sea at all - and what lay under one age
-// after age is where limestone comes from. So a history floods itself to this
-// share, records who was drowned, and hands the finished ground to the map's
-// own sea share, which is why a valley with no sea in it can still have
-// limestone country: that ground was a seabed once.
+// after age is where limestone comes from. So a history floods at least this
+// share of itself in its first epoch, records who was drowned, and hands the
+// finished ground to the map's own sea share, which is why a valley with no
+// sea in it can still have limestone country: that ground was a seabed once.
 //
 // A share of the map and not a level read off where the two kinds of crust
 // are riding, which was tried and is the better-sounding rule: the water
@@ -477,6 +477,11 @@ const (
 // happens to them, so on two seeds of five the level came out under
 // everything and nothing was ever drowned - no seabed, and so no limestone
 // anywhere on the map. A share always drowns something.
+//
+// It is the first epoch's alone now. What the share pours is the planet's
+// water, and the epochs after keep the water and not the share: the land
+// share is what the basins make of it (seawater.go). Water kept drowns
+// something as surely as a share does, since it has to stand somewhere.
 const historySea = 0.35
 
 // marineMud is how much a sea bed off a shore takes in an epoch, against the
@@ -1041,7 +1046,9 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		// before it is asked to cut it: the cutting walks from each tile to
 		// the one its water goes to, and the hollows the plates have made
 		// hold what the water brings them: see stillWork.
-		g.base = g.historyBase()
+		// The sea stands where the planet's water fills the basins the
+		// plates have just left. See seawater.go.
+		g.pourSea(cr, e)
 		g.drain()
 		worn := cr.worn(g)
 		cr.was = append(cr.was[:0], worn...)
@@ -1785,6 +1792,12 @@ type crust struct {
 	// denuded is what each epoch's weather took off the land. See
 	// readDenudation.
 	denuded []denudation
+	// oceanWater is how much water the planet has, in the measure of
+	// roomUnder, poured in the first epoch at firstLevel over a floor
+	// firstFloor deep on the mean; seas is each epoch's sea. See
+	// seawater.go.
+	oceanWater, firstLevel, firstFloor float64
+	seas                               []seaReading
 	// fed is how many tiles of crust went down, or were crumpled up, at each
 	// place this epoch. It is what feeds the arcs and the ranges: see
 	// tectonics.
@@ -3578,28 +3591,6 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 			}
 		}
 	}
-}
-
-// historyBase is the sea a history is running against: where the crust floats
-// it at, seaDatum, or higher where that leaves less than historySea of the
-// ground under it. It is what the book counts as under water and what the air
-// takes its fill from while there is no sea of the map's own.
-//
-// It was the lowest historySea of the ground and nothing else. With the
-// ground standing where its crust floats it at, a share is the wrong reading
-// on a world that is mostly ocean floor: its sea came out kilometres down the
-// floor, with the young floor along every ridge standing out of it as land and
-// the continents five kilometres over it. The sea stands at the continents'
-// edges, and has for as long as there have been continents (Wise 1974), and
-// that is where seaDatum is. A world of little floor - a valley's, a quarter
-// of its plates ocean - still drowns historySea of itself, so that something
-// is always a sea bed.
-func (g *Grid) historyBase() float64 {
-	h := make([]float64, len(g.Tiles))
-	for i := range g.Tiles {
-		h[i] = g.Height[i]
-	}
-	return math.Max(seaDatum, quantile(h, historySea))
 }
 
 // keepBook writes down, after an epoch of weather, what the epoch left on

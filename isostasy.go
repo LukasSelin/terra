@@ -124,10 +124,11 @@ const (
 	// the trenches of a long subduction went on deepening, to twenty-eight
 	// kilometres under the sea.
 	trenchDeepest = 11 * km
-	// seaDatum is the height, over the history's nothing, that the sea is
-	// taken to stand at while the history runs: high enough that the oldest
-	// floor and the trench in front of an arc are still ground. See
-	// historyBase for the sea a history actually runs against.
+	// seaDatum is the height, over the history's nothing, that the crust
+	// floats against: high enough that the oldest floor and the trench in
+	// front of an arc are still ground. It is where the sea is first poured,
+	// and the sea a history runs against stands wherever its water fills the
+	// basins after that: see seawater.go.
 	seaDatum = 12 * km
 )
 
