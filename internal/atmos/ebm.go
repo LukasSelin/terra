@@ -2,7 +2,6 @@ package atmos
 
 import (
 	"math"
-	"sync"
 )
 
 // The warmth of a latitude, worked out from the sun.
@@ -34,8 +33,9 @@ import (
 // late one, which is continentality read off the heat capacities rather than
 // written down: see swingAt and lagAt.
 //
-// It is worked out once, for a planet with ebmLand of each band under land,
-// and read by latitude.
+// It is worked out once for each forcing it is asked under - the sun, the
+// orbit and the air's carbon: see forcing.go - for a planet with ebmLand of
+// each band under land, and read by latitude.
 
 // The energy balance.
 const (
@@ -107,25 +107,33 @@ type ebmClimate struct {
 	meanL, meanS   [ebmBands]float64
 }
 
-var (
-	ebmOnce sync.Once
-	ebmOut  *ebmClimate
-)
-
-// ebm is the settled energy-balance year, worked out the first time it is
-// asked for.
-func ebm() *ebmClimate {
-	ebmOnce.Do(func() { ebmOut = solveEBM() })
-	return ebmOut
+// insolation is the daily mean sun at the top of the air at latitude phi
+// (radians) on day j of 365.25 counted from the first of January, in W/m²,
+// under today's forcing.
+func insolation(phi, j float64) float64 {
+	return Today().insolation(phi, j)
 }
 
 // insolation is the daily mean sun at the top of the air at latitude phi
-// (radians) on day j of 365.25 counted from the first of January, in W/m².
-func insolation(phi, j float64) float64 {
-	d := 0.409 * math.Sin(2*math.Pi*j/365.25-1.39)
-	dr := 1 + 0.033*math.Cos(2*math.Pi*j/365.25)
+// (radians) on day j of 365.25 counted from the first of January, in W/m²,
+// under f: Berger's (1978) daily mean in FAO-56's form, with the declination
+// the obliquity times the sine of the sun's longitude and the inverse square
+// of the distance 1 + 2e cos of its longitude from perihelion.
+//
+// The calendar is the equinox's, as a real one is: the declination crosses
+// the equator 1.39 radians into the year whatever the orbit, and perihelion
+// moves through the year with the precession, standing on the first of
+// January at todayPerihelion. The form is first order in the eccentricity and
+// takes the sun round the sky at an even pace, so that a season's length does
+// not change with where perihelion falls; at the largest eccentricity of the
+// last million years, some 0.05, the distance it leaves out is under one part
+// in a hundred of the sun. Today's figures go through it exactly as the
+// written-down ones did, to the bit.
+func (f Forcing) insolation(phi, j float64) float64 {
+	d := f.Obliquity * math.Sin(2*math.Pi*j/365.25-1.39)
+	dr := 1 + 2*f.Eccentricity*math.Cos(2*math.Pi*j/365.25-(f.Perihelion-todayPerihelion))
 	ws := math.Acos(math.Max(-1, math.Min(1, -math.Tan(phi)*math.Tan(d))))
-	return solarConstant / math.Pi * dr * (ws*math.Sin(phi)*math.Sin(d) + math.Cos(phi)*math.Cos(d)*math.Sin(ws))
+	return f.Solar / math.Pi * dr * (ws*math.Sin(phi)*math.Sin(d) + math.Cos(phi)*math.Cos(d)*math.Sin(ws))
 }
 
 // iceAlbedo is the albedo at x, the sine of the latitude, of ground at temp.
@@ -139,10 +147,10 @@ func iceAlbedoWith(p ebmParams, x, temp float64) float64 {
 	return albedoIce + (free-albedoIce)*w
 }
 
-// solveEBM runs the balance from a uniform start until its year repeats and
-// reads the last year's harmonics.
-func solveEBM() *ebmClimate {
-	return solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, landSeaExchange})
+// solveEBMUnder runs the balance under forcing f from a uniform start until
+// its year repeats and reads the last year's harmonics.
+func solveEBMUnder(f Forcing) *ebmClimate {
+	return solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, landSeaExchange}, f)
 }
 
 // The sea ice, as Wagner and Eisenman (2015) put it into the seasonal
@@ -158,14 +166,15 @@ const (
 )
 
 // seaSurface is the temperature of the sea's surface for a column of enthalpy
-// e J/m² with a mixed layer holding cs J/m²K, under sun W/m².
-func seaSurface(e, cs, sun float64) float64 {
+// e J/m² with a mixed layer holding cs J/m²K, under sun W/m², sending back
+// a + olrB T to space.
+func seaSurface(e, cs, sun, a float64) float64 {
 	if e >= 0 {
 		return e / cs
 	}
 	h := -e / seaIceLatent
 	k := seaIceConduct / h
-	t0 := (sun*(1-albedoIce) - olrA) / (olrB + k)
+	t0 := (sun*(1-albedoIce) - a) / (olrB + k)
 	return math.Min(0, t0)
 }
 
@@ -247,8 +256,11 @@ const (
 // ebmParams are the balance's figures, gathered so that they can be probed.
 type ebmParams struct{ d, a0, a2, cl, cs, nu float64 }
 
-func solveEBMWith(p ebmParams) *ebmClimate {
+// solveEBMWith is the balance's settled year with figures p under forcing f.
+func solveEBMWith(p ebmParams, f Forcing) *ebmClimate {
 	const n = ebmBands
+	f = f.OrDefault()
+	a := f.olrA() // Budyko's A, less what the air's carbon holds back
 	dx := 2.0 / n
 	var x, phi [n]float64
 	for k := range x {
@@ -272,7 +284,7 @@ func solveEBMWith(p ebmParams) *ebmClimate {
 	sunOf := make([]float64, sunDays*n)
 	for d := 0; d < sunDays; d++ {
 		for k := 0; k < n; k++ {
-			sunOf[d*n+k] = insolation(phi[k], float64(d)+0.5)
+			sunOf[d*n+k] = f.insolation(phi[k], float64(d)+0.5)
 		}
 	}
 	// A start near the settled one: each band's annual sun against Budyko's line.
@@ -281,7 +293,7 @@ func solveEBMWith(p ebmParams) *ebmClimate {
 		for d := 0; d < 365; d++ {
 			q += sunOf[d*n+k] / 365
 		}
-		t0 := (q*(1-iceAlbedo(x[k], 10)) - olrA) / (olrB + 2*p.d)
+		t0 := (q*(1-iceAlbedo(x[k], 10)) - a) / (olrB + 2*p.d)
 		tl[k], ts[k], es[k] = t0, t0, t0*p.cs
 	}
 	for year := 0; year < ebmYears; year++ {
@@ -290,14 +302,14 @@ func solveEBMWith(p ebmParams) *ebmClimate {
 			j := float64(s) / ebmSteps
 			sun := sunOf[min(int(j), sunDays-1)*n:]
 			for k := range tl {
-				fl := sun[k]*(1-iceAlbedoWith(p, x[k], tl[k])) - (olrA + olrB*tl[k]) + p.nu*(1-ebmLand)*(ts[k]-tl[k])
+				fl := sun[k]*(1-iceAlbedoWith(p, x[k], tl[k])) - (a + olrB*tl[k]) + p.nu*(1-ebmLand)*(ts[k]-tl[k])
 				// The sea: open water holding its mixed layer's heat, or ice
 				// over it. See seaSurface.
 				alb := albedoIce
 				if es[k] > 0 {
 					alb = iceAlbedoWith(p, x[k], ts[k])
 				}
-				fs := sun[k]*(1-alb) - (olrA + olrB*ts[k]) + p.nu*ebmLand*(tl[k]-ts[k])
+				fs := sun[k]*(1-alb) - (a + olrB*ts[k]) + p.nu*ebmLand*(tl[k]-ts[k])
 				if es[k] < 0 {
 					fs += seaIceBelow
 				}
@@ -306,7 +318,7 @@ func solveEBMWith(p ebmParams) *ebmClimate {
 			}
 			diffuse(&face, &tl, &ts, &es, p, dt)
 			for k := range ts {
-				ts[k] = seaSurface(es[k], p.cs, sun[k])
+				ts[k] = seaSurface(es[k], p.cs, sun[k], a)
 			}
 			if last {
 				th := 2 * math.Pi * j / days
@@ -364,7 +376,8 @@ func (c *ebmClimate) at(field *[ebmBands]float64, lat float64) float64 {
 // ZonalMean is the year's mean at sea level at a latitude on a globe: the energy
 // balance's zonal mean there. It was MeanTemp and thirty degrees times how
 // far the cosine of the latitude stood from its value at Temperate, which put
-// the equator at nineteen degrees and the poles at minus eleven.
+// the equator at nineteen degrees and the poles at minus eleven. It is
+// today's: ZonalMeanUnder reads it under another forcing.
 func ZonalMean(lat float64) float64 {
 	e := ebm()
 	return e.at(&e.mean, lat)

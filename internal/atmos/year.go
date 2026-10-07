@@ -96,7 +96,7 @@ var ContMiddling = middlingOf(ebm())
 // because a valley's rivers and lakes were tuned on the day's range that
 // gave, and the stronger exchange a globe's winters want is a fact about
 // continents a valley does not have.
-var ContValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}))
+var ContValley = middlingOf(solveEBMWith(ebmParams{ebmDiffusion, albedoA0, albedoA2, heatLand, heatSea, valleyExchange}, Today()))
 
 // valleyExchange is landSeaExchange as it stood when the valley was tuned.
 const valleyExchange = 3.0
