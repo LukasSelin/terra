@@ -24,7 +24,7 @@ var phaseNames = []string{
 	"shape", "cutValleys", "silt", "tides", "readFeatures", "readSeaFeatures",
 	"readRelations",
 	"stage.ground", "stage.sea", "stage.shape", "stage.cut", "stage.coast",
-	"stage.cover",
+	"stage.cover", "deepClimate", "deepClimate.ebm",
 }
 
 func init() { phase.Prepare(phaseNames...) }
