@@ -131,7 +131,11 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	// ground: main's first globe had 305 tiles of 1024 open along the north
 	// pole and 109 along the south. With the crust floating on its thickness
 	// (isostasy.go) the hundredth came out on one of them, in a row 74 in a
-	// hundred bare.
+	// hundred bare. Solving the gyres over the whole ocean at once rather
+	// than a row at a time (internal/atmos/flow.go, M1) moves the pole's
+	// rows' warmth too; both bars are kept on the merged world.
+	// On A and M together the north row read 0.63; with the soil's water
+	// (L1) it is 0.77 again.
 	for _, y := range []int{0, g.H - 1} {
 		bare := 0
 		for x := 0; x < g.W; x++ {
