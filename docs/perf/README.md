@@ -16,8 +16,12 @@ Every globe on the ladder runs every pass the full globe does; iterate
 against `globe256` and confirm on `globe`. Besides `ns/op` each reports
 `ns/tile`, `B/op` and `allocs/op`.
 
-The work log - what was measured, what was found, what was changed and what
-it bought - is [worklog.md](worklog.md). Raw benchmark output that later runs
+What was measured, what was found, what was changed and what it bought goes
+in each change's PR description and commit message. The work log kept in
+`worklog.md` until 2026-10-07 was retired because every branch's entry at its
+top conflicted with every other's; read it in git history with
+`git show 434c511:docs/perf/worklog.md`, which is where older documents' references
+to "the work log" point. Raw benchmark output that later runs
 are compared against lives in [baseline/](baseline/).
 
 The module depends on nothing but the standard library, so benchstat is run
@@ -120,7 +124,7 @@ scripts/perf.sh baseline
 ```
 
 That writes `docs/perf/baseline/<date>-<HHMM>-small.txt`. Commit it with a
-work-log entry that says why the baseline moved.
+message that says why the baseline moved.
 
 Why 10%: a quiet run on the 2026-09-15 machine has confidence intervals of
 ±4-6%, and the same code run while other work was loading the desktop came
