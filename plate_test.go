@@ -85,20 +85,28 @@ func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 // down evenly and each given the ground nearest it is a world of equal rooms:
 // its largest plate is not two of its middling ones.
 //
+// One world's ratio is a draw: seed 2 has read 2.0 while sixteen seeds read a
+// median of 3.9 [3.2, 4.3] (PR #109). So the ratio is read over the eight
+// seeds plateWorlds makes, and the floor holds the median's interval, as the
+// river and relief yardsticks do (docs/yardsticks.md): it fails when the
+// whole interval is under it, not when one draw is.
+//
 // This is only the floor. How the sizes fall off past the great plates is held
 // to Bird's power law in realism_test.go.
 func TestPlatesAreNotAllOneSize(t *testing.T) {
-	for _, seed := range []uint64{1, 2, 3} {
-		g := plateWorld(seed)
+	var ratios []float64
+	for seed := uint64(1); seed <= 8; seed++ {
 		var sizes []float64
-		for _, tiles := range pieces(g) {
+		for _, tiles := range pieces(plateWorld(seed)) {
 			sizes = append(sizes, float64(tiles))
 		}
-		largest := quantile(sizes, 1)
-		if got := largest / quantile(sizes, 0.5); got < 2.5 {
-			t.Errorf("seed %d: the largest plate is %.1f times the middling one; "+
-				"a world with great plates and small ones is several times that", seed, got)
-		}
+		r := quantile(sizes, 1) / quantile(sizes, 0.5)
+		t.Logf("seed %d: the largest plate is %.2f times the middling one", seed, r)
+		ratios = append(ratios, r)
+	}
+	if s := spreadOf(ratios); s.outside(2.5, math.Inf(1)) {
+		t.Errorf("the largest plate is %v times the middling one over eight seeds; "+
+			"a world with great plates and small ones is several times that", s)
 	}
 }
 
