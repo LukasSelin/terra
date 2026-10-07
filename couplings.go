@@ -56,7 +56,7 @@ func writes(fields ...string) []string {
 var couplings = []coupling{
 	{"newGround", is("Land.newGround"), in("ground"), reads(), writes("energy")},
 	{"historyGround", is("Land.historyGround"), in("ground"), reads(), writes("energy")},
-	{"history", is("Land.history"), in("ground"), reads("energy", "sea", "height", "rock", "plates", "book", "drainage", "load", "soil", "cover"), writes("sea", "height", "rock", "plates", "book", "load", "soil")},
+	{"history", is("Land.history"), in("ground"), reads("energy", "wind", "sea", "height", "rock", "plates", "book", "drainage", "load", "soil", "cover"), writes("energy", "wind", "sea", "height", "rock", "plates", "book", "load", "soil")},
 	{"flood", is("Land.flood"), in("ground"), reads(), writes()},
 	{"move", is("Land.move"), in("ground"), reads("height", "rock", "plates", "soil"), writes("height", "rock", "plates", "soil", "cover")},
 	{"joinUp", is("Grid.joinUp"), in("ground"), reads("plates"), writes("plates")},
