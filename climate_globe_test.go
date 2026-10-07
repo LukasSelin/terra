@@ -122,6 +122,9 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	// globe had 305 tiles of 1024 open along the north pole and 109 along
 	// the south. With the crust floating on its thickness (isostasy.go) the
 	// hundredth came out on one of them, in a row 74 in a hundred bare.
+	// Solving the gyres over the whole ocean at once rather than a row at a
+	// time (internal/atmos/flow.go) moves the pole's rows' warmth too; the
+	// bar is main's two thirds, kept on the merged world.
 	for _, y := range []int{0, g.H - 1} {
 		bare := 0
 		for x := 0; x < g.W; x++ {

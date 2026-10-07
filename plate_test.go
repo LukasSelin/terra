@@ -228,6 +228,17 @@ func TestPlateBoundariesAreNotStraight(t *testing.T) {
 // reading is taken over the eight seeds the floor was set on, and the floor
 // holds the median's interval, as the river and relief yardsticks do
 // (docs/yardsticks.md): it fails when the whole interval is under it.
+//
+// The floor was 1.05, set when the walls read 1.18. The rock stack (crust
+// and isostasy, the history's erosion, the even rifts, the sea from the
+// basins) left them rounder: 1.032 [0.969, 1.085] over twenty-four seeds, so
+// 1.05 sat at the world's own median and a branch passed or failed it by the
+// draw. The owner accepted the rounder walls (2026-10-08) and the floor went
+// to 0.95, under that interval and still twice a disc's 0.48.
+// wallFloor is the least a plate's straightest wall may run, over the root of
+// its area: see above.
+const wallFloor = 0.95
+
 func TestAPlatesWallRunsStraight(t *testing.T) {
 	var runs []float64
 	for seed := uint64(1); seed <= 8; seed++ {
@@ -235,7 +246,7 @@ func TestAPlatesWallRunsStraight(t *testing.T) {
 		t.Logf("seed %d: a plate's longest straight wall is %.3f of the root of its area", seed, r)
 		runs = append(runs, r)
 	}
-	if s := spreadOf(runs); s.outside(1.05, math.Inf(1)) {
+	if s := spreadOf(runs); s.outside(wallFloor, math.Inf(1)) {
 		t.Errorf("a plate's longest straight wall is %v of the root of its area over eight seeds; "+
 			"a disc gives 0.48 and a straight-sided cell 1.33, so these are still pebbles", s)
 	}
