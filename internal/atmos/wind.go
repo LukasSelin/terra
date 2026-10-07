@@ -236,13 +236,14 @@ type Env struct {
 	climb []float64
 
 	// Warm is how many degrees the sea over each cell stands over its
-	// latitude's mean for the currents, and Coast what that is worth to the
-	// country round it: see currents. Both are nil on a valley.
+	// latitude's mean for the currents and what the sea carries, and Coast
+	// what that is worth to the country round it: see currents. Both are nil
+	// on a valley.
 	Warm, Coast []float64
 	// Cu and Cv are the sea's current over each cell, metres a second toward
 	// the east and the north; Rise how fast water comes up from under it,
 	// metres a second, off a shore and in the open ocean; and WaterTemp the water's temperature, degrees: the
-	// latitude's mean and Warm, before Warm is held to seaWarmMost. Land
+	// latitude's mean and Warm, where it is not under ice. Land
 	// has no current and no upwelling; the land along a shore is given the
 	// temperature of the sea beside it, and the land away from the sea its
 	// latitude's mean. All are nil on a valley.
@@ -264,6 +265,15 @@ type Env struct {
 	// subtropical gyres. Nought on land. See thermocline.go. Nil on a
 	// valley.
 	Thermocline []float32
+	// Carried is the heat the sea carries toward the north across each row
+	// of cells, watts over the whole parallel, and SeaHeat what that leaves
+	// in each band of the energy balance's sea column, W a square metre of
+	// sea: see slab.go. Nil and nought on a valley.
+	Carried []float64
+	SeaHeat [ebmBands]float64
+	// seaShift is how many degrees warmer each band of the energy balance
+	// stands for the sea's carrying against the balance's own sea's.
+	seaShift [ebmBands]float64
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's

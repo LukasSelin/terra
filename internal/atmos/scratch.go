@@ -151,6 +151,8 @@ const (
 	slotLand
 	slotWaterTemp
 	slotShore
+	slotGyreU
+	slotGyreV
 	slotsCurrents
 )
 

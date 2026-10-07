@@ -161,9 +161,11 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // M1); when the water that comes up was given the thermocline's depth (M2);
 // on the integration branch, where all four meet; and when the Hadley cell's
 // rise was laid across it, so that the trades blow hardest where the earth's
-// do (#88; see atmos's hadley). And the warmth is the kept temperature over
-// its latitude's mean, held to seaWarmMost, and to nothing over it where the
-// water is under ice.
+// do (#88; see atmos's hadley); and when the sea came to carry its own heat
+// in two layers, into the energy balance (#22). And the warmth is the kept
+// temperature over its latitude's mean, as far as it stands (it was held to
+// ten degrees either way before #22), and nothing over it where the water is
+// under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -176,10 +178,9 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0x81755cd4817c10a4); got != want {
+	if got, want := h.Sum64(), uint64(0x941ab84b2c4dda28); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
-	const most = 10 // atmos.seaWarmMost
 	for i, w := range e.Warm {
 		if e.Sea[i] <= 0.5 {
 			continue
@@ -188,9 +189,6 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 		if float64(e.WaterTemp[i]) < SeaFreeze {
 			// Under ice: the air over it takes none of the water's warmth.
 			over = math.Min(0, over)
-		}
-		if math.Abs(over) >= most {
-			over = math.Copysign(most, over)
 		}
 		// The temperature is kept in single precision: some microdegrees.
 		if math.Abs(over-w) > 1e-4 {
