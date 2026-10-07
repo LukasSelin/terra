@@ -91,6 +91,47 @@ func TestTheFiresBurnWhereTheyShould(t *testing.T) {
 	}
 }
 
+// A grass fire runs at its full rate through cured grass and barely through
+// green: Cruz and others' (2015) coefficient is one at full curing and a
+// sixth at half, and the grass is cured as far as its soil is dry. So a
+// green sward, the same fuel, burns less than a dry season's.
+func TestGreenGrassCarriesLittle(t *testing.T) {
+	for _, c := range []struct{ w, lo, hi float64 }{
+		{0, 0.99, 1},      // dry soil: all of the grass cured
+		{0.1, 0.99, 1},    // SPITFIRE's live grass dry at a tenth
+		{0.55, 0.15, 0.2}, // half of it green: Cruz's 0.166 at 50% cured
+		{1, 0, 0.01},      // wet soil: green
+	} {
+		if got := curing(c.w); got < c.lo || got > c.hi {
+			t.Errorf("curing at water %.2f: %.3f, want %.3f-%.3f", c.w, got, c.lo, c.hi)
+		}
+	}
+	for w := 0.0; w < 1; w += 0.01 {
+		if curing(w+0.01) > curing(w) {
+			t.Fatalf("curing rises with the water at %.2f", w)
+		}
+	}
+	// Kano's year, its grass as it stands, burned once in its dry season's
+	// water and once in its wet season's.
+	c := kano.climate()
+	y := Read(&c)
+	var pot [PFTs]Potential
+	for p := range PFTs {
+		pot[p] = y.Potential(p)
+	}
+	s, _ := kano.run(true)
+	burn := func(w float64) float64 {
+		f := Fire{Reach: 0.2, Litter: litterYears / q10(c.Mean)}
+		f.Cured, f.Cured2 = f.Reach*curing(w), f.Reach*curing(w)*curing(w)
+		return Burned(&s, &pot, &f)
+	}
+	dry, wet := burn(0.1), burn(0.6)
+	t.Logf("Kano's grass: %.3f burned at a dry season's water, %.3f at a wet season's", dry, wet)
+	if wet >= dry/2 {
+		t.Errorf("a green sward burns %.3f, a cured one %.3f", wet, dry)
+	}
+}
+
 // A fire through a savanna's trees and a rainforest's kills the rainforest's
 // the more, and burns the grass to the ground without taking its cover.
 func TestAFireKillsByTheBark(t *testing.T) {

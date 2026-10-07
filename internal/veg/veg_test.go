@@ -111,6 +111,45 @@ func TestThePlacesGrowTheirBiomes(t *testing.T) {
 	}
 }
 
+// A desert carries its plants sparse, not none: its shrubs stand apart on the
+// water of the ground between them, a twentieth to a third or so of its
+// ground on an arid year (UNEP's aridity index 0.05-0.2) and next to none in
+// a hyper-arid core (under 0.05), each crown in full leaf; and where the
+// water would pay for leaves over all the ground, the stand covers it as it
+// did.
+func TestADesertCarriesItsSparseCover(t *testing.T) {
+	phoenix := places[5]
+	core := phoenix
+	core.name = "hyper-arid core"
+	core.herb = [Phases]float64{0.02, 0.01, 0.005, 0.01}
+	core.wood = [Phases]float64{0.03, 0.015, 0.01, 0.015}
+	for _, c := range []struct {
+		pl     place
+		lo, hi float64
+	}{
+		{phoenix, 0.05, 0.4},
+		{core, 0, 0.1},
+	} {
+		s, pot := steady(c.pl.climate())
+		var cover float64
+		for p := range PFTs {
+			cover += s.Cover[p]
+		}
+		t.Logf("%-20s cover %.3f; shrub room %.3f, a crown's LAI %.2f, NPP %.3f", c.pl.name, cover, pot[Shrub].Room, pot[Shrub].LAI, pot[Shrub].NPP)
+		if cover < c.lo || cover > c.hi {
+			t.Errorf("%s: cover %.3f, want %.2f-%.2f", c.pl.name, cover, c.lo, c.hi)
+		}
+		if cover > 0 && pot[Shrub].LAI < 0.5 {
+			t.Errorf("%s: the shrubs' crowns put up a leaf area of %.2f, not a crown's", c.pl.name, pot[Shrub].LAI)
+		}
+	}
+	// A grassland's water holds its grass over the whole of it.
+	_, pot := steady(places[4].climate())
+	if pot[C3Grass].Room != 1 {
+		t.Errorf("Kansas's grass stands on %.2f of the ground, want all of it", pot[C3Grass].Room)
+	}
+}
+
 // A wood whose ground dries dies back to what the dry ground holds: the
 // temperate forest, its water cut to the grassland's, comes in a few decades
 // to the grassland's state, and the trees' carbon goes with them.
@@ -168,7 +207,8 @@ func TestTheBestLeafAreaIsTheBest(t *testing.T) {
 				continue
 			}
 			k := &Kinds[p]
-			// The surplus at leaf area l, by the same sums Potential takes.
+			// The surplus at leaf area l over a crown, by the same sums
+			// Potential takes.
 			at := func(l float64) float64 {
 				f := 1 - math.Exp(-extinction*l)
 				var gpp, leafQ, woodQ float64
@@ -197,7 +237,13 @@ func TestTheBestLeafAreaIsTheBest(t *testing.T) {
 					if !k.Tree {
 						light *= 1 - c.Snow[ph]
 					}
-					gpp += k.lue * light / 1000 * math.Min(f, water[ph]*k.wue)
+					// A sparse stand's crown has the water of its share of
+					// the ground (see sparse).
+					w := water[ph]
+					if pot.Room < 1 {
+						w = math.Min(1, w/pot.Room)
+					}
+					gpp += k.lue * light / 1000 * math.Min(f, w*k.wue)
 				}
 				npp := (1 - growthCost) * (gpp - k.leafKeep*leafQ*l/1000 - k.woodKeep*woodQ/1000)
 				return npp - k.leafTurn*l/1000
