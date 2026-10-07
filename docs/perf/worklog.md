@@ -6,6 +6,89 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Land L3: vegetation as a state (#51)
+
+**What this is.** On `claude/land-vegetation`, stacked on `claude/land-snow`
+(L2, #81) at 3d00f2b. Nine plant functional types (tropical evergreen and
+raingreen, temperate broadleaf and needleleaf, boreal needleleaf, C3 and C4
+grass, shrub, tundra) on every land tile, each with its cover, its carbon and
+its leaf area (`internal/veg`, `vegetation.go`). Each type's bioclimatic
+limits are LPJ's (Sitch et al. 2003, table 3) and BIOME1's α limits
+(Prentice et al. 1992); its leaf area is BIOME4's (Kaplan et al. 2003): the
+one that leaves it the most to grow by, light by Beer's law against leaf
+upkeep and turnover, bounded phase by phase by the water L1's bucket gives
+at a herb's root depth (1 m) or a woody plant's (2 m), with L2's snow
+shading the short types. BIOME4's ranking gives the start; LPJ-style
+establishment, growth, mortality (age, starving, frost, drought) and crowding
+then run to a steady state (`veg.Spin`, 30 years a year at a time, then five
+to a step). `Erode` runs it on for the age and, under the climate's rules,
+turns a wood whose trees have died back under a fifth of the ground to open
+ground (`dieBackWoods`). `WoodsAt` under the climate's rules is the trees'
+share of the canopy's room, so `Forest`/`Grass`, `HoldsWood`, `SetGrowth`,
+`SeedTakes` and the Wood and Wild stocks are read as before. L1's root depth
+reads the vegetation's woody cover; the history still reads the dryness, so
+**the history stage is bit-identical** (owner decision 3: present-day
+vegetation only). The cover stage lays the vegetation, runs every tile's
+bucket again under its roots (`rewater`) and re-pools the rivers on it.
+`BiomeAt` names a tile's biome off its state; cmd/overview's biome map reads
+it, and the Köppen map stays its own. pedogenesis's forest cover reads the
+broadleaf share of the trees' carbon.
+
+**Bytes a tile.** 36: a byte a type of cover (255ths), two of carbon (g/m²),
+a byte of leaf area (twentieths). 18.9 MB on the 1024×512 globe. Plus the air
+cells' PET shares by phase, kept from rainOn (a few kB).
+
+**The digest.** Rewritten, as meant: valley d759fbc9581ccfaf, ancient
+52b6ef24ae5e3a8b, globe128 6804c8fe58f69f22.
+
+**The heap.** Budget rewritten: valley 10.42 MiB in 1323 allocations (10.29
+in 1310), ancient 56.85 MiB in 8802 (56.72 in 8787), globe128 399.07 MiB in
+29468 (398.72 in 29417). The full globe allocates 11.04 GB against 11.02.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, two runs each, the base at
+3d00f2b in its own worktree and then this branch, the machine otherwise
+quiet: Generate 62.8-63.7 s on the base and 59.2-62.5 here (noise);
+stage.ground 50.2-51.6 against 47.6-49.4 (the same history); stage.cover
+0.40-0.45 s against 0.85-0.91: growVegetation 0.24-0.25 s, rewater 0.02 s,
+and the re-pooling the rest. On the valley growVegetation was 0.23 s of a
+0.36 s making until the spin took strides of five years once the first
+thirty were done; it is 0.08 s now (budget valley 96 ms -> 194 ms on the
+budget's four workers). `scripts/perf.sh check` was not run.
+
+**What it reads** (GlobeTerms seed 1; all new yardsticks, all in band):
+- Vegetation carbon 510 Gt C scaled to the earth's 148.9 Mkm² of land
+  (IPCC AR6: 450-650). Small globes 1-2: 319.
+- Leaf area index by biome: tropical rainforest 4.07 (MODIS 4.5-6; band 4-7),
+  boreal forest 2.76 (2-4), temperate grassland 1.26 (0.5-2.5), deserts 0.16
+  (< 0.5).
+- Land in its biome's Whittaker (1975) envelope, area-weighted: 0.847.
+  Biomes by area: shrubland 0.265, tropical seasonal forest 0.170, tundra
+  0.110, temperate grassland 0.108, boreal forest 0.106, savanna 0.092,
+  temperate broadleaf 0.045, tropical rainforest 0.043, temperate conifer
+  0.029, hot desert 0.026, cold desert 0.006. Inside their envelopes: boreal
+  1.00, deserts 1.00, savanna 0.94, shrubland 0.94, temperate grassland 0.86,
+  tundra 0.85, tropical rainforest 0.72, tropical seasonal 0.68, temperate
+  broadleaf 0.57, temperate conifer 0.54.
+- Woods die back: small globe 1 on a third of its rain for five ages, tree
+  cover 2237 tiles' worth to 366, and 2169 of its 2652 woods turned to open
+  ground (`TestWoodsDieBackWhereTheGroundStopsSuitingThem`).
+- The existing woods yardsticks: forest share of arid land 0; dry over
+  humid 0.047 -> 0.247 (band < 0.5); wooded 82.6% of humid ground, 11.0% of
+  dry, 0.05% of desert.
+
+The yardsticks, `TestRealNumbers|TestTheRealWorld`: the failure list is
+L2's eight, the same eight (small-globe concavity 0.293, concavity 2x-1x
+0.207, C1 0.0731, ridge-valley wavelength 400 m, midlatitude over
+subtropical rain 0.963, mean rain 2x over 1x 1.250, Aridisols 0.084 ->
+0.081, Gelisols 0.113 -> 0.113). With #80's seeded readings
+(`spread_test.go` and its test changes applied for the run, not committed)
+both read the same four failures (midlatitude rain, rain 2x/1x, Aridisols,
+Gelisols), and every seeded river and relief reading is the base's to the
+digit, interval and all: the histories are the base's, and the cover stage
+moves no ground.
+
+---
+
 ## 2026-10-07 - Land L2: snowpack and glaciers on today's map (#50)
 
 **What this is.** On `claude/land-snow`, stacked on `claude/land-soil-water`

@@ -244,10 +244,11 @@ var (
 	nothingCover = cover{0, 1, 1}
 )
 
-// coverOf is what grows on tile i. A wood is conifer where the year is cold
-// and broadleaf where it is warm, with the mixed woods between: the boreal
-// forests stand at yearly means under two or three degrees and the broadleaf
-// deciduous from about ten.
+// coverOf is what grows on tile i. A wood is as broadleaf as the carbon of
+// the vegetation's trees on it is (see vegetation.go); where none has been
+// laid it is conifer where the year is cold and broadleaf where it is warm,
+// with the mixed woods between: the boreal forests stand at yearly means
+// under two or three degrees and the broadleaf deciduous from about ten.
 func (g *Grid) coverOf(i int, temp float64) cover {
 	t := &g.Tiles[i]
 	switch t.Terrain {
@@ -257,6 +258,9 @@ func (g *Grid) coverOf(i int, temp float64) cover {
 		return fieldCover
 	case Forest:
 		leaf := ramp(temp, 2, 10)
+		if b, ok := g.broadleaf(i); ok {
+			leaf = b // the vegetation's own trees, where it has been laid
+		}
 		return cover{
 			input: leaf*leafCover.input + (1-leaf)*needleCover.input,
 			decay: leaf*leafCover.decay + (1-leaf)*needleCover.decay,

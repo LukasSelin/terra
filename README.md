@@ -37,7 +37,13 @@ rivers are where the water runs off and has the power to cut, and the ground
 wears the way stream power says it does. The moon, and the tide it raises each
 day: springs and neaps, gathered by the shape of each coast, and the tidal
 flats a laden walker can cross at low water one fortnight in two. What grows on it
-and how far along it has come. How worn a path is and how fast it fades.
+and how far along it has come: nine plant functional types on every tile,
+each with the share of the ground it covers, the carbon it holds and the leaf
+area it puts up, grown to the climate's steady state by the year's warmth,
+light, snow and soil water and by competition, and living on through every
+age the ground is worn; the woods a game sees are read off them, and a wood
+whose ground stops suiting it dies back (`Grid.Cover`, `Biomass`, `LeafArea`,
+`LAI`, `BiomeAt`). How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
 

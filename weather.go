@@ -240,6 +240,7 @@ func (g *Grid) rainOn() {
 
 	g.soilBucket()
 	carried, lift, given, share := atmos.RainCells(&g.Map, a, w, ground, g.Soil, g.paw)
+	g.petShare = share
 	if n := len(g.Tiles) * atmos.Phases; len(g.soilWater) != n {
 		g.rainIn, g.soilWater, g.runoffIn = make([]float32, n), make([]float32, n), make([]float32, n)
 		g.snowWater, g.snowCover, g.meltIn = make([]float32, n), make([]float32, n), make([]float32, n)
@@ -310,7 +311,7 @@ func (g *Grid) rainOn() {
 					take[k] *= share[k][cell] * atmos.Phases / shares
 				}
 			}
-			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), atmos.RootDepth(pe/math.Max(p, 1e-9)))
+			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), g.rootOf(i, pe/math.Max(p, 1e-9)))
 			mean, swing := g.snowYearOn(i, t, swingSea, swingLand)
 			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
 			g.runoff[i], g.soilHold[i], g.ice[i] = b.Shed(), float32(hold), float32(b.Ice)

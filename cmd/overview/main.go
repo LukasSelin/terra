@@ -612,7 +612,7 @@ func drawings(land *terra.Land, s summary, cls classes) []drawing {
 		},
 		{
 			file: "biome", title: "Biome", legend: s.Biomes,
-			about: "What the weather makes of each tile, by Köppen–Geiger: the warmest and coldest month at its latitude and height, and the rain on it and when in the year it falls. Desert is under half the dry line and steppe under it; the tree line is a warmest month of ten degrees. Low ground by a river is wetland, standing woods are drawn a little darker, and the sea is shallow within reach of land.",
+			about: "What grows on each tile, as the land's vegetation names it: plant functional types established, growing and dying through the years by the year's warmth, light, snow and soil water, and by one another (BIOME4 then LPJ). A closed canopy is a forest by its dominant trees, a third or so of the ground under trees a woodland or a savanna, ground with next to no leaf a desert, and the open ground is named by what holds it. Low ground by a river is wetland, standing woods are drawn a little darker, and the sea is shallow within reach of land. The climate's own Köppen–Geiger type is its own map.",
 			color: func(i int, p geom.Pos, t *terra.Tile) color.RGBA {
 				c := biomeOf(cls.Biome[i]).col
 				if k := cls.Biome[i]; k == cShelf || k == cDeep {

@@ -371,3 +371,29 @@ func ClimateGrowth(temp, mean, swing, rain float64) float64 {
 	}
 	return math.Max(0, temp-growBase) / gdd * miamiNPP(mean, rain) / nppRef
 }
+
+// DegreeDays is the year's degree-days over base of a year whose mean is
+// mean, swinging swing either side of it: what a plant's growing season is
+// counted in, five degrees for the temperate trees and nought for the frost's
+// thaw. It is exact for a sine.
+func DegreeDays(mean, swing, base float64) float64 {
+	return daysPerYear * aboveMean(mean-base, swing)
+}
+
+// PhaseSun is the mean sun at the top of the air through each phase of the
+// year at latitude lat, in degrees, under f, in W/m²: the daily mean of
+// insolation taken over each phase's days about its middle (see dayOf). The
+// zero Forcing is today's.
+func PhaseSun(f Forcing, lat float64) (sun [Phases]float64) {
+	f = f.OrDefault()
+	phi := lat * math.Pi / 180
+	const days = Year / Phases
+	for k := range Phases {
+		var sum float64
+		for d := range days {
+			sum += f.insolation(phi, float64(dayOf[k]-days/2+d)+0.5)
+		}
+		sun[k] = sum / days
+	}
+	return sun
+}

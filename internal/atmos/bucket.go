@@ -267,11 +267,12 @@ func bucketStart(rain, pet *[Phases]float64) float64 {
 // metres deeper than under grass. A forest's deeper bucket is why it takes
 // more of the same rain back than grass (Zhang and others, 2001, whose
 // plant-available water coefficient is 2 for forest and 0.5 for grass).
-// There is no cover to read yet - vegetation as a state is to come - so the
-// cover is the climate's own: a forest where the rain outruns what the air
-// could take, none where the air could take twice the rain, and between in
-// proportion, which is the line woods.go draws its climate's woods at
-// (Budyko, 1974; Holdridge, 1967).
+// Where the land's vegetation has been laid the cover is what stands on the
+// ground (see the land's vegetation.go); before it has - through a history,
+// whose epochs have no plants of their own yet - the cover is the climate's:
+// a forest where the rain outruns what the air could take, none where the
+// air could take twice the rain, and between in proportion (Budyko, 1974;
+// Holdridge, 1967). That is RootDepth.
 //
 // Weathered rock under the soil holds water the roots take too - rock
 // moisture, a few to eight parts in a hundred of its volume that the trees of

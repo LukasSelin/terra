@@ -231,11 +231,15 @@ func (w *Land) stageCover(g *Grid, cfg Terms) {
 	// whatever ground it was given.
 	//
 	// That is the tuned rule. Under the climate's there is no share: a wood
-	// stands where the climate and the lie of the ground let one stand, which
-	// is most of a wet country and the river bottoms of a dry one and nothing
-	// of a desert. The founding woods still take a little over half of the
+	// stands where the vegetation's trees close their canopy, which is most
+	// of a wet country and the river bottoms of a dry one and nothing of a
+	// desert. The founding woods still take a little over half of the
 	// ground that could hold one, the best of it by the same luck. See
 	// Terms.Woods and Grid.WoodsAt.
+	// What grows on the land first, at its steady state under today's
+	// climate, and the soil's water and the rivers again under the roots it
+	// has. The woods are read off it. See vegetation.go.
+	g.layVegetation()
 	g.climateWoods = cfg.Woods.climate(cfg.Wrap)
 	g.readWoods()
 	// How well the ground suits trees is read over the rows; the luck

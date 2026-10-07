@@ -171,6 +171,18 @@ type Grid struct {
 	// year, and nothing where it melts out. See snow.go.
 	snowWater, snowCover, meltIn []float32
 	ice                          []float32
+	// petShare is, for each phase of the year and each air cell, the share
+	// of a year's potential evaporation the cell's land has in the phase, as
+	// the air last read it, which a tile's own bucket is run on again from
+	// (see soilYear).
+	petShare [atmos.Phases][]float64
+	// vegCover, vegMass and vegLeaf are what grows on each tile, type by type
+	// and the types of a tile together: the share of its ground each covers
+	// in 255ths, the carbon it holds in grams a square metre, and the leaf
+	// area over its cover in twentieths. Nil until the cover stage lays them.
+	// See vegetation.go.
+	vegCover, vegLeaf []uint8
+	vegMass           []uint16
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -363,6 +375,8 @@ func (g *Grid) Clone() *Grid {
 	c.soilHold = slices.Clone(g.soilHold)
 	c.snowWater, c.snowCover, c.meltIn = slices.Clone(g.snowWater), slices.Clone(g.snowCover), slices.Clone(g.meltIn)
 	c.ice = slices.Clone(g.ice)
+	c.petShare = g.petShare // the air's, never written once read
+	c.vegCover, c.vegMass, c.vegLeaf = slices.Clone(g.vegCover), slices.Clone(g.vegMass), slices.Clone(g.vegLeaf)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)

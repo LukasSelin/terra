@@ -217,6 +217,13 @@ func (w *Land) Erode() {
 	// holds no soil to age.
 	g.drownSoils()
 	g.resoil(was)
+	// What grows on the land lives the age through on the ground and the
+	// water it now has, and under the climate's rules a wood whose trees have
+	// died back is a wood no longer. See vegetation.go.
+	if g.vegLaid() {
+		g.growVegetation(int(ageYears / yr))
+		g.dieBackWoods()
+	}
 	// The ground has moved, so the tree line has moved with it: what was a
 	// dry shoulder may now be damp enough to hold a wood, and what the water
 	// has cut into may not.
