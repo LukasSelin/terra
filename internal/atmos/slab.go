@@ -291,6 +291,15 @@ func (l *seaSlab) solve(t, d []float64, s *Scratch, from []float64) {
 	e := l.e
 	n := e.W * e.H
 	room := s.lend(gmresRoom(slabRestart)+2, 2*n)
+	if room == nil {
+		// With no Scratch (a reading of the wind outside the weather's, as
+		// the sea features' test makes) lend lends nothing: the vectors are
+		// made new, all nought, as the Scratch's would be.
+		room = make([][]float64, gmresRoom(slabRestart)+2)
+		for k := range room {
+			room[k] = make([]float64, 2*n)
+		}
+	}
 	b, x0 := room[gmresRoom(slabRestart)], room[gmresRoom(slabRestart)+1]
 	copy(b, l.base[0])
 	copy(b[n:], l.base[1])
