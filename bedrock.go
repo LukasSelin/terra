@@ -293,8 +293,18 @@ func (g *Grid) swellAt(seed uint64, x, y int) float64 {
 // soilTexture sets every tile's soil to what its ground weathers to. It runs
 // when the map is made, once the heights and the drainage are settled,
 // because what the water has laid down is part of the answer.
+//
+// A flat is left as the tide laid it: its ground is the mud and sand the
+// tide brought (see silt), and the tide graded it on that grain (see tides).
+// Set back to its rock's, a flat on a coarse shoal weathered from fine rock
+// read steeper than the sea grades the ground it now said it was made of:
+// one flat of the second small globe, once the plates rifted into halves
+// (#87), at 0.019 against 0.016.
 func (g *Grid) soilTexture() {
 	for i := range g.Tiles {
+		if g.Tiles[i].Terrain == Flat {
+			continue
+		}
 		p := geom.Pos{X: i % g.W, Y: i / g.W}
 		g.Sand[i], g.Clay[i] = g.TextureAt(p)
 	}

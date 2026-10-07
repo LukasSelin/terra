@@ -206,7 +206,7 @@ func (g *Grid) soilYear(i int, sea, land float64) (rain, take [atmos.Phases]floa
 	}
 	y := i / g.W
 	a := g.air
-	t := a.Mean[y] - Lapse*g.laidHeight(i)
+	t := a.Mean[y] - Lapse*g.lapseHeight(i)
 	pe = atmos.PetAt(a.PET[y], t, g.yearCont(i)) * float64(g.dayRange[i])
 	cell := -1
 	if g.winds != nil {
@@ -249,7 +249,10 @@ func (g *Grid) rewater() {
 			p := g.Rain(i)
 			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), g.rootOf(i, pe/math.Max(p, 1e-9)))
 			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
-			g.runoff[i], g.soilHold[i], g.ice[i] = b.Shed(), float32(hold), float32(b.Ice)
+			// The phases' rain is kept in float32 (rainIn), and where the air
+			// takes nothing back their sum can come over the year's rain by a
+			// rounding: what runs off is never more than fell.
+			g.runoff[i], g.soilHold[i], g.ice[i] = math.Min(b.Shed(), p), float32(hold), float32(b.Ice)
 			at := i * atmos.Phases
 			for k := range atmos.Phases {
 				g.soilWater[at+k], g.runoffIn[at+k] = float32(b.Water[k]), float32(b.Runoff[k])

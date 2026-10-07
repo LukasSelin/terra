@@ -49,7 +49,7 @@ func (g *Grid) snowYearOn(i int, t, sea, land float64) (mean, swing float64) {
 		swing = sea + (land-sea)*clamp01(g.contAt(i))
 	}
 	if len(g.warm) == len(g.Tiles) {
-		t = g.meanOn(i, g.laidHeight(i))
+		t = g.meanOn(i, g.lapseHeight(i))
 	}
 	return t, swing
 }
