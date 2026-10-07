@@ -260,8 +260,17 @@ func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float6
 	// as much warmer or colder as that makes it.
 	temp := all.floats(slotWaterTemp, n)
 	deep := all.floats(slotDeep, n)
-	slab := e.newSlab(gu, gv, rise, sink, thermo, func(i int) (east, north float64) { return ekman(i, i/e.W) })
+	done := phase.Start("airEnv.slab")
+	var was *seaSlab
+	if ocean != nil {
+		was = ocean.slab
+	}
+	slab := e.newSlab(was, gu, gv, rise, sink, thermo, func(i int) (east, north float64) { return ekman(i, i/e.W) })
+	if ocean != nil {
+		ocean.slab = slab
+	}
 	slab.solve(temp, deep, s)
+	done()
 	e.Carried = slab.carried(temp, deep)
 	e.SeaHeat = e.seaHeat(e.Carried)
 	dq := e.SeaHeat

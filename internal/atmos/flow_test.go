@@ -91,3 +91,58 @@ func TestGMRESSettles(t *testing.T) {
 		t.Errorf("after %d directions the residual is %.3g, said to be %.3g", done, norm(r)/norm(b), res)
 	}
 }
+
+// GMRES over only the stretches of its unknowns that are not their own
+// nought (gmresOn) is GMRES over all of them, to the bit, where the rest
+// are: as the land's are in the sea's two layers.
+func TestGMRESOverTheSeaIsGMRESOverAll(t *testing.T) {
+	const n = 64
+	land := func(i int) bool { return i%16 < 3 || (i >= 40 && i < 47) }
+	apply := func(x, out []float64) {
+		for i := range n {
+			if land(i) {
+				out[i] = x[i]
+				continue
+			}
+			s := 4 * x[i]
+			if i > 0 && !land(i-1) {
+				s -= 1.5 * x[i-1]
+			}
+			if i < n-1 && !land(i+1) {
+				s -= 0.5 * x[i+1]
+			}
+			out[i] = s
+		}
+	}
+	precondition := func(in, out []float64) {
+		for i := range n {
+			out[i] = in[i] / 3
+		}
+	}
+	b := make([]float64, n)
+	var spans [][2]int
+	lo := -1
+	for i := range n {
+		if !land(i) {
+			b[i] = math.Sin(float64(i))
+			if lo < 0 {
+				lo = i
+			}
+		} else if lo >= 0 {
+			spans, lo = append(spans, [2]int{lo, i}), -1
+		}
+	}
+	if lo >= 0 {
+		spans = append(spans, [2]int{lo, n})
+	}
+	all, d1, r1 := gmres(b, apply, precondition, 1e-12, 7, 100, nil)
+	sea, d2, r2 := gmresOn(b, apply, precondition, 1e-12, 7, 100, nil, spans)
+	if d1 != d2 || math.Float64bits(r1) != math.Float64bits(r2) {
+		t.Fatalf("over all: %d directions, %g left; over the sea: %d, %g", d1, r1, d2, r2)
+	}
+	for i := range all {
+		if math.Float64bits(all[i]) != math.Float64bits(sea[i]) {
+			t.Fatalf("unknown %d: %v over all and %v over the sea", i, all[i], sea[i])
+		}
+	}
+}

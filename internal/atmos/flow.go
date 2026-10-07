@@ -133,6 +133,10 @@ type flow struct {
 	// next starts from: the coupled solve (coupled.go) works the gyres out
 	// again under a wind a little changed.
 	last []float64
+	// slab is the sea's two layers' equations (slab.go) as the last
+	// currents over this ground wrote them, whose memory the next writes
+	// over: a reading's flow lives as long as its rounds.
+	slab *seaSlab
 }
 
 // level is the equations at one coarseness: the unknowns of the cells, row

@@ -104,21 +104,29 @@ type seaSlab struct {
 
 // newSlab writes each sea cell's two equations down, from the gyres' current
 // gu, gv, the water drawn up rise and pressed down sink, metres a second, the
-// thermocline thermo, metres, and the wind's drift ekman, m²/s.
-func (e *Env) newSlab(gu, gv, rise, sink, thermo []float64, ekman func(i int) (east, north float64)) *seaSlab {
+// thermocline thermo, metres, and the wind's drift ekman, m²/s. They are
+// written over l's where l is not nil, as they are where the currents are
+// worked out again in a round of the coupled solve (coupled.go): the
+// equations of the round before are not read again. Each row's are its own,
+// and the rows are written side by side.
+func (e *Env) newSlab(l *seaSlab, gu, gv, rise, sink, thermo []float64, ekman func(i int) (east, north float64)) *seaSlab {
 	n := e.W * e.H
-	l := &seaSlab{e: e, depth: make([]float64, e.H), cold: make([]float64, e.H), below: make([]float64, n)}
+	if l == nil || l.e != e {
+		l = &seaSlab{e: e}
+	}
+	l.f = nil
+	l.depth, l.cold, l.below = grow(l.depth, e.H), grow(l.cold, e.H), grow(l.below, n)
 	for q := range 2 {
-		l.take[q], l.base[q] = make([]float64, n), make([]float64, n)
-		l.west[q], l.east[q] = make([]float64, n), make([]float64, n)
-		l.north[q], l.south[q] = make([]float64, n), make([]float64, n)
-		l.corner[q], l.from[q] = make([]float64, n), make([]int32, n)
-		l.cross[q], l.carry[q] = make([]float64, n), make([]float64, n)
+		l.take[q], l.base[q] = grow(l.take[q], n), grow(l.base[q], n)
+		l.west[q], l.east[q] = grow(l.west[q], n), grow(l.east[q], n)
+		l.north[q], l.south[q] = grow(l.north[q], n), grow(l.south[q], n)
+		l.corner[q], l.from[q] = grow(l.corner[q], n), grow(l.from[q], n)
+		l.cross[q], l.carry[q] = grow(l.cross[q], n), grow(l.carry[q], n)
 	}
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 	clampSpeed := func(v float64) float64 { return math.Max(-currentMost, math.Min(currentMost, v)) }
 	dy := e.Dy
-	for cy := 0; cy < e.H; cy++ {
+	e.rows(func(cy int) {
 		h1 := mixedTropic + (mixedPolar-mixedTropic)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
 		l.depth[cy] = h1
 		relax := seaExchange / (seaHeat * h1)
@@ -177,7 +185,7 @@ func (e *Env) newSlab(gu, gv, rise, sink, thermo []float64, ekman func(i int) (e
 			b := thermoSpread / deepLayer * (softplus((h1+deepLayer-thermo[i])/thermoSpread) - softplus((h1-thermo[i])/thermoSpread))
 			l.below[i] = math.Min(b, belowMost) * (1 - smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy])))
 		}
-	}
+	})
 	return l
 }
 
@@ -284,9 +292,33 @@ func (l *seaSlab) solve(t, d []float64, s *Scratch) {
 		clear(out)
 		l.sweep(out, in, rows)
 	}
-	x, _, _ := gmres(b, l.applyRows, precondition, slabSettled, slabRestart, slabMost, s.lend(gmresRoom(slabRestart), 2*n))
+	x, _, _ := gmresOn(b, l.applyRows, precondition, slabSettled, slabRestart, slabMost, s.lend(gmresRoom(slabRestart), 2*n), l.spans())
 	copy(t, x[:n])
 	copy(d, x[n:])
+}
+
+// spans are the runs of sea in the two layers' unknowns, the mixed layer's
+// and then the water's under it, as gmresOn takes them: on land each
+// unknown is its own right-hand side, nought, and nothing reads it.
+func (l *seaSlab) spans() [][2]int {
+	n := len(l.take[0])
+	var out [][2]int
+	for q := range 2 {
+		lo := -1
+		for i, c := range l.take[q] {
+			switch {
+			case c != 0 && lo < 0:
+				lo = i
+			case c == 0 && lo >= 0:
+				out = append(out, [2]int{q*n + lo, q*n + i})
+				lo = -1
+			}
+		}
+		if lo >= 0 {
+			out = append(out, [2]int{q*n + lo, q*n + n})
+		}
+	}
+	return out
 }
 
 // apply is the two layers' equations on x, the mixed layer's warmth and then
@@ -354,8 +386,8 @@ func newSlabRow(w int) *slabRow {
 // inverse (ringFirst).
 type slabFactor struct {
 	inv       [][4]float64
-	ringQ     map[int][][2][2]float64
-	ringFirst map[int][4]float64
+	ringQ     [][][2][2]float64 // nil on a row that is not a ring
+	ringFirst [][4]float64
 	// chains are each row's runs of sea, as the cells they start and end
 	// at, east from a cell of land; a ring is one run from 0 to W-1.
 	chains [][][2]int32
@@ -376,14 +408,15 @@ func mul2(m [4]float64, v [2]float64) [2]float64 {
 }
 
 // factor eliminates every row's blocks: block Thomas along each chain, the
-// west and east weights being one number a layer.
+// west and east weights being one number a layer. A row's are its own, and
+// the rows are eliminated side by side.
 func (l *seaSlab) factor() {
 	e := l.e
 	w := e.W
 	n := w * e.H
-	f := &slabFactor{inv: make([][4]float64, n), ringQ: map[int][][2][2]float64{}, ringFirst: map[int][4]float64{}, chains: make([][][2]int32, e.H)}
+	f := &slabFactor{inv: make([][4]float64, n), ringQ: make([][][2][2]float64, e.H), ringFirst: make([][4]float64, e.H), chains: make([][][2]int32, e.H)}
 	l.f = f
-	for cy := 0; cy < e.H; cy++ {
+	e.rows(func(cy int) {
 		row := cy * w
 		sea := func(x int) bool { return l.take[0][row+x] != 0 }
 		start := -1
@@ -396,7 +429,7 @@ func (l *seaSlab) factor() {
 		if start < 0 {
 			f.chains[cy] = [][2]int32{{0, int32(w - 1)}}
 			l.factorRing(cy)
-			continue
+			return
 		}
 		first := -1
 		for k := 1; k <= w; k++ {
@@ -414,7 +447,7 @@ func (l *seaSlab) factor() {
 				first = -1
 			}
 		}
-	}
+	})
 }
 
 // eliminate eliminates the chain of row from cell first east to cell last,
@@ -528,7 +561,7 @@ func (l *seaSlab) row(cy int, t, d, b0, b1 []float64, r *slabRow) {
 			}
 		}
 	}
-	if q, ok := l.f.ringQ[cy]; ok {
+	if q := l.f.ringQ[cy]; q != nil {
 		l.ringRow(cy, t, d, q, r)
 		return
 	}
