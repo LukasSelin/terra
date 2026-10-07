@@ -123,14 +123,15 @@ var shapeYardsticks = []realYardstick{
 		source:  "Harris et al. 2014: shelves are 88.2 km wide on passive margins and 31 on active ones, 2.85 times; the band is not a measured figure. A margin is read as active where a plate boundary runs within 150 km of its coast",
 		measure: func() float64 { s := shelvesOf(threeGlobes()); return s.quiet / s.active },
 	},
-	// It was known gap K: an active shelf is laid no narrower than a tile and
-	// a half, 56 km, against a quiet one's 88, and most coasts with a seam
-	// within 150 km are quiet margins as laid, so the active column reads
-	// mostly quiet shelves. It read 1.88 until the fractures bent by the plate
-	// moved every coast, then 1.24 (2.00, 0.94 and 1.23 globe by globe), and
-	// 1.37 on the rift's halves (#98). With the sea standing where its water
-	// fills the basins (seawater.go) it reads 1.85, inside the band by a
-	// hair: a point reading off three globes, which can fall out again.
+		// It read 1.88 until the fractures bent by the plate moved every coast,
+		// then 1.24 (2.00, 0.94 and 1.23 globe by globe), and 1.37 on the rift's
+		// halves (#98). With the sea standing where its water fills the basins
+		// (seawater.go) it read 1.85, inside the band by a hair, and the marker
+		// came off. With the basins subsiding and filling with what arrives
+		// (subside.go, #45) it fell out again: 1.13 to 1.67 over five builds of
+		// that change, three of which lay their shelves alike and differ only in
+		// whether the rifts and the margins carry their heat and the plates break.
+		gap: "known gap: K - an active shelf is laid no narrower than a tile and a half, 56 km, against a quiet one's 88, and most coasts with a seam within 150 km are quiet margins as laid, so the active column reads mostly quiet shelves: 1.13 to 1.85 over builds that lay their shelves alike",
 	},
 	{yardstick: yardstick{
 		name: "grid lock of the sea floor off the coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.05, slow: true,

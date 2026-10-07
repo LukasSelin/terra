@@ -83,15 +83,19 @@ const waterLoad = (mantleDensity - seaDensity) / mantleDensity
 // than the first epoch's, over the share of the sea that is floor - Pitman's
 // ridge volume. sediment is the margins': the sediment under the sea, floated
 // on the crust as it is (wetRise of it takes the water's room), over the
-// sea's area. ice is what the ice holds out of it. Each is loaded as the
-// level is (waterLoad). What is left of the rise is the rest of what the
-// basins did: the continents grown or shrunk, the trenches, the floor bent
-// under what is laid on it.
+// sea's area. ice is what the ice holds out of it. heat is what the
+// stretched continent under the sea still stands up by for the heat its
+// rifting brought up (subside.go), over the sea's area: what it gives the
+// sea as it cools is how far heat falls from the first epoch's. Each is
+// loaded as the level is (waterLoad). What is left of the rise is the rest of
+// what the basins did: the continents grown or shrunk, the trenches, the
+// floor bent under what is laid on it.
 type seaReading struct {
 	level, rise          float64
 	land, shelf          float64
 	floorAge             float64
 	ridge, sediment, ice float64
+	heat                 float64
 }
 
 // areaOf is how much of the planet tile i stands for, against a tile on the
@@ -220,7 +224,7 @@ func (g *Grid) firstSea() float64 {
 // readSea reads the sea g.base stands at in epoch epoch: see seaReading.
 func (g *Grid) readSea(cr *crust, epoch int, ice float64) seaReading {
 	r := seaReading{level: g.base, rise: g.base - cr.firstLevel}
-	var all, dry, cont, drowned, wet, sed float64
+	var all, dry, cont, drowned, wet, sed, heat float64
 	for i := range g.Tiles {
 		a := g.areaOf(i)
 		all += a
@@ -229,6 +233,9 @@ func (g *Grid) readSea(cr *crust, epoch int, ice float64) seaReading {
 		} else {
 			wet += a
 			sed += a * float64(cr.sed[i])
+			if !cr.ocean[i] {
+				heat += a * float64(cr.rift[i].warm)
+			}
 		}
 		if !cr.ocean[i] {
 			cont += a
@@ -249,6 +256,7 @@ func (g *Grid) readSea(cr *crust, epoch int, ice float64) seaReading {
 		r.ridge = waterLoad * (cr.firstFloor - depth) * floor / wet
 		r.sediment = waterLoad * wetRise * sed / wet
 		r.ice = waterLoad * ice / wet
+		r.heat = waterLoad * heat / wet
 	}
 	return r
 }

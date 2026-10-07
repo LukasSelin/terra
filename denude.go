@@ -137,7 +137,8 @@ func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, 
 			lost += total // off the map's edge
 			continue
 		}
-		left := sh.fill(g, m, total, total, load, epoch, book, false)
+		rem := load
+		left := sh.fill(g, m, &rem, epoch, book, false)
 		if left > 0 && !sh.ocean(m) {
 			// A filled basin: on over the land to the ocean, and laid off
 			// where the way reaches it.
@@ -147,7 +148,7 @@ func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, 
 			}
 			if sh.ocean(int(at)) {
 				was := left
-				left = sh.fill(g, int(at), left, total, load, epoch, book, true)
+				left = sh.fill(g, int(at), &rem, epoch, book, true)
 				spilt += was - left
 			}
 		}
@@ -302,17 +303,23 @@ func (g *Grid) around(i int, near *[8]int32) int {
 	return k
 }
 
-// fill lays left metres of a mouth's load of total on the floor of the body
-// of water out from tile m, the nearest floor first, up to the shelf's top:
-// each ring out a shelf's fall deeper, or level for what a filled basin
-// passed on. It returns what it had no room for, once the whole body is
-// filled.
-func (sh *shelfScratch) fill(g *Grid, m int, left, total float64, load [Grains]float64, epoch int, book []record, passed bool) float64 {
+// fill lays what is left of a mouth's load, rem, grain by grain, on the floor
+// of the body of water out from tile m, the nearest floor first, up to the
+// shelf's top: each ring out a shelf's fall deeper, or level for what a
+// filled basin passed on. Each place takes as much as it has room for, and
+// what it takes is sorted (settleOut): the share of each grain that settles
+// crossing it first, the sand within a few tens of kilometres of the mouth
+// and the mud carried on further (shelfReach), and only then the rest of
+// what is left, coarsest first. So a shelf with little room left near its
+// mouth is built of sand there and of mud out at its edge. It returns what it
+// had no room for, once the whole body is filled.
+func (sh *shelfScratch) fill(g *Grid, m int, rem *[Grains]float64, epoch int, book []record, passed bool) float64 {
 	base := math.Max(0, g.base)
 	var near [8]int32
 	sh.stamp++
 	sh.ring = append(sh.ring[:0], int32(m))
 	sh.seen[m] = sh.stamp
+	left := carrying(*rem)
 	for d := 0; len(sh.ring) > 0 && left > 0; d++ {
 		top := base - shelfTop
 		if !passed {
@@ -323,9 +330,8 @@ func (sh *shelfScratch) fill(g *Grid, m int, left, total float64, load [Grains]f
 				break
 			}
 			if room := top - g.Height[i]; room > 0 {
-				put := math.Min(room, left)
-				g.layShelf(int(i), put, load, total, epoch, book)
-				left -= put
+				g.layShelf(int(i), settleOut(rem, math.Min(room, left), g.span()), epoch, book)
+				left = carrying(*rem)
 			}
 		}
 		if left <= 0 {
@@ -346,27 +352,79 @@ func (sh *shelfScratch) fill(g *Grid, m int, left, total float64, load [Grains]f
 	return left
 }
 
-// layShelf lays put metres of a load on tile i, as a bed of sandstone where
-// the load is sandy and of shale where it is not, and books its grains.
-func (g *Grid) layShelf(i int, put float64, load [Grains]float64, total float64, epoch int, book []record) {
+// settleOut takes put metres out of rem, what is left of a load, as one place
+// span metres across lays them: first the share of each grain that settles
+// crossing the place (settleWeight), and then, if that is less than put, the
+// rest of what is left, coarsest first.
+func settleOut(rem *[Grains]float64, put, span float64) [Grains]float64 {
+	var part [Grains]float64
+	free := put
+	for gr := range rem {
+		take := math.Min(rem[gr]*settleWeight(Grain(gr), span), free)
+		part[gr] += take
+		free -= take
+	}
+	for gr := range rem {
+		take := math.Min(rem[gr]-part[gr], free)
+		part[gr] += take
+		free -= take
+	}
+	for gr := range rem {
+		rem[gr] = math.Max(0, rem[gr]-part[gr])
+	}
+	return part
+}
+
+// layShelf lays part, a bed's grains in metres, on tile i, as a bed of
+// sandstone where it is sandy and of shale where it is not (laidAs), and books
+// its grains.
+func (g *Grid) layShelf(i int, part [Grains]float64, epoch int, book []record) {
+	put := carrying(part)
+	if put <= 0 {
+		return
+	}
 	was := g.Height[i]
 	g.Height[i] += put
-	sand := load[Sand] / total
-	rock := Shale
-	if sand >= sandyBed {
-		rock = Sandstone
-	}
+	sand := part[Sand] / put
 	if g.strata != nil {
-		g.strata[i].lay(rock, uint8(epoch), uint8(max(1, 255*clamp01(sand))), was, g.Height[i])
+		g.strata[i].lay(laidAs(sand), uint8(epoch), uint8(max(1, 255*clamp01(sand))), was, g.Height[i])
 	}
 	if g.ledger != nil {
 		g.ledger[i].bury(byMud, epoch)
 	}
 	if book != nil {
-		for gr := range load {
-			book[i].laid[gr] += put * load[gr] / total
+		for gr := range part {
+			book[i].laid[gr] += part[gr]
 		}
 	}
+}
+
+// shelfReach is how far out from a mouth each grain is carried over a shelf
+// before it settles, in metres: the sand within a few tens of kilometres, on
+// the shoreface and the inner shelf, and the mud out over the middle and the
+// outer shelf and down the slope, where most of what the rivers bring the sea
+// ends up (McCave 1972; Walsh and Nittrouer 2009 have the mud of the great
+// rivers' shelves laid from tens to a couple of hundred kilometres off their
+// mouths). A place takes first the share of what is still carried that
+// settles crossing it (settleWeight), so the sand is laid first and nearest
+// and the clay last and furthest. The same reaches sort what the land's
+// rivers lay on their floodplains: see sortedAt.
+var shelfReach = [Grains]float64{Sand: 20 * km, Silt: 100 * km, Clay: 200 * km}
+
+// settleWeight is the share of what is still carried of grain gr that settles
+// crossing a place span metres wide.
+func settleWeight(gr Grain, span float64) float64 {
+	return -math.Expm1(-span / shelfReach[gr])
+}
+
+// laidAs is the rock a bed laid by water comes out as, by the share of sand
+// in it: sandstone where sand is at least half of it, as Folk (1954) draws
+// the line between a sand and a mud, and shale where it is not.
+func laidAs(sand float64) Bedrock {
+	if sand >= sandyBed {
+		return Sandstone
+	}
+	return Shale
 }
 
 // denudation is what one epoch of weather took off a history's land, in

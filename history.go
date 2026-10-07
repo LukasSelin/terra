@@ -484,18 +484,10 @@ const (
 // something as surely as a share does, since it has to stand somewhere.
 const historySea = 0.35
 
-// marineMud is how much a sea bed off a shore takes in an epoch, against the
-// one an epoch of burial on land is worth. fillEnough is how much has to have
-// fallen on a tile before what it is made of is the fill rather than whatever
-// was underneath - a couple of epochs' worth, so that ground which dipped
-// below its river once or twice is still the basement it always was. And
-// Which of the two a fill makes is settled by the sand in it against the
-// clay, which is the sorting asked the only question it can answer: what
-// stopped here, and what went on past.
 // madeEnough is how much has to have happened to a tile before what happened
 // to it decides what it is made of, in metres of ground moved.
 //
-// The fill has always had one - see fillEnough - and the fire and the crushing
+// The fill has always had one - the metres laid - and the fire and the crushing
 // had none, so any trace of either beat a continent: a seam that brushed past
 // a tile once, raising it by a hand's breadth, made that tile igneous forever.
 // One epoch of a rift working at its full rate, which is the scale at which
@@ -514,54 +506,38 @@ const madeEnough = -riftRate * epochYears
 // epochs of a rift's flooring, as it was tuned at.
 const accreteEnough = 4 * madeEnough
 
-// fillRate is how fast a basin fills, in metres a year, and so what an epoch
-// of burial lays on a tile: a tenth of a millimetre, which is what sediment
-// piles up at when it is measured over millions of years rather than over one
-// flood (Sadler 1981 - a rate read over a longer span is a slower one, because
-// it has more gaps in it). Four hundred metres an epoch is a fifteenth of what
-// makes a rock, as the one an epoch was of the fifteen metres before.
+// fillRate is how fast a basin fills, in metres a year, as sediment piles up
+// when it is measured over millions of years rather than over one flood: a
+// tenth of a millimetre (Sadler 1981 - a rate read over a longer span is a
+// slower one, because it has more gaps in it). It was what every epoch of
+// burial laid, wherever the ground lay low, whatever the rivers brought; the
+// beds are what the rivers bring now (keepBook), and this is what a soil
+// reads the age of the ground at the top of a fill by (pedogenesis.go).
 const fillRate = 0.1 * mm / yr
 
-const (
-	marineMud  = 0.5
-	fillEnough = 3 * fillRate * epochYears
-	// coarseShare is how much of a world's filled ground comes out sandstone
-	// rather than shale: the sandiest third of it. It is a share and not a
-	// cutoff for the reason every other share on this map is - see
-	// forestShare - and here the reason is sharper than usual. What a deposit
-	// is made of hardly varies while a history is running, because until the
-	// rock is settled at the end every tile is weathering the same basalt,
-	// so the sand in one basin and the next differ by a few hundredths and
-	// any fixed line puts nearly all of them on one side of it: at sand
-	// against clay the map came out a third sandstone, and one step stricter
-	// it came out with none at all. Ranking the fills against each other asks
-	// the only thing the sorting can actually answer - which of these
-	// stopped soonest - and a third is about the share of the world's
-	// sedimentary rock that is sandstone.
-	coarseShare = 0.35
-)
-
-// The beds a history lays. bedPerFill is how many metres of rock an epoch's
-// fill makes - a unit of what keepBook counts as laid - and limeBed how many
-// an epoch under quiet water leaves. They are metres of the history's own
-// ground, which is handed the drawn map's spread at the end, and they are
-// set against the lift of a range in an epoch - see orogeny - because what
-// makes a scarp is a bed as thick as a hillside is high: a pile of beds a
-// hand's breadth thick is one rock to anything the weather can do.
+// The beds a history lays. limeBed is how many metres an epoch under quiet
+// water leaves; what the rivers lay is as many metres as they brought (see
+// keepBook and shelve). They are metres of the history's own ground, which
+// is handed the drawn map's spread at the end, and they are set against the
+// lift of a range in an epoch - see orogeny - because what makes a scarp is a
+// bed as thick as a hillside is high: a pile of beds a hand's breadth thick
+// is one rock to anything the weather can do.
 //
 // They were 9 and 6 metres an epoch against a lift of 45, and they are real
-// rates now, as the lift is: a basin's fill at fillRate, four hundred metres an
-// epoch, and lime at a fifth of that, which is what a carbonate shelf keeps
-// over millions of years (Schlager 1981 has 0.01 to 0.1 mm/yr at that span).
-// Held in proportion to the lift instead - 3.6 and 2.4 kilometres an epoch -
-// sixteen epochs of them were deeper than the history's whole relief, which
-// real erosion keeps to kilometres and not to what the plates lift, and every
-// tile on a made valley was the last epoch's fill. The depths the fire and the
-// crushing reach are real too: greenschist from some eight kilometres down,
-// and plutons set at five to fifteen.
+// rates now, as the lift is: lime at a fifth of fillRate, which is what a
+// carbonate shelf keeps over millions of years (Schlager 1981 has 0.01 to 0.1
+// mm/yr at that span). The depths the fire and the crushing reach are real
+// too: greenschist from some eight kilometres down, and plutons set at five
+// to fifteen.
 //
-// sandyBed is the sand a fill needs to be laid as sandstone while the
-// history runs, before settleRock ranks the fills against each other.
+// sandyBed is the share of sand that makes a bed the water laid a sandstone
+// rather than a shale: half, where Folk (1954) draws the line between a sand
+// and a mud. A fill used to be ranked against the world's other fills, the
+// sandiest third sandstone, because every load a history's rivers carried
+// was the same weathered basalt and a fixed line put all of them on one side
+// of it. What a bed is made of is the sorting's now: the sand settles out
+// near where it came from and the mud is carried on (shelfReach, sortedAt), so
+// the beds off a mouth are sand and the beds out on the shelf are mud.
 //
 // foldShare is how far a collision buckles the beds under it against how far
 // it lifts the ground, and foldWave how many tiles it is from one fold's
@@ -579,12 +555,11 @@ const (
 // Marine Geology, 1982), and a history's quiet floor is a tile - tens of
 // kilometres - from the nearest land.
 const (
-	bedPerFill  = fillRate * epochYears
 	limeBed     = 0.02 * mm / yr * epochYears
 	limeWarm    = 20.0
 	limeCold    = -8.0
 	quietMud    = 0.005 * mm / yr
-	sandyBed    = 0.45
+	sandyBed    = 0.5
 	foldShare   = 0.5
 	foldWave    = 5.0
 	cookDepth   = 8 * km
@@ -1040,6 +1015,8 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		for i := range touch {
 			touch[i] = 0
 		}
+		// The rifts lose an epoch's heat, and sink as they do: see subside.go.
+		cr.cool()
 		w.tectonics(g, plates, cr, book, e, arcGapOn(g, standing(plates)), touch, weld, grain)
 		// An age of weather between the ages of the earth. What was raised
 		// this epoch starts coming down in the next, and what comes off it is
@@ -1063,10 +1040,14 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		}
 		clear(g.toSea)
 		g.wear(epochYears)
-		// What the rivers brought the sea is laid on the margins off their
-		// mouths, and is crust there. See shelve.
+		// What the weather laid on the land, and then what the rivers
+		// brought the sea, laid on the margins off their mouths: both are
+		// crust where they lie, and both are the beds the epoch leaves. See
+		// shelve and keepBook.
+		cr.laidBy(g, cr.was, cr.landed)
 		var shelf denudation
 		shelf.shelved, shelf.spilt, shelf.lost = g.shelve(g.toSea, e, book)
+		cr.laidBy(g, cr.step, cr.shelved)
 		// What the weather took off is crust gone, and what it laid down is
 		// crust laid; and the plate floats up under what it lost while it
 		// was losing it, which is the rebound. See isostasy.go.
@@ -1080,7 +1061,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		cr.denuded = append(cr.denuded, d)
 		g.isostasy(cr, e, worn, relaxing)
 		cr.riseBy()
-		g.keepBook(book, e)
+		g.keepBook(book, e, cr.landed, cr.shelved, worn)
 		// What the epoch floored with lava, filled or silted over is a new
 		// surface, and its soil starts from nothing. See pedogenesis.go.
 		g.restartBuried(e)
@@ -1790,6 +1771,20 @@ type crust struct {
 	// crust and floats as crust, but it is not what makes a floor a
 	// continent: see accrete.
 	sed, nsed []float32
+	// rift is how far each tile's crust has been stretched, and how much of
+	// the heat the stretching brought up under it is still to be lost: it
+	// goes with the crust. fore is where a collision's plates are broken,
+	// this epoch: see forelands. Both are in subside.go.
+	rift, nrift []rifted
+	fore        []float32
+	load        []float64
+	collided    []int32
+	broken      bool
+	// landed and shelved are what the epoch's weather laid on each tile of
+	// the land and what the shelves laid off the rivers' mouths, in metres,
+	// and step the heights between the two: see laidBy and keepBook.
+	landed, shelved []float32
+	step            []float64
 	// local is isostasy's working, and plan its transform's. eroded and
 	// rebound are what the weather has taken off the land over the history,
 	// and what the land rose by in the same epochs as it was taken: the
@@ -1901,6 +1896,8 @@ func newCrust(g *Grid) *crust {
 		rise: make([]float64, n), nrise: make([]float64, n), lifted: make([]float64, n),
 		thick: make([]float32, n), nthick: make([]float32, n),
 		sed: make([]float32, n), nsed: make([]float32, n),
+		rift: make([]rifted, n), nrift: make([]rifted, n), fore: make([]float32, n),
+		landed: make([]float32, n), shelved: make([]float32, n), step: make([]float64, n),
 		sag: make([]float32, n), nsag: make([]float32, n),
 		plate: make([]uint8, n), nplate: make([]uint8, n),
 		org: make([]int32, n), norg: make([]int32, n),
@@ -2113,6 +2110,7 @@ func (cr *crust) land(plates []Plate, i, j int) {
 	cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = cr.plate[i], cr.org[i], cr.fresh[i], cr.born[i], cr.aged[i]
 	cr.nocean[j], cr.nrise[j] = cr.ocean[i], cr.rise[i]
 	cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[i], cr.sag[i], cr.sed[i]
+	cr.nrift[j] = cr.rift[i]
 	cr.noff[j] = cr.off[i]
 }
 
@@ -2129,6 +2127,7 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 	cr.rise, cr.nrise = cr.nrise, cr.rise
 	cr.thick, cr.nthick = cr.nthick, cr.thick
 	cr.sed, cr.nsed = cr.nsed, cr.sed
+	cr.rift, cr.nrift = cr.nrift, cr.rift
 	cr.sag, cr.nsag = cr.nsag, cr.sag
 	cr.off, cr.noff = cr.noff, cr.off
 }
@@ -2264,6 +2263,7 @@ func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 				cr.nplate[j], cr.norg[j], cr.nfresh[j], cr.nborn[j], cr.naged[j] = k, cr.org[best], cr.fresh[best], cr.born[best], cr.aged[best]
 				cr.nocean[j], cr.nrise[j] = cr.ocean[best], cr.rise[best]
 				cr.nthick[j], cr.nsag[j], cr.nsed[j] = cr.thick[best], cr.sag[best], cr.sed[best]
+				cr.nrift[j] = cr.rift[best]
 				// It stands where the turn put it, but never further off than
 				// its own tile: crust carried here because nothing nearer was
 				// is standing in for ground the rounding lost.
@@ -2357,6 +2357,7 @@ func (cr *crust) openFloor(g *Grid, shun func(k uint8) bool) {
 			cr.nrise[j] = 0
 			// A ridge makes ocean crust, standing as it floats.
 			cr.nthick[j], cr.nsag[j], cr.nsed[j] = oceanCrust, 0, 0
+			cr.nrift[j] = rifted{}
 			cr.noff[j] = [2]float32{}
 		}
 		next = next[:0]
@@ -2704,6 +2705,11 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		// another, and each belongs to its own side of it.
 		under := worst > 0 && cr.ocean[i] != cr.ocean[j]
 		g.seam[i] = seam{lift: lift, makes: makes, found: true, side: t.Plate, stay: under, with: worstAt}
+		if makes == crushed {
+			// Which of the two goes under the other at a collision, for the
+			// basins in front of its range: see forelands.
+			g.collide(cr, i, j)
+		}
 		g.seamQueue = append(g.seamQueue, int32(i))
 	}
 
@@ -2737,6 +2743,10 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			g.seamQueue = append(g.seamQueue, int32(j))
 		}
 	}
+
+	// Where the ranges' plates are broken, for the plate to bend under them as
+	// it is: see forelands.
+	g.forelands(cr)
 
 	// What happens at the seams is laid on the crust: see below, and
 	// isostasy.go for how the plate then answers it.
@@ -2780,7 +2790,11 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			case by < 0 && cr.ocean[i]:
 				laid = 0
 			case by < 0:
-				laid = cr.thicken(i, by*math.Min(1, float64(cr.thick[i])/continentCrust))
+				// And the stretching brings the hot mantle up under it, which
+				// holds the rift up until it cools: see subside.go.
+				was := float64(cr.thick[i])
+				laid = cr.thicken(i, by*math.Min(1, was/continentCrust))
+				cr.stretch(i, was, epoch)
 			default:
 				laid = cr.thicken(i, by)
 			}
@@ -3603,62 +3617,104 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 }
 
 // keepBook writes down, after an epoch of weather, what the epoch left on
-// each tile: what was buried, and what lay under water. The soil's own
-// make-up carries the first - the water sorted what it laid down, so a tile
-// buried in sand reads as sand - and the second is simply counted.
-func (g *Grid) keepBook(book []record, epoch int) {
+// each tile: what was buried, and what lay under water. What was buried is
+// what the water brought: landed is what the weather laid on each tile of the
+// land, in the hollows that hold what the rivers bring them, and shelved what
+// the shelves took off the rivers' mouths, which shelve has laid in the pile
+// already. A sea bed no river reached takes what settles out of quiet water
+// (quietFloor). worn is what the weather took off each tile, which says where
+// what was laid came from.
+//
+// It was a bed of a fixed rate, fillRate, wherever the ground stood within a
+// flood's depth of the water it drained into and off every shore, whatever
+// the rivers brought or did not: four hundred metres an epoch on the land and
+// two hundred off a coast, on ground the weather laid nothing on and on
+// ground it laid kilometres on alike. Off the shores it is what the shelves
+// lay now. On the land the floodplains keep fillRate as the least they are
+// given, and are given more where the weather laid more: a history's wear
+// takes its ground down by its relief and lays nothing on ground that drains
+// (denude.go), so its floodplains are never filled by it, and without their
+// soft beds the low country, worn as basement, stood twice as high over its
+// sea (the lowest quarter of a globe's land at 470 m against 140, the earth's
+// 179). That is a gap in the wear, which keeps no alluvium, and not a fill.
+func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, worn []float64) {
 	defer phase.Start("keepBook")()
 	g.piles()
 	sea := g.base
-	fill := fillRate * epochYears // metres of burial an epoch: see fillRate
+	// How far each tile is from ground the weather was taking down, which is
+	// where what was laid on it came from: see sortedAt. Read only if anything
+	// was laid on the land.
+	var away []float64
+	for i := range g.Tiles {
+		if (landed[i] > 0 || g.Drain[i] < FloodDepth/2) && g.Height[i] > sea {
+			away = g.awayFrom(func(j int) bool { return worn[j] > sourceWear*epochYears && g.Height[j] > sea })
+			break
+		}
+	}
 	for i := range g.Tiles {
 		t := &g.Tiles[i]
 		if t.Wet() || g.Height[i] <= sea {
 			book[i].submerged++
-			// What a sea bed gets depends on whether anything is being
-			// washed into it. Off a shore there is mud, and mud makes shale;
-			// out where no land is near enough to send any, the water is
-			// quiet and what settles is what lived there, which makes
-			// limestone. Nothing here knows how far the shore is, only
-			// whether it is next door, which is enough to tell a bed that
-			// silts up from one that does not. Out there it is the warmth
-			// of the water that decides whether what settles is lime or
-			// mud: see quietFloor.
-			if g.offshore(geom.Pos{X: i % g.W, Y: i / g.W}, sea) {
-				book[i].laid[Clay] += marineMud * 0.7 * fill
-				book[i].laid[Silt] += marineMud * 0.3 * fill
+			if shelved[i] > 0 {
+				// A shelf's bed, laid by shelve as its grains came.
 				t.Formed = uint8(epoch)
-				g.strata[i].bury(Shale, uint8(epoch), 0, g.Height[i], marineMud*bedPerFill)
-				g.ledger[i].bury(byMud, epoch)
+				continue
+			}
+			// Out where no river's load reached, the water is quiet and what
+			// settles is what lived there, lime or mud as the warmth of the
+			// water decides: see quietFloor.
+			rock, thick := g.quietFloor(i)
+			g.strata[i].bury(rock, uint8(epoch), 0, g.Height[i], thick)
+			if rock == Limestone {
+				g.ledger[i].bury(byLime, epoch)
 			} else {
-				rock, thick := g.quietFloor(i)
-				g.strata[i].bury(rock, uint8(epoch), 0, g.Height[i], thick)
-				if rock == Limestone {
-					g.ledger[i].bury(byLime, epoch)
-				} else {
-					g.ledger[i].bury(byMud, epoch)
-				}
+				g.ledger[i].bury(byMud, epoch)
 			}
 			continue
 		}
-		// Ground below the water it drains into is ground being filled in,
-		// and rock made of what is falling on it now dates from now.
+		// Ground the weather laid something on is ground being filled in, and
+		// rock made of what fell on it dates from now: a bed as thick as what
+		// was laid, coarse or fine as the water sorted it on the way.
+		laid := float64(landed[i])
 		if g.Drain[i] < FloodDepth/2 {
-			book[i].laid[Sand] += g.Sand[i] * fill
-			book[i].laid[Silt] += g.siltAt(i) * fill
-			book[i].laid[Clay] += g.Clay[i] * fill
-			t.Formed = uint8(epoch)
-			// The epoch's fill is a bed, coarse or fine as the water sorted
-			// it. Which of the two it finally counts as is read against the
-			// world's other fills at the end; see settleRock.
-			rock := Shale
-			if g.Sand[i] >= sandyBed {
-				rock = Sandstone
-			}
-			g.strata[i].bury(rock, uint8(epoch), uint8(max(1, 255*clamp01(g.Sand[i]))), g.Height[i], bedPerFill)
-			g.ledger[i].bury(byFill, epoch)
+			laid = math.Max(laid, fillRate*epochYears)
 		}
+		if laid <= 0 {
+			continue
+		}
+		part := g.parts(i)
+		if away != nil {
+			part = sortedAt(part, away[i], g.span())
+		}
+		for gr := range part {
+			book[i].laid[gr] += part[gr] * laid
+		}
+		t.Formed = uint8(epoch)
+		g.strata[i].bury(laidAs(part[Sand]), uint8(epoch), uint8(max(1, 255*clamp01(part[Sand]))), g.Height[i], laid)
+		g.ledger[i].bury(byFill, epoch)
 	}
+}
+
+// sortedAt is the make-up of what a load of the make-up part lays on a place
+// span metres across, away places out from the ground it came off (one for
+// the place next to it): of each grain, the share that settles crossing that
+// place of what is still carried when it gets there, as a shelf sorts it
+// (shelfReach). Next to the high ground the sand drops out, as the fans and
+// the braided rivers at a range's foot are sand and gravel, and further out
+// the plains are laid in mud.
+func sortedAt(part [Grains]float64, away, span float64) [Grains]float64 {
+	total := 0.0
+	for gr := range part {
+		part[gr] *= math.Exp(-math.Max(0, away-1)*span/shelfReach[gr]) * settleWeight(Grain(gr), span)
+		total += part[gr]
+	}
+	if total <= 0 {
+		return part
+	}
+	for gr := range part {
+		part[gr] /= total
+	}
+	return part
 }
 
 // quietFloor is the bed an epoch leaves on sea floor no land is near enough
@@ -3735,37 +3791,16 @@ func (g *Grid) quietFloor(i int) (Bedrock, float64) {
 func (g *Grid) settleRock(book []record, ocean []bool) {
 	defer phase.Start("settleRock")()
 	g.piles()
-	// Where the line between a coarse fill and a fine one falls on this
-	// world, read off its own fills rather than fixed. See coarseShare. It is
-	// read off each tile's whole fill and not bed by bed: what one epoch's
-	// fill is made of hardly differs from the next, and the difference the
-	// sorting makes is between one basin and another.
-	sandy := make([]float64, 0, len(g.Tiles))
-	for i := range g.Tiles {
-		if fill := carrying(book[i].laid); fill > fillEnough {
-			sandy = append(sandy, book[i].laid[Sand]/fill)
-		}
-	}
-	coarse := math.Inf(1)
-	if len(sandy) > 0 {
-		coarse = quantile(sandy, 1-coarseShare)
-	}
-
 	for i := range g.Tiles {
 		c := &g.strata[i]
 		b := book[i]
-		fill := carrying(b.laid)
-		// Coarse fill is the near end of a basin, where what came off the
-		// hill did not travel far before it was dropped; fine fill is what did
-		// travel. The mud off a shore is shale whatever it is ranked against,
-		// and is laid with no sand to say so.
-		river := Shale
-		if fill > 0 && b.laid[Sand]/fill >= coarse {
-			river = Sandstone
-		}
+		// Each bed the water laid is what its own grains make it: the water
+		// sorted them on the way, the sand dropped nearest where it came from
+		// and the mud carried on (see sortedAt and settleOut). The mud of a
+		// quiet sea is laid with no sand to say so, and is shale.
 		for k := 0; k+1 < int(c.n); k++ {
 			if r := c.rock[k]; (r == Sandstone || r == Shale) && c.sand[k] > 0 {
-				c.rock[k] = river
+				c.rock[k] = laidAs(float64(c.sand[k]) / 255)
 			}
 		}
 		if g.planet > 0 {
@@ -3885,20 +3920,4 @@ func (g *Grid) soften() {
 		}
 		g.Height[i] = h[i]
 	}
-}
-
-// offshore reports whether any of the eight tiles around p stands above the
-// sea. It is how a sea bed is told from a shore: what is next to land gets
-// what the land sends it.
-func (g *Grid) offshore(p geom.Pos, sea float64) bool {
-	for _, off := range Dirs {
-		q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-		if g.Wrap {
-			q = g.Norm(q)
-		}
-		if g.In(q) && !g.At(q).Wet() && g.Height[g.Index(q)] > sea {
-			return true
-		}
-	}
-	return false
 }
