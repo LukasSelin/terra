@@ -74,7 +74,7 @@ func (w *Land) historyGround(g *Grid, cfg Terms) *Grid {
 	h.planet = g.Span()
 	// The air reads the rows as latitudes, so it is the climate of a map as
 	// many rows high as the history's grid.
-	h.air = NewClimateOn(Terms{Width: hw, Height: hh, Wrap: cfg.Wrap}).airFor(h, cfg.Wetness)
+	h.air = NewClimateOn(Terms{Width: hw, Height: hh, Wrap: cfg.Wrap, Forcing: cfg.Forcing}).airFor(h, cfg.Wetness)
 	return h
 }
 
