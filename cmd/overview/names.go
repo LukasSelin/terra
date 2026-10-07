@@ -63,6 +63,8 @@ func namerFor(seed uint64) func(terra.Feature) string {
 				return "the " + word + " Copse"
 			}
 			return "the " + word + " Forest"
+		case terra.SubtropicalHigh:
+			return "the " + word + " High"
 		}
 		return word
 	}

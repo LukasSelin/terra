@@ -309,6 +309,25 @@ func (w *Winds) SubsidenceOn(i, day int) float64 {
 	return s
 }
 
+// SubsideMost is how fast the air comes down where the Hadley cell's descent
+// is strongest, metres a second at 500 hPa. See subsideMost.
+const SubsideMost = subsideMost
+
+// DescentAt is how fast the air comes down over tile i of the map on the
+// year's mean, metres a second at 500 hPa: SubsidenceOn's four phases taken
+// alike. Nothing where the descent is not worked out.
+func (w *Winds) DescentAt(i int) float64 {
+	fx, fy := w.CellAt(i)
+	var s float64
+	for k := range Phases {
+		if w.Subsides[k] == nil {
+			return 0
+		}
+		s += w.Sample(w.Subsides[k], fx, fy) / Phases
+	}
+	return s
+}
+
 // InversionOn is the height of the trade-wind inversion over tile i of the
 // map on a day of the year, metres over the sea, and infinite where the air
 // does not come down.

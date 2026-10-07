@@ -142,7 +142,7 @@ func TestRelationsAreFoundFromBothEnds(t *testing.T) {
 			}
 		}
 		unit := map[RelationKind]string{Warms: "°C", Cools: "°C", Dries: "share", Waters: "share", PartOf: "", Feeds: "Sv",
-			Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s"}[r.Kind]
+			Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s", Subsides: "mm/s"}[r.Kind]
 		if r.Unit != unit {
 			t.Errorf("%v has unit %q", r.Kind, r.Unit)
 		}

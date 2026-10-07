@@ -87,11 +87,18 @@ const (
 	// the current, the upwelling or the gyre nearest its outlet. Quantity is
 	// the flow at the outlet, in cubic metres a second.
 	DrainsInto
+	// Subsides is a subtropical high and a climate region under it: the
+	// Hadley cell's air comes down over the region, and the trade-wind
+	// inversion its descent lays caps the rain the region's air can make
+	// (see atmos.Env.Subsides). Quantity is the year's mean descent, in
+	// millimetres a second at 500 hPa, on the whole of the region's ground,
+	// nothing where the high is not over it: see relations_land.go.
+	Subsides
 	relationKinds
 )
 
 var relationKindNames = [relationKinds]string{"none", "warms", "cools", "dries", "waters", "part of", "feeds",
-	"shadows", "fills", "grows", "raises", "drains into"}
+	"shadows", "fills", "grows", "raises", "drains into", "subsides"}
 
 func (k RelationKind) String() string {
 	if int(k) < len(relationKindNames) {

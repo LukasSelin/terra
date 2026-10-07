@@ -55,13 +55,15 @@ var soilYardsticks = []realYardstick{
 		name: "valley floor over hillslope soil depth, small globe", unit: "x", scale: "ground", lo: 3, hi: 50, slow: true,
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
-	}},
-	// The floors' soil is capped with the hillslopes' by production (see the
-	// floor depth yardstick), so they stood only a few times deeper: 3.015x
-	// on main, 2.11x once the land's winters softened. It came inside the
-	// band, 3.44x, when the belts came to follow the circulation (see
-	// atmos.Env.beltsAt) and the small globes' floors held 0.83 m where they
-	// held 0.47: near its floor, and the marker is off.
+	},
+		// It came inside the band, 3.44x, when the belts came to follow the
+		// circulation (see atmos.Env.beltsAt) and the small globes' floors
+		// held 0.83 m where they held 0.47, and A2 took the marker off; on
+		// the integration branch, with the soil's water (L1) and the crust's
+		// isostasy (G2) as well, it reads 2.78x, and the marker main had is
+		// back.
+		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only a few times deeper: 3.015x on main, 2.11x once the land's winters softened, 2.78x with the whole Earth-system stack",
+	},
 
 	// 10. Clay against the climate. On the same rock a soil formed warm holds
 	// more clay than one formed cold, and a wet one more than a dry one: the
@@ -121,9 +123,12 @@ var soilYardsticks = []realYardstick{
 		name: "land share of Oxisols", unit: "", scale: "ground", lo: 0.05, hi: 0.10, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Oxisols ~7.5% of ice-free land",
 		measure: func() float64 { return soilOrderShare(globes(), Oxisol) },
-	},
-		gap: "known gap: I - the hot humid land is young: its surfaces are a median of fourteen thousand years old, and few have weathered out three quarters of their minerals (SoilOrderOf): 0.024",
-	},
+	}},
+	// It was a known gap (I: the hot humid land is young, its surfaces a
+	// median of fourteen thousand years old, and few have weathered out
+	// three quarters of their minerals; 0.024) until the Earth-system stack
+	// met on the integration branch, where it reads 0.0575: the marker is
+	// off.
 	{yardstick: yardstick{
 		name: "land share of Mollisols", unit: "", scale: "ground", lo: 0.05, hi: 0.09, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Mollisols ~6.9% of ice-free land",

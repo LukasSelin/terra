@@ -6,6 +6,57 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Integration: the Earth-system stack, merged and measured
+
+**What this is.** On `claude/earth-integration`, from `main` (2c51bea):
+#15, #64, #72 (with #66, #68), #75 (with #65, #71), #74, #79 (with #73)
+and #77 merged in that order, the conflicts resolved, and the follow-ups
+that only meet here wired. Not #67 (G1, the owner's decision).
+
+**Follow-ups wired.**
+- `atmos.Env.Stream` (O2) now reads M1's `Psi` in sverdrups; O2's Poisson
+  re-solve from the current's spin is gone, and a current's transport is
+  its speed over the layer M2 spreads it over (`max(FlowLeast, h)`), not
+  `gyreDepth`, which M1 removed.
+- A2's descent is the `Subsides` relation: a new feature kind,
+  `SubtropicalHigh` (year's mean descent at least 1 mm/s, one band a
+  hemisphere, globes only), relates to each climate region whose ground it
+  comes down over at 1 mm/s or more on the whole. 105 relations on seed 3;
+  `TestTheDryRegionsAreExplained` counts it: 17 B regions are explained by
+  it alone. 39 regions of 1723 tiles are left as known gaps (#72 had 49 of
+  1296 on its own world).
+- #64 as M2 asked: the southern eastern-boundary marker is off (-3.49),
+  the equatorial skip names the wind (#28, #35) and logs it, and the
+  Sverdrup closure reads ψ.
+- L1's soil-water fields are a world field, `moisture`, in `couplings.go`;
+  six passes' rows corrected; `docs/couplings.md` regenerated. Water -> air
+  and land and life -> air are no longer empty (the bucket feeds RainCells).
+
+**The world moves** (digest rewritten): valley a2e3fd404c70c45d, ancient
+6803fa3d4915fa50, globe128 ce4309c543bf810d.
+
+**Heap.** Budget rewritten. globe128 413.0 -> 555.2 MB (+34%) and 29301 ->
+35515 allocations against main; ancient 58.9 -> 58.6 MB; valley 10.5 ->
+10.8 MB. By merge: A0-A2 404.4 MiB, +L1 408.7, +M1/M2 461.5, +G2 529.3:
+G2 alone took globe128 down 16 MB, and with the rest it adds 68 MiB. Not
+yet traced. The follow-ups add under 0.1 MB.
+
+**Yardsticks** (`go test -run 'TestRealNumbers|TestTheRealWorld'`): five
+fail against main's eight. Fixed: mean land rain 2x/1x (1.062),
+Aridisols (0.122), Gelisols (0.098), hypsometric integral small globe
+(0.389), midlatitude over subtropical rain (1.439), drainage area
+exceedance small globe (0.447). Still failing: channel concavity small
+globe (0.340, main 0.2455), discharge exceedance small globe (0.465, main
+0.462). New: Hack small globe (0.526), drainage area exceedance globe
+(0.476), hypsometric integral 2x-1x (-0.077). Oxisols closed its gap
+(0.0575; marker off); valley floor over hillslope soil (2.78x) is a known
+gap again, as on main.
+
+**Not run.** `scripts/perf.sh check` (the machine was loaded by this
+session's own suites).
+
+---
+
 ## 2026-10-07 - The crust floats: thickness, isostasy, flexure and rebound (Rock G2)
 
 **What this is.** On `claude/rock-isostasy`, from `main` (2c51bea): issue

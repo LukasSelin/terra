@@ -20,6 +20,7 @@ Which pass of world creation reads which of the world's fields and writes which,
 | rock | plates | which plate each tile rides, which plate each has been welded into, and the hotspots |
 | rock | book | the book the history kept of what it did to each tile, and how many epochs it ran |
 | water | drainage | where each tile's water goes and how much runs through it, and how far it stands over it |
+| water | moisture | the soil's water through the year: each phase's rain, what the soil holds and sheds of it, and how much it can hold |
 | water | load | the ground the water carries: off the land, and off the banks of its bends |
 | water | lakes | the standing water: the lakes, their level, and the salt pans |
 | land and life | soil | the soil: how deep, what it is made of, and what time has made of it |
@@ -42,27 +43,29 @@ flowchart LR
   land_and_life[land and life]
   registry[registry]
   air -- 7 --> sea
-  air -- 12 --> rock
-  air -- 8 --> water
+  air -- 13 --> rock
+  air -- 13 --> water
   air -- 20 --> land_and_life
   air -- 4 --> registry
   sea -- 3 --> air
   sea -- 6 --> rock
-  sea -- 4 --> water
+  sea -- 5 --> water
   sea -- 10 --> land_and_life
   sea -- 1 --> registry
-  rock -- 5 --> air
+  rock -- 7 --> air
   rock -- 7 --> sea
-  rock -- 8 --> water
+  rock -- 11 --> water
   rock -- 19 --> land_and_life
   rock -- 3 --> registry
+  water -- 2 --> air
   water -- 3 --> sea
   water -- 8 --> rock
   water -- 11 --> land_and_life
   water -- 2 --> registry
+  land_and_life -- 2 --> air
   land_and_life -- 4 --> sea
   land_and_life -- 8 --> rock
-  land_and_life -- 3 --> water
+  land_and_life -- 4 --> water
   land_and_life -- 1 --> registry
 ```
 
@@ -72,21 +75,22 @@ Field to field: each field, and the fields the passes that read it write.
 
 | Field | Drives |
 |---|---|
-| energy | wind (weather); rain (weather); sea (history, cutThroughCycle); tide (tides); height (history, settleHistory, shape, landslide, cutThroughCycle, wear); floor (settleHistory); rock (history, keepBook, settleHistory, shape); plates (history); book (history, keepBook, wear); drainage (flow); load (wear, waterStep); lakes (pool, flow); soil (history, landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
-| wind | rain (weather); year (year); sea (cutThroughCycle); tide (tides); height (landslide, cutThroughCycle, wear); book (wear); load (wear, waterStep); soil (landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
-| rain | wind (weather); sea (cutThroughCycle); tide (tides); height (shape, landslide, cutThroughCycle, wear); rock (shape); book (wear); drainage (flow); load (wear, waterStep); lakes (pool, flow); soil (landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
+| energy | wind (weather); rain (weather); sea (history, cutThroughCycle); tide (tides); height (history, settleHistory, shape, landslide, cutThroughCycle, wear); floor (settleHistory); rock (history, keepBook, settleHistory, shape); plates (history); book (history, keepBook, wear); drainage (flow); moisture (weather); load (wear, waterStep); lakes (pool, flow); soil (history, landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
+| wind | rain (weather); year (year); sea (cutThroughCycle); tide (tides); height (shape, landslide, cutThroughCycle, wear); rock (shape); book (wear); drainage (flow); moisture (weather); load (wear, waterStep); lakes (pool, flow); soil (landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
+| rain | wind (weather); sea (cutThroughCycle); tide (tides); height (shape, landslide, cutThroughCycle, wear); rock (shape); book (wear); drainage (flow); moisture (weather); load (wear, waterStep); lakes (pool, flow); soil (landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (tides, cover); features (readFeatures) |
 | year | tide (tides); height (wear); book (wear); load (wear, waterStep); soil (wear, laySoil); cover (freeze, tides, cover); woods (tides, cover, readWoods); fertility (tides, cover); stocks (freeze, tides, cover); features (readFeatures) |
-| sea | wind (weather); rain (weather); year (year); tide (tides); height (history, shape, texture, denude, cutThroughCycle, wear, silt); rock (history, keepBook, shape); plates (history); book (history, keepBook, wear); drainage (flow); load (wear, waterStep); lakes (pool, flow); soil (history, cutThroughCycle, wear, silt); cover (pour, level, carve, tides); woods (pour, level, carve, tides); fertility (tides); stocks (pour, level, carve, tides); features (readFeatures) |
+| sea | wind (weather); rain (weather); year (year); tide (tides); height (history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt); rock (history, tectonics, keepBook, shape); plates (history, tectonics); book (history, tectonics, keepBook, wear); drainage (flow); moisture (weather); load (wear, waterStep); lakes (pool, flow); soil (history, cutThroughCycle, wear, silt); cover (pour, level, carve, tides); woods (pour, level, carve, tides); fertility (tides); stocks (pour, level, carve, tides); features (readFeatures) |
 | tide | height (wear, silt); book (wear); load (wear, waterStep); soil (wear, silt); cover (tides); woods (tides); fertility (tides); stocks (tides) |
-| height | wind (weather); rain (weather); year (year); sea (history, pour, level, cutThroughCycle); tide (tides); floor (settleHistory); rock (history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape); plates (history, move, tectonics, settleRock, handDown); book (history, tectonics, keepBook, handDown, wear); drainage (flow, height); load (wear, waterStep); lakes (pool, flow); soil (history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil); cover (move, handDown, pour, level, carve, freeze, tides, cover); woods (pour, level, carve, tides, cover, readWoods); fertility (tides, cover); stocks (pour, level, carve, freeze, tides, cover); features (readFeatures) |
-| floor | wind (weather); rain (weather); sea (pour, cutThroughCycle); tide (tides); height (settleHistory, shape, texture, landslide, cutThroughCycle, wear); rock (settleHistory, shape); book (wear); drainage (flow, height); load (wear); lakes (pool, flow); soil (landslide, cutThroughCycle, wear, laySoil); cover (pour, freeze, tides, cover); woods (pour, tides, cover, readWoods); fertility (tides, cover); stocks (pour, freeze, tides, cover) |
-| rock | sea (history, cutThroughCycle); tide (tides); height (history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear); floor (settleHistory); plates (history, move, tectonics, settleRock, handDown); book (history, tectonics, keepBook, handDown, wear); load (wear, waterStep); soil (history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (move, handDown, tides); woods (tides); fertility (tides); stocks (tides) |
+| height | wind (weather); rain (weather); year (year); sea (history, pour, level, cutThroughCycle); tide (tides); floor (settleHistory); rock (history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape); plates (history, move, tectonics, settleRock, handDown); book (history, tectonics, keepBook, handDown, wear); drainage (flow, height); moisture (weather); load (wear, waterStep); lakes (pool, flow); soil (history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil); cover (move, handDown, pour, level, carve, freeze, tides, cover); woods (pour, level, carve, tides, cover, readWoods); fertility (tides, cover); stocks (pour, level, carve, freeze, tides, cover); features (readFeatures) |
+| floor | wind (weather); rain (weather); sea (pour, cutThroughCycle); tide (tides); height (settleHistory, shape, texture, landslide, cutThroughCycle, wear); rock (settleHistory, shape); book (wear); drainage (flow, height); moisture (weather); load (wear); lakes (pool, flow); soil (landslide, cutThroughCycle, wear, laySoil); cover (pour, freeze, tides, cover); woods (pour, tides, cover, readWoods); fertility (tides, cover); stocks (pour, freeze, tides, cover) |
+| rock | wind (weather); rain (weather); sea (history, cutThroughCycle); tide (tides); height (history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear); floor (settleHistory); plates (history, move, tectonics, settleRock, handDown); book (history, tectonics, keepBook, handDown, wear); moisture (weather); load (wear, waterStep); soil (history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil); cover (move, handDown, tides); woods (tides); fertility (tides); stocks (tides) |
 | plates | sea (history); height (history, move, tectonics, handDown); rock (history, move, tectonics, settleRock, handDown); book (history, tectonics, handDown); soil (history, move, handDown); cover (move, handDown); features (readFeatures) |
 | book | height (tectonics, handDown, settleHistory, wear); floor (settleHistory); rock (tectonics, keepBook, handDown, settleHistory); plates (tectonics, handDown); load (wear); soil (handDown, wear); cover (handDown); features (readFeatures) |
 | drainage | sea (history); tide (tides); height (history, wear); rock (history, keepBook); plates (history); book (history, keepBook, wear); load (wear, waterStep); lakes (flow); soil (history, wear, laySoil); cover (carve, tides, cover); woods (carve, tides, cover, readWoods); fertility (tides, cover); stocks (carve, tides, cover); features (readFeatures) |
+| moisture | wind (weather); rain (weather) |
 | load | height (wear); book (wear); soil (wear) |
 | lakes | tide (tides); height (denude, wear); book (wear); drainage (flow, height); load (wear, waterStep); soil (wear); cover (carve, freeze, tides); woods (carve, tides); fertility (tides); stocks (carve, freeze, tides); features (readFeatures) |
-| soil | sea (history, cutThroughCycle); tide (tides); height (history, move, handDown, landslide, cutThroughCycle, wear, silt); rock (history, move, keepBook, handDown); plates (history, move, handDown); book (history, keepBook, handDown, wear); load (wear, waterStep); cover (move, handDown, tides, cover); woods (tides, cover); fertility (tides, cover); stocks (tides, cover) |
+| soil | wind (weather); rain (weather); sea (history, cutThroughCycle); tide (tides); height (history, move, handDown, landslide, cutThroughCycle, wear, silt); rock (history, move, keepBook, handDown); plates (history, move, handDown); book (history, keepBook, handDown, wear); moisture (weather); load (wear, waterStep); cover (move, handDown, tides, cover); woods (tides, cover); fertility (tides, cover); stocks (tides, cover) |
 | cover | sea (history, pour, level, cutThroughCycle); tide (tides); height (history, shape, denude, landslide, cutThroughCycle, wear); rock (history, keepBook, shape); plates (history); book (history, keepBook, wear); drainage (height); load (wear, waterStep); soil (history, landslide, cutThroughCycle, wear, laySoil); woods (pour, level, carve, tides, cover, readWoods); fertility (tides, cover); stocks (pour, level, carve, freeze, tides, cover); features (readFeatures) |
 | woods | cover (cover); fertility (cover); stocks (cover) |
 | fertility | cover (cover); woods (cover); stocks (cover) |
@@ -103,7 +107,7 @@ Field to field: each field, and the fields the passes that read it write.
 | flood | ground |  |  |
 | move | ground | height, rock, plates, soil | height, rock, plates, soil, cover |
 | joinUp | ground | plates | plates |
-| tectonics | ground | height, rock, plates, book | height, rock, plates, book |
+| tectonics | ground | sea, height, rock, plates, book | height, rock, plates, book |
 | reshape | ground | plates | plates |
 | keepBook | ground | energy, sea, height, rock, book, drainage, soil, cover | rock, book |
 | settleRock | ground | height, plates, rock | plates, rock |
@@ -115,15 +119,15 @@ Field to field: each field, and the fields the passes that read it write.
 | expose | ground, shape, cut, coast | height, rock | rock |
 | pour | sea, cut, coast | sea, height, floor, cover | sea, cover, woods, stocks |
 | level | sea, cut, coast | sea, height, cover | sea, cover, woods, stocks |
-| shape | shape | cover, energy, floor, height, rain, rock, sea | height, rock |
+| shape | shape | energy, wind, rain, sea, height, floor, rock, cover | height, rock |
 | texture | shape | floor, height, sea | height |
 | denude | shape | cover, height, lakes, rock, sea | height |
 | landslide | ground, shape, cut | cover, energy, floor, height, rain, rock, soil, wind | height, soil |
 | drain | ground, shape, cut, coast | floor, height, rain, sea, wind |  |
-| weather | ground, shape, cut, coast | energy, floor, height, rain, sea, wind | rain, wind |
+| weather | ground, shape, cut, coast | energy, wind, rain, sea, height, floor, rock, moisture, soil | wind, rain, moisture |
 | defaultAir | ground, shape, cut, coast | energy | energy |
-| pool | ground, shape, cut, coast | energy, floor, height, lakes, rain, sea | lakes |
-| flow | ground, shape, cut, coast | drainage, energy, floor, height, lakes, rain, sea | drainage, lakes |
+| pool | ground, shape, cut, coast | energy, wind, rain, sea, height, floor, lakes | lakes |
+| flow | ground, shape, cut, coast | energy, wind, rain, sea, height, floor, drainage, lakes | drainage, lakes |
 | cutValleys | cut |  |  |
 | cutThroughCycle | cut | cover, energy, floor, height, rain, rock, sea, soil, wind | height, sea, soil |
 | carve | cut | sea, height, drainage, lakes, cover | cover, woods, stocks |
@@ -136,7 +140,7 @@ Field to field: each field, and the fields the passes that read it write.
 | tides | coast | energy, wind, rain, year, sea, tide, height, floor, rock, drainage, lakes, soil, cover | tide, cover, woods, fertility, stocks |
 | silt | coast | sea, tide, height, soil | height, soil |
 | cover | cover | energy, wind, rain, year, height, floor, drainage, soil, cover, woods, fertility | cover, woods, fertility, stocks |
-| readWoods | cover | cover, drainage, energy, floor, height, rain, woods, year | woods |
+| readWoods | cover | energy, wind, rain, year, height, floor, drainage, cover, woods | woods |
 | soilTexture | ground, cover | energy, height, rain, rock, wind | soil |
 | laySoil | cover | cover, drainage, energy, floor, height, rain, rock, soil, wind, year | soil |
 | recount | cover | height, floor |  |
@@ -147,17 +151,22 @@ Field to field: each field, and the fields the passes that read it write.
 
 Fields that drive one another round some loop, each set by Tarjan's strongly connected components:
 
-- wind, rain, year, sea, tide, height, floor, rock, plates, book, drainage, load, lakes, soil, cover, woods, fertility
+- wind, rain, year, sea, tide, height, floor, rock, plates, book, drainage, moisture, load, lakes, soil, cover, woods, fertility
 
-Every loop of up to 3 fields, found by walking the graph: each field drives the next and the last the first, through the passes named, with the systems it goes through. A loop one pass makes alone, reading and writing its own fields, is not counted. 246 loops: 38 of two fields and 208 of three.
+Every loop of up to 3 fields, found by walking the graph: each field drives the next and the last the first, through the passes named, with the systems it goes through. A loop one pass makes alone, reading and writing its own fields, is not counted. 300 loops: 43 of two fields and 257 of three.
 
 - wind -(cutThroughCycle)-> sea -(weather)-> wind [air, sea]
-- wind -(landslide, cutThroughCycle, wear)-> height -(weather)-> wind [air, rock]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> wind [air, rock]
+- wind -(shape)-> rock -(weather)-> wind [air, rock]
+- wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> wind [air, land and life]
 - rain -(cutThroughCycle)-> sea -(weather)-> rain [air, sea]
 - rain -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> rain [air, rock]
+- rain -(shape)-> rock -(weather)-> rain [air, rock]
+- rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> rain [air, land and life]
 - year -(wear)-> height -(year)-> year [air, rock]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, shape)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, shape)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics)-> plates -(history)-> sea [sea, rock]
 - sea -(flow)-> drainage -(history)-> sea [sea, water]
 - sea -(history, cutThroughCycle, wear, silt)-> soil -(history, cutThroughCycle)-> sea [sea, land and life]
 - sea -(pour, level, carve, tides)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, land and life]
@@ -190,41 +199,90 @@ Every loop of up to 3 fields, found by walking the graph: each field drives the 
 - cover -(pour, level, carve, tides, cover, readWoods)-> woods -(cover)-> cover [land and life]
 - cover -(tides, cover)-> fertility -(cover)-> cover [land and life]
 
-<details><summary>The 208 loops of three fields</summary>
+<details><summary>The 257 loops of three fields</summary>
 
 - wind -(weather)-> rain -(cutThroughCycle)-> sea -(weather)-> wind [air, sea]
 - wind -(weather)-> rain -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> wind [air, rock]
+- wind -(weather)-> rain -(shape)-> rock -(weather)-> wind [air, rock]
+- wind -(weather)-> rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> wind [air, land and life]
 - wind -(year)-> year -(wear)-> height -(weather)-> wind [air, rock]
+- wind -(year)-> year -(wear, laySoil)-> soil -(weather)-> wind [air, land and life]
 - wind -(cutThroughCycle)-> sea -(weather)-> rain -(weather)-> wind [air, sea]
-- wind -(cutThroughCycle)-> sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(weather)-> wind [air, sea, rock]
+- wind -(cutThroughCycle)-> sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(weather)-> wind [air, sea, rock]
+- wind -(cutThroughCycle)-> sea -(history, tectonics, keepBook, shape)-> rock -(weather)-> wind [air, sea, rock]
+- wind -(cutThroughCycle)-> sea -(weather)-> moisture -(weather)-> wind [air, sea, water]
+- wind -(cutThroughCycle)-> sea -(history, cutThroughCycle, wear, silt)-> soil -(weather)-> wind [air, sea, land and life]
 - wind -(tides)-> tide -(wear, silt)-> height -(weather)-> wind [air, sea, rock]
-- wind -(landslide, cutThroughCycle, wear)-> height -(weather)-> rain -(weather)-> wind [air, rock]
-- wind -(landslide, cutThroughCycle, wear)-> height -(history, pour, level, cutThroughCycle)-> sea -(weather)-> wind [air, sea, rock]
-- wind -(landslide, cutThroughCycle, wear)-> height -(settleHistory)-> floor -(weather)-> wind [air, rock]
+- wind -(tides)-> tide -(wear, silt)-> soil -(weather)-> wind [air, sea, land and life]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> rain -(weather)-> wind [air, rock]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(history, pour, level, cutThroughCycle)-> sea -(weather)-> wind [air, sea, rock]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(settleHistory)-> floor -(weather)-> wind [air, rock]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape)-> rock -(weather)-> wind [air, rock]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> moisture -(weather)-> wind [air, rock, water]
+- wind -(shape, landslide, cutThroughCycle, wear)-> height -(history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil)-> soil -(weather)-> wind [air, rock, land and life]
+- wind -(shape)-> rock -(weather)-> rain -(weather)-> wind [air, rock]
+- wind -(shape)-> rock -(history, cutThroughCycle)-> sea -(weather)-> wind [air, sea, rock]
+- wind -(shape)-> rock -(history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear)-> height -(weather)-> wind [air, rock]
+- wind -(shape)-> rock -(settleHistory)-> floor -(weather)-> wind [air, rock]
+- wind -(shape)-> rock -(weather)-> moisture -(weather)-> wind [air, rock, water]
+- wind -(shape)-> rock -(history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> wind [air, rock, land and life]
 - wind -(wear)-> book -(tectonics, handDown, settleHistory, wear)-> height -(weather)-> wind [air, rock]
 - wind -(wear)-> book -(settleHistory)-> floor -(weather)-> wind [air, rock]
+- wind -(wear)-> book -(tectonics, keepBook, handDown, settleHistory)-> rock -(weather)-> wind [air, rock]
+- wind -(wear)-> book -(handDown, wear)-> soil -(weather)-> wind [air, rock, land and life]
+- wind -(flow)-> drainage -(history)-> sea -(weather)-> wind [air, sea, water]
+- wind -(flow)-> drainage -(history, wear)-> height -(weather)-> wind [air, rock, water]
+- wind -(flow)-> drainage -(history, keepBook)-> rock -(weather)-> wind [air, rock, water]
+- wind -(flow)-> drainage -(history, wear, laySoil)-> soil -(weather)-> wind [air, water, land and life]
 - wind -(wear, waterStep)-> load -(wear)-> height -(weather)-> wind [air, rock, water]
+- wind -(wear, waterStep)-> load -(wear)-> soil -(weather)-> wind [air, water, land and life]
+- wind -(pool, flow)-> lakes -(denude, wear)-> height -(weather)-> wind [air, rock, water]
+- wind -(pool, flow)-> lakes -(wear)-> soil -(weather)-> wind [air, water, land and life]
+- wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> rain -(weather)-> wind [air, land and life]
 - wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea -(weather)-> wind [air, sea, land and life]
 - wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, move, handDown, landslide, cutThroughCycle, wear, silt)-> height -(weather)-> wind [air, rock, land and life]
+- wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, move, keepBook, handDown)-> rock -(weather)-> wind [air, rock, land and life]
+- wind -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> moisture -(weather)-> wind [air, water, land and life]
 - wind -(tides, cover)-> cover -(history, pour, level, cutThroughCycle)-> sea -(weather)-> wind [air, sea, land and life]
 - wind -(tides, cover)-> cover -(history, shape, denude, landslide, cutThroughCycle, wear)-> height -(weather)-> wind [air, rock, land and life]
-- rain -(cutThroughCycle)-> sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(weather)-> rain [air, sea, rock]
+- wind -(tides, cover)-> cover -(history, keepBook, shape)-> rock -(weather)-> wind [air, rock, land and life]
+- wind -(tides, cover)-> cover -(history, landslide, cutThroughCycle, wear, laySoil)-> soil -(weather)-> wind [air, land and life]
+- rain -(cutThroughCycle)-> sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(weather)-> rain [air, sea, rock]
+- rain -(cutThroughCycle)-> sea -(history, tectonics, keepBook, shape)-> rock -(weather)-> rain [air, sea, rock]
+- rain -(cutThroughCycle)-> sea -(weather)-> moisture -(weather)-> rain [air, sea, water]
+- rain -(cutThroughCycle)-> sea -(history, cutThroughCycle, wear, silt)-> soil -(weather)-> rain [air, sea, land and life]
 - rain -(tides)-> tide -(wear, silt)-> height -(weather)-> rain [air, sea, rock]
+- rain -(tides)-> tide -(wear, silt)-> soil -(weather)-> rain [air, sea, land and life]
 - rain -(shape, landslide, cutThroughCycle, wear)-> height -(history, pour, level, cutThroughCycle)-> sea -(weather)-> rain [air, sea, rock]
 - rain -(shape, landslide, cutThroughCycle, wear)-> height -(settleHistory)-> floor -(weather)-> rain [air, rock]
+- rain -(shape, landslide, cutThroughCycle, wear)-> height -(history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape)-> rock -(weather)-> rain [air, rock]
+- rain -(shape, landslide, cutThroughCycle, wear)-> height -(weather)-> moisture -(weather)-> rain [air, rock, water]
+- rain -(shape, landslide, cutThroughCycle, wear)-> height -(history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil)-> soil -(weather)-> rain [air, rock, land and life]
 - rain -(shape)-> rock -(history, cutThroughCycle)-> sea -(weather)-> rain [air, sea, rock]
 - rain -(shape)-> rock -(history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear)-> height -(weather)-> rain [air, rock]
 - rain -(shape)-> rock -(settleHistory)-> floor -(weather)-> rain [air, rock]
+- rain -(shape)-> rock -(weather)-> moisture -(weather)-> rain [air, rock, water]
+- rain -(shape)-> rock -(history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> rain [air, rock, land and life]
 - rain -(wear)-> book -(tectonics, handDown, settleHistory, wear)-> height -(weather)-> rain [air, rock]
 - rain -(wear)-> book -(settleHistory)-> floor -(weather)-> rain [air, rock]
+- rain -(wear)-> book -(tectonics, keepBook, handDown, settleHistory)-> rock -(weather)-> rain [air, rock]
+- rain -(wear)-> book -(handDown, wear)-> soil -(weather)-> rain [air, rock, land and life]
 - rain -(flow)-> drainage -(history)-> sea -(weather)-> rain [air, sea, water]
 - rain -(flow)-> drainage -(history, wear)-> height -(weather)-> rain [air, rock, water]
+- rain -(flow)-> drainage -(history, keepBook)-> rock -(weather)-> rain [air, rock, water]
+- rain -(flow)-> drainage -(history, wear, laySoil)-> soil -(weather)-> rain [air, water, land and life]
 - rain -(wear, waterStep)-> load -(wear)-> height -(weather)-> rain [air, rock, water]
+- rain -(wear, waterStep)-> load -(wear)-> soil -(weather)-> rain [air, water, land and life]
 - rain -(pool, flow)-> lakes -(denude, wear)-> height -(weather)-> rain [air, rock, water]
+- rain -(pool, flow)-> lakes -(wear)-> soil -(weather)-> rain [air, water, land and life]
 - rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea -(weather)-> rain [air, sea, land and life]
 - rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, move, handDown, landslide, cutThroughCycle, wear, silt)-> height -(weather)-> rain [air, rock, land and life]
+- rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, move, keepBook, handDown)-> rock -(weather)-> rain [air, rock, land and life]
+- rain -(landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(weather)-> moisture -(weather)-> rain [air, water, land and life]
 - rain -(tides, cover)-> cover -(history, pour, level, cutThroughCycle)-> sea -(weather)-> rain [air, sea, land and life]
 - rain -(tides, cover)-> cover -(history, shape, denude, landslide, cutThroughCycle, wear)-> height -(weather)-> rain [air, rock, land and life]
+- rain -(tides, cover)-> cover -(history, keepBook, shape)-> rock -(weather)-> rain [air, rock, land and life]
+- rain -(tides, cover)-> cover -(history, landslide, cutThroughCycle, wear, laySoil)-> soil -(weather)-> rain [air, land and life]
 - year -(tides)-> tide -(wear, silt)-> height -(year)-> year [air, sea, rock]
 - year -(wear)-> height -(history, pour, level, cutThroughCycle)-> sea -(year)-> year [air, sea, rock]
 - year -(wear)-> book -(tectonics, handDown, settleHistory, wear)-> height -(year)-> year [air, rock]
@@ -236,27 +294,27 @@ Every loop of up to 3 fields, found by walking the graph: each field drives the 
 - sea -(tides)-> tide -(wear, silt)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
 - sea -(tides)-> tide -(wear, silt)-> soil -(history, cutThroughCycle)-> sea [sea, land and life]
 - sea -(tides)-> tide -(tides)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, land and life]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, tectonics, settleRock, handDown)-> plates -(history)-> sea [sea, rock]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(flow, height)-> drainage -(history)-> sea [sea, rock, water]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(move, handDown, pour, level, carve, freeze, tides, cover)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history, keepBook, shape)-> rock -(history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, shape)-> rock -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, shape)-> rock -(history, move, tectonics, settleRock, handDown)-> plates -(history)-> sea [sea, rock]
-- sea -(history, keepBook, shape)-> rock -(history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history, keepBook, shape)-> rock -(move, handDown, tides)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history)-> plates -(history, move, tectonics, handDown)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
-- sea -(history)-> plates -(history, move, tectonics, settleRock, handDown)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
-- sea -(history)-> plates -(history, move, handDown)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history)-> plates -(move, handDown)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history, keepBook, wear)-> book -(tectonics, handDown, settleHistory, wear)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, wear)-> book -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, wear)-> book -(tectonics, keepBook, handDown, settleHistory)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
-- sea -(history, keepBook, wear)-> book -(tectonics, handDown)-> plates -(history)-> sea [sea, rock]
-- sea -(history, keepBook, wear)-> book -(handDown, wear)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
-- sea -(history, keepBook, wear)-> book -(handDown)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, tectonics, keepBook, settleRock, handDown, settleHistory, layBedrock, expose, shape)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, tectonics, settleRock, handDown)-> plates -(history)-> sea [sea, rock]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(flow, height)-> drainage -(history)-> sea [sea, rock, water]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(history, move, handDown, landslide, cutThroughCycle, wear, silt, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, shape, texture, denude, cutThroughCycle, wear, silt)-> height -(move, handDown, pour, level, carve, freeze, tides, cover)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, keepBook, shape)-> rock -(history, move, tectonics, handDown, settleHistory, shape, denude, landslide, cutThroughCycle, wear)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, shape)-> rock -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, shape)-> rock -(history, move, tectonics, settleRock, handDown)-> plates -(history)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, shape)-> rock -(history, move, handDown, landslide, cutThroughCycle, wear, soilTexture, laySoil)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, keepBook, shape)-> rock -(move, handDown, tides)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics)-> plates -(history, move, tectonics, handDown)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics)-> plates -(history, move, tectonics, settleRock, handDown)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics)-> plates -(history, move, handDown)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics)-> plates -(move, handDown)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, keepBook, wear)-> book -(tectonics, handDown, settleHistory, wear)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, wear)-> book -(settleHistory)-> floor -(pour, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, wear)-> book -(tectonics, keepBook, handDown, settleHistory)-> rock -(history, cutThroughCycle)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, wear)-> book -(tectonics, handDown)-> plates -(history)-> sea [sea, rock]
+- sea -(history, tectonics, keepBook, wear)-> book -(handDown, wear)-> soil -(history, cutThroughCycle)-> sea [sea, rock, land and life]
+- sea -(history, tectonics, keepBook, wear)-> book -(handDown)-> cover -(history, pour, level, cutThroughCycle)-> sea [sea, rock, land and life]
 - sea -(flow)-> drainage -(history, wear)-> height -(history, pour, level, cutThroughCycle)-> sea [sea, rock, water]
 - sea -(flow)-> drainage -(history, keepBook)-> rock -(history, cutThroughCycle)-> sea [sea, rock, water]
 - sea -(flow)-> drainage -(history)-> plates -(history)-> sea [sea, rock, water]

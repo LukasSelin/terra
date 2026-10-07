@@ -55,11 +55,13 @@ const (
 	// oceanOpen is the share of the way round a parallel a stretch of sea has
 	// to run for its shores not to close a gyre: atmos.gyreOpen's.
 	oceanOpen = 0.8
-	// oceanColumn is the depth, in metres, the gyres' currents are taken to
-	// run to when a surface speed is read as a transport: atmos.gyreDepth.
-	// The surface current is the gyre's transport over this depth plus the
-	// Ekman drift over fifty metres, so a transport read this way overstates
-	// the drift's share; the ratios are read off the speeds and do not care.
+	// oceanColumn is the depth, in metres, a surface speed is taken to run
+	// to when it is read as a transport, where a reading has nothing better:
+	// the old atmos.gyreDepth. Since M2 (#21) the gyres' current is their
+	// transport spread over the warm water above the thermocline, never less
+	// than atmos.FlowLeast, so a transport read this way is only roughly
+	// one; the Sverdrup closure reads the streamfunction instead (see
+	// gyreTransport).
 	oceanColumn = 300.0
 	// sverdrup is a cubic hectometre a second, the oceanographer's unit of
 	// transport: 10^6 m^3/s.
@@ -182,44 +184,15 @@ func (o *oceanCells) current(i int) (east, north float64) {
 	return float64(o.e.Cu[i]), float64(o.e.Cv[i])
 }
 
-// The figures atmos.currents drives the surface drift with, as it has them.
-const (
-	oceanAirDensity = 1.2       // atmos.airDensity, kg a cubic metre
-	oceanStressDrag = 1.3e-3    // atmos.stressDrag
-	oceanOmega      = 7.2921e-5 // atmos.omega, radians a second
-	oceanEkmanDepth = 50.0      // atmos.ekmanDepth, metres
-	oceanEkmanLow   = 15.0      // atmos.upwellLow, degrees: the least latitude the turning is read at
-)
-
-// ekmanDrift is the drift the year's mean wind drives the surface water at
-// over cell i on row cy, metres a second toward the east and the north: a
-// quarter turn to the right of the wind's stress in the north and to the left
-// in the south, over the Ekman layer, as atmos.currents adds it to the
-// gyres' current. The surface current less this is the gyre's own, which is
-// what Sverdrup's balance is a balance of: the model's gyre flow is already
-// the whole of the wind curl's transport, Ekman layer and all, so the drift
-// is not added back.
-func (o *oceanCells) ekmanDrift(i, cy int) (east, north float64) {
-	var mu, mv float64
-	for k := range atmos.Phases {
-		mu += float64(o.w.U[k][i]) / atmos.Phases
-		mv += float64(o.w.V[k][i]) / atmos.Phases
-	}
-	s := math.Hypot(mu, mv)
-	tx, ty := oceanAirDensity*oceanStressDrag*s*mu, oceanAirDensity*oceanStressDrag*s*mv
-	lat := o.lat[cy]
-	f := 2 * oceanOmega * math.Max(math.Sin(math.Abs(lat)*math.Pi/180), math.Sin(oceanEkmanLow*math.Pi/180))
-	f = math.Copysign(f, lat)
-	return ty / (atmos.SeaDensity * f) / oceanEkmanDepth, -tx / (atmos.SeaDensity * f) / oceanEkmanDepth
-}
-
-// gyreCurrent is the sea's current toward the north over cell i on row cy
-// less the wind's drift: the flow the gyre drives, metres a second, over
-// oceanColumn of water.
-func (o *oceanCells) gyreCurrent(i, cy int) float64 {
-	_, v := o.current(i)
-	_, d := o.ekmanDrift(i, cy)
-	return v - d
+// gyreTransport is what the gyre carries toward the north across cell
+// (cx, cy), in cubic metres a second through the whole of the moving water:
+// the rise of its streamfunction across the cell (M1's Psi, flow.go), the
+// same central difference atmos.currents reads the current off. It is the
+// gyre's own, with no wind's drift in it, and no depth has to be guessed to
+// make a transport of a speed: M2 (#21) asked the closure to be read so,
+// once the surface current came to be ψ over the thermocline's depth.
+func (o *oceanCells) gyreTransport(cx, cy int) float64 {
+	return float64(o.e.Psi[o.at(cx+1, cy)]-o.e.Psi[o.at(cx-1, cy)]) / 2 * atmos.Sverdrup
 }
 
 // waterTemp is the year's mean temperature of the water over cell i, degrees.
@@ -287,9 +260,8 @@ func (o *oceanCells) basins(rows []int) []int {
 
 // gyre is a subtropical gyre's two halves: what its western boundary current
 // carries toward the pole and what its interior carries toward the equator,
-// each in square metres a second - a transport per metre of depth, summed
-// over the rows the gyre spans, so a gyre's is the mean over its rows times
-// how many there are.
+// each in cubic metres a second, summed over the rows the gyre spans, so a
+// gyre's is the mean over its rows times how many there are.
 type gyre struct {
 	basin    int
 	rows     int     // how many rows it has an ocean on
@@ -308,14 +280,13 @@ func (g gyre) closure() float64 { return g.boundary / g.interior }
 // from its western shore, and the meridional transport of the two parts is
 // summed over the basin the stretch is part of. Only basins with an ocean on
 // least rows are kept: a gyre spans more than a bay does. The northward
-// current read is the gyre's own (gyreCurrent), not the wind's drift on it.
+// transport read is the gyre's own (gyreTransport), not the wind's drift on it.
 func (o *oceanCells) gyresOf(lo, hi float64, least int) []gyre {
 	hemi := math.Copysign(1, lo+hi)
 	rows := o.rowsBetween(lo, hi)
 	label := o.basins(rows)
 	byBasin := map[int]*gyre{}
 	for _, cy := range rows {
-		dx := o.e.Dx[cy]
 		for _, s := range o.stretches(cy) {
 			b := label[o.at(s.first, cy)]
 			gy := byBasin[b]
@@ -328,11 +299,11 @@ func (o *oceanCells) gyresOf(lo, hi float64, least int) []gyre {
 			}
 			gy.lo, gy.hi = min(gy.lo, o.lat[cy]), max(gy.hi, o.lat[cy])
 			for cx := s.first; cx <= s.last; cx++ {
-				v := o.gyreCurrent(o.at(cx, cy), cy) * hemi // poleward
+				q := o.gyreTransport(cx, cy) * hemi // poleward
 				if cx < s.first+oceanBoundary {
-					gy.boundary += v * dx
+					gy.boundary += q
 				} else {
-					gy.interior -= v * dx
+					gy.interior -= q
 				}
 			}
 		}
@@ -363,25 +334,27 @@ const gyreRowsLeast = 10
 // carries some 31 Sv at 27°N (Baringer and Larsen 2001) against an interior
 // Sverdrup transport of 25-35 Sv (Leetmaa, Niiler and Stommel 1977; Wunsch
 // and Roemmich 1985). The reading is the boundary over the interior, gyre by
-// gyre, over each hemisphere's subtropics, of the gyre's own current: the
-// surface current less the wind's drift (gyreCurrent), which on its own runs
-// poleward under the trades across the whole ocean and read with the gyre
-// turned every closure negative (-0.65 together). The transport-weighted
+// gyre, over each hemisphere's subtropics, of the gyre's own transport, read
+// off its streamfunction (gyreTransport). It was read off the surface current
+// less the wind's drift over a column of oceanColumn, while the gyres were
+// worked out row by row; the wind's drift, which on its own runs poleward
+// under the trades across the whole ocean, had to be taken out (read with
+// the gyre it turned every closure negative, -0.65 together). The transport-weighted
 // closure of all the gyres together is held to 0.8-1.25 - a fifth either
 // way, the scatter of the Atlantic's own budget over the papers above - and
 // every gyre to 0.5-2.
 //
-// The present gyres are made to close row by row (atmos.currents), so what
-// this reads now is what the smoothing over gyreRows and the ragged coasts
-// leave of that; M1 (#19) solves the flow in two dimensions and has to earn it.
+// The gyres were made to close row by row until M1 (#19) solved the flow in
+// two dimensions (flow.go): what this reads is what it earns, with part of
+// the return going round islands at the level the island rule gives them.
 func TestOceanSverdrupClosure(t *testing.T) {
 	o := theGlobesOcean(t)
 	var boundary, interior float64
 	n := 0
 	for _, band := range subtropics {
 		for _, gy := range o.gyresOf(band[0], band[1], gyreRowsLeast) {
-			t.Logf("gyre at %.0f to %.0f degrees over %d rows: the western boundary carries %.1f Sv poleward, the interior %.1f Sv equatorward (over %.0f m): closure %.2f",
-				gy.lo, gy.hi, gy.rows, gy.boundary*oceanColumn/sverdrup/float64(gy.rows), gy.interior*oceanColumn/sverdrup/float64(gy.rows), oceanColumn, gy.closure())
+			t.Logf("gyre at %.0f to %.0f degrees over %d rows: the western boundary carries %.1f Sv poleward, the interior %.1f Sv equatorward: closure %.2f",
+				gy.lo, gy.hi, gy.rows, gy.boundary/sverdrup/float64(gy.rows), gy.interior/sverdrup/float64(gy.rows), gy.closure())
 			boundary += gy.boundary
 			interior += gy.interior
 			n++
@@ -489,8 +462,10 @@ func (o *oceanCells) easternCold(lo, hi float64) (anomaly float64, cells int) {
 // upwelling systems), and the Canary and the California a little less. The
 // reading is the water within two cells of an eastern shore between 15 and
 // 30 degrees, against its row's zonal mean of the sea, each hemisphere,
-// area-weighted. The south's reads -2.83 on the present sea, a known gap
-// that the thermocline of #21 (M2) is to close.
+// area-weighted. The south's read -2.83 with the upwelled water a fixed
+// contrast under the mean; the thermocline of #21 (M2), which the trades lift
+// toward the east, closed that gap (-3.10 on M2's own branch), and M2 asked
+// its marker to come off.
 func TestOceanEasternBoundaryCold(t *testing.T) {
 	o := theGlobesOcean(t)
 	for _, b := range []struct {
@@ -498,10 +473,7 @@ func TestOceanEasternBoundaryCold(t *testing.T) {
 		gap    string
 	}{
 		{15, 30, ""},
-		// The water that comes up off an eastern shore is the latitude's mean
-		// less atmos.upwellContrast at most: a fixed contrast, not the water of
-		// a thermocline that the trades lift toward the east.
-		{-30, -15, "known gap: #21 (M2) - the upwelled water is a fixed contrast under the mean, not a thermocline the trades lift in the east"},
+		{-30, -15, ""},
 	} {
 		t.Run(fmt.Sprintf("%.0f to %.0f", b.lo, b.hi), func(t *testing.T) {
 			cold, cells := o.easternCold(b.lo, b.hi)
@@ -775,17 +747,52 @@ func (o *oceanCells) equatorialContrast(lo float64) float64 {
 	return s / w
 }
 
+// equatorialWind is the year's mean wind toward the east, metres a second,
+// over the broadest ocean on each row within lo degrees of the equator,
+// area-weighted over the rows: what tilts an equatorial thermocline.
+func (o *oceanCells) equatorialWind(lo float64) float64 {
+	var s, w float64
+	for _, cy := range o.rowsBetween(-lo, lo) {
+		var broad stretch
+		for _, st := range o.stretches(cy) {
+			if st.cells() > broad.cells() {
+				broad = st
+			}
+		}
+		for cx := broad.first; cx <= broad.last && broad.cells() > 0; cx++ {
+			i := o.at(cx, cy)
+			for k := range atmos.Phases {
+				s += o.weight(cy) * float64(o.w.U[k][i]) / atmos.Phases
+			}
+			w += o.weight(cy)
+		}
+	}
+	return s / w
+}
+
 // 7. Equatorial west-east contrast. The trades pile warm water up in the west
 // of an equatorial ocean and the thermocline comes up under the east, so the
 // warm pool stands 4-6 degrees over the cold tongue (Locarnini et al. 2018,
-// WOA; Wyrtki 1981). It needs a thermocline that tilts, #21 (M2); the
-// present contrast is read across the broadest ocean within five degrees of
-// the equator.
+// WOA; Wyrtki 1981). The contrast is read across the broadest ocean within
+// five degrees of the equator, and the year's mean wind over the same water
+// with it. M2 (#21) gave the sea a thermocline that tilts; what it lacks is
+// the easterlies to tilt it on the equator itself, where the Pacific's year
+// is -4 to -6 m/s: the year's mean ITCZ lies on the equator, in the
+// doldrums, and the Walker circulation that the cold tongue itself drives
+// (Bjerknes 1969) is #28, the sea and the air solved together, with A3 (#35)
+// for the wind's own east-west structure. M2 asked the skip to name the wind
+// rather than the thermocline. It fails once the contrast is in the band, to
+// have its marker taken off.
 func TestOceanEquatorialContrast(t *testing.T) {
 	o := theGlobesOcean(t)
 	c := o.equatorialContrast(5)
-	t.Logf("within 5 degrees of the equator the west of the broadest ocean stands %+.2f degrees over its east", c)
-	t.Skipf("needs #21 (M2): one layer has no thermocline to tilt; the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", c)
+	u := o.equatorialWind(5)
+	t.Logf("within 5 degrees of the equator the west of the broadest ocean stands %+.2f degrees over its east, under a year's mean wind of %+.2f m/s toward the east", c, u)
+	if c >= 4 && c <= 6 {
+		t.Errorf("the equatorial contrast reads %+.2f degrees, inside 4-6: the gap has closed, take the marker off", c)
+		return
+	}
+	t.Skipf("known gap: #28 (sea and air solved together), #35 (A3) - no year's mean easterlies on the equator to tilt the thermocline (%+.2f m/s over the broadest ocean, the Pacific's -4 to -6); the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
 }
 
 // seaIceShare is the share of the globe's whole surface, area-weighted, that
