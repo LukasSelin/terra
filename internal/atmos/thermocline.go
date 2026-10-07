@@ -82,6 +82,11 @@ const (
 	// couple of degrees of the equator, where the turning of the planet is
 	// less than this, the drift runs downwind rather than sideways.
 	ekmanDamp = 1 / (2 * 86400.0)
+	// equatorRadius is the equatorial radius of deformation, √(c/β), in
+	// metres, with c the speed of the layer's waves, √(g'·thermoMean), and β
+	// the planet's turning's change with latitude on the equator: some three
+	// hundred and fifty kilometres (Gill, 1982).
+	equatorRadius = 355e3
 	// deepContrast is how much colder, in degrees, the water under the
 	// thermocline is than the surface at the equator: some fifteen degrees
 	// across the equatorial Pacific's (Fiedler and Talley, 2006). It falls
@@ -143,14 +148,36 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 			}
 		} else {
 			// West along the row from each eastern shore, round the seam.
+			// Near the equator the layer's warm water is held to its mean
+			// along each stretch of sea, as it is along a parallel all the way
+			// round: there the waves that run along the equator and back
+			// along the eastern shore keep how much warm water an ocean has,
+			// and the trades only move it from the one side to the other
+			// (Zebiak and Cane, 1987). Away from the equator the shore holds
+			// the layer at thermoEast.
+			y := e.lat[cy] * math.Pi / 180 * planetRadius
+			keep := math.Exp(-y * y / (2 * equatorRadius * equatorRadius))
 			level, pull := psi[row+shore], 0.0
+			var run []int
 			for k := 1; k <= e.W; k++ {
 				cx := ((shore-k)%e.W + e.W) % e.W
 				i := row + cx
 				if !wet(i) {
 					level = psi[i]
+					if len(run) > 0 {
+						var mean float64
+						for _, x := range run {
+							mean += p[x]
+						}
+						mean /= float64(len(run))
+						for _, x := range run {
+							p[x] += keep * (ring - mean)
+						}
+						run = run[:0]
+					}
 					continue
 				}
+				run = append(run, cx)
 				j := row + (cx+1)%e.W
 				if !wet(j) {
 					pull = tx[i] * dx / 2 / SeaDensity

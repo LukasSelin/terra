@@ -206,13 +206,13 @@ func estuary() *Grid {
 // internal/atmos/flow.go), which moves every globe's rain and so its ground,
 // they hold 3, 0, 0, 0, 0, 2, 4 and 2. With the thermocline under the
 // gyres (internal/atmos/thermocline.go), which moves the cold of the water
-// that comes up and so the rain of every coast, they hold 0, 1, 1, 0, 1, 0, 0
-// and 0, and the first with flats is the second.
+// that comes up and so the rain of every coast, they hold 0, 0, 1, 0, 2, 3, 0
+// and 1, and the first with flats is the third.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		g    *Grid
-	}{{"the estuary", estuary()}, {"small globe 2", yardWorld("small", 2, smallGlobe())}} {
+	}{{"the estuary", estuary()}, {"small globe 3", yardWorld("small", 3, smallGlobe())}} {
 		g := c.g
 		flats, above := 0, 0
 		shore, _ := g.fromShore(&surf{})
