@@ -30,7 +30,15 @@ import (
 //     own doing. Heated by its own rain, the air ran away from the ground
 //     under it: a continent on the equator a little drier than the sea
 //     beside it drew the air out, and rained less, and drew more out, reading
-//     after reading, from eight millimetres a day to half of one. A
+//     after reading, from eight millimetres a day to half of one. But the
+//     water only heats the column it comes up into where that column rains
+//     it out: under the subtropical highs the trades carry what the sea
+//     sends up off to the ITCZ under their inversion, and the column over
+//     the sea there is cooled by its radiation, not heated (Rodwell and
+//     Hoskins, 2001). So the latent heat a column takes is what it sends up
+//     or what it rains, whichever is less: the ground's supply where the
+//     air gathers in more than it sends up, and only its rain where the air
+//     carries its water off. A
 //     continent hot in its summer draws the sea's air in under a low
 //     reaching west of it, and the easterlies of its Kelvin wave run along
 //     the equator east of it; a continent heated more than the sea on the
@@ -138,11 +146,11 @@ func (e *Env) waves(was *Winds, s *Scratch) {
 	inParallel(Phases-1, workers, func(k, _ int) {
 		wk := s.phaseWork(k)
 		temp := e.airTempIn(wk, slotAirTemp, phaseSin[k])
-		var evap []float64
+		var evap, rain []float64
 		if budget != nil {
-			evap = budget[k].Evap
+			evap, rain = budget[k].Evap, budget[k].Rain
 		}
-		q := e.heating(temp, evap, e.Subsides[k], wk)
+		q := e.heating(temp, evap, rain, wk)
 		phi, gu, gv := e.gill(q, wk)
 		w := &e.Waves[k]
 		w.U, w.V, w.P, w.Aloft = make([]float32, n), make([]float32, n), make([]float32, n), make([]float32, n)
@@ -162,18 +170,17 @@ func (e *Env) waves(was *Winds, s *Scratch) {
 }
 
 // heating is Gill's heating on each cell, m² s⁻³, over the warmth of the air
-// temp of a phase and the water evap, kg/m² a second, the air's budget took
-// up in it, or none: the energy the ground gives the column. On land it is
-// the latent heat of what the land sends up and the heat it gives the air,
-// sensibleExchange for each degree its air stands over its row's; over the
-// sea the latent heat of what the row's sea sends up on its mean, whose
-// warmth along the row is the Walker circulation's (walker). The latent
-// heat is the column's only where the air rises, out of reach of the
-// Hadley cell's descent (Subsides, of the phase); the land's own heat warms
-// the air over it wherever it is. Each row's
-// mean is taken off, which is the belts', and the whole of it is held to
-// the tropics, as the Walker circulation's is.
-func (e *Env) heating(temp, evap, descent []float64, wk *work) []float64 {
+// temp of a phase and the water evap and rain, kg/m² a second, the air's
+// budget took up and let fall in it, or none: the energy the ground gives
+// the column. On land it is the latent heat of what the land sends up and
+// the heat it gives the air, sensibleExchange for each degree its air stands
+// over its row's; over the sea the latent heat of what the row's sea sends
+// up on its mean, whose warmth along the row is the Walker circulation's
+// (walker). The latent heat is the column's only as far as the column rains
+// it out (see latent); the land's own heat warms the air over it wherever it
+// is. Each row's mean is taken off, which is the belts', and the whole of it
+// is held to the tropics, as the Walker circulation's is.
+func (e *Env) heating(temp, evap, rain []float64, wk *work) []float64 {
 	q := wk.floats(slotHeat, e.W*e.H)
 	for cy := 0; cy < e.H; cy++ {
 		share := e.tropicShare(cy)
@@ -181,16 +188,12 @@ func (e *Env) heating(temp, evap, descent []float64, wk *work) []float64 {
 			continue
 		}
 		row := cy * e.W
-		// Only where the air rises does it carry the water's heat up
-		// through the column: under the Hadley cell's descent what the sea
-		// sends up is carried off to the ITCZ, and rains there.
-		deep := 1 - clamp01(descent[row]/subsideMost)
 		var tz, se, sk float64
 		for cx := 0; cx < e.W; cx++ {
 			i := row + cx
 			tz += temp[i]
 			if evap != nil {
-				se, sk = se+e.Sea[i]*evap[i], sk+e.Sea[i]
+				se, sk = se+e.Sea[i]*latent(evap[i], rain[i]), sk+e.Sea[i]
 			}
 		}
 		tz /= float64(e.W)
@@ -204,10 +207,10 @@ func (e *Env) heating(temp, evap, descent []float64, wk *work) []float64 {
 			land := 1 - e.Sea[i]
 			wet := sea * e.Sea[i]
 			if evap != nil {
-				wet += land * evap[i]
+				wet += land * latent(evap[i], rain[i])
 			}
 			heat := land * sensibleExchange * (temp[i] - tz) / latentHeat
-			q[i] = share * gillPerRain * (deep*wet + heat)
+			q[i] = share * gillPerRain * (wet + heat)
 			mean += q[i]
 		}
 		mean /= float64(e.W)
@@ -217,6 +220,22 @@ func (e *Env) heating(temp, evap, descent []float64, wk *work) []float64 {
 	}
 	return q
 }
+
+// latent is the water, kg/m² a second, whose latent heat a column that sends
+// up evap and rains rain takes: what comes up from the ground where the air
+// gathers in as much or more and rises (Neelin and Held, 1987), and only what
+// it rains where the air carries off what the ground sends up. Under the
+// subtropical highs the trades take the sea's water off to the ITCZ under
+// their inversion, and its heat is let go of there, where it rains: the
+// subtropical sea is no heat source of the column over it, and the air there
+// comes down (Rodwell and Hoskins, 2001). Counted where it came up, the
+// subtropical sea's water heated the air over it more than the dry land
+// beside it heated its own, and Gill's answer turned the wind along the
+// eastern shores of the oceans toward the pole all the year, against the
+// coastal winds that drive their upwelling (#130). It was held off by the
+// Hadley cell's descent along each parallel, which is nothing at the
+// descent's edges and knows nothing of where along a parallel it rains.
+func latent(evap, rain float64) float64 { return math.Min(evap, rain) }
 
 // stationary is the streamfunction, m²/s, of the waves the westerlies stand
 // at waveLevel in a phase sinT of the way into the north's summer, over air

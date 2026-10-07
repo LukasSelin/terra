@@ -51,9 +51,9 @@ import (
 //     handed to the energy balance, which says how much warmer or colder the
 //     air over each latitude of the sea stands for it. See slab.go.
 //
-// It is done once a year's wind, from the year's mean wind, and only on a
-// globe: a valley is a few dozen kilometres of country and has no ocean to
-// have gyres in, and is untouched by any of this to the bit.
+// It is done once a year's wind, from the stress of each season's wind, and
+// only on a globe: a valley is a few dozen kilometres of country and has no
+// ocean to have gyres in, and is untouched by any of this to the bit.
 
 // The sea.
 const (
@@ -127,8 +127,8 @@ const (
 	inversionMost = 0.9
 )
 
-// currents works out the water under the year's mean wind u, v and gives
-// each cell's warmth: how many degrees the sea there stands over the mean of
+// currents works out the water under the wind u, v of each phase of the
+// year and gives each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land. The current, the upwelling and the
 // water's temperature it works out on the way are kept on e: see Env.Cu.
 // ocean is the gyres' equations for the ground (newFlow), or nil; s is the
@@ -138,23 +138,31 @@ func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float6
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 
-	// The wind's stress on the sea, in newtons a square metre, from the year's
-	// mean wind; and the current it drifts the surface at.
+	// The wind's stress on the sea, in newtons a square metre, over the
+	// year; and the current it drifts the surface at.
 	// They are worked out in the first phase's memory, whose wind is worked out by
 	// now; what of it they do not take is let go of. See Scratch.
 	all := s.phaseWork(0)
 	all.drop(slotStressX, slotCurrentV+1)
 	tx, ty := all.floats(slotStressX, n), all.floats(slotStressY, n)
 	cu, cv := all.floats(slotCurrentU, n), all.floats(slotCurrentV, n)
+	// The stress goes as the square of the wind, so the year's is the mean of
+	// each season's, and not the stress of the year's mean wind: a coastal
+	// wind that blows hard along a shore in one season and slack in the next
+	// drives more water off it than a steady wind of their mean (the
+	// upwelling seasons of Bakun, 1990). Read off the year's mean wind, the
+	// summer's coastal jets off the subtropical west coasts counted as a
+	// moderate wind all the year (#130).
 	for i := range n {
-		var mu, mv float64
+		var sx, sy float64
 		for k := range Phases {
-			mu += float64(u[k][i]) / Phases
-			mv += float64(v[k][i]) / Phases
+			uu, vv := float64(u[k][i]), float64(v[k][i])
+			s := math.Hypot(uu, vv)
+			sx += s * uu
+			sy += s * vv
 		}
-		s := math.Hypot(mu, mv)
-		tx[i] = airDensity * stressDrag * s * mu
-		ty[i] = airDensity * stressDrag * s * mv
+		tx[i] = airDensity * stressDrag * sx / Phases
+		ty[i] = airDensity * stressDrag * sy / Phases
 	}
 	ekman := func(i, cy int) (east, north float64) {
 		f := 2 * omega * math.Max(math.Sin(math.Abs(e.lat[cy])*math.Pi/180), math.Sin(upwellLow*math.Pi/180))

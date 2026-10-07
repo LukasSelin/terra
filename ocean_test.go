@@ -166,10 +166,12 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // currents worked out again under the wind it makes; and when the heat the
 // ground gives the tropical air, and the waves the westerlies stand, were
 // added to the wind (#35; see atmos's waves); and when the sea came to carry
-// its own heat in two layers, into the energy balance (#22). And the warmth
-// is the kept temperature over its latitude's mean, as far as it stands (it
-// was held to ten degrees either way before #22), and nothing over it where
-// the water is under ice.
+// its own heat in two layers, into the energy balance (#22); and when the
+// tropical air came to take the latent heat of its water only as far as it
+// rains it, and the sea the stress of each season's wind (#130). And the
+// warmth is the kept temperature over its latitude's mean, as far as it
+// stands (it was held to ten degrees either way before #22), and nothing over
+// it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -182,7 +184,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xdae7bf2cb5adf204); got != want {
+	if got, want := h.Sum64(), uint64(0x9a86076508837df8); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	for i, w := range e.Warm {
