@@ -29,6 +29,12 @@ import (
 // have no sea at all a hundred and twenty metres down: the share is the
 // glacial fall over the depth of the real ocean, and the map's sea gives up
 // that share of what it holds.
+//
+// The sawtooth is drawn, not made: no ice grows anywhere on the map to hold
+// the water it takes. A history's sea is the planet's water in its basins
+// (seawater.go), with a place left for the ice to take its share (iceHeld);
+// when the ice ages are worked from the climate (X5, #61) the ice they grow
+// is what lowers the sea, and this sawtooth goes.
 
 // The glacial cycle, as the sea's fall below today's over the years before the
 // present. glacialLow is the fall at a glacial maximum, and the cycle is a

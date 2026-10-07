@@ -49,6 +49,20 @@ func namerFor(seed uint64) func(terra.Feature) string {
 				return "the " + word + " Uplands"
 			}
 			return "the " + word + " Wastes"
+		case terra.SeaCurrent:
+			if f.Class == terra.Drift {
+				return "the " + word + " Drift"
+			}
+			return "the " + word + " Current"
+		case terra.Gyre:
+			return "the " + word + " Gyre"
+		case terra.Upwelling:
+			return "the " + word + " Upwelling"
+		case terra.Woodland:
+			if f.Count < 10 {
+				return "the " + word + " Copse"
+			}
+			return "the " + word + " Forest"
 		}
 		return word
 	}

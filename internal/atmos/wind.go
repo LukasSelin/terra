@@ -17,9 +17,11 @@ import (
 //     year's swing - large deep inside a continent, small over the sea, which
 //     holds its heat - and the anomaly the day's weather has carried in.
 //   - The pressure at sea level: the belts the planet's circulation lays down,
-//     low under the rising air at the equator and at sixty degrees and high
-//     under the sinking air at thirty and at the poles, shifting north and
-//     south with the sun; and on top of them what the warmth does, because a
+//     low under the rising air of the ITCZ and the subpolar lows and high
+//     under the sinking air at the Hadley cells' edges and at the poles,
+//     each where the energy balance puts it and following the ITCZ north
+//     and south with the sun (see circulation.go); and on top of them what
+//     the warmth does, because a
 //     warm column of air is a light one and a cold column a heavy one. A
 //     continent in summer draws a low over itself and in winter sits under a
 //     high, which is what a monsoon is.
@@ -69,33 +71,20 @@ const (
 // The belts of pressure, in hPa. The real world's zonal means at sea level:
 // a trough a little under a thousand and ten at the equator, the subtropical
 // highs at some thousand and twenty, the subpolar lows at a thousand and
-// less, and a weak high over each pole.
+// less, and a weak high over each pole. Where they lie, and how deep they
+// are on another planet than today's, is the circulation's: see
+// circulation.go.
 const (
 	beltMean    = 1012.0
 	beltEquator = 5.0  // how far under beltMean the equatorial trough lies
 	beltHorse   = 9.0  // how far over it the subtropical highs stand
 	beltPolar   = 13.0 // how far under it the subpolar lows lie
 	beltCap     = 5.0  // how far over it the polar highs stand
-	// beltShift is how many degrees the belts follow the sun north and south
-	// over the year. The real trough wanders further over the continents, and
-	// the continents are what move it there: see hypsometric.
-	beltShift = 5.0
 	// beltWinter is how much deeper a subpolar low is in its own winter, as a
 	// share: the Icelandic and Aleutian lows are a third again as deep in
 	// January as in July.
 	beltWinter = 0.25
 )
-
-// beltPressure is the pressure at sea level the circulation alone lays down
-// at a latitude, with the year sinT of the way into the north's summer.
-func beltPressure(lat, sinT float64) float64 {
-	l := lat - beltShift*sinT
-	a := math.Abs(l)
-	winter := 1 - beltWinter*sinT*math.Copysign(1, l)
-	bump := func(x float64) float64 { return math.Exp(-x * x) }
-	return beltMean - beltEquator*bump(l/10) + beltHorse*bump((a-32)/10) -
-		beltPolar*winter*bump((a-62)/10) + beltCap*bump((a-88)/12)
-}
 
 // What warmth does to the pressure.
 const (
@@ -221,12 +210,18 @@ type Env struct {
 	// seasonTemp.
 	swingSea, swingLand []float64
 	// forcing is the one the air's year is worked out under: the map's, or
-	// today's on a valley.
+	// today's on a valley; circ is the balance under it, which the
+	// circulation is worked out from.
 	forcing Forcing
-	Mean    []float64 // the year's mean temperature at sea level on each row
-	Dx      []float64 // metres across a cell along each row
-	Dy      float64   // and down one
-	f       []float64 // the Coriolis parameter on each row, per second
+	circ    *ebmClimate
+	// tropicN and tropicS are how much of the ground within tropicReach of
+	// the equator is land, north of it and south: see beltsAt.
+	tropicN, tropicS float64
+
+	Mean []float64 // the year's mean temperature at sea level on each row
+	Dx   []float64 // metres across a cell along each row
+	Dy   float64   // and down one
+	f    []float64 // the Coriolis parameter on each row, per second
 
 	Sea    []float64 // how much of each cell lies under the water the air takes its fill from
 	Cont   []float64 // how much of the country round each cell is land
@@ -252,6 +247,11 @@ type Env struct {
 	// temperature of the sea beside it, and the land away from the sea its
 	// latitude's mean. All are nil on a valley.
 	Cu, Cv, Rise, WaterTemp []float32
+
+	// Subsides is how fast the Hadley cell's air comes down over each cell
+	// in each phase of the year, metres a second at 500 hPa, which lays the
+	// trade-wind inversion over it. See circulation.go.
+	Subsides [Phases][]float64
 }
 
 // airCell is how many tiles a side the air cells over a map m are. The map's
@@ -278,6 +278,7 @@ const airLeast = 16
 func NewEnv(m *geom.Map, a *Air, above, wet []float64) *Env {
 	cell := airCell(m, a)
 	e := &Env{Cell: cell, W: m.W / cell, H: m.H / cell, Wrap: m.Wrap, forcing: a.Forcing.OrDefault()}
+	e.circ = ebmUnder(e.forcing)
 	n := e.W * e.H
 	e.lat, e.Mean, e.Dx, e.f = make([]float64, e.H), make([]float64, e.H), make([]float64, e.H), make([]float64, e.H)
 	e.swingSea, e.swingLand = make([]float64, e.H), make([]float64, e.H)
@@ -352,6 +353,7 @@ func NewEnv(m *geom.Map, a *Air, above, wet []float64) *Env {
 		}
 	}
 	e.climb = e.climbs()
+	e.descents()
 	return e
 }
 
@@ -640,6 +642,7 @@ func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32
 		warm = e.blur(e.blur(warm, synopticReach), synopticReach)
 	}
 	pres := make([]float64, n)
+	b := e.beltsAt(sinT)
 	for cy := 0; cy < e.H; cy++ {
 		row := cy * e.W
 		var zonal float64
@@ -647,7 +650,7 @@ func (e *Env) Solve(sinT float64, temp, extra, warm []float64, u, v, p []float32
 			zonal += temp[row+cx]
 		}
 		zonal /= float64(e.W)
-		belt := beltPressure(e.lat[cy], sinT)
+		belt := b.pressure(e.lat[cy], sinT)
 		for cx := 0; cx < e.W; cx++ {
 			i := row + cx
 			dt := temp[i] - zonal
