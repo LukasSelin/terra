@@ -450,7 +450,7 @@ a{color:inherit}
 {{if .Jobs}}<h2 class="mut">Being made</h2>
 <ul>{{range .Jobs}}<li><a href="/jobs/{{.ID}}">{{.ID}}</a> · <span class="mut">{{if eq .State "queued"}}waiting, {{.Ahead}} ahead{{else}}{{.Stage}}{{end}}</span></li>{{end}}</ul>{{end}}
 {{if .Runs}}<h2 class="mut">Made before</h2>
-<ul>{{range .Runs}}<li><a href="/runs/{{.Name}}/">{{.Name}}</a> · <a class="mut" href="/runs/{{.Name}}/why.html">why</a>{{if .Tune}} · <a class="mut" href="{{.Tune}}">tune from this</a><br><span class="mut">{{.About}}</span>{{end}}</li>{{end}}</ul>{{end}}
+<ul>{{range .Runs}}<li><a href="/runs/{{.Name}}/">{{.Name}}</a> · <a class="mut" href="/runs/{{.Name}}/why.html">why</a> · <a class="mut" href="/runs/{{.Name}}/couplings.html">couplings</a>{{if .Tune}} · <a class="mut" href="{{.Tune}}">tune from this</a><br><span class="mut">{{.About}}</span>{{end}}</li>{{end}}</ul>{{end}}
 </main>
 <script>
 const preset=document.getElementById('preset'), form=document.getElementById('make');
