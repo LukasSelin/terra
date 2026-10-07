@@ -303,15 +303,16 @@ func (g *Grid) around(i int, near *[8]int32) int {
 	return k
 }
 
-// fill lays left metres of a mouth's load of total on the floor of the body
-// of water out from tile m, the nearest floor first, up to the shelf's top:
-// each ring out a shelf's fall deeper, or level for what a filled basin
-// passed on. rem is what is left of the load, grain by grain, and each ring
-// takes out of it what settles crossing it, as far as it has room: the sand
-// within a few tens of kilometres of the mouth and the mud carried on further
-// (shelfReach). What a ring has no room for goes on past it, so a shelf
-// filled to its top passes its sand on to its edge, and builds out. It
-// returns what it had no room for, once the whole body is filled.
+// fill lays what is left of a mouth's load, rem, grain by grain, on the floor
+// of the body of water out from tile m, the nearest floor first, up to the
+// shelf's top: each ring out a shelf's fall deeper, or level for what a
+// filled basin passed on. Each place takes as much as it has room for, and
+// what it takes is sorted (settleOut): the share of each grain that settles
+// crossing it first, the sand within a few tens of kilometres of the mouth
+// and the mud carried on further (shelfReach), and only then the rest of
+// what is left, coarsest first. So a shelf with little room left near its
+// mouth is built of sand there and of mud out at its edge. It returns what it
+// had no room for, once the whole body is filled.
 func (sh *shelfScratch) fill(g *Grid, m int, rem *[Grains]float64, epoch int, book []record, passed bool) float64 {
 	base := math.Max(0, g.base)
 	var near [8]int32
@@ -319,48 +320,19 @@ func (sh *shelfScratch) fill(g *Grid, m int, rem *[Grains]float64, epoch int, bo
 	sh.ring = append(sh.ring[:0], int32(m))
 	sh.seen[m] = sh.stamp
 	left := carrying(*rem)
-	last := settleLast * left
 	for d := 0; len(sh.ring) > 0 && left > 0; d++ {
 		top := base - shelfTop
 		if !passed {
 			top -= shelfFall * float64(d) * g.span()
 		}
-		room := 0.0
 		for _, i := range sh.ring {
-			room += math.Max(0, top-g.Height[i])
-		}
-		if room > 0 {
-			// What settles crossing the ring, or the last of the load.
-			var want [Grains]float64
-			all := 0.0
-			for gr := range rem {
-				want[gr] = rem[gr] * settleWeight(Grain(gr), g.span())
-				all += want[gr]
+			if left <= 0 {
+				break
 			}
-			if left-all <= last {
-				want, all = *rem, left
+			if room := top - g.Height[i]; room > 0 {
+				g.layShelf(int(i), settleOut(rem, math.Min(room, left), g.span()), epoch, book)
+				left = carrying(*rem)
 			}
-			// Where the ring has less room than that, what settles first
-			// takes it, and the finer goes on past: the sand fills a shelf
-			// to its top and the mud is carried over it.
-			free := room
-			for gr := range want {
-				want[gr] = math.Min(want[gr], free)
-				free -= want[gr]
-			}
-			for _, i := range sh.ring {
-				if r := top - g.Height[i]; r > 0 {
-					var part [Grains]float64
-					for gr := range part {
-						part[gr] = want[gr] * r / room
-					}
-					g.layShelf(int(i), part, epoch, book)
-				}
-			}
-			for gr := range rem {
-				rem[gr] = math.Max(0, rem[gr]-want[gr])
-			}
-			left = carrying(*rem)
 		}
 		if left <= 0 {
 			break
@@ -378,6 +350,29 @@ func (sh *shelfScratch) fill(g *Grid, m int, rem *[Grains]float64, epoch int, bo
 		sh.ring, sh.next = sh.next, sh.ring
 	}
 	return left
+}
+
+// settleOut takes put metres out of rem, what is left of a load, as one place
+// span metres across lays them: first the share of each grain that settles
+// crossing the place (settleWeight), and then, if that is less than put, the
+// rest of what is left, coarsest first.
+func settleOut(rem *[Grains]float64, put, span float64) [Grains]float64 {
+	var part [Grains]float64
+	free := put
+	for gr := range rem {
+		take := math.Min(rem[gr]*settleWeight(Grain(gr), span), free)
+		part[gr] += take
+		free -= take
+	}
+	for gr := range rem {
+		take := math.Min(rem[gr]-part[gr], free)
+		part[gr] += take
+		free -= take
+	}
+	for gr := range rem {
+		rem[gr] = math.Max(0, rem[gr]-part[gr])
+	}
+	return part
 }
 
 // layShelf lays part, a bed's grains in metres, on tile i, as a bed of
@@ -410,19 +405,14 @@ func (g *Grid) layShelf(i int, part [Grains]float64, epoch int, book []record) {
 // outer shelf and down the slope, where most of what the rivers bring the sea
 // ends up (McCave 1972; Walsh and Nittrouer 2009 have the mud of the great
 // rivers' shelves laid from tens to a couple of hundred kilometres off their
-// mouths). Each ring out from a mouth takes the share of what is still
-// carried that settles crossing it (settleWeight), so the sand is laid first
-// and nearest and the clay last and furthest.
-//
-// settleLast is the share of a load left carried at which the rest of it is
-// laid where it is: a mouth's mud thinned out over the whole of an ocean is
-// rings without end for metres that are not there.
+// mouths). A place takes first the share of what is still carried that
+// settles crossing it (settleWeight), so the sand is laid first and nearest
+// and the clay last and furthest. The same reaches sort what the land's
+// rivers lay on their floodplains: see sortedAt.
 var shelfReach = [Grains]float64{Sand: 20 * km, Silt: 100 * km, Clay: 200 * km}
 
-const settleLast = 0.05
-
 // settleWeight is the share of what is still carried of grain gr that settles
-// crossing a ring span metres wide.
+// crossing a place span metres wide.
 func settleWeight(gr Grain, span float64) float64 {
 	return -math.Expm1(-span / shelfReach[gr])
 }

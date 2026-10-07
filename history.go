@@ -536,7 +536,7 @@ const fillRate = 0.1 * mm / yr
 // sandiest third sandstone, because every load a history's rivers carried
 // was the same weathered basalt and a fixed line put all of them on one side
 // of it. What a bed is made of is the sorting's now: the sand settles out
-// near where it came from and the mud is carried on (shelfReach, fineAt), so
+// near where it came from and the mud is carried on (shelfReach, sortedAt), so
 // the beds off a mouth are sand and the beds out on the shelf are mud.
 //
 // foldShare is how far a collision buckles the beds under it against how far
@@ -3633,7 +3633,7 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 	g.piles()
 	sea := g.base
 	// How far each tile is from ground the weather was taking down, which is
-	// where what was laid on it came from: see fineAt. Read only if anything
+	// where what was laid on it came from: see sortedAt. Read only if anything
 	// was laid on the land.
 	var away []float64
 	for i := range g.Tiles {
@@ -3675,7 +3675,7 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 		}
 		part := g.parts(i)
 		if away != nil {
-			part = fineAt(part, away[i]*g.span())
+			part = sortedAt(part, away[i], g.span())
 		}
 		for gr := range part {
 			book[i].laid[gr] += part[gr] * laid
@@ -3686,13 +3686,25 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 	}
 }
 
-// fineAt is what a load of the make-up part is when it has come run metres
-// from where it was taken: its sand worn to silt as a river's is (Sternberg;
-// see abrasion).
-func fineAt(part [Grains]float64, run float64) [Grains]float64 {
-	worn := part[Sand] * abrasion(math.Max(0, run))
-	part[Sand] -= worn
-	part[Silt] += worn
+// sortedAt is the make-up of what a load of the make-up part lays on a place
+// span metres across, away places out from the ground it came off (one for
+// the place next to it): of each grain, the share that settles crossing that
+// place of what is still carried when it gets there, as a shelf sorts it
+// (shelfReach). Next to the high ground the sand drops out, as the fans and
+// the braided rivers at a range's foot are sand and gravel, and further out
+// the plains are laid in mud.
+func sortedAt(part [Grains]float64, away, span float64) [Grains]float64 {
+	total := 0.0
+	for gr := range part {
+		part[gr] *= math.Exp(-math.Max(0, away-1)*span/shelfReach[gr]) * settleWeight(Grain(gr), span)
+		total += part[gr]
+	}
+	if total <= 0 {
+		return part
+	}
+	for gr := range part {
+		part[gr] /= total
+	}
 	return part
 }
 
@@ -3775,7 +3787,7 @@ func (g *Grid) settleRock(book []record, ocean []bool) {
 		b := book[i]
 		// Each bed the water laid is what its own grains make it: the water
 		// sorted them on the way, the sand dropped nearest where it came from
-		// and the mud carried on (see fineAt and settleOut). The mud of a
+		// and the mud carried on (see sortedAt and settleOut). The mud of a
 		// quiet sea is laid with no sand to say so, and is shale.
 		for k := 0; k+1 < int(c.n); k++ {
 			if r := c.rock[k]; (r == Sandstone || r == Shale) && c.sand[k] > 0 {
