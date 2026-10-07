@@ -32,6 +32,21 @@ func poleward(heading float32, lat float64) bool {
 // westerlies turn it - clockwise in the north, anticlockwise in the south -
 // with a warm current up its western side toward the pole, and a cold one
 // down its eastern side.
+//
+// Known gap (#88 x the gyres' reading): the cold current is there, and is not
+// counted as the gyre's. With the trades strongest at seventeen degrees
+// rather than twenty-four, each subtropical gyre lies between seventeen and
+// forty-eight degrees, centred at 24.6 where it was 29, and carries 33.8 Sv
+// where it carried 40.3: the wind's curl over its southern half is spread
+// over more of it. Down the eastern shore the water runs equatorward and
+// cold, 2.0 under its latitude's mean, from 51°N to 34°N and from 33°S north;
+// but a current is one of a gyre's only if it lies within gyreReach, 1000 km,
+// of the gyre's tiles, those with 5 Sv or more between them and the shore,
+// and at 34.5°N those begin some fourteen tiles, 1800 km, west of the shore.
+// The short pieces that were counted, at 31.6°N and 27.4°S, ran within it.
+// The remedy is the reading's - a current along a parallel from a gyre's
+// water that keeps its sign is the gyre's - and is left to the sea's
+// features rather than made here.
 func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
 	g := twoOceans()
 	g.weather()
