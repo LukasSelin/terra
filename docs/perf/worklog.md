@@ -6,6 +6,154 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The history's rain settles: each epoch's water budget at its fixed point (#84)
+
+**What this is.** On `claude/history-rain-settled`, from
+`claude/earth-integration` (c848a76). Issue #84, found by the deep-time
+climate cost study (#83).
+
+**The cause.** Each weather call worked the land's rain and what it sends
+back out against each other a fixed number of times (`recycleRounds`), from
+the last budget, and a history took one round an epoch. The ground's lift
+read how near saturation the column had stood in the *last* round
+(`humidity(budget[k], i)`), so a wet column was wrung out hard and left the
+next round dry, and a dry one the reverse. That is a lagged negative
+feedback with a gain over one: the round-by-round land rain is a two-cycle,
+not a sequence that settles. On small globe 3 at the integration base, ten
+rounds in one epoch read 216, 322, 216, 322, ... mm and never settled (one
+call went 771 → 1778 mm). With the lift's humidity held fixed, the same
+rounds settled monotonically (a round moved the land's rain by 0.5% after
+nine). A history ran the two-cycle one step an epoch: the globe's land rain
+went 1822, 1580, 1800, 1615, ... 2178, 1250, 2048, 1176 mm, and where the
+swing landed was what a hundredth of a degree moved. The vapour sweeps,
+capped at four rounds, also ended unsettled on every call (a mean change of
+0.05-0.16 kg/m² a round against the 0.03 they stop at). Not the cause: the
+rain curve (continuous), `weatherStale` (one weather call an epoch, every
+epoch) and the lakes (see the floor below).
+
+**What changed** (`internal/atmos/vapour.go`, `air.go`).
+- The ground's lift wrings out of the column as near saturation as it
+  stands while it is settled: inside each cell's Newton step, with its
+  derivative, and in the coarse corrections.
+- A phase's budget is laid out once a call (`newVapour`: the fluxes, the
+  Poisson solve, the cells) and settled round by round: one round of the
+  four sweeps for each phase, then a year of the land's bucket for each land
+  cell, until a round moves the land's rain by under 0.1% (`settledShare`),
+  at least two rounds and at most forty. The day's range on the PET is read
+  off the round's rain too, not the last call's.
+- A coarse correction over blocks of 4x4 cells after each round's sweeps
+  (`blockCorrection`, `zonalCorrection`'s Galerkin step with a block for a
+  row): on small globe 3 it took the rounds to settle from 465 to 197.
+- The bucket pass and the phases are spread over the goroutines from an
+  eighth of `spreadTiles` cells. Each cell and phase is its own, so a world
+  is the same over any number of workers.
+- `TestTheRainSettlesWhereverItStarts`: started from another continent's
+  budget, the land's rain moves -0.20% (0.25% tile by tile); on the base it
+  moved -5.06% (7.39%).
+
+**What it bought: the sensitivity** (`TestTheHistorysRainSensitivity`,
+`rainsettle_test.go`, run by hand). Today's air warmer everywhere by the
+nudge; height RMS against the unnudged history's last epoch; the worst
+epoch's land rain against the unnudged.
+
+| world | nudge | before: height RMS | before: worst epoch rain | after: height RMS | after: worst epoch rain |
+|---|---|---|---|---|---|
+| globe 1 | +0.01 °C | 1274 m | x1.605 (10 of 16 epochs >10%) | 100 m | x1.012 |
+| globe 1 | +0.1 °C | 242 m | x1.232 (7 >10%) | 739 m | x1.017 |
+| globe 1 | +0.3 °C | 1274 m | x2.112 (7 >10%, 1 doubled) | 584 m | x1.037 |
+| small globe 1 | +0.01 / 0.1 / 0.3 | 13 / 75 / 139 m | x1.001 / 1.017 / 1.037 | 48 / 105 / 139 m | x1.003 / 1.022 / 1.042 |
+| small globe 2 | +0.01 / 0.1 / 0.3 | 15 / 59 / 89 m | x1.002 / 1.009 / 1.021 | 42 / 91 / 118 m | x1.007 / 1.010 / 1.024 |
+| small globe 3 | +0.01 / 0.1 / 0.3 | 107 / 186 / 225 m | x1.016 / 1.145 / 1.517 | 62 / 119 / 212 m | x1.004 / 1.024 / 1.029 |
+
+The rain is now smooth in the air: no epoch moves by 5% for 0.3 °C, and the
+globe's land rain climbs steadily from 813 to 1154 mm over the epochs. The
+heights do not get to metres. **The floor is the ground's own:** with the
+air left alone and the rain multiplied by 1 + f after the fix, the heights
+moved by
+
+| world | f = 1e-4 | 1e-3 | 1e-2 |
+|---|---|---|---|
+| globe 1 | 58 m | 103 m | 190 m |
+| small globes 1 / 2 / 3 | 16 / 0 / 0.4 m | 45 / 7 / 56 m | 85 / 88 / 111 m |
+
+A hundredth of a per cent more rain moves the globe's heights by 58 m: the
+drainage, the lakes and the wear amplify any change, and a 0.01 °C nudge
+(0.1-1% of rain) lands at that floor. The globe's 739 m at 0.1 °C is more
+than the 1% rain floor, so the air reaches the ground by another path too:
+`quietFloor` switches limestone for shale at a warmth, and the soils read
+the air; not followed here.
+
+**Cost** (seed 1, `history` alone, `TERRA_PHASES=1`, min of two, the
+machine otherwise quiet; airEnv.vapour sums its goroutines and now counts
+rounds).
+
+| | history s | weather s | rainOn s | airEnv.vapour s (calls) | vapour setup s |
+|---|---|---|---|---|---|
+| GlobeTerms, base | 38.52 | 12.63 | 7.61 | 5.02 (54) | in vapour |
+| GlobeTerms, settled | 43.57 (1.13x) | 18.06 | 13.14 | 15.52 (672) | 2.14 (51) |
+| small globe 1 / 2 / 3, base | 4.60 / 4.38 / 5.16 | | | | |
+| small globe 1 / 2 / 3, settled | 5.71 / 5.47 / 7.10 (1.24-1.38x) | | | | |
+
+A weather call settles in about thirteen rounds (the history's first, on
+the molten world, all land, stops at forty). `scripts/perf.sh check`
+against the 0718 baseline, base then this branch, on the same quiet
+machine: valley 92.6 → 99.1 ms, ancient 376.6 → 442.0 ms, globe256 5.217 →
+7.879 s (+51%: the bucket's year is now run every round, `bucketYear` is
+15% of the profile). Both fail check against the September baseline; the
+base already did.
+
+**Heap.** globe128 555.2 → 564.9 MB (+1.8%), 35515 → 41156 allocations;
+ancient 58.6 → 59.3 MB; valley 10.8 → 10.3 MB. Budget rewritten.
+
+**The world moves** (digest rewritten): valley 3fd2761f12327806, ancient
+740e205457ab9dff, globe128 043f906e6250b612.
+
+**Yardsticks** against the integration branch's five failures (re-run here
+on c848a76: channel concavity small globe 0.340, hypsometric integral 2x-1x
+-0.077, discharge exceedance small globe 0.465, Hack small globe 0.526,
+drainage area exceedance globe 0.476). On this branch eight fail. Fixed:
+channel concavity small globe, discharge exceedance small globe, Hack small
+globe. Still: hypsometric integral 2x-1x (-0.051), drainage area exceedance
+globe (0.465). New: Flint's R² small globe (0.815; advisory under #80),
+channel concavity 2x-1x (0.105 against 0.1; advisory under #80), meander
+wavelength and sinuosity small globe (NaN: six reaches gentle enough to
+meander over the eight globes, against the eight the reading asks; the base
+had thirteen), Horton bifurcation ratio globe (5.021 against 5), Aridisols
+(0.072 against 0.122 on the base, with the globe's land under PET/P > 5 at
+0.139 against 0.131, so not a drier world). No test loosened.
+
+**#80's spread, before and after.** `TestTheReadingsSpread` with #80's
+`spread_test.go` merged in temporarily (not committed), on c848a76 and on
+this branch. Interval and its width; sd a seed.
+
+| reading | band | base | settled |
+|---|---|---|---|
+| hypsometric integral, small globe | 0.32-0.60 | 0.357 [0.347, 0.405] w 0.058, sd 0.048 | 0.352 [0.345, 0.364] w 0.019, sd 0.045 |
+| drainage area exceedance, small globe | 0.39-0.46 | 0.454 [0.398, 0.534] w 0.136, sd 0.117 | 0.486 [0.399, 0.545] w 0.146, sd 0.156 |
+| discharge exceedance, small globe | 0.40-0.46 | 0.470 [0.425, 0.506] w 0.081, sd 0.130 | 0.439 [0.411, 0.523] w 0.113, sd 0.141 |
+| Hack, small globe (pooled) | 0.54-0.60 | 0.533 [0.462, 0.604] w 0.143, se 0.034 | 0.550 [0.521, 0.580] w 0.059, se 0.014 |
+| Hack, globe | 0.54-0.60 | 0.567 [0.547, 0.580] sd 0.017 | 0.569 [0.563, 0.571] sd 0.004 |
+| ridge-valley wavelength, small globe | 24-224 m | 145.5 [145.5, 200] sd 123 | 145.5 [133.3, 160] sd 50 |
+| channel concavity, small globe | 0.35-0.60 | 0.280 [0.096, 0.435] w 0.338, sd 0.41 | 0.385 [0.261, 0.630] w 0.370, sd 0.56 |
+| Flint's R², small globe (pooled) | 0.85-1 | 0.907 [0.759, 1.054] se 0.069 | 0.870 [0.668, 1.073] se 0.095 |
+| Hack, 2x less 1x (pooled) | -0.05-0.05 | 0.059 [-0.067, 0.185] se 0.053 | -0.001 [-0.044, 0.042] se 0.018 |
+| channel concavity, 2x less 1x | -0.1-0.1 | -0.111 [-0.891, 0.363] sd 0.39 | -0.158 [-0.519, 0.137] sd 0.53 |
+| hypsometric integral, 2x less 1x | -0.05-0.05 | -0.056 [-0.139, -0.004] sd 0.081 | -0.060 [-0.099, 0.015] sd 0.057 |
+| relief intermittency C1, three globes | 0.08-0.18 | 0.092 [0.081, 0.131] sd 0.026 | 0.126 [0.090, 0.134] sd 0.023 |
+
+Tighter: Hack's exponent everywhere (small globes se 0.034 → 0.014, the
+globe's sd 0.017 → 0.004, 2x-1x se 0.053 → 0.018), the ridge-valley
+wavelength (sd 123 → 50 m) and the small globes' hypsometric integral
+(interval 0.058 → 0.019). On the base, Hack small globe and Hack 2x-1x had
+intervals wider than their bands, which #80's rule makes advisory; settled,
+both are narrower than their bands (0.059 against 0.06, 0.086 against 0.1)
+and gate, as #80 has them. No advisory reading can move to gating: the
+exceedance exponents, the concavity, Flint's R² and the concavity's 2x-1x
+still scatter by more than their bands, because the floor above is the
+ground's and not the rain's.
+
+---
+
 ## 2026-10-07 - Integration: the Earth-system stack, merged and measured
 
 **What this is.** On `claude/earth-integration`, from `main` (2c51bea):
