@@ -227,8 +227,10 @@ func (g *Grid) landslide(keep bool) {
 		// went through into the rock it has left a fresh face: see strip.
 		if soil[i] > 0 {
 			strip(&g.Tiles[i], d/soil[i])
+			g.stripPools(int(i), d/soil[i])
 		} else {
 			clearSoil(&g.Tiles[i])
+			g.stripPools(int(i), 1)
 		}
 		h[i] -= d
 		soil[i] -= fromSoil

@@ -191,6 +191,9 @@ type Grid struct {
 	// peat is the carbon in each tile's peat, in kg a square metre, and
 	// peatAge how long it has been laying down, in years. See wetland.go.
 	peat, peatAge []float32
+	// pools is the carbon in each tile's litter, its soil's fast, slow and
+	// passive pools and its frozen ground: see carbon.go.
+	pools []carbonPools
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -387,6 +390,7 @@ func (g *Grid) Clone() *Grid {
 	c.vegCover, c.vegMass, c.vegLeaf = slices.Clone(g.vegCover), slices.Clone(g.vegMass), slices.Clone(g.vegLeaf)
 	c.burned, c.npp = slices.Clone(g.burned), slices.Clone(g.npp)
 	c.peat, c.peatAge = slices.Clone(g.peat), slices.Clone(g.peatAge)
+	c.pools = slices.Clone(g.pools)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)

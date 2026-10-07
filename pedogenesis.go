@@ -163,55 +163,33 @@ const (
 
 // Carbon.
 //
-// What grows puts carbon into the soil and the soil's life takes it out. So
-// the stock comes to input over decay, and it gets there in the decay's own
-// time: carbonYears at the map's middling warmth, a century, the turnover of
-// the part of a soil's organic matter that the plough and the crop live off.
-//
-// The input is what the Miami model (Lieth 1975; see miamiNPP) has the year
-// grow, taken as its warmth's term times its rain's and not the lesser of
-// them: the lesser puts a warm dry grassland's roots at a cool one's, where
-// Jobbágy and Jackson's (2000) tropical grasslands hold more carbon than their
-// temperate ones.
+// The soil's organic carbon is kept in pools, as CENTURY keeps it: see
+// carbon.go. The constants here are the ones the rest of the soil reads.
 //
 // The decay goes up by carbonQ10 for every ten degrees. Raich and Schlesinger
 // (1992) have two for the soil's breathing, but that is the roots' breathing
 // as well as the decay's, and it is read within a site; across the world's
 // sites Mahecha and others (2010) have 1.4 whatever the climate, which is
-// taken. A soil's life is held back by drought nearly as much as what grows
-// on it, and dryland soils hold half a grassland's carbon and not nothing: so
-// the decay goes as the rain's term of the growing to carbonDry. It slows
-// where the ground is waterlogged, which is how a peat builds, and on
-// permafrost, where the carbon is frozen for most of the year and churned
-// down into ground that never thaws (Tarnocai and others 2009 have the
-// northern permafrost's soils holding half the world's soil carbon): to
-// carbonFrozen of what the warmth alone would leave.
+// taken, for every pool and for the peat. carbonFrozen is what the decay
+// keeps on ground the frost index reads as permafrost, where the snow has not
+// been read to say how deep the summer thaws it (chosen; see frost.go).
 //
-// carbonMiddle is what open grass on a metre of soil under a grassland's
-// climate - the map's middling warmth and carbonRain of rain - comes to.
-// Jobbágy and Jackson (2000), over 2700 profiles, have a temperate
-// grassland's top metre holding 11.7 kilograms a square metre, a temperate
-// deciduous forest's 17.4, a boreal forest's 9.3, the tundra's 14.2 and a
-// desert's 6.2.
+// carbonMiddle is the middling soil's carbon, which the fertility reads a
+// soil's organic matter against: Jobbágy and Jackson (2000), over 2700
+// profiles, have a temperate grassland's top metre holding 11.7 kilograms a
+// square metre, a temperate deciduous forest's 17.4, a boreal forest's 9.3,
+// the tundra's 14.2 and a desert's 6.2. carbonRain is the rain a map whose
+// water has not been read is taken to have.
 //
 // carbonDepth is how fast the carbon thins with depth, as an e-fold in metres:
 // a soil thinner than a metre holds the share of a metre's carbon that is in
-// its thickness. Not all of it: the litter and the roots' mat lie on top of
-// whatever there is, and carbonLitter of the carbon is held there whether or
-// not there is mineral soil under it - more on permafrost, carbonLitterFrozen,
-// where the organic layers of the tundra stand over a few centimetres of
-// churned ground. The shares, the dryness exponent and the frozen decay are
-// chosen, against the four biomes above on the globe.
+// its thickness (see carbonHeld).
 const (
-	carbonYears        = 100.0
-	carbonMiddle       = 11.0  // kg C/m²
-	carbonRain         = 600.0 // mm
-	carbonDepth        = 0.3   // m
-	carbonQ10          = 1.4
-	carbonDry          = 0.7
-	carbonFrozen       = 0.2
-	carbonLitter       = 0.5
-	carbonLitterFrozen = 0.8
+	carbonMiddle = 11.0  // kg C/m²
+	carbonRain   = 600.0 // mm
+	carbonDepth  = 0.3   // m
+	carbonQ10    = 1.4
+	carbonFrozen = 0.2
 )
 
 // cover is what is growing on a tile, as the soil feels it: how much carbon it
@@ -321,34 +299,6 @@ func dryness(wetness, wetter, drier float64) float64 {
 	return clamp01((wetter - wetness) / (wetter - drier))
 }
 
-// carbonLevel is what the carbon on tile i comes to and how fast: input over
-// decay, for the soil it has, and the decay.
-func (g *Grid) carbonLevel(i int, c pedoClimate, cv cover) (level, rate float64) {
-	grow, dry := carbonGrowth(c.temp, c.rain)
-	decay := math.Pow(carbonQ10, (c.temp-MeanTemp)/10) * math.Pow(dry/carbonMiddleDry, carbonDry) *
-		(1 - 0.6*c.sodden) * cv.decay / carbonYears
-	litter := carbonLitter
-	if c.frozen {
-		decay *= carbonFrozen
-		litter = carbonLitterFrozen
-	}
-	held := -math.Expm1(-float64(g.Soil[i])/carbonDepth) / -math.Expm1(-1/carbonDepth)
-	held = litter + (1-litter)*held
-	return carbonMiddle * grow / carbonMiddleGrowth * cv.input * held / (decay * carbonYears), decay
-}
-
-// carbonGrowth is what a year of temp degrees and rain millimetres grows into
-// the soil, as the Miami model's warmth term times its rain term, and the rain
-// term alone, floored so that a rainless year still decays.
-func carbonGrowth(temp, rain float64) (grow, wet float64) {
-	warm := 1 / (1 + math.Exp(1.315-0.119*temp))
-	wet = math.Max(1e-3, 1-math.Exp(-0.000664*rain))
-	return warm * wet, wet
-}
-
-// What carbonGrowth makes of the grassland's climate carbonMiddle is set at.
-var carbonMiddleGrowth, carbonMiddleDry = carbonGrowth(MeanTemp, carbonRain)
-
 // toward is v after years heading for level at rate: the exact step of
 // dv/dt = rate·(level − v).
 func toward(v, level, rate, years float64) float64 {
@@ -376,6 +326,7 @@ func (g *Grid) ripenSoil(i int, years float64) {
 	t := &g.Tiles[i]
 	if !forms(t) {
 		clearSoil(t)
+		g.stripPools(i, 1)
 		if t.Terrain == Pan {
 			t.SetSalinity(math.Inf(1))
 		}
@@ -393,10 +344,10 @@ func (g *Grid) ripenSoil(i int, years float64) {
 	t.SetSalinity(gathered(t.Salinity(), saltRate*dryness(c.wetness, saltWetter, saltDrier), c.water, saltWater, years))
 	level, rate := g.leachLevel(i, c, cv, age)
 	t.SetLeaching(toward(t.Leaching(), level, rate, years))
-	level, rate = g.carbonLevel(i, c, cv)
-	t.Carbon = float32(toward(float64(t.Carbon), level, rate, years))
 	t.Exposed = float32(age)
 	g.ripenPeat(i, c, years)
+	// The carbon after the peat, whose depth the frozen ground's thaw reads.
+	g.ripenCarbon(i, c, cv, years)
 }
 
 // drownSoils clears the soil state of every tile that does not form soil: the
@@ -408,6 +359,7 @@ func (g *Grid) drownSoils() {
 	for i := range g.Tiles {
 		if t := &g.Tiles[i]; !forms(t) {
 			clearSoil(t)
+			g.stripPools(i, 1)
 			if t.Terrain == Pan {
 				t.SetSalinity(math.Inf(1))
 			}
@@ -476,6 +428,7 @@ func (g *Grid) laySoilState(i int, h, pace, made float64) {
 	t := &g.Tiles[i]
 	age := g.exposure(i, h, pace, made)
 	clearSoil(t)
+	g.stripPools(i, 1)
 	if !forms(t) {
 		if t.Terrain == Pan {
 			t.SetSalinity(math.Inf(1))
@@ -584,26 +537,4 @@ const (
 	// soils of the hollows; read against the middle, those are what the
 	// chemistry costs.
 	leachMiddle = 0.15
-	// carbonWeight is how far the carbon a tile holds, against what open grass
-	// would hold under the same sky, moves what it grows: a field ploughed
-	// down to two fifths of the grass's carbon grows a sixth less.
-	carbonWeight = 0.3
 )
-
-// humus is the organic matter of tile i's soil against the middling climate's
-// at one, as organic reads it, with the carbon the tile actually holds in it:
-// the climate's reading, moved by how much of the carbon open grass would
-// hold under that climate the tile holds.
-func (g *Grid) humus(i int) float64 {
-	o := g.organic(i)
-	if !g.pedons {
-		return o
-	}
-	c := g.pedoClimateOf(i)
-	grass, _ := g.carbonLevel(i, c, grassCover)
-	if grass <= 0 {
-		return o
-	}
-	share := math.Min(2, float64(g.Tiles[i].Carbon)/grass)
-	return math.Max(0.5, math.Min(1.5, o*(1+carbonWeight*(share-1))))
-}

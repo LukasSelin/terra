@@ -311,8 +311,10 @@ func (g *Grid) wear(years float64) {
 				switch {
 				case c.soil[i] <= 0 || h <= 0:
 					clearSoil(t)
+					g.stripPools(i, 1)
 				default:
 					strip(t, lost[i]/c.soil[i])
+					g.stripPools(i, lost[i]/c.soil[i])
 				}
 			}
 			if surface {

@@ -53,7 +53,12 @@ water coming down through the ground is more than it can pass on and stands
 at the surface, the tundra's thaw flats among it (`Grid.Wetland`,
 `WaterTable`); and the peat that wet ground lays down faster than it rots,
 rising and holding its own water (`Grid.PeatDepth`, `PeatAge`,
-`PeatCarbon`). How worn a path is and how fast it fades.
+`PeatCarbon`). The land's carbon as stocks: the vegetation's, the litter's,
+the soil's fast, slow and passive pools that turn over in years, decades and
+centuries by the warmth and the water of each season, the peat's, and what
+the frost has churned down into the permafrost; and all of it together, for
+a step of deep time to book (`Grid.Litter`, `SoilPools`, `FrozenCarbon`,
+`SoilTurnover`, `LandCarbon`). How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
 

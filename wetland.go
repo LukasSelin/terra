@@ -189,13 +189,15 @@ func (g *Grid) Peatland(i int) bool { return g.PeatDepth(i) >= histicPeat }
 
 // nppOf is what tile i grows in a year, in kg C a square metre: its
 // vegetation's, or the Miami model's for its climate where none has been
-// laid (see carbonGrowth), at 0.45 of the dry matter carbon.
+// laid (Lieth 1975: the lesser of its warmth's and its rain's terms, in
+// grams of dry matter), at 0.45 of the dry matter carbon.
 func (g *Grid) nppOf(i int, c pedoClimate) float64 {
 	if len(g.npp) == len(g.Tiles) {
 		return float64(g.npp[i])
 	}
-	grow, _ := carbonGrowth(c.temp, c.rain)
-	return 0.45 * 3 * grow
+	warm := 3000 / (1 + math.Exp(1.315-0.119*c.temp))
+	wet := 3000 * -math.Expm1(-0.000664*math.Max(0, c.rain))
+	return 0.45 * math.Min(warm, wet) / 1000
 }
 
 // ripenPeat moves tile i's peat on by years under the water and the climate
