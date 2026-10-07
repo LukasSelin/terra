@@ -24,7 +24,7 @@ Which pass of world creation reads which of the world's fields and writes which,
 | water | moisture | the soil's water through the year: each phase's rain into it, what it holds and what it sheds, and the most it holds |
 | water | snow | the snow through the year: the water lying in it each phase, the share of the ground it covers, what melts, and the mass balance of the snow that outlasts the year |
 | water | lakes | the standing water: the lakes, their level, and the salt pans |
-| land and life | soil | the soil: how deep, what it is made of, what time has made of it, and the peat a wet cold ground lays down |
+| land and life | soil | the soil: how deep, what it is made of, what time has made of it, its carbon pool by pool, and the peat a wet cold ground lays down |
 | land and life | cover | what each tile is: open ground, forest, water, ice, outcrop, tidal flat, salt |
 | land and life | woods | where trees will take, and the map's measure of its ground they are read against |
 | land and life | plants | what grows on each tile, type by type: the share of its ground each covers, the carbon it holds and its leaf area, the share of its ground its fires burn in a year, and what grows on it in a year |
