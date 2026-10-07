@@ -155,8 +155,8 @@ var shapeYardsticks = []realYardstick{
 	// the history's ground came down by its relief (denude.go).
 	{yardstick: yardstick{
 		name: "land relief intermittency C1, three globes", unit: "", scale: "ground", lo: 0.08, hi: 0.18, slow: true,
-		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
-		measure: func() float64 { c1, _ := reliefIntermittency(threeGlobes()); return c1 },
+		source: "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
+		seeded: &seeded{worlds: eachOf(threeGlobes), read: pooled(intermittencyC1)},
 	},
 		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) its interiors are plateaus behind escarpments, and the shaping lays the map's ground again from their order alone: the country (hypsometry.go) is the history's height and Height is not, so it does not reach this. 0.091 on G2, 0.052-0.057 on four builds since, its three globes 0.040-0.064 a globe: 0.052",
 	},
