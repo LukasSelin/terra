@@ -396,6 +396,142 @@ sediment the history's water carries off the land is lost to the crust.
 
 ---
 
+## 2026-10-07 - A globe's land stands on its country (Rock G1)
+
+**What this is.** On `claude/rock-real-heights`, from `main` (2c51bea):
+issue #40, G1 of `docs/earth-system-plan.md`. A globe's dry land is given a
+second height, `Grid.country`, laid once in `stage.sea` after the sea is
+poured (`layCountry`, `hypsometry.go`): the land ranked by its height as
+the history left it (the order `basins` put it in) and given the earth's
+land height at each place in that order (`earthHeights`, ETOPO5's land in
+500 m bands, the curve Cogley 1984 draws), less what the map's own drawn
+ground already stands to at that rank. `Height` is unchanged and is still
+what every slope is read off; `Grid.Elevation` (and `TileView.Elevation`)
+is the two together. The air's warmth reads it (`lapseHeight`): the lapse,
+the year, the frost, the tree line, the soil's warmth, and the warmth PET
+is read at. The winds' ground and the rain's lift read the map's ground, as
+on main. Valleys keep their drawn spread: no country is laid on a map that
+is not a wrapped, poured world.
+
+**Why the earth's spread and not the history's.** The history's metres are
+a planet's (real rates, the real 4.5 km freeboard), and the metre upright is
+the one unit the history and the map share - a history tile is 37.5 km
+across and a map tile 25 m, so a slope cannot cross. Read one for one,
+though, the history's land is not a planet's. Its continental crust above
+the history's own sea, in metres:
+
+| | 1% | 5% | 25% | 50% | 75% | 95% | 99% | top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| globe 1 | -3,229 | -1,562 | 153 | 331 | 456 | 547 | 620 | 1,915 |
+| small globe 1 | -1,787 | -832 | 87 | 403 | 794 | 932 | 1,004 | 1,254 |
+| small globe 2 | -1,169 | -552 | 108 | 656 | 787 | 882 | 1,006 | 1,901 |
+
+with the globe's ocean crust at a median of +143 m: a plateau with its tail
+going down, the floor at the land's height. With no isostasy (#41, G2) the
+wear takes the ranges down and nothing buoys them back. So the order is the
+history's and the spread the earth's; when G2 lands, `earthHeights` comes
+out and the history's heights are the country one for one.
+
+**The hypsometry.** `TestTheGlobeStandsAtTheEarthsHeights` logs the land's
+elevation above the sea, weighted by area on the sphere, at shares of the
+land:
+
+| m | 5% | 10% | 25% | 50% | 75% | 90% | 95% | 99% | 99.9% | top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| earth | 36 | 71 | 179 | 461 | 1106 | 2240 | 3026 | 4748 | 5600 | 8000 |
+| globe 1 | 49 | 93 | 234 | 529 | 1043 | 1583 | 2072 | 3200 | 4959 | 7327 |
+| globe 2 | 54 | 100 | 239 | 546 | 1140 | 2370 | 3128 | 4784 | 5558 | 7336 |
+| globe 3 | 61 | 100 | 215 | 474 | 1040 | 2097 | 2914 | 4644 | 5544 | 7551 |
+| small 1 | 52 | 95 | 228 | 522 | 1125 | 2093 | 2895 | 4425 | 5339 | 6263 |
+| small 2 | 45 | 85 | 209 | 498 | 1240 | 2436 | 3143 | 4805 | 5631 | 6184 |
+
+On main the same globes' land stood a few hundred metres over the sea at
+the most. The shaping lays the map's ground again in its own order, so the
+sum is the earth's curve as near as that leaves it: some 60 m high in the
+lowlands, and globe 1 short in its upper tenth. The continental mode is
+still the 0-250 m bin (+0.125 km).
+
+**The rivers across the country.** `TestHowOftenARiverClimbsTheCountry`
+logs the share of the water's steps over dry land that climb in
+`Elevation`: 0.10-0.12 of all steps on the five globes and 0.09-0.13 of
+the rivers' (tiles carrying `meanderFlow`), against 0.003-0.014 and
+0-0.032 in `Height`, which is the grading's own (lake hollows and flats).
+The country is in the history's order and the network in the shaping's;
+it is logged and not held.
+
+**The air, tried whole and taken back.** Read by the winds and the rain's
+lift as well, the country rained: Smith and Barstad's lift at the air's
+planetary span on ranges kilometres high, with nothing to cap the trades
+(no trade inversion), took globe 1's land rain from 1075 mm a year to 1326
+(the earth's land has some 800), its horse latitudes' from 747 to 1232
+against the westerlies' 712 to 969, and put five more yardsticks out of
+their bands. Blurring the country eight passes took it only to 1185, so it
+is the ranges and not the tile steps. That is the air's to answer (A2/A3,
+the follow-up issue); here the air reads the country for its warmth only,
+and the rain is main's: globe 1's land 1076 mm, horse latitudes 747,
+westerlies 711; small globe 1 576 (main 577), small globe 2 896 (main 890).
+
+**Yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout
+60m .` on main (2c51bea) and here:
+
+| yardstick | main | here | |
+| --- | --- | --- | --- |
+| channel concavity, small globe | 0.2455 | 0.2567 | fails both |
+| midlatitude over subtropical rain, globe | 0.9042 | 0.9039 | fails both |
+| mean land rain, 2x over 1x, small globe | 1.246 | 1.246 | fails both |
+| land share of Aridisols | 0.059 | 0.042 | fails both |
+| land share of Gelisols | 0.1295 | 0.1257 | fails both |
+| hypsometric integral, small globe | 0.3055 | 0.3197 | fails both (floor 0.32) |
+| drainage area exceedance exponent, small globe | 0.4863 | 0.4878 | fails both |
+| discharge exceedance exponent, small globe | 0.4622 | 0.4569 | now inside |
+| Horton bifurcation ratio, small globe | 4.022 | 5.051 | new: runoff (below) |
+| Horton bifurcation ratio, globe | 4.489 | 5.129 | new: runoff (below) |
+| meander wavelength, small globe | 13.0 | 15.65 | new: runoff (below) |
+| mean hillslope soil depth, small globe | 0.2312 | 0.1753 | new: colder high slopes make soil slower |
+| land share of Mollisols | 0.083 | 0.186 | new: the cool high country keeps its carbon |
+
+The warmth is the whole of the change, and it moves the rivers through the
+runoff: the high country is colder, so the air takes less of its rain back
+(PET read at its elevation), and over the eight network small globes the
+land's mean runoff went 212.5 -> 264.5 mm a year with the rain unchanged,
+and the closed lakes 74 -> 65. More water cuts more channels and wider
+ones, which is the bifurcation ratios and the meanders measured in widths.
+The soil's production and carbon read the warmth (`meanTempOf`): a
+Mollisol is cool, deep in carbon and not leached, which the high country
+now is, and the hillslopes' soil is made slower in the cold. Nothing in
+the shaping's or the cutting's code changed.
+
+**The world.** Moved: `TERRA_DIGEST=write` rewrote globe128 only
+(f92adf079b762dca -> c8451b0740edc38a); the valley and the ancient valley
+check as they were, which is the valleys keeping their drawn spread.
+
+**The heap.** globe128 412.98 -> 413.00 MB, inside the budget, which is
+left as it was. The country is 8 B a tile on a globe.
+
+**Timing.** Taken on the first version of this branch, whose air read the
+country for its winds and rain as well (more work than this one does);
+interleaved on a loaded machine, main's test binary and the branch's turn
+and turn about, globe256, six each, `TERRA_PHASES=1`:
+
+| globe256 | main | branch | |
+| --- | --- | --- | --- |
+| sec/op | 4.140 ± 22% | 4.198 ± 19% | ~ (p=0.699) |
+| stage.sea | 2.6 ms | 4.4 ms | +66% (p=0.009): the sort in layCountry |
+| rainOn | 1.538 s | 1.555 s | ~ |
+| orographic | 0.379 s | 0.391 s | ~ |
+| shape | 0.143 s | 0.146 s | ~ |
+| B/op | 1.551 Gi | 1.551 Gi | ~ |
+
+No time to be seen beyond the sea stage's 1.7 ms. A quiet-machine
+`scripts/perf.sh check` is still owed before merging.
+
+**Open.** Rivers are graded on `Height`, and climb in `Elevation` on a
+tenth of their steps (above). `cmd/unreal`, `cmd/zarr` and `cmd/overview`
+still export and draw `Height`, and the terrain classes by height quantile
+read `Height`. The ranges' rain waits for the air (the follow-up issue).
+
+---
+
 ## 2026-10-06 - Two short-tier tests that read the draw
 
 **What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at

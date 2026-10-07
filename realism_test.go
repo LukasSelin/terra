@@ -351,7 +351,7 @@ func hypsometricModes(gs []*Grid) (continent, ocean float64) {
 	count := make([]float64, int((hi-lo)/bin))
 	for _, g := range gs {
 		for i := range g.Tiles {
-			e := g.Height[i] - g.sea
+			e := g.Elevation(i) - g.sea // the country under the land with it: see hypsometry.go
 			k := int(math.Floor((e - lo) / bin))
 			if k >= 0 && k < len(count) {
 				count[k] += math.Cos(latitudeOf(g, i/g.W) * math.Pi / 180)

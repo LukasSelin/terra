@@ -116,6 +116,9 @@ func (cfg Terms) poured() bool { return cfg.Epochs > 0 && cfg.Water > 0 }
 func (w *Land) stageSea(g *Grid, cfg Terms) {
 	if cfg.poured() {
 		g.pour(cfg.Water, w.RNG)
+		// And a globe's land is stood on the country its history raised,
+		// now that the sea says which of it is land. See hypsometry.go.
+		g.layCountry()
 	} else {
 		g.flood(cfg.SeaShare, w.RNG)
 	}

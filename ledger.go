@@ -70,8 +70,9 @@ const (
 // an epoch and the plate's root and the weather take most of it back
 // before the next, while the ground stands a few kilometres high. The
 // finished heights are handed to the map by rank alone (see normalise and
-// basins), so the map's metres say nothing of these and these nothing of
-// the map's; a reading of the book says whose metres it is giving. They are
+// basins, and on a globe layCountry, which stands the land on the earth's
+// heights in the history's order), so the map's metres say nothing of these
+// and these nothing of the map's; a reading of the book says whose metres it is giving. They are
 // not rescaled with the heights, because a rescaling of standing heights
 // applied to an increment larger than any height is a number that means
 // nothing: tried, it made a 45 kilometre lift into 4.5 on a map 258 metres
