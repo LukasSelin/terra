@@ -51,19 +51,36 @@ func shapeOf(g *Grid) shape {
 // the edges of it rather than through the middle of everything.
 func TestAHistoryLeavesAMapTheSettlementCanUse(t *testing.T) {
 	var steep []float64
+	var madeWet, drawnWet int
 	const seeds = 12
 	for seed := uint64(1); seed <= seeds; seed++ {
 		drawn := shapeOf(NewLand(seed, DefaultTerms()).Grid)
-		made := shapeOf(NewLand(seed, historyConfig(16)).Grid)
+		made := shapeOf(madeLand(seed, historyConfig(16)).Grid)
 		steep = append(steep, made.slope90/drawn.slope90)
+		madeWet, drawnWet = madeWet+made.wet, drawnWet+drawn.wet
 
 		if made.open < drawn.open*8/10 {
 			t.Errorf("seed %d: %d tiles can be ploughed on a made world against %d on a drawn one",
 				seed, made.open, drawn.open)
 		}
-		if made.wet > drawn.wet*3 {
-			t.Errorf("seed %d: %d tiles of water against %d", seed, made.wet, drawn.wet)
-		}
+	}
+	// The water is asked of the dozen together and not of each seed against
+	// its twin, because the two share a seed number and nothing else: over
+	// six hundred seeds a made map's water and its twin's correlate by 0.03
+	// before the fractures were bent by the plate and 0.09 after. Against the
+	// twin the bar was three times whatever that draw left - 72 tiles where
+	// the drawn map had 24 and 2556 where it had 852 - and three dozens in
+	// ten tripped it, before the bend and after; seed 8 after, 310 against
+	// 80. The made valleys are no wetter than the drawn ones (169 tiles on
+	// the mean before, 174 after, 175 drawn), and less often drowned: 3 and 4
+	// in six hundred hold three times the middling drawn map's water, where
+	// 11 drawn maps do. A dozen made valleys hold 0.60 to 1.50 of their
+	// twins' water over a hundred dozens, so twice is a history that floods
+	// its valleys and not a draw. One drowned valley is the ploughland's to
+	// catch, above, since water is not ploughed.
+	if madeWet > 2*drawnWet {
+		t.Errorf("%d tiles of water on the made valleys against %d on the drawn ones, over %d seeds",
+			madeWet, drawnWet, seeds)
 	}
 	// The steepest tenth is what decides whether a map is country or a set of
 	// walls, and it is the reading that caught every wrong turn this generator
