@@ -6,6 +6,187 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - The crust floats: thickness, isostasy, flexure and rebound (Rock G2)
+
+**What this is.** On `claude/rock-isostasy`, from `main` (2c51bea): issue
+#41, G2 of `docs/earth-system-plan.md`. It stands on main, not on G1's
+branch (#67). The history's crust has a thickness, carried with it as the
+plates move (`crust.thick`), and the ground floats on it (`isostasy.go`).
+It replaces the two fixed freeboards, `settleTime` and the noise `bow`.
+
+- **Thickness.** Continent starts at 35 km and ocean floor at 7 km, spread
+  across the margins over `marginRamp` passes; a ridge makes 7 km. What
+  `liftOf` hands out is laid on the crust and not on the ground alone: a
+  collision, an arc or islands thicken it by what they raise, a rift thins a
+  continent by a share of what is left, a hotspot piles its lava on. The
+  wear takes its metres off the crust and the fill lays them on. No crust is
+  thicker than 70 km (`crustMost`, Tibet and the Altiplano; past it the root
+  founders). A trench is laid on the ground alone, no deeper than 11 km under
+  the sea. Floor parting from floor is not dropped, since a ridge stands
+  where its age puts it. Ocean crust 31 km thick is continent (`accrete`
+  read the volcanic ground raised on the floor, `built`, which is gone, and
+  reads the thickness now).
+- **Level.** Airy, crust 2800 and mantle 3300 kg/m³. Continental crust 30 km
+  thick floats at the sea (`seaCrust`), and each metre more stands 0.152 m
+  higher, 1.45 times deeper under water. Ocean floor stands at GDH1's depth
+  for its age (abyss.go's `floorDepth`), plus what its crust is thicker than
+  7 km, read under water.
+- **Flexure.** The ground comes to its level through a thin elastic plate:
+  Te 30 km, E 100 GPa, ν 0.25, α = 74 km. The Airy deflection is filtered by
+  1/(1 + Dk⁴/ρm g) through the FFT (`flexure`), round the cylinder and
+  mirrored at the poles. The bend is the crust's state (`crust.sag`), carried
+  with it, so a load the plate holds up stays held and only what changes is
+  answered. The plate lets go of what it holds over 10 Myr (`relaxTime`, a
+  Maxwell plate after Walcott 1970 and Beaumont 1981). Without that, two
+  crusts carried side by side with roots fifteen kilometres apart were held
+  fifteen kilometres apart in height a tile apart, and the highest ground
+  stood 13 km up.
+- **When.** Twice an epoch: after the seams and the hotspots, so the weather
+  meets ranges already sunk into their roots, and after the wear, which is
+  the rebound (and the relaxation). With the second only, the wear cut the
+  epoch's 18 km of collision to its outlet before the plate answered, and no
+  range kept a root.
+- **The sea.** The history runs against `seaDatum`, where 30 km of crust
+  floats, or against the lowest `historySea` of the ground where that is
+  higher, as on a valley whose plates are a quarter floor. It was the lowest
+  35% of the ground on every world, which on a globe of floor would put the
+  sea kilometres down the floor, with the ridges standing out of it.
+- **Draws.** The bow's lattices are still drawn and thrown away, so each
+  seed draws its grain, hotspots and breaks as before, and what moved is
+  the crust's doing. Plates' straight walls over eight small globes read
+  1.05 with the draws kept, 1.00 without and 1.08 on main, and a seed is
+  ±0.1 on its own.
+
+**Readings.** `TestTheHistoryStandsOnItsCrust` (new, slow tier), at the end
+of the last epoch, each tile weighted by cos(latitude). The same reading of
+main's history was taken with a throwaway test:
+
+| | land share | mean land, m | continents over floor, m | cont. crust, km | top 1% of land: m / crust km / Moho km | rebound per m worn |
+| --- | --- | --- | --- | --- | --- | --- |
+| small globe 1, main | 0.055 | 119 | 664 | - | - | - |
+| small globe 1 | 0.131 | 211 | 3,807 | 27.5 | 3,177 / 46.7 / 43.6 | 0.864 |
+| small globe 2, main | 0.075 | 238 | 484 | - | - | - |
+| small globe 2 | 0.069 | 260 | 3,760 | 27.0 | 4,070 / 52.2 / 48.2 | 0.865 |
+| globe 1, main | 0.109 | 36 | 739 | - | - | - |
+| globe 1 | 0.153 | 452 | 4,303 | 29.1 | 5,169 / 54.1 / 49.0 | 0.868 |
+| earth | 0.29 | ~800 | 4,500-5,000 | ~40 | Tibet: 5,000 / 70 | 0.85 |
+
+The roots under the highest land are 14-19 km deeper than under crust at the
+sea. The land's hypsometry above its sea, at shares of the land, against
+Cogley's (1984) curve, which is G1's comparison:
+
+| m | 5% | 10% | 25% | 50% | 75% | 90% | 95% | 99% | 99.9% | top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| earth | 36 | 71 | 179 | 461 | 1,106 | 2,240 | 3,026 | 4,748 | 5,600 | 8,000 |
+| small 1, main | 2 | 4 | 14 | 37 | 88 | 295 | 476 | 1,540 | 4,417 | 5,571 |
+| small 1 | 2 | 4 | 12 | 28 | 177 | 529 | 1,087 | 2,715 | 3,966 | 4,476 |
+| small 2, main | 2 | 4 | 11 | 39 | 181 | 583 | 1,083 | 3,205 | 5,569 | 6,241 |
+| small 2 | 2 | 4 | 10 | 26 | 150 | 942 | 1,367 | 2,887 | 5,067 | 5,452 |
+| globe 1, main | 1 | 2 | 6 | 15 | 33 | 66 | 106 | 334 | 1,947 | 5,506 |
+| globe 1 | 6 | 10 | 20 | 37 | 393 | 1,552 | 2,628 | 4,215 | 5,879 | 10,113 |
+
+**Rebound.** `TestAWornRangeRisesByFiveSixthsOfWhatIsTakenOff`: a range
+1,500 km across worn down by a kilometre rises 0.849 of it (ρc/ρm = 0.848). A
+valley one tile wide, 37.5 km, rises 0.215 of it. `TestARangeStandsOnARoot`:
+a belt 13 tiles wide thickened by 10 km stands 1.21 km up (Airy alone gives
+1.52), with a moat of -0.33 km three tiles beyond it.
+
+**What is not the earth's yet.** The land's low half: half of it lies
+within 26-37 m of its sea, where half the earth's land is under 461 m. That
+is the history's water and not its crust, and main's is the same (15-39 m
+by the same reading). At 37.5 km a tile and 4 Myr a step, K√Q·dt/dx is
+50-200. So the implicit cut takes every tile down to the tile it drains to,
+and a whole drainage to its outlet, in one epoch. On main the settling
+lifted every plate back 15% of the way to its freeboard each epoch. Here the
+crust floats back 5/6 of what was cut, and the crust is lost. The sediment
+the water carries to the sea leaves the crust too (`exported`), so the
+continents thin, to 27-29 km on the mean, and stand under the sea on the
+mean. A denudation law for the history's span, and the sediment laid on
+the margins (G6), are what would hold them up.
+
+**Yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout
+60m .` on main (2c51bea) and here:
+
+| yardstick | main | here | |
+| --- | --- | --- | --- |
+| channel concavity, small globe | 0.2455 ✗ | 0.3874 ✓ | now inside |
+| mean land rain, 2x over 1x, small globe | 1.246 ✗ | 1.070 ✓ | now inside |
+| land share of Aridisols | 0.0592 ✗ | 0.0941 ✓ | now inside |
+| hypsometric integral, small globe | 0.3055 ✗ | 0.3486 ✓ | now inside |
+| land relief intermittency C1, three globes | 0.0750 (gap) | 0.0906 ✓ | the gap closed; marker taken off |
+| midlatitude over subtropical rain, globe | 0.9042 ✗ | 0.9066 ✗ | fails on both |
+| land share of Gelisols | 0.1295 ✗ | 0.1152 ✗ | fails on both |
+| drainage area exceedance exponent, small globe | 0.4863 ✗ | 0.4871 ✗ | fails on both |
+| discharge exceedance exponent, small globe | 0.4622 ✗ | 0.5083 ✗ | fails on both |
+| **meander wavelength, small globe** | 13.0 | 15.03 ✗ | new: below |
+
+The meander wavelength is the median over the low-gradient reaches of the
+eight network small globes. There were 29 of them and there are 21: the
+small globes' land is steeper (mean slope 0.444 to 0.521, 99th percentile
+0.946 to 1.111). The rock uplift the shaping grades the rivers to now
+includes the rebound under what was worn. The valley's yardsticks read to
+the digit as on main; its world is drawn.
+
+**Other tests.** Moved, with the reason in each:
+
+- `TestTheChainForOneTileOfTheAncientValley`: tile 987 to tile 1228.
+- `TestTheTideLaysFlatsOnlyWhereItReaches`: small globes 1-8 hold 0, 8, 0,
+  0, 0, 0, 0 and 34 flats (main: 2, 0, 1, 0, 1, 3, 1, 0), so the second is
+  read.
+- `TestAGlobeHasASeaItsRiversReach`: the poles were one tile. They are each
+  polar row two thirds bare now. Main's north row is 305 tiles of 1,024 open
+  ground, and the branch's 262.
+- `TestAHistoryHandedDownFromACoarserGridIsTheHistoryReadFiner`: the top bed
+  is held to a millimetre or four float32 steps. The ground stands 12 km
+  over the history's nothing, where a float32 is good to a millimetre.
+
+`TestTheWeatherChangesFromDayToDay` fails on both (859 hPa, under 870).
+
+**The world.** Moved: `TERRA_DIGEST=write` rewrote ancient
+(b0108b03255bc723 -> 67e456e6ee7335eb) and globe128 (f92adf079b762dca ->
+996361afd1877218). The drawn valley checks as it was.
+
+**The heap.** Rewritten with `TERRA_PERF_UPDATE=1`. globe128 412.98 to
+396.95 MB, with 27,506 allocations where it had 29,301. ancient 58.85 to
+56.88 MB, with 9,057 where it had 8,700: the flexure's plan and its
+working. The crust carries its thickness and bend (float32, with their move
+buffers, 16 B a tile), isostasy's working (16 B a tile) and the transform's
+padded field (16 B a cell, about two cells a tile). Gone are `built` and its
+move buffer (16 B a tile), the bow (8 B a tile) and the settling's rise,
+which was 8 B a tile made afresh every epoch.
+
+**Timing.** Interleaved, main's test binary and the branch's turn and turn
+about, `TERRA_PHASES=1`, on a machine that was not quiet:
+
+| globe256, 6 each | main | branch | |
+| --- | --- | --- | --- |
+| sec/op | 4.460 ± 9% | 4.424 ± 12% | ~ (p=0.39) |
+| history | 3.42 s | 3.44 s | ~ (p=0.94) |
+| tectonics | 0.231 s | 0.186 s | -19% (p=0.002): no settling, no bow |
+| isostasy | - | 0.072 s | 32 calls |
+| wear | 0.602 s | 0.543 s | -10% (p=0.015) |
+| B/op | 1.663 GB | 1.553 GB | -6.6% |
+
+| full globe, 3 each, medians | main | branch |
+| --- | --- | --- |
+| Generate | 53.8 s | 51.1 s |
+| history | 40.8 s | 37.5 s |
+| tectonics | 3.59 s | 2.58 s |
+| isostasy | - | 0.68 s (32 calls over 1024×1024 padded) |
+| wear | 11.7 s | 9.4 s |
+| move | 4.78 s | 5.00 s |
+
+`scripts/perf.sh check`'s benchmarks against the 2026-09-16 baseline read
+valley +10.3%, ancient +8.6% and globe256 ~. The drawn valley is a world
+this change does not touch, so that is the machine. A quiet-machine check is
+still owed.
+
+**Open.** The low half of the land, above. The sea a history runs against is
+a datum, until G3 pours it. Te is one figure for the whole world. The
+sediment the history's water carries off the land is lost to the crust.
+
+---
+
 ## 2026-10-07 - The thermocline
 
 **What this is.** On `claude/ocean-thermocline`, from `claude/ocean-flow-2d`

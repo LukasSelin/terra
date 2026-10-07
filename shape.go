@@ -221,7 +221,8 @@ func (g *Grid) shape() (area []float64) {
 //	the rate, by rank                .455   .493       .557   .367       .864
 //
 // Most of a continent rises at a twentieth of a collision's rate or less - the
-// plate settling, and the bow it rides in - and only the seams' belts faster,
+// plate floating up under what the weather takes off it - and only the seams'
+// belts faster,
 // so read as a rate the uplift was all but even over the land, the lowland
 // graded as steeply as the upland, and the discharge exponent fell to a third.
 // Over the 99th centile it came nearer, and the mainstreams fell short of

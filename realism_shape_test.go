@@ -138,6 +138,11 @@ var shapeYardsticks = []realYardstick{
 		source:  "Gagnon, Lovejoy & Schertzer 2006 (Multifractal earth topography): P(k) ~ k^-beta with beta = 1 + 2H - K(2) = 2.1 on the continents (H 0.66, C1 0.12, alpha 1.79), 2.3 on their margins, from 40 m to planetary scales. Read along the rows and columns of windows of 64 tiles wholly on land",
 		measure: func() float64 { return reliefSpectrum(threeGlobes()) },
 	}},
+	// It was a known gap, K, at 0.075: the history left its relief gathered,
+	// 0.175 as the shaping took it up, and the shaping laid it again as one
+	// hillslope on every tile off the rivers. With the history's ground
+	// floating on its crust (isostasy.go) the uplift the shaping grades by is
+	// the rock's, rebound and all, and it reads 0.091.
 	{yardstick: yardstick{
 		name: "land relief intermittency C1, three globes", unit: "", scale: "ground", lo: 0.08, hi: 0.18, slow: true,
 		source:  "Gagnon, Lovejoy & Schertzer 2006: the earth's relief is a multifractal of C1 0.12 and alpha 1.79, how sparsely its roughness is gathered. Read by trace moments of the gradient in windows of 32 tiles wholly on land; a relief rough everywhere alike, a fractional Brownian one, reads 0.037 on this reading, and the band's width is not a measured figure",
@@ -147,7 +152,8 @@ var shapeYardsticks = []realYardstick{
 	// the shaping takes it up, and the shaping lays it again as one hillslope
 	// on every tile off the rivers; 0.075) until the air came to swing the
 	// energy balance's year (see atmos.Env.seasonTemp); it read 0.087 then,
-	// near the floor, and nothing in the shaping changed.
+	// near the floor, and nothing in the shaping changed. The crust floating
+	// on its thickness (isostasy.go) closed it on its own as well, at 0.091.
 	},
 }
 

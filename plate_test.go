@@ -523,9 +523,10 @@ func inland(g *Grid) []int32 {
 // was built.
 //
 // Two things moved it. An arc is raised behind the trench and not on it, so
-// there is a coastal plain in front of the range; and a plate rides with
-// swells and basins in it, so the sea finds its coast in the shape of the
-// ground rather than at the boundary of the crust. See arcGapReach and bowRise.
+// there is a coastal plain in front of the range; and a continent's crust is
+// thinned at its margins and where it has rifted, so the sea finds its coast
+// in the thickness of the crust rather than at the boundary of the plate. See
+// arcGapReach and isostasy.go.
 func TestMountainsAreNotAllOnTheCoast(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)
