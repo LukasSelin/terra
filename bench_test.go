@@ -3,7 +3,7 @@ package terra
 import "testing"
 
 // How long a world takes to make, and how much it asks of the heap while it
-// is made. These are the yardsticks docs/perf/worklog.md is kept against:
+// is made. These are the yardsticks a change's PR reports against:
 // run them before and after a change, a handful of times each, and hand both
 // runs to benchstat. See docs/perf/README.md for the commands.
 //
