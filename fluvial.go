@@ -277,7 +277,7 @@ type stepScratch struct {
 	root                                            []bool
 	edge, keep, room                                []float64
 	floor                                           []float64
-	seen                                            []int32
+	shelf                                           shelfScratch
 	solve                                           solveScratch
 }
 

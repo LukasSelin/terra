@@ -1080,7 +1080,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		}
 	}
 
-	g.toSea, g.stepScratch.floor, g.stepScratch.seen = nil, nil, nil
+	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
 
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet, and once the plates are kept,

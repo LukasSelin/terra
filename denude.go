@@ -4,7 +4,6 @@ import (
 	"math"
 	"slices"
 
-	"github.com/LukasSelin/terra/geom"
 	"github.com/LukasSelin/terra/internal/phase"
 )
 
@@ -111,24 +110,18 @@ func rockFactor(t *Tile) float64 {
 
 // shelve lays what the weather sent the sea from each mouth this epoch on the
 // sea floor off it (see the top of this file), and books it in the pile and
-// in book. A sea it fills to the shelf's top passes the rest on, over the
-// land, to the nearest floor that has room: the river goes on across the
-// filled basin to the next sea. It returns how much was laid, how much of
-// that went on past the first sea, and how much went off the map's edge, in
-// metres over a tile.
+// in book. A sea it fills to the shelf's top - a basin under the sea's level
+// with no way out to the ocean but over the land - passes the rest on to the
+// ocean by the shortest way over the land: the river goes on across the
+// filled basin to the open sea. It returns how much was laid, how much of
+// that went on past a filled sea, and how much went off the map's edge or
+// found no room, in metres over a tile.
 //
 // The mouths are taken in tile order and each lays its own, so what a world
 // lays is the same however many goroutines made it.
 func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, spilt, lost float64) {
 	defer phase.Start("shelve")()
-	n := len(g.Tiles)
-	base := math.Max(0, g.base)
-	g.stepScratch.seen = sized(g.stepScratch.seen, n)
-	seen := g.stepScratch.seen
-	for i := range seen {
-		seen[i] = -1
-	}
-	var ring, next, visited []int32
+	sh := g.shelfWork()
 	for m := range toSea {
 		load := toSea[m]
 		total := carrying(load)
@@ -139,67 +132,176 @@ func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, 
 			lost += total // off the map's edge
 			continue
 		}
-		left := total
-		ring = append(ring[:0], int32(m))
-		visited = visited[:0]
-		seen[m] = int32(m)
-		d := 0
-		over := false // past the first sea, over the land
-		for left > 0 {
-			if len(ring) == 0 {
-				if over {
-					break
-				}
-				over = true
-				ring = append(ring, visited...)
-				d = 0
+		left := sh.fill(g, m, total, total, load, epoch, book, false)
+		if left > 0 && !sh.ocean(m) {
+			// A filled basin: on over the land to the ocean, and laid off
+			// where the way reaches it.
+			at := int32(m)
+			for !sh.ocean(int(at)) && sh.way[at] >= 0 {
+				at = sh.way[at]
 			}
-			top := base - shelfTop - shelfFall*float64(d)*g.span()
-			if over {
-				top = base - shelfTop
+			if sh.ocean(int(at)) {
+				was := left
+				left = sh.fill(g, int(at), left, total, load, epoch, book, true)
+				spilt += was - left
 			}
-			for _, i := range ring {
-				if !over || d > 0 {
-					visited = append(visited, i)
-				}
-				if left <= 0 || !g.sunk(int(i)) {
-					continue
-				}
-				if room := top - g.Height[i]; room > 0 {
-					put := math.Min(room, left)
-					g.layShelf(int(i), put, load, total, epoch, book)
-					left -= put
-					if over {
-						spilt += put
-					}
-				}
-			}
-			next = next[:0]
-			for _, i := range ring {
-				p := g.PosOf(int(i))
-				for _, off := range Dirs {
-					q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
-					if g.Wrap {
-						q = g.Norm(q)
-					}
-					if !g.In(q) {
-						continue
-					}
-					j := g.Index(q)
-					if seen[j] == int32(m) || (!over && !g.sunk(j)) {
-						continue
-					}
-					seen[j] = int32(m)
-					next = append(next, int32(j))
-				}
-			}
-			ring, next = next, ring
-			d++
 		}
 		laid += total - left
 		lost += left
 	}
 	return laid, spilt, lost
+}
+
+// shelfScratch is shelve's working, kept on the Grid while a history runs:
+// which body of water under the sea's level each tile is in, which of them is
+// the ocean, the way from every other tile toward the ocean, and a fill's
+// rings.
+type shelfScratch struct {
+	body             []int32
+	way              []int32
+	seen             []int32
+	stamp            int32
+	main             int32
+	ring, next, todo []int32
+}
+
+// ocean reports whether tile i is in the ocean: the largest body of water.
+func (sh *shelfScratch) ocean(i int) bool { return sh.main >= 0 && sh.body[i] == sh.main }
+
+// shelfWork reads the bodies of water and the ways to the ocean for an
+// epoch's shelving.
+func (g *Grid) shelfWork() *shelfScratch {
+	n := len(g.Tiles)
+	var near [8]int32
+	sh := &g.stepScratch.shelf
+	sh.body, sh.way, sh.seen = sized(sh.body, n), sized(sh.way, n), sized(sh.seen, n)
+	for i := range n {
+		sh.body[i], sh.way[i], sh.seen[i] = -1, -1, 0
+	}
+	sh.stamp = 0
+	// The bodies, each flooded from its first tile.
+	var sizes []int
+	for i := range n {
+		if sh.body[i] >= 0 || !g.sunk(i) {
+			continue
+		}
+		k := int32(len(sizes))
+		sh.body[i] = k
+		sh.todo = append(sh.todo[:0], int32(i))
+		count := 0
+		for len(sh.todo) > 0 {
+			t := sh.todo[len(sh.todo)-1]
+			sh.todo = sh.todo[:len(sh.todo)-1]
+			count++
+			c := g.around(int(t), &near)
+			for _, j := range near[:c] {
+				if sh.body[j] < 0 && g.sunk(int(j)) {
+					sh.body[j] = k
+					sh.todo = append(sh.todo, j)
+				}
+			}
+		}
+		sizes = append(sizes, count)
+	}
+	sh.main = -1
+	for k, c := range sizes {
+		if sh.main < 0 || c > sizes[sh.main] {
+			sh.main = int32(k)
+		}
+	}
+	// The ways: breadth first out of the ocean over everything else.
+	sh.ring = sh.ring[:0]
+	for i := range n {
+		if sh.ocean(i) {
+			sh.ring = append(sh.ring, int32(i))
+		}
+	}
+	for len(sh.ring) > 0 {
+		sh.next = sh.next[:0]
+		for _, t := range sh.ring {
+			c := g.around(int(t), &near)
+			for _, j := range near[:c] {
+				if !sh.ocean(int(j)) && sh.way[j] < 0 {
+					sh.way[j] = t
+					sh.next = append(sh.next, j)
+				}
+			}
+		}
+		sh.ring, sh.next = sh.next, sh.ring
+	}
+	return sh
+}
+
+// around writes the tiles round tile i into near, round the world where it
+// goes round, and returns how many there are.
+func (g *Grid) around(i int, near *[8]int32) int {
+	x, y := i%g.W, i/g.W
+	k := 0
+	for dy := -1; dy <= 1; dy++ {
+		ny := y + dy
+		if ny < 0 || ny >= g.H {
+			continue
+		}
+		for dx := -1; dx <= 1; dx++ {
+			nx := x + dx
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			if nx < 0 || nx >= g.W {
+				if !g.Wrap {
+					continue
+				}
+				nx = (nx + g.W) % g.W
+			}
+			near[k] = int32(ny*g.W + nx)
+			k++
+		}
+	}
+	return k
+}
+
+// fill lays left metres of a mouth's load of total on the floor of the body
+// of water out from tile m, the nearest floor first, up to the shelf's top:
+// each ring out a shelf's fall deeper, or level for what a filled basin
+// passed on. It returns what it had no room for, once the whole body is
+// filled.
+func (sh *shelfScratch) fill(g *Grid, m int, left, total float64, load [Grains]float64, epoch int, book []record, passed bool) float64 {
+	base := math.Max(0, g.base)
+	var near [8]int32
+	sh.stamp++
+	sh.ring = append(sh.ring[:0], int32(m))
+	sh.seen[m] = sh.stamp
+	for d := 0; len(sh.ring) > 0 && left > 0; d++ {
+		top := base - shelfTop
+		if !passed {
+			top -= shelfFall * float64(d) * g.span()
+		}
+		for _, i := range sh.ring {
+			if left <= 0 {
+				break
+			}
+			if room := top - g.Height[i]; room > 0 {
+				put := math.Min(room, left)
+				g.layShelf(int(i), put, load, total, epoch, book)
+				left -= put
+			}
+		}
+		if left <= 0 {
+			break
+		}
+		sh.next = sh.next[:0]
+		for _, t := range sh.ring {
+			c := g.around(int(t), &near)
+			for _, j := range near[:c] {
+				if sh.seen[j] != sh.stamp && g.sunk(int(j)) {
+					sh.seen[j] = sh.stamp
+					sh.next = append(sh.next, j)
+				}
+			}
+		}
+		sh.ring, sh.next = sh.next, sh.ring
+	}
+	return left
 }
 
 // layShelf lays put metres of a load on tile i, as a bed of sandstone where

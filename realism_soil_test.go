@@ -56,7 +56,10 @@ var soilYardsticks = []realYardstick{
 		source:  "Pelletier et al. 2016: lowland valley bottoms hold several to tens of metres of soil and sediment against ~1 m on the hillslopes above",
 		measure: func() float64 { d := soilDepths(smallGlobes(networkGlobes)); return d.floor / d.hillslope },
 	},
-		gap: "known gap: I - the floors' soil is capped with the hillslopes' by production (see the floor depth yardstick), so they stand only a few times deeper: 3.015x on main, 2.11x once the land's winters softened",
+	// It was a known gap - the floors' soil is capped with the hillslopes' by
+	// production, so they stood only a few times deeper: 3.015x on main, 2.11x
+	// once the land's winters softened - until the history's ground came down
+	// by its relief (G2b, denude.go): 3.13x, at the floor of the band.
 	},
 
 	// 10. Clay against the climate. On the same rock a soil formed warm holds
