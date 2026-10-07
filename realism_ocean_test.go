@@ -866,10 +866,19 @@ const coldTongueUnder = 0.5
 // the trades' layer's depth, it ran on to the Pacific's -5 m/s and a
 // contrast of +2.4 degrees, and with the rain's heating at the strength the
 // coupled models of the Pacific give it, past the band to +8.6, the
-// thermocline under the east at its least; neither settled. What is still
-// missing is the trades' own east-west structure, A3 (#35), from which the
-// feedback could grow. It fails once the contrast is in the band, to have
-// its marker taken off.
+// thermocline under the east at its least; neither settled. What was
+// missing was the trades' own east-west structure, A3 (#35), from which the
+// feedback could grow. Since A3 the heat the ground gives the tropical air
+// is in the wind (atmos's waves), and the feedback grows, but the other way:
+// the continent west of the broadest ocean sends up some three millimetres
+// of water a day against the open sea's five and more, so it is a Walker
+// cell's sinking branch and not its rising one, and the westerlies its
+// heating draws east of it (Gill, 1980) carry the warm water east, under a
+// thermocline deeper in the east than the west. The earth's continents on
+// the equator rain more than its ocean there; the column budget's ITCZ
+// over the sea rains two or three times the earth's (gap G), and the
+// heating read off its rain ran away (see waves.go). It fails once the
+// contrast is in the band, to have its marker taken off.
 func TestOceanEquatorialContrast(t *testing.T) {
 	o := theGlobesOcean(t)
 	c := o.equatorialContrast(5)
@@ -885,7 +894,7 @@ func TestOceanEquatorialContrast(t *testing.T) {
 		t.Errorf("the equatorial contrast reads %+.2f degrees, inside 4-6: the gap has closed, take the marker off", c)
 		return
 	}
-	t.Skipf("known gap: #35 (A3) - with the sea and the air solved together (#28) there are still no year's mean easterlies on the equator for the Bjerknes feedback to grow from (%+.2f m/s over the broadest ocean, the Pacific's -4 to -6); the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
+	t.Skipf("known gap: G - the heat the ground gives the tropical air (#35) makes the continent west of the broadest ocean a Walker cell's sinking branch, its land sending up less water than the open sea, whose column budget rains two or three times the earth's: the Bjerknes feedback grows the warm-east way, %+.2f m/s over the broadest ocean (the Pacific's -4 to -6), a contrast of %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
 }
 
 // seaIceShare is the share of the globe's whole surface, area-weighted, that

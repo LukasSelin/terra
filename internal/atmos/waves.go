@@ -142,7 +142,7 @@ func (e *Env) waves(was *Winds, s *Scratch) {
 		if budget != nil {
 			evap = budget[k].Evap
 		}
-		q := e.heating(temp, evap, wk)
+		q := e.heating(temp, evap, e.Subsides[k], wk)
 		phi, gu, gv := e.gill(q, wk)
 		w := &e.Waves[k]
 		w.U, w.V, w.P, w.Aloft = make([]float32, n), make([]float32, n), make([]float32, n), make([]float32, n)
@@ -167,10 +167,13 @@ func (e *Env) waves(was *Winds, s *Scratch) {
 // the latent heat of what the land sends up and the heat it gives the air,
 // sensibleExchange for each degree its air stands over its row's; over the
 // sea the latent heat of what the row's sea sends up on its mean, whose
-// warmth along the row is the Walker circulation's (walker). Each row's
+// warmth along the row is the Walker circulation's (walker). The latent
+// heat is the column's only where the air rises, out of reach of the
+// Hadley cell's descent (Subsides, of the phase); the land's own heat warms
+// the air over it wherever it is. Each row's
 // mean is taken off, which is the belts', and the whole of it is held to
 // the tropics, as the Walker circulation's is.
-func (e *Env) heating(temp, evap []float64, wk *work) []float64 {
+func (e *Env) heating(temp, evap, descent []float64, wk *work) []float64 {
 	q := wk.floats(slotHeat, e.W*e.H)
 	for cy := 0; cy < e.H; cy++ {
 		share := e.tropicShare(cy)
@@ -178,6 +181,10 @@ func (e *Env) heating(temp, evap []float64, wk *work) []float64 {
 			continue
 		}
 		row := cy * e.W
+		// Only where the air rises does it carry the water's heat up
+		// through the column: under the Hadley cell's descent what the sea
+		// sends up is carried off to the ITCZ, and rains there.
+		deep := 1 - clamp01(descent[row]/subsideMost)
 		var tz, se, sk float64
 		for cx := 0; cx < e.W; cx++ {
 			i := row + cx
@@ -200,7 +207,7 @@ func (e *Env) heating(temp, evap []float64, wk *work) []float64 {
 				wet += land * evap[i]
 			}
 			heat := land * sensibleExchange * (temp[i] - tz) / latentHeat
-			q[i] = share * gillPerRain * (wet + heat)
+			q[i] = share * gillPerRain * (deep*wet + heat)
 			mean += q[i]
 		}
 		mean /= float64(e.W)
