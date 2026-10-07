@@ -770,6 +770,83 @@ func (o *oceanCells) equatorialWind(lo float64) float64 {
 	return s / w
 }
 
+// broadestOn is the broadest stretch of sea on row cy, or none.
+func (o *oceanCells) broadestOn(cy int) stretch {
+	var broad stretch
+	for _, st := range o.stretches(cy) {
+		if st.cells() > broad.cells() {
+			broad = st
+		}
+	}
+	return broad
+}
+
+// equatorialThermocline is how deep, in metres, the thermocline lies under
+// the western and the eastern quarters of the broadest ocean on each row
+// within lo degrees of the equator, area-weighted over the rows: the warm
+// pool's two hundred metres against the cold tongue's fifty in the Pacific
+// (Fiedler and Talley 2006).
+func (o *oceanCells) equatorialThermocline(lo float64) (west, east float64) {
+	var w float64
+	for _, cy := range o.rowsBetween(-lo, lo) {
+		broad := o.broadestOn(cy)
+		q := broad.cells() / 4
+		if q == 0 {
+			continue
+		}
+		var ws, es float64
+		for k := range q {
+			ws += float64(o.e.Thermocline[o.at(broad.first+k, cy)])
+			es += float64(o.e.Thermocline[o.at(broad.last-k, cy)])
+		}
+		west += o.weight(cy) * ws / float64(q)
+		east += o.weight(cy) * es / float64(q)
+		w += o.weight(cy)
+	}
+	return west / w, east / w
+}
+
+// coldTongue is the cold tongue of the broadest ocean on each row within lo
+// degrees of the equator: how far west of the eastern shore, in kilometres,
+// the water runs at least coldTongueUnder degrees under the mean of its row
+// of that ocean, unbroken from the shore, and what share of the ocean's
+// breadth that is, both area-weighted over the rows; and how far under the
+// row's mean the coldest of it lies. The Pacific's reaches from Ecuador to
+// the date line, some ten thousand kilometres and two thirds of the ocean,
+// and lies some three degrees under the equator's mean (Wyrtki 1981;
+// Locarnini et al. 2018).
+func (o *oceanCells) coldTongue(lo float64) (km, share, coldest float64) {
+	var w float64
+	for _, cy := range o.rowsBetween(-lo, lo) {
+		broad := o.broadestOn(cy)
+		if broad.cells() == 0 {
+			continue
+		}
+		var mean float64
+		for cx := broad.first; cx <= broad.last; cx++ {
+			mean += o.waterTemp(o.at(cx, cy))
+		}
+		mean /= float64(broad.cells())
+		run := 0
+		for cx := broad.last; cx >= broad.first; cx-- {
+			d := o.waterTemp(o.at(cx, cy)) - mean
+			coldest = math.Min(coldest, d)
+			if d > -coldTongueUnder || run < broad.last-cx {
+				continue
+			}
+			run++
+		}
+		km += o.weight(cy) * float64(run) * o.e.Dx[cy] / 1000
+		share += o.weight(cy) * float64(run) / float64(broad.cells())
+		w += o.weight(cy)
+	}
+	return km / w, share / w, coldest
+}
+
+// coldTongueUnder is how many degrees under the mean of its row of ocean the
+// water has to be to be the cold tongue's.
+const coldTongueUnder = 0.5
+
 // 7. Equatorial west-east contrast. The trades pile warm water up in the west
 // of an equatorial ocean and the thermocline comes up under the east, so the
 // warm pool stands 4-6 degrees over the cold tongue (Locarnini et al. 2018,
@@ -778,21 +855,37 @@ func (o *oceanCells) equatorialWind(lo float64) float64 {
 // with it. M2 (#21) gave the sea a thermocline that tilts; what it lacks is
 // the easterlies to tilt it on the equator itself, where the Pacific's year
 // is -4 to -6 m/s: the year's mean ITCZ lies on the equator, in the
-// doldrums, and the Walker circulation that the cold tongue itself drives
-// (Bjerknes 1969) is #28, the sea and the air solved together, with A3 (#35)
-// for the wind's own east-west structure. M2 asked the skip to name the wind
-// rather than the thermocline. It fails once the contrast is in the band, to
-// have its marker taken off.
+// doldrums. Since #28 the sea and the air are solved together, and the
+// Walker circulation the contrast drives (Bjerknes 1969) is in the wind: the
+// thermocline under the west and the east, the cold tongue and the coupled
+// solve's residual are logged with it. On the globe it is read on, the
+// feedback has nothing to grow from: the year's mean wind over the equator
+// is the doldrums', the stress goes as the square of the wind, and a little
+// contrast makes a little easterly that tilts the thermocline by less again.
+// Where the coupling was made stronger than its physics allows, five times
+// the trades' layer's depth, it ran on to the Pacific's -5 m/s and a
+// contrast of +2.4 degrees, and with the rain's heating at the strength the
+// coupled models of the Pacific give it, past the band to +8.6, the
+// thermocline under the east at its least; neither settled. What is still
+// missing is the trades' own east-west structure, A3 (#35), from which the
+// feedback could grow. It fails once the contrast is in the band, to have
+// its marker taken off.
 func TestOceanEquatorialContrast(t *testing.T) {
 	o := theGlobesOcean(t)
 	c := o.equatorialContrast(5)
 	u := o.equatorialWind(5)
 	t.Logf("within 5 degrees of the equator the west of the broadest ocean stands %+.2f degrees over its east, under a year's mean wind of %+.2f m/s toward the east", c, u)
+	hw, he := o.equatorialThermocline(5)
+	km, share, coldest := o.coldTongue(5)
+	for k, r := range o.e.Coupled {
+		t.Logf("coupled round %d: the sea's warmth the air read stood at most %.3f degrees from the sea's, %.3f rms, %.3f rms in the tropics", k+1, r.Most, r.RMS, r.Tropics)
+	}
+	t.Logf("the thermocline lies %.0f m down under its west and %.0f m under its east (the Pacific's some 200 and 50); its cold tongue runs %.0f km west from the eastern shore, %.2f of the ocean's breadth, and is at most %.2f degrees under its row's mean", hw, he, km, share, coldest)
 	if c >= 4 && c <= 6 {
 		t.Errorf("the equatorial contrast reads %+.2f degrees, inside 4-6: the gap has closed, take the marker off", c)
 		return
 	}
-	t.Skipf("known gap: #28 (sea and air solved together), #35 (A3) - no year's mean easterlies on the equator to tilt the thermocline (%+.2f m/s over the broadest ocean, the Pacific's -4 to -6); the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
+	t.Skipf("known gap: #35 (A3) - with the sea and the air solved together (#28) there are still no year's mean easterlies on the equator for the Bjerknes feedback to grow from (%+.2f m/s over the broadest ocean, the Pacific's -4 to -6); the contrast reads %+.2f degrees, real 4-6 (Locarnini et al. 2018)", u, c)
 }
 
 // seaIceShare is the share of the globe's whole surface, area-weighted, that

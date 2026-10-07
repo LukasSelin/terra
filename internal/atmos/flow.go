@@ -129,6 +129,10 @@ type flow struct {
 	shift float64
 
 	levels []*level
+	// last is the unknowns of the last solve of these equations, which the
+	// next starts from: the coupled solve (coupled.go) works the gyres out
+	// again under a wind a little changed.
+	last []float64
 }
 
 // level is the equations at one coarseness: the unknowns of the cells, row
@@ -154,15 +158,17 @@ type level struct {
 
 // gyres is the transport streamfunction ψ, in cubic metres a second, under
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
-// it is the level of the landmass. It is for a globe only.
+// it is the level of the landmass. It is for a globe only. f is the
+// equations newFlow wrote down for the ground, or nil to write them now.
 //
 // Its solve keeps its vectors in what s lends it, where s is not nil: see
 // Scratch.lend.
-func (e *Env) gyres(tx, ty []float64, s *Scratch) []float64 {
+func (e *Env) gyres(tx, ty []float64, f *flow, s *Scratch) []float64 {
 	defer phase.Start("airEnv.gyres")()
-	f := e.newFlow()
-	b := f.forcing(tx, ty)
-	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost, s.lend(gmresRoom(flowRestart), len(b)))
+	if f == nil {
+		f = e.newFlow()
+	}
+	x := f.solve(f.forcing(tx, ty), s)
 	return f.spread(x)
 }
 
@@ -727,6 +733,35 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 		}
 	}
 	return b
+}
+
+// solve is x with A x = b, to flowSettled of b. Where the equations were
+// solved before, it is solved for what that answer leaves of b, held to the
+// same flowSettled of b itself, and added to it. The solve's vectors are what
+// s lends (Scratch.lend), and so is the x it gives back; the answer the next
+// solve starts from is kept in f's own memory.
+func (f *flow) solve(b []float64, s *Scratch) []float64 {
+	room := s.lend(gmresRoom(flowRestart), len(b))
+	if f.last == nil {
+		x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost, room)
+		f.last = append([]float64(nil), x...)
+		return x
+	}
+	r := make([]float64, len(b))
+	f.apply(f.last, r)
+	for i := range r {
+		r[i] = b[i] - r[i]
+	}
+	settled := flowSettled
+	if rn := norm(r); rn > 0 {
+		settled = math.Min(1, flowSettled*norm(b)/rn)
+	}
+	x, _, _ := gmres(r, f.apply, f.precondition, settled, flowRestart, flowMost, room)
+	for i := range x {
+		x[i] += f.last[i]
+	}
+	copy(f.last, x)
+	return x
 }
 
 // chain is a line of cells and the operator between them, a band of two

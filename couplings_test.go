@@ -413,6 +413,25 @@ func TestTheGraphHasTheRainLoop(t *testing.T) {
 	}
 }
 
+// A loop a pass closes within itself is a declared pass's, within a field
+// it both reads and writes, and goes round at least two quantities.
+func TestTheInnerLoopsAreDeclaredPasses(t *testing.T) {
+	for _, l := range innerLoops {
+		k := slices.IndexFunc(couplings, func(c coupling) bool { return c.pass == l.pass })
+		if k < 0 {
+			t.Errorf("the loop within %s is closed by %s, which is not a pass", l.field, l.pass)
+			continue
+		}
+		c := couplings[k]
+		if !slices.Contains(c.reads, l.field) || !slices.Contains(c.writes, l.field) {
+			t.Errorf("%s closes a loop within %s, which it does not both read and write", l.pass, l.field)
+		}
+		if len(l.steps) < 2 {
+			t.Errorf("the loop within %s goes round %d quantities", l.field, len(l.steps))
+		}
+	}
+}
+
 // docs/couplings.md is what the declaration makes of it.
 func TestCouplingsDoc(t *testing.T) {
 	const path = "docs/couplings.md"

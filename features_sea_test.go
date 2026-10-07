@@ -180,7 +180,7 @@ func TestTheSeaFeaturesDoNotDependOnTheGoroutines(t *testing.T) {
 		was := Workers
 		Workers = workers
 		defer func() { Workers = was }()
-		return seaOf(g, g.windsFor())
+		return seaOf(g, g.windsFor(g.winds))
 	}
 	one, fone := read(1)
 	again, _ := seaOf(g, g.winds)

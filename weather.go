@@ -131,7 +131,7 @@ func (g *Grid) weather() {
 	g.airWork = new(atmos.Scratch)
 	defer func() { g.airWork = nil }()
 	was := g.winds
-	g.winds = g.windsFor()
+	g.winds = g.windsFor(was)
 	if was != nil {
 		g.winds.Budget = was.Budget
 	}
@@ -174,11 +174,12 @@ func (g *Grid) airedGround(into []float32) []float32 {
 	return into
 }
 
-// windsFor works out the climate of the wind over g as its ground now lies.
-func (g *Grid) windsFor() *Winds {
+// windsFor works out the climate of the wind over g as its ground now lies,
+// from the wind as it was last worked out, was, or nil.
+func (g *Grid) windsFor(was *Winds) *Winds {
 	defer phase.Start("windsFor")()
 	above, wet := g.airGround()
-	return atmos.WindsFor(&g.Map, g.air, above, wet, g.airWork)
+	return atmos.WindsFor(&g.Map, g.air, above, wet, was, g.airWork)
 }
 
 // airGround is the ground of g as the air reads it, tile by tile: how far each

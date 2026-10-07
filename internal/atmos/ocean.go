@@ -132,7 +132,9 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land. The current, the upwelling and the
 // water's temperature it works out on the way are kept on e: see Env.Cu.
-func (e *Env) currents(u, v [Phases][]float32, s *Scratch) []float64 {
+// ocean is the gyres' equations for the ground (newFlow), or nil; s is the
+// reading's working memory, or nil (see Scratch).
+func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
@@ -172,7 +174,7 @@ func (e *Env) currents(u, v [Phases][]float32, s *Scratch) []float64 {
 	// read as a current of metres a second. The models of the ocean and the
 	// air on a grid of parallels filter their rows near the poles for the
 	// same reason (Arakawa and Lamb, 1977).
-	psi := e.gyres(tx, ty, s)
+	psi := e.gyres(tx, ty, ocean, s)
 	thermo := e.thermocline(psi, tx)
 	widest := 0.0
 	for _, dx := range e.Dx {
