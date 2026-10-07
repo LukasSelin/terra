@@ -38,8 +38,8 @@ import "math"
 //     some twenty-four degrees toward its pole. A map's ITCZ is read between
 //     them by the land under the tropics of the hemisphere the summer is in.
 //     It is the zonal mean's: the trough that bends over a continent in its
-//     summer, and the monsoon it draws, are the heating's (Gill, 1980), a
-//     later step's.
+//     summer, and the monsoon it draws, are the heating's (Gill, 1980): see
+//     waves.go.
 //   - The subtropical highs stand at the cell's edges, which follow the ITCZ
 //     north and south by edgeShare of its swing: the summer's cell shrinks
 //     and the winter's reaches across the equator (Lindzen and Hou, 1988).
@@ -81,8 +81,10 @@ const (
 	// ferrelBreadth is how many degrees poleward of the Hadley cell's edge
 	// the subpolar lows lie: today's, thirty-two and sixty-two.
 	ferrelBreadth = 30.0
-	// beltWidth is the breadth, in degrees, of the trough, the highs and the
-	// subpolar lows, and capWidth of the polar highs.
+	// beltWidth is the breadth, in degrees, of the subtropical highs'
+	// poleward flank and of the subpolar lows, and capWidth of the polar
+	// highs. The trough and the highs' equatorward flank are the Hadley
+	// cell's rise: see hadley.
 	beltWidth = 10.0
 	capWidth  = 12.0
 	// beltPole is the latitude of the polar highs.
@@ -199,9 +201,49 @@ func (b *belts) pressure(lat, sinT float64) float64 {
 	if l < 0 {
 		sub = b.shift - b.south + ferrelBreadth
 	}
-	return beltMean - beltEquator*b.depth*bump((lat-b.itcz)/beltWidth) +
-		beltHorse*b.depth*(bump((lat-b.north)/beltWidth)+bump((lat-b.south)/beltWidth)) -
-		beltPolar*b.storm*winter*bump((a-sub)/beltWidth) + beltCap*bump((a-beltPole)/capWidth)
+	return b.hadley(lat) - beltPolar*b.storm*winter*bump((a-sub)/beltWidth) + beltCap*bump((a-beltPole)/capWidth)
+}
+
+// hadley is the pressure at sea level the Hadley cells lay down at a
+// latitude: the equatorial trough on the ITCZ, rising across each cell to the
+// subtropical high on its edge, and falling off the high's poleward flank.
+//
+// The rise across the cell is what drives the trades. The wind near the
+// ground is the balance of the pull down the gradient, the turning of the
+// planet and the drag (see Solve), and over the sea the drag matches the
+// turning at some fifteen degrees: nearer the equator the drag holds the
+// wind back, and further out the turning does, as 1/f. So the trades blow
+// hardest a little equatorward of where the rise is steepest. The earth's
+// blow hardest in the inner half of the cell, some fifteen degrees out
+// (Peixoto and Oort, 1992), which is where Held and Hou's (1980) cell has
+// them too: its surface wind balances the angular momentum the air aloft
+// carries poleward, and its easterlies are strongest at 0.43 of the way to
+// its edge, fourteen degrees on today's thirty-two (Lindzen and Nigam,
+// 1987, read the same easterlies off the boundary layer's pressure).
+//
+// The rise used to be the trough and the highs as two bumps beltWidth
+// broad. Their sum rises twice as steeply on the highs' own flank, at
+// twenty-two to twenty-seven degrees, as within ten of the trough, and the
+// trades blew hardest at twenty-four, where the earth's are past their best,
+// with the tropical band of cyclonic curl, and the open ocean's upwelling
+// under it, at nine to twenty. Here the cell's whole rise, the same
+// beltEquator and beltHorse, is laid as the square of a sine from the ITCZ
+// to the edge: level in the doldrums and under the high's crest, steepest
+// half-way. On a planet of sea the trades then blow hardest at some
+// seventeen degrees either side.
+func (b *belts) hadley(lat float64) float64 {
+	edge := b.north
+	if lat < b.itcz {
+		edge = b.south
+	}
+	trough, high := beltMean-beltEquator*b.depth, beltMean+beltHorse*b.depth
+	x := (lat - b.itcz) / (edge - b.itcz)
+	if x >= 1 {
+		d := (lat - edge) / beltWidth
+		return beltMean + beltHorse*b.depth*math.Exp(-d*d)
+	}
+	s := math.Sin(math.Pi / 2 * x)
+	return trough + (high-trough)*s*s
 }
 
 // subsidence is how fast the Hadley cell's air comes down at a latitude,
@@ -309,6 +351,25 @@ func (w *Winds) SubsidenceOn(i, day int) float64 {
 	return s
 }
 
+// SubsideMost is how fast the air comes down where the Hadley cell's descent
+// is strongest, metres a second at 500 hPa. See subsideMost.
+const SubsideMost = subsideMost
+
+// DescentAt is how fast the air comes down over tile i of the map on the
+// year's mean, metres a second at 500 hPa: SubsidenceOn's four phases taken
+// alike. Nothing where the descent is not worked out.
+func (w *Winds) DescentAt(i int) float64 {
+	fx, fy := w.CellAt(i)
+	var s float64
+	for k := range Phases {
+		if w.Subsides[k] == nil {
+			return 0
+		}
+		s += w.Sample(w.Subsides[k], fx, fy) / Phases
+	}
+	return s
+}
+
 // InversionOn is the height of the trade-wind inversion over tile i of the
 // map on a day of the year, metres over the sea, and infinite where the air
 // does not come down.
@@ -341,3 +402,8 @@ func CirculationUnder(f Forcing, sinT float64) Circulation {
 		Contrast: c.contrast, Tropopause: c.tropopause,
 	}
 }
+
+// ITCZ is the latitude of the ITCZ over the map, degrees, sinT of the way
+// into the north's summer: the energy flux equator, read by the land under
+// the summer hemisphere's tropics. See beltsAt.
+func (e *Env) ITCZ(sinT float64) float64 { return e.beltsAt(sinT).itcz }

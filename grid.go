@@ -208,6 +208,10 @@ type Grid struct {
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
+	// airWork is the working memory a reading of the weather is worked out
+	// in, while it is: the wind's fields and the rain's take turns in it. See
+	// weather and atmos.Scratch.
+	airWork *atmos.Scratch
 	// aired is the ground the weather was last read over: see weatherStale.
 	// A copy of the map starts without it, and reads its weather afresh.
 	aired []float32

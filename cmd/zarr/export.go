@@ -491,7 +491,7 @@ var (
 	bedrockCodes = enum(int(terra.BedrockCount), terra.Bedrock.String)
 	meetingCodes = enum(int(terra.Hotspot)+1, terra.MeetingKind.String)
 	burialCodes  = enum(int(terra.BuriedByLava)+1, terra.Burial.String)
-	kindCodes    = enum(int(terra.Woodland)+1, terra.FeatureKind.String)
+	kindCodes    = enum(int(terra.SubtropicalHigh)+1, terra.FeatureKind.String)
 	seaCodes     = enum(int(terra.Tropical)+1, terra.SeaClass.String)
 	groupCodes   = codes{values: []int{0, 'A', 'B', 'C', 'D', 'E'}, meanings: []string{"none", "A", "B", "C", "D", "E"}}
 )

@@ -273,7 +273,7 @@ func (g *Grid) readSeaFeatures(f *Features, all []Feature, stack []int32, w *Win
 		sea[i] = true
 		fx, fy := w.CellAt(i)
 		u[i], v[i] = float32(w.Sample32(w.Cu, fx, fy)), float32(w.Sample32(w.Cv, fx, fy))
-		psi[i] = float32(w.Sample(stream, fx, fy)) // sverdrups: see atmos.Env.Stream
+		psi[i] = float32(w.Sample(stream, fx, fy))
 		layer[i] = float32(math.Max(atmos.FlowLeast, w.ThermoclineAt(i)))
 	}
 	run, round := make([]int32, n), make([]int8, n)

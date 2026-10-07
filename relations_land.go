@@ -57,10 +57,22 @@ const (
 	// goes into: a river's plume, which the Amazon's carries some five
 	// hundred kilometres out before the sea has it.
 	drainReach = 500.0
+	// highFloor is the least year's mean descent, in metres a second at 500
+	// hPa, the air has to come down at over a tile for it to lie under a
+	// subtropical high: a quarter of the Hadley cell's strongest (see
+	// atmos.subsideMost), where the lid the descent lays (Lilly's, about a
+	// kilometre at the strongest) has risen to some four kilometres and
+	// holds back little of the column's water.
+	highFloor = 1e-3
+	// subsideFloor is the least descent, in millimetres a second, a high
+	// has to bring down on the whole of a climate region's ground for the
+	// region to lie under it: the same quarter of the strongest, so that a
+	// region only the high's fringe reaches is not counted.
+	subsideFloor = 1.0
 )
 
 // landRelations appends to rel the land's relations, kind by kind: Raises,
-// Fills, Grows, Shadows and DrainsInto. f is the registry being read, which
+// Fills, Grows, Subsides, Shadows and DrainsInto. f is the registry being read, which
 // g.features is not yet.
 func (g *Grid) landRelations(f *Features, rel []Relation) []Relation {
 	n := len(g.Tiles)
@@ -128,6 +140,35 @@ func (g *Grid) landRelations(f *Features, rel []Relation) []Relation {
 					rel = append(rel, Relation{From: fe.ID, To: w, Kind: Grows, Quantity: s, Unit: "share"})
 				}
 				count[w] = 0
+			}
+			on = on[:0]
+		}
+	}
+
+	// Each climate region lies under the subtropical high whose air comes
+	// down over it, by the year's mean descent on the whole of its ground.
+	if len(f.climate) == n && len(f.high) == n {
+		sum := make([]float64, len(f.All)+1)
+		var on []FeatureID
+		for k := range f.All {
+			fe := &f.All[k]
+			if fe.Kind != ClimateRegion || fe.Count == 0 {
+				continue
+			}
+			for _, t := range fe.Tiles {
+				if h := f.high[t]; h > 0 {
+					if sum[h] == 0 {
+						on = append(on, h)
+					}
+					sum[h] += f.descent[t]
+				}
+			}
+			slices.Sort(on)
+			for _, h := range on {
+				if d := 1000 * sum[h] / float64(fe.Count); d >= subsideFloor {
+					rel = append(rel, Relation{From: h, To: fe.ID, Kind: Subsides, Quantity: d, Unit: "mm/s"})
+				}
+				sum[h] = 0
 			}
 			on = on[:0]
 		}

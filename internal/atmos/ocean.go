@@ -45,8 +45,11 @@ import (
 //     off a shore, or where the drifts part in the open ocean, on the
 //     equator and under the subpolar lows, cold water comes up from under to
 //     take its place: as cold as the thermocline is shallow there.
-//   - The warmth all of that carries: the water keeps the warmth of where it
-//     came from, and gives it up to the air over some months.
+//   - The warmth all of that carries, in the mixed layer and the water
+//     under it: the water keeps the warmth of where it came from, and gives
+//     it up to the air over some months. What it carries toward the poles is
+//     handed to the energy balance, which says how much warmer or colder the
+//     air over each latitude of the sea stands for it. See slab.go.
 //
 // It is done once a year's wind, from the year's mean wind, and only on a
 // globe: a valley is a few dozen kilometres of country and has no ocean to
@@ -90,10 +93,6 @@ const (
 	// is still in the water when it reaches Norway.
 	seaExchange = 30.0
 	seaHeat     = 4.1e6
-	// seaWarmMost is the most degrees the sea stands warmer or colder than its
-	// latitude: the Gulf Stream at the Grand Banks, some eight or ten over the
-	// water beside it, is about the most the real world has.
-	seaWarmMost = 10.0
 	// upwellCalm is how near the equator, in degrees, a coast has no
 	// upwelling of its own: the turning of the planet that sends the water
 	// the wind drives off a shore goes to nothing there.
@@ -132,15 +131,21 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land. The current, the upwelling and the
 // water's temperature it works out on the way are kept on e: see Env.Cu.
-func (e *Env) currents(u, v [Phases][]float32) []float64 {
+// ocean is the gyres' equations for the ground (newFlow), or nil; s is the
+// reading's working memory, or nil (see Scratch).
+func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 
 	// The wind's stress on the sea, in newtons a square metre, from the year's
 	// mean wind; and the current it drifts the surface at.
-	tx, ty := make([]float64, n), make([]float64, n)
-	cu, cv := make([]float64, n), make([]float64, n)
+	// They are worked out in the first phase's memory, whose wind is worked out by
+	// now; what of it they do not take is let go of. See Scratch.
+	all := s.phaseWork(0)
+	all.drop(slotStressX, slotCurrentV+1)
+	tx, ty := all.floats(slotStressX, n), all.floats(slotStressY, n)
+	cu, cv := all.floats(slotCurrentU, n), all.floats(slotCurrentV, n)
 	for i := range n {
 		var mu, mv float64
 		for k := range Phases {
@@ -168,8 +173,9 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// read as a current of metres a second. The models of the ocean and the
 	// air on a grid of parallels filter their rows near the poles for the
 	// same reason (Arakawa and Lamb, 1977).
-	psi := e.gyres(tx, ty)
-	thermo := e.thermocline(psi, tx)
+	psi := e.gyres(tx, ty, ocean, s)
+	thermo := e.thermocline(psi, tx, all)
+	gu, gv := all.floats(slotGyreU, n), all.floats(slotGyreV, n)
 	widest := 0.0
 	for _, dx := range e.Dx {
 		widest = math.Max(widest, dx)
@@ -188,18 +194,21 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
 			layer := math.Max(flowLeast, thermo[i])
-			cu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / layer
-			cv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / layer
+			gu[i] = -(psi[up*e.W+cx] - psi[down*e.W+cx]) / dy / layer
+			gv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / layer
 		}
 	}
-	e.Psi = make([]float32, n)
+	e.Psi = grow(e.Psi, n)
 	for i, p := range psi {
 		e.Psi[i] = float32(p / Sverdrup)
 	}
 	for i := range n {
+		if !wet(i) {
+			gu[i], gv[i] = 0, 0
+		}
 		mx, my := ekman(i, i/e.W)
-		cu[i] += mx / ekmanDepth
-		cv[i] += my / ekmanDepth
+		cu[i] = gu[i] + mx/ekmanDepth
+		cv[i] = gv[i] + my/ekmanDepth
 		if !wet(i) {
 			cu[i], cv[i] = 0, 0
 		}
@@ -209,11 +218,10 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 
 	// Upwelling: how fast, in metres a second, the water the wind drives off a
 	// shore, or the water its drift parts over in the open ocean, is replaced
-	// from under, and how cold what comes up is: the colder the shallower
-	// the thermocline under it.
-	rise := e.pumping(u, v)
-	deep := make([]float64, n)
-	land := make([]float64, n)
+	// from under; and sinking, how fast the water it drives onto a shore, or
+	// that its drifts meet over, is pressed down under the mixed layer.
+	rise, sink := e.pumping(u, v, all)
+	land := all.floats(slotLand, n)
 	for i := range land {
 		land[i] = 1 - e.Sea[i]
 	}
@@ -221,7 +229,6 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 		lat := e.lat[cy]
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
-			deep[i] = e.upwelled(cy, thermo[i])
 			if !wet(i) || math.Abs(lat) < upwellCalm {
 				continue
 			}
@@ -239,34 +246,55 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			// Near the equator the turning that sends the water off the
 			// shore goes to nothing, and what sends it there instead is the
 			// open ocean's business rather than a coast's.
+			w := off / math.Min(e.Dx[cy], e.Dy) * smoothstep(upwellCalm, upwellLow, math.Abs(lat))
 			if off > 0 {
-				rise[i] += off / math.Min(e.Dx[cy], e.Dy) * smoothstep(upwellCalm, upwellLow, math.Abs(lat))
+				rise[i] += w
+			} else {
+				sink[i] -= w
 			}
 		}
 	}
 
-	// The warmth of the water, where each cell's is what the water coming into
-	// it carries, what comes up from under, and the air's pull back toward the
-	// latitude's own, all in balance. One equation a cell, swept in the four
-	// orders a current can run in until it settles, the same as the air's
-	// moisture.
-	temp := make([]float64, n)
-	for i := range temp {
-		temp[i] = e.Mean[i/e.W]
+	// The warmth of the water, in its two layers: see slab.go. What the sea
+	// carries is handed to the energy balance, and the air over the sea is
+	// as much warmer or colder as that makes it.
+	temp := all.floats(slotWaterTemp, n)
+	deep := all.floats(slotDeep, n)
+	done := phase.Start("airEnv.slab")
+	// The coupled round's solve starts from where the first left the sea,
+	// under a wind a little changed (#28): it solves for the round's
+	// correction only.
+	var was *seaSlab
+	var from []float64
+	if ocean != nil {
+		was, from = ocean.slab, ocean.sea
 	}
-	depth, relax := make([]float64, e.H), make([]float64, e.H)
-	for cy := range depth {
-		depth[cy] = mixedTropic + (mixedPolar-mixedTropic)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
-		relax[cy] = seaExchange / (seaHeat * depth[cy])
+	slab := e.newSlab(was, gu, gv, rise, sink, thermo, func(i int) (east, north float64) { return ekman(i, i/e.W) })
+	slab.solve(temp, deep, s, from)
+	if ocean != nil {
+		ocean.slab = slab
+		ocean.sea = grow(ocean.sea, 2*n)
+		copy(ocean.sea, temp)
+		copy(ocean.sea[n:], deep)
 	}
-	// Each cell's equation does not change while it is solved - the currents,
-	// the coast and the upwelling are what they are - so where its water comes
-	// from and how hard is found once: the pull toward the latitude and up from
-	// under, the cell upstream along the row, and the cell upstream down the
-	// column, or across the diagonal where that is land. Land takes nothing.
-	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
-	sea.gaussSeidel(temp)
-	e.Cu, e.Cv, e.Rise, e.Thermocline = narrow(cu), narrow(cv), narrow(rise), narrow(thermo)
+	done()
+	e.Carried = slab.carried(temp, deep)
+	e.SeaHeat = e.seaHeat(e.Carried)
+	dq := e.SeaHeat
+	for k := range dq {
+		dq[k] -= e.circ.seaIn[k]
+	}
+	e.seaShift = e.circ.respond(&dq)
+	for cy := 0; cy < e.H; cy++ {
+		d := ebmRead(&e.seaShift, e.lat[cy])
+		for i := cy * e.W; i < (cy+1)*e.W; i++ {
+			if wet(i) {
+				temp[i] += d
+				deep[i] += d
+			}
+		}
+	}
+	e.Cu, e.Cv, e.Rise, e.Thermocline = narrowInto(e.Cu, cu), narrowInto(e.Cv, cv), narrowInto(e.Rise, rise), narrowInto(e.Thermocline, thermo)
 
 	// Water colder than seaIce is under ice, and the air over ice is not
 	// warmed by the water under it: there the sea is worth no more than its
@@ -275,11 +303,15 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// into the polar seas, and the polar lands beside them came out four
 	// degrees milder than their latitude under a sea that was ice (see
 	// terra.Grid.Freezing, which reads the same mean). The sea's own ice is
-	// M7's (docs/ocean-model-plan.md).
+	// M7's (docs/ocean-model-plan.md). Elsewhere the warmth is the water's
+	// temperature less its latitude's mean, as far from it as it stands: it
+	// used to be held to ten degrees either way, the Gulf Stream's over the
+	// water beside it at the Grand Banks, about the most the real world has,
+	// and that is now a reading the sea is held to (realism_ocean_test.go).
 	warm := make([]float64, n)
 	for i := range warm {
 		if wet(i) {
-			warm[i] = math.Max(-seaWarmMost, math.Min(seaWarmMost, temp[i]-e.Mean[i/e.W]))
+			warm[i] = temp[i] - e.Mean[i/e.W]
 			if temp[i] < seaIce {
 				warm[i] = math.Min(0, warm[i])
 			}
@@ -291,7 +323,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// the shore.
 	// The water's own temperature is given to the shore the same way; the
 	// land away from any sea keeps its latitude's mean.
-	shore := make([]float64, n)
+	shore := all.floats(slotShore, n)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -320,7 +352,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			warm[i] = s
 		}
 	}
-	e.WaterTemp = narrow(temp)
+	e.WaterTemp = narrowInto(e.WaterTemp, temp)
 	return warm
 }
 
@@ -333,213 +365,17 @@ func narrow(v []float64) []float32 {
 	return out
 }
 
-// seaRounds is the most rounds of sweeps, down the rows and back, the water's
-// warmth is given to settle, and seaSettled the change in degrees in a round
-// that is settled. A current along the rows carries its warmth the length of
-// an ocean, or round the planet, in a sweep; one across them a row a sweep.
-// Near the poles, where the air's pull on three hundred metres of water takes
-// more than a year and the currents go round in a few months, the warmth goes
-// round its gyre many times before it settles, and on a globe that has made
-// its history the rounds run out first, a hundredth of a degree or so short,
-// as they did before the gyres were solved in two dimensions. GMRES on the
-// equations, with the sweeps its preconditioner, took three times as long to
-// settle it.
-const (
-	seaRounds  = 40
-	seaSettled = 1e-3
-)
-
-// seaLinks is each cell's equation for the water's warmth,
-//
-//	take·t_i = base + wa·t_ja + wb·t_jb
-//
-// with ja and jb -1 where no water comes in that way, and take nought on land.
-type seaLinks struct {
-	w, h       int
-	base, take []float64
-	wa, wb     []float64
-	ja, jb     []int32
-	// up is ja as a column of its own row, or -1.
-	up []int32
-}
-
-// seaLinks writes each cell's equation down. It takes over deep for its own
-// take, since nothing reads it once the warmth is being solved, and writes
-// its base and weights to scratch of its own: the currents and the upwelling
-// are kept (Env.Cu). A cell's are the only ones it reads.
-func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
-	n := e.W * e.H
-	l := &seaLinks{
-		w: e.W, h: e.H,
-		base: make([]float64, n), take: deep,
-		wa: make([]float64, n), wb: make([]float64, n),
-		ja: make([]int32, n), jb: make([]int32, n),
+// narrowInto is narrow written over out where out is as long as v, as it is
+// where the currents are worked out again in a round of the coupled solve
+// (coupled.go): what the round before kept is not read again.
+func narrowInto(out []float32, v []float64) []float32 {
+	if len(out) != len(v) {
+		return narrow(v)
 	}
-	dy := e.Dy
-	for cy := 0; cy < e.H; cy++ {
-		for cx := 0; cx < e.W; cx++ {
-			i := cy*e.W + cx
-			l.ja[i], l.jb[i] = -1, -1
-			if e.Sea[i] <= 0.5 {
-				l.take[i] = 0
-				continue
-			}
-			r := rise[i] / depth[cy]
-			sum := relax[cy]*e.Mean[cy] + r*deep[i]
-			take := relax[cy] + r
-			a := math.Abs(cu[i]) / e.Dx[cy]
-			b := math.Abs(cv[i]) / dy
-			cvi := cv[i]
-			if a > 0 {
-				ux := cx - int(math.Copysign(1, cu[i]))
-				if e.Wrap || (ux >= 0 && ux < e.W) {
-					if j := e.at(ux, cy); e.Sea[j] > 0.5 {
-						take += a
-						l.ja[i], l.wa[i] = int32(j), a
-					}
-				}
-			}
-			// Toward the north is up the map, so water going north comes from
-			// the row below. The current runs along the coast, so where the cell
-			// behind it in the column is land, the water came round the corner:
-			// from the cell behind it across the diagonal, on the side the
-			// current comes from along the row.
-			if b > 0 {
-				if uy := cy + int(math.Copysign(1, cvi)); uy >= 0 && uy < e.H {
-					j := e.at(cx, uy)
-					if e.Sea[j] <= 0.5 && cu[i] != 0 {
-						j = e.at(cx-int(math.Copysign(1, cu[i])), uy)
-					}
-					if e.Sea[j] > 0.5 {
-						take += b
-						l.jb[i], l.wb[i] = int32(j), b
-					}
-				}
-			}
-			l.base[i], l.take[i] = sum, take
-		}
+	for i, x := range v {
+		out[i] = float32(x)
 	}
-	l.up = make([]int32, n)
-	for i, j := range l.ja {
-		l.up[i] = -1
-		if j >= 0 {
-			l.up[i] = j % int32(l.w)
-		}
-	}
-	return l
-}
-
-// gaussSeidel settles t in place, a row at a time, the rows swept north to
-// south and back. Along its row each cell's water comes from the cell east or
-// west of it, so the row's warmths given the rows either side are a chain, or
-// a ring of chains all the way round a parallel, solved exactly in one pass:
-// a current carries its warmth the length of an ocean, or round the planet,
-// in one, where swept a cell at a time in the four orders a current can run
-// in, the water going round a ring of sea took a round for each time round
-// it. Read from the round before (Jacobi), so that a round
-// could be spread over goroutines and vectors, the warmth moved a cell a
-// round: on a quarter globe that took 4.7 times the sweeps, was slower all
-// told, and settled on warmths up to 7.6 degrees apart. See
-// docs/perf/worklog.md.
-func (l *seaLinks) gaussSeidel(t []float64) {
-	c, g := make([]float64, l.w), make([]float64, l.w)
-	state := make([]int8, l.w)
-	stack := make([]int, 0, l.w)
-	// A row is swept again only while it, or a row either side, which is
-	// all a row's water comes from, changed by more than seaSettled in the
-	// round before: on a globe that has made its history, all but a few
-	// rows near the poles have settled within a few rounds.
-	moved, active := make([]bool, l.h), make([]bool, l.h)
-	for cy := range active {
-		active[cy] = true
-	}
-	for round := 0; round < seaRounds; round++ {
-		most := 0.0
-		clear(moved)
-		for k := 0; k < 2*l.h; k++ {
-			cy := k
-			if k >= l.h {
-				cy = 2*l.h - 1 - k
-			}
-			if !active[cy] {
-				continue
-			}
-			d := l.row(cy, t, c, g, state, stack)
-			most = math.Max(most, d)
-			if d >= seaSettled {
-				moved[cy] = true
-			}
-		}
-		if most < seaSettled {
-			return
-		}
-		for cy := range active {
-			active[cy] = moved[cy] || (cy > 0 && moved[cy-1]) || (cy < l.h-1 && moved[cy+1])
-		}
-	}
-}
-
-// row solves row cy's warmths exactly for the warmths of the rows either
-// side, and is the most any of them changed. Each cell's is c + g times the
-// warmth of the cell upstream of it along the row: each is found by walking
-// upstream to a cell already found, or to where no water comes in along the
-// row, or round a ring back to itself, where the ring's warmth is the one
-// that comes back to itself.
-func (l *seaLinks) row(cy int, t, c, g []float64, state []int8, stack []int) float64 {
-	row := cy * l.w
-	ts := t[row : row+l.w]
-	up := l.up[row : row+l.w]
-	for x := range l.w {
-		i := row + x
-		if l.take[i] == 0 {
-			state[x] = 2
-			continue
-		}
-		state[x] = 0
-		s := l.base[i]
-		if j := l.jb[i]; j >= 0 {
-			s += l.wb[i] * t[j]
-		}
-		c[x], g[x] = s/l.take[i], l.wa[i]/l.take[i]
-	}
-	most := 0.0
-	for x0 := range l.w {
-		if state[x0] == 2 {
-			continue
-		}
-		stack = stack[:0]
-		x := x0
-		for x >= 0 && state[x] == 0 {
-			state[x] = 1
-			stack = append(stack, x)
-			x = int(up[x])
-		}
-		if x >= 0 && state[x] == 1 {
-			// A ring: the warmth at x, carried round it, comes back as
-			// a + b times itself.
-			a, b := c[x], g[x]
-			for y := int(up[x]); y != x; y = int(up[y]) {
-				a += b * c[y]
-				b *= g[y]
-			}
-			v := a / (1 - b)
-			most = math.Max(most, math.Abs(v-ts[x]))
-			ts[x], state[x] = v, 2
-		}
-		for k := len(stack) - 1; k >= 0; k-- {
-			y := stack[k]
-			if state[y] == 2 {
-				continue
-			}
-			v := c[y]
-			if u := up[y]; u >= 0 {
-				v += g[y] * ts[u]
-			}
-			most = math.Max(most, math.Abs(v-ts[y]))
-			ts[y], state[y] = v, 2
-		}
-	}
-	return most
+	return out
 }
 
 // coastal is the sea's warmth as the country round each cell feels it: the
@@ -627,18 +463,9 @@ func (w *Winds) WaterTempAt(i int) float64 {
 	return w.Sample32(w.WaterTemp, fx, fy)
 }
 
-// ThermoclineAt is terra.Grid.Thermocline for a tile of the map.
-func (w *Winds) ThermoclineAt(i int) float64 {
-	if w.Thermocline == nil {
-		return 0
-	}
-	fx, fy := w.CellAt(i)
-	return w.Sample32(w.Thermocline, fx, fy)
-}
-
 // WaterWarmth is how many degrees the water over tile i stands over the mean
-// of its latitude: SeaWarmth before it is held to seaWarmMost. It is nothing
-// where there is no water worked out.
+// of its latitude: SeaWarmth, where the water is not under ice. It is
+// nothing where there is no water worked out.
 func (w *Winds) WaterWarmth(i int) float64 {
 	if w.WaterTemp == nil {
 		return 0
@@ -735,4 +562,13 @@ func (e *Env) Corners(i int) (cells [4]int, weights [4]float64) {
 	x, y := int(x0), int(y0)
 	return [4]int{e.at(x, y), e.at(x+1, y), e.at(x, y+1), e.at(x+1, y+1)},
 		[4]float64{(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty}
+}
+
+// ThermoclineAt is terra.Grid.Thermocline for a tile of the map.
+func (w *Winds) ThermoclineAt(i int) float64 {
+	if w.Thermocline == nil {
+		return 0
+	}
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.Thermocline, fx, fy)
 }

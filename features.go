@@ -23,7 +23,10 @@ import (
 // the history left; a climate region is a run of Köppen's one letter; a
 // current, a gyre and an upwelling are the sea's own current, the way it
 // turns and where it comes up, as the weather worked them out (see
-// features_sea.go); a wood is the forest the cover left standing. The
+// features_sea.go); a wood is the forest the cover left standing; a
+// subtropical high is the ground and sea the Hadley cell's air comes down
+// over, as the air's circulation worked it out (see
+// atmos.Env.Subsides). The
 // registry joins, and invents nothing.
 //
 // Ids are deterministic: each kind's features are numbered in the order of
@@ -67,10 +70,17 @@ const (
 	// Woodland is connected forest, joined eight ways: a wood as the woods
 	// stand when the registry is read.
 	Woodland
+	// SubtropicalHigh is the band of ground and sea, one a hemisphere, the
+	// Hadley cell's air comes down over faster than highFloor on the year's
+	// mean: the horse latitudes, the Azores and the St Helena highs taken
+	// round the planet, as the air's circulation lays them (see
+	// atmos.Env.Subsides). Its Flow is the mean descent over it, metres a
+	// second at 500 hPa. Globes only, as the currents are.
+	SubtropicalHigh
 	featureKinds
 )
 
-var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region", "sea current", "gyre", "upwelling", "woodland"}
+var featureKindNames = [featureKinds]string{"none", "uplift belt", "drainage basin", "lake", "plate", "climate region", "sea current", "gyre", "upwelling", "woodland", "subtropical high"}
 
 func (k FeatureKind) String() string {
 	if int(k) < len(featureKindNames) {
@@ -166,6 +176,11 @@ type Features struct {
 	plate                [plateCap]FeatureID
 	// wood is each tile's woodland, or 0.
 	wood []FeatureID
+	// high is each tile's subtropical high, or 0, and descent each tile's
+	// year's mean descent, metres a second: nil where there is no sea
+	// worked out. descent is kept only while the relations are read.
+	high    []FeatureID
+	descent []float64
 	// current, gyre and upwell are each tile's feature of those kinds as its
 	// place among its kind's features, from 1, or 0; its id is that place
 	// past the kind's seaBase. The sea's features are few, and a place is
@@ -257,6 +272,10 @@ func (g *Grid) featureAt(i int, k FeatureKind) FeatureID {
 	case Woodland:
 		if i < len(f.wood) {
 			return f.wood[i]
+		}
+	case SubtropicalHigh:
+		if i < len(f.high) {
+			return f.high[i]
 		}
 	}
 	return 0
@@ -390,6 +409,28 @@ func (g *Grid) readFeatures() {
 		return 0, g.Tiles[i].Terrain == Forest
 	}, func(fe *Feature, i int) { fe.Kind = Woodland })
 
+	// The subtropical highs: where the Hadley cell's air comes down, on the
+	// year's mean, faster than highFloor, joined where it touches - a band
+	// round the planet in each hemisphere, the descent being the zonal
+	// circulation's. Only where the sea's currents are worked out, as on a
+	// globe: a valley's air is read at one latitude.
+	if w := g.winds; w != nil && w.Cu != nil && w.W*w.Cell == g.W && w.H*w.Cell == g.H {
+		f.descent = make([]float64, n)
+		for i := range n {
+			f.descent[i] = w.DescentAt(i)
+		}
+		f.high = make([]FeatureID, n)
+		f.All, stack = g.components(f.All, f.high, stack, func(i int) (uint32, bool) {
+			if f.descent[i] < highFloor {
+				return 0, false
+			}
+			if g.air.Lat[i/g.W] < 0 {
+				return 1, true
+			}
+			return 0, true
+		}, func(fe *Feature, i int) { fe.Kind = SubtropicalHigh })
+	}
+
 	// Every feature's tiles, lowest first, out of one slice. A plate's are
 	// not listed.
 	for id := range f.All {
@@ -409,6 +450,7 @@ func (g *Grid) readFeatures() {
 	each(f.climate, tally)
 	f.eachSea(tally)
 	each(f.wood, tally)
+	each(f.high, tally)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			counts[f.lake[k]]++
@@ -436,14 +478,27 @@ func (g *Grid) readFeatures() {
 	each(f.climate, fill)
 	f.eachSea(fill)
 	each(f.wood, fill)
+	each(f.high, fill)
 	for i := range g.Tiles {
 		if k := g.lakeOf[i]; k >= 0 && int(k) < len(f.lake) && f.lake[k] > 0 {
 			fill(f.lake[k], i)
 		}
 	}
 
+	// Each high's mean descent.
+	for k := range f.All {
+		if fe := &f.All[k]; fe.Kind == SubtropicalHigh && fe.Count > 0 {
+			sum := 0.0
+			for _, t := range fe.Tiles {
+				sum += f.descent[t]
+			}
+			fe.Flow = sum / float64(fe.Count)
+		}
+	}
+
 	// What the features do to one another. See relations.go.
 	g.readRelations(f)
+	f.descent = nil
 
 	if namer != nil {
 		for id := range f.All {

@@ -57,6 +57,12 @@ func TestGrowthIsSlowerTowardThePoles(t *testing.T) {
 
 // A globe has a sea, its rivers reach it or a pole, and nothing but the
 // sea lies on the seam that its ground does not continue across.
+// poleBare is the least share of each polar row of the globe that is ice,
+// water or outcrop. G2 asked two-thirds, M1 a half; it is the stricter of
+// the two that the merged world passes (see the end of
+// TestAGlobeHasASeaItsRiversReach).
+const poleBare = 2.0 / 3
+
 func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe takes a second or two to make")
@@ -115,27 +121,19 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if poleward > 0 {
 		t.Errorf("%d river tiles run off the top or the bottom of the map", poleward)
 	}
-	// The poles grow no wood and no crop, all the way round, and most of the
-	// rows along them is bare: rock, water or ice.
-	//
-	// The first: this read one tile, the hundredth of the top row, and asked
-	// it to be rock, water or ice; it was ice, while the tiles three and nine
-	// hundred along it were open ground, a tundra under the balance's pole of
-	// some minus thirteen and a summer quarter a degree or two over freezing.
-	// When the air came to swing the energy balance's year (see
-	// atmos.Env.seasonTemp) the ground there came out a hundred metres higher,
-	// and open too.
-	//
-	// The second: the row is not all bare - the air's poles are some ten
-	// degrees too warm (see the realism gaps) and the land on them is open
-	// ground: main's first globe had 305 tiles of 1024 open along the north
-	// pole and 109 along the south. With the crust floating on its thickness
-	// (isostasy.go) the hundredth came out on one of them, in a row 74 in a
-	// hundred bare. Solving the gyres over the whole ocean at once rather
-	// than a row at a time (internal/atmos/flow.go, M1) moves the pole's
-	// rows' warmth too; both bars are kept on the merged world.
-	// On A and M together the north row read 0.63; with the soil's water
-	// (L1) it is 0.77 again.
+	// The poles are bare: no wood and no crop anywhere along either polar
+	// row, and most of each row ice, water or outcrop. This read one tile,
+	// (100, 0), and asked it to be rock, water or ice; but which tile of the
+	// pole's row is land is the plates' to say, and polar land whose summer
+	// comes over freezing is tundra, which is open ground. Three branches
+	// each moved that tile to tundra and loosened the check their own way:
+	// A1 (the balance's swing) to "no wood or crop on either row", M1 (the
+	// gyres solved over the whole ocean) to "each row at least half bare",
+	// and G2 (isostasy) to "each row at least two-thirds bare". The
+	// integration branch holds all of them at once, at the strictest share
+	// that passes on the merged world: see poleBare.
+	// On main, A and M together read the north row 0.63; with the soil's
+	// water (L1) it was 0.77 again.
 	for _, y := range []int{0, g.H - 1} {
 		bare := 0
 		for x := 0; x < g.W; x++ {
@@ -143,11 +141,13 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 			case Rock, Water, Ice:
 				bare++
 			case Forest, Field:
-				t.Fatalf("the pole at %d grows %v", x, tr)
+				t.Fatalf("the pole at %d of row %d grows %v", x, y, tr)
 			}
 		}
-		if share := float64(bare) / float64(g.W); share < 2.0/3 {
-			t.Fatalf("the pole's row %d is %.2f bare", y, share)
+		share := float64(bare) / float64(g.W)
+		t.Logf("the pole's row %d is %.0f%% bare", y, 100*share)
+		if share < poleBare {
+			t.Fatalf("the pole's row %d is %.0f%% bare, under %.0f%%", y, 100*share, 100*poleBare)
 		}
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of

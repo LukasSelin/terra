@@ -118,8 +118,10 @@ func continent(lat float64) *Grid {
 // wind there was the trades' less the monsoon's turn, offshore. The ITCZ on
 // the balance's energy flux equator goes further into the summer's
 // hemisphere - some six degrees on this planet of sea with one continent -
-// and draws the coast's air north across it. The monsoon worked out from
-// the heating, Gill's (1980), is a later step of the air's (#35).
+// and draws the coast's air north across it. The heating's own answer,
+// Gill's (1980), is added since #35 (see atmos's waves): on this continent
+// it reads the heat the land gives the air, and moves the turn by a few
+// tenths of a metre a second.
 func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 	g := continent(25)
 	g.weather()

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // The land's relations: see relations_land.go.
@@ -18,10 +20,11 @@ var landEnds = map[RelationKind][]FeatureKind{
 	Grows:      {ClimateRegion, Woodland},
 	Raises:     {CrustPlate, UpliftBelt},
 	DrainsInto: {DrainageBasin, SeaCurrent, Upwelling, Gyre},
+	Subsides:   {SubtropicalHigh, ClimateRegion},
 }
 
 // landUnits is the unit each of the land's relations carries.
-var landUnits = map[RelationKind]string{Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s"}
+var landUnits = map[RelationKind]string{Shadows: "mm", Fills: "m³/s", Grows: "share", Raises: "m", DrainsInto: "m³/s", Subsides: "mm/s"}
 
 // checkLandRelations fails t where one of g's land relations joins features
 // of kinds it does not join, carries the wrong unit or is under its floor,
@@ -70,6 +73,19 @@ func checkLandRelations(t *testing.T, g *Grid) map[RelationKind]int {
 		case DrainsInto:
 			if r.Quantity != from.Flow || float64(from.Count) < drainTiles {
 				t.Errorf("%+v: the basin's outlet carries %v", r, from.Flow)
+			}
+		case Subsides:
+			if r.Quantity < subsideFloor || r.Quantity > 1000*atmos.SubsideMost {
+				t.Errorf("%+v is under the floor or over the strongest descent", r)
+			}
+			under := 0
+			for _, i := range to.Tiles {
+				if g.featureAt(int(i), SubtropicalHigh) == from.ID {
+					under++
+				}
+			}
+			if under == 0 {
+				t.Errorf("%+v: no tile of the region is under the high", r)
 			}
 		}
 	}
@@ -165,13 +181,12 @@ func TestTheLandsRelations(t *testing.T) {
 }
 
 // The deserts are explained: on a made globe every dry climate region has a
-// recorded reason to be dry - the cold water off its coast (Dries) or a
-// range upwind of it (Shadows) - or is listed here as one that has none.
-// What is left is the dry country the subtropical high makes on its own,
-// which no feature does: the air sinking over the Sahara is the air's and
-// not a range's or a current's. The test fails only where a region of a
-// thousand tiles or more has no reason, which is a desert the size of a
-// country with nothing recorded for it.
+// recorded reason to be dry - the cold water off its coast (Dries), a range
+// upwind of it (Shadows), or the Hadley cell's air coming down over it under
+// a subtropical high (Subsides, since the air's circulation was worked out:
+// see atmos.Env.Subsides) - or is listed here as one that has none. The
+// test fails only where a region of a thousand tiles or more has no reason,
+// which is a desert the size of a country with nothing recorded for it.
 func TestTheDryRegionsAreExplained(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a globe; see docs/perf/suite.md")
@@ -197,18 +212,19 @@ func TestTheDryRegionsAreExplained(t *testing.T) {
 		var why []string
 		by := map[RelationKind]bool{}
 		for _, r := range f.RelationsOf(fe.ID) {
-			if r.To == fe.ID && (r.Kind == Dries || r.Kind == Shadows) {
+			if r.To == fe.ID && (r.Kind == Dries || r.Kind == Shadows || r.Kind == Subsides) {
 				why = append(why, fmt.Sprintf("%v by %v %d (%.3g %s)", r.Kind, g.Feature(r.From).Kind, r.From, r.Quantity, r.Unit))
 				by[r.Kind] = true
 			}
 		}
-		switch {
-		case by[Dries] && by[Shadows]:
-			ways["both"]++
-		case by[Dries]:
-			ways["dries alone"]++
-		case by[Shadows]:
-			ways["shadows alone"]++
+		var named []string
+		for _, k := range []RelationKind{Dries, Shadows, Subsides} {
+			if by[k] {
+				named = append(named, k.String())
+			}
+		}
+		if len(named) > 0 {
+			ways[strings.Join(named, "+")]++
 		}
 		lat := g.air.Lat[int(fe.First)/g.W]
 		if len(why) > 0 {

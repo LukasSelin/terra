@@ -290,6 +290,8 @@ func relationSentence(g *terra.Grid, r terra.Relation) string {
 		return fmt.Sprintf("%s %s %s, by as much as %s %s of the history's own", from, verb, to, num(math.Abs(r.Quantity)), r.Unit)
 	case terra.DrainsInto:
 		return fmt.Sprintf("%s drains into %s, %s %s at its mouth", from, to, sig(r.Quantity), r.Unit)
+	case terra.Subsides:
+		return fmt.Sprintf("%s subsides over %s: its air comes down at %s %s, and the lid it lays caps the rain", from, to, num(r.Quantity), r.Unit)
 	}
 	return fmt.Sprintf("%s %s %s: %s %s", from, r.Kind, to, num(r.Quantity), r.Unit)
 }
