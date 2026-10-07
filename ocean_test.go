@@ -272,6 +272,21 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 // up from under, is too cold to keep one: the eastern Pacific's storms die as
 // they come north toward California, where the western Pacific's go on to
 // Japan. The same storm over the same water with the currents left out lives.
+//
+// Known gap (A2 x M2): the water six degrees off the western shore at 18°N is
+// 26.0, under the 26.5 a storm needs. M2's pumping has the right sign: read
+// across the western half of the first ocean, the year's mean Ekman pumping
+// is down (-0.03 to -0.14 m/day) from 21.8°N to 38.7°N, under the subtropical
+// gyre between the trades and the westerlies, and up from 20.4°N to the
+// equator. It is up at 18°N (+0.044 m/day on the year's mean, +0.054 with the
+// phases' downwelling dropped) because A2's trades are strongest at 22°N,
+// where the earth's are at about 15, so the tropical band of cyclonic curl,
+// whose upwelling raises the earth's thermocline ridge at about 10°N, lies at
+// 9-20°N here; ψ is negative there, the thermocline rises to 44 m at 17.6°N
+// and to its floor, 10 m, at 16°N and below, and what comes up is 16-17°C.
+// That makes the water 0.6 under the latitude's mean where the warm western
+// water should be. The remedies are A2's - the trades' maximum where the
+// earth's is - and the thermocline ridge's depth (M3, #22), not the sign.
 func TestAStormDiesOverTheColdCurrent(t *testing.T) {
 	// A storm is set down on the water a degree off the eastern shore, and
 	// six off the western, so that a day of the trades that steer it leaves
