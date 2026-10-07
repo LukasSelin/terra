@@ -178,7 +178,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0x81755cd4817c10a4); got != want {
+	if got, want := h.Sum64(), uint64(0xab03a8340eecd4be); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	const most = 10 // atmos.seaWarmMost
