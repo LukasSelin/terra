@@ -3620,7 +3620,14 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 // flood's depth of the water it drained into and off every shore, whatever
 // the rivers brought or did not: four hundred metres an epoch on the land and
 // two hundred off a coast, on ground the weather laid nothing on and on
-// ground it laid kilometres on alike.
+// ground it laid kilometres on alike. Off the shores it is what the shelves
+// lay now. On the land the floodplains keep fillRate as the least they are
+// given, and are given more where the weather laid more: a history's wear
+// takes its ground down by its relief and lays nothing on ground that drains
+// (denude.go), so its floodplains are never filled by it, and without their
+// soft beds the low country, worn as basement, stood twice as high over its
+// sea (the lowest quarter of a globe's land at 470 m against 140, the earth's
+// 179). That is a gap in the wear, which keeps no alluvium, and not a fill.
 func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, worn []float64) {
 	defer phase.Start("keepBook")()
 	g.piles()
@@ -3630,7 +3637,7 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 	// was laid on the land.
 	var away []float64
 	for i := range g.Tiles {
-		if landed[i] > 0 && g.Height[i] > sea {
+		if (landed[i] > 0 || g.Drain[i] < FloodDepth/2) && g.Height[i] > sea {
 			away = g.awayFrom(func(j int) bool { return worn[j] > 0 && g.Height[j] > sea })
 			break
 		}
@@ -3660,6 +3667,9 @@ func (g *Grid) keepBook(book []record, epoch int, landed, shelved []float32, wor
 		// rock made of what fell on it dates from now: a bed as thick as what
 		// was laid, coarse or fine as the water sorted it on the way.
 		laid := float64(landed[i])
+		if g.Drain[i] < FloodDepth/2 {
+			laid = math.Max(laid, fillRate*epochYears)
+		}
 		if laid <= 0 {
 			continue
 		}
