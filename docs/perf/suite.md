@@ -95,3 +95,15 @@ Since 2026-09-16 a world a test only needs, and not the making of, comes
 through `madeLand` (`histories_test.go`), which keeps its history in
 `.cache/histories` keyed by the package's source. A second run with no
 change outside the tests took 187 s against 375 s. See the work log.
+
+## Yardsticks read over seeds
+
+Since 2026-10-07 the river and relief yardsticks that a history's chaos
+moves are read over seeds with an interval (`spread_test.go`,
+[../yardsticks.md](../yardsticks.md)). They read the sixteen small globes
+and the three full globes the suite already made; the resolution
+yardsticks read eight double globes where they read four, which is four
+more worlds of 512x256, about 20 s each to make. `go test -run
+'TestRealNumbers|TestTheRealWorld' -count=1 -timeout 60m .` on 2c51bea with
+every history kept: 79.9 s before, 100.4 s after; a run that makes every
+world anew adds the four doubles, some 80 s.

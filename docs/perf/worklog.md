@@ -6,6 +6,43 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Yardsticks read over seeds (#76)
+
+**What this is.** On `claude/robust-yardsticks`, from `main` at 2c51bea.
+Tests and docs only: `TERRA_DIGEST=check` passes, and no world moves.
+
+**What was measured.** Each river and relief yardstick that the
+Earth-system branches swapped between pass and fail was read seed by seed
+over the worlds the suite already makes: sixteen small globes, three full
+globes, and the double and single small globes of the resolution
+yardsticks. That gives each reading's scatter from one seed to the next,
+and the jackknife standard error of the pooled reading over the seeds it
+used to read. Some of them scatter by more than their whole band from one
+globe to the next. The small globes' concavity reads −0.28 to 0.58, and one
+basin's exceedance exponent scatters by 0.12 against a band of 0.07.
+[../yardsticks.md](../yardsticks.md) has the table.
+
+**What changed.**
+- Those yardsticks read the median of the seeds, with a distribution-free
+  interval. Hack's exponent and Flint's R² read the pooled fit, with a
+  jackknife interval. Each fails only when its interval lies wholly outside
+  the band.
+- Five whose interval is wider than their band at any affordable seed count
+  are advisory: the two exceedance exponents, the small globes' concavity,
+  Flint's R², and the concavity's 2x−1x difference.
+- `resolutionSeeds` goes from 4 to 8, so that the Hack exponent's 2x−1x
+  difference gates.
+
+**What it bought.**
+- Main's yardstick failures go from eight to four. The four left are the
+  climate's and the soils' (the midlatitude rain, the 2x land rain, the
+  Aridisols, the Gelisols).
+- On #73 and #75, the gating readings call neither branch better or worse
+  than main. Pooled, they had swapped four readings and six.
+- Time, with every history kept: `TestRealNumbers|TestTheRealWorld` took
+  79.9 s before and 100.4 s after. Making every world anew costs some 80 s
+  more for the four double globes. See [suite.md](suite.md).
+
 ## 2026-10-06 - Two short-tier tests that read the draw
 
 **What this is.** On `claude/affectionate-roentgen-ccfb0d`, from `main` at
