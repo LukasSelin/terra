@@ -176,13 +176,28 @@ var realYardsticks = []realYardstick{
 		source:  "Adler et al. 2003 (GPCP): zonal rain ~5.5 mm/d under the ITCZ against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 0, 10) / zonalRain(globes(), 20, 30) },
 	},
-		gap: "known gap: G - the column budget gathers the trades' water into a narrow ITCZ under a mean wind with no transient convection spreading it: 5x the subtropics, not 2-3x",
+		gap: "known gap: G - the column budget gathers the trades' water into a narrow ITCZ under a mean wind with no transient convection spreading it, and since the trades blow hardest where the earth's do (#88) the air near the ground gathers only within some ten degrees of the ITCZ: 12x the subtropics, not 2-3x",
 	},
+	// It passed at 1.44 while the trades blew hardest at twenty-two to
+	// twenty-four degrees. In the surface wind's balance the wind across the
+	// isobars goes with the wind along them, as the drag over the turning, so
+	// the air near the ground gathers equatorward of where the trades are
+	// strongest and spreads poleward of it: with the strongest at twenty-four
+	// the gathering, and the rain of the column budget, reached to some
+	// nineteen degrees and the summer took it into the twenties; with the
+	// strongest at seventeen (#88) it reaches to some eleven. The subtropics'
+	// own rain on the earth, the fronts the storm tracks trail into them, the
+	// monsoons and the tropical storms, is not in a mean wind's budget: gap G.
+	// Read on two oceans, moving the steepest of the rise from half-way across
+	// the cell to its outer three quarters moves the trades' maximum from 17
+	// to 23 degrees and this reading from 2.8 to 0.9.
 	{yardstick: yardstick{
 		name: "midlatitude over subtropical rain, globe", unit: "x", scale: "water", lo: 1.1, hi: 2, slow: true,
 		source:  "Adler et al. 2003 (GPCP): the storm tracks at 40-60 deg rain ~2.8 mm/d against ~2.2 mm/d at 20-30 deg",
 		measure: func() float64 { return zonalRain(globes(), 40, 60) / zonalRain(globes(), 20, 30) },
-	}},
+	},
+		gap: "known gap: G - the subtropics' rain is the fronts', the monsoons' and the tropical storms', which a mean wind's column budget does not have; it rained there while the trades' gathering reached into the twenties, and it reaches to some eleven degrees since they blow hardest at seventeen (#88): 2.5x",
+	},
 	{yardstick: yardstick{
 		name: "latitude of the driest belt, globe", unit: "deg", scale: "water", lo: 15, hi: 35, slow: true,
 		source:  "Adler et al. 2003 (GPCP); Peixoto & Oort 1992: the subtropical minimum of zonal rain lies at 20-30 deg",

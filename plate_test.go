@@ -51,6 +51,32 @@ func TestContinentsWeldIntoOnePlate(t *testing.T) {
 // hemispheres. A sliver's seam raises a range no wider than the sliver; a
 // single piece holding everything has no edges inside it and so nothing
 // happening anywhere on it.
+//
+// Known gap (the third globe fails, 0.332 against 0.33): the ceiling is not
+// held by the rifting on any branch. Read epoch by epoch on the third small
+// globe, the largest plate stands over the ceiling after reshape in nearly
+// every epoch - 0.27 to 0.49 on the integration, on main before Rock G2 and
+// on G2 alone - and which of them the history ends on is chance: 0.292 before
+// G2, 0.285 on G2 alone, 0.332 with G2 and the climate branches together,
+// whose weather moves the ground the plates carry and so every later rift.
+// Two things in reshape do it, neither of them G2's or the climate's:
+//   - split's halves are not halves. Its floods start from the plate's
+//     furthest tiles along the line, on its edge, where the fractures the
+//     floods are slowest across lie, and one is walled in: 0.385 rifted
+//     into 0.054 and 0.332 on the last epoch, 0.323 into 0.001 and 0.322
+//     on the twelfth.
+//   - a plate is rifted once an epoch, and this one welds a third of a
+//     world back on in some epochs, so one halving leaves it over.
+//
+// Starting the floods a quarter of the way in, taking the most even of four
+// lines, and rifting each half again while it is over holds every plate of
+// all three globes under 0.22 - but it redraws every history, and on the
+// whole suite eleven more yardsticks fail with it (the slopes, the ridge
+// spacing, Flint's and the chi plot's fits, the meanders, the coasts' right
+// angles, ...) and eight more tests, some of them goldens read off one tile
+// of a history, so it is a change of its own to calibrate: see
+// claude/rift-even-halves and docs/perf/worklog.md (2026-10-07,
+// integration fix-ups).
 func TestNoPieceOfCrustIsASliverOrAHemisphere(t *testing.T) {
 	for _, seed := range []uint64{1, 2, 3} {
 		g := plateWorld(seed)

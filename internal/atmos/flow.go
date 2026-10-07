@@ -129,6 +129,10 @@ type flow struct {
 	shift float64
 
 	levels []*level
+	// last is the unknowns of the last solve of these equations, which the
+	// next starts from: the coupled solve (coupled.go) works the gyres out
+	// again under a wind a little changed.
+	last []float64
 }
 
 // level is the equations at one coarseness: the unknowns of the cells, row
@@ -154,12 +158,19 @@ type level struct {
 
 // gyres is the transport streamfunction ψ, in cubic metres a second, under
 // the wind's stress tx, ty in newtons a square metre, on every cell: on land
-// it is the level of the landmass. It is for a globe only.
-func (e *Env) gyres(tx, ty []float64) []float64 {
+// it is the level of the landmass. It is for a globe only. f is the
+// equations newFlow wrote down for the ground, or nil to write them now.
+//
+// Its solve keeps its vectors in what s lends it, where s is not nil: see
+// Scratch.lend.
+func (e *Env) gyres(tx, ty []float64, f *flow, s *Scratch) []float64 {
 	defer phase.Start("airEnv.gyres")()
-	f := e.newFlow()
-	x := f.solve(f.forcing(tx, ty))
-	return f.spread(x)
+	if f == nil {
+		f = e.newFlow()
+	}
+	all := s.phaseWork(0)
+	x := f.solve(f.forcing(tx, ty, all.floats(slotForcing, f.levels[0].n)), s)
+	return f.spread(x, all.floats(slotPsi, f.n))
 }
 
 // newFlow labels the landmasses and writes down the equations at every
@@ -276,8 +287,7 @@ func (f *flow) label() {
 
 // spread lays the unknowns x out over the map as ψ: the sea's own, each
 // island's level on its cells, and nought on the mainland.
-func (f *flow) spread(x []float64) []float64 {
-	psi := make([]float64, f.n)
+func (f *flow) spread(x, psi []float64) []float64 {
 	for i, u := range f.unknown {
 		if u >= 0 {
 			psi[i] = x[u]
@@ -688,7 +698,8 @@ func (f *flow) precondition(r, z []float64) {
 // island, as the right side of the equations: the wind's pull round the
 // cell's edges, each edge taking the stress of the sea beside it so that the
 // wind over the land, slowed by it, is not read as a turning at the coast.
-func (f *flow) forcing(tx, ty []float64) []float64 {
+// It is written to b, as many as the finest level has unknowns, all nought.
+func (f *flow) forcing(tx, ty, b []float64) []float64 {
 	e, w, h := f.e, f.w, f.h
 	wet := func(i int) bool { return f.mass[i] < 0 }
 	face := func(t []float64, i, j int) float64 {
@@ -700,7 +711,6 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 		}
 		return (t[i] + t[j]) / 2
 	}
-	b := make([]float64, f.levels[0].n)
 	for cy := 0; cy < h; cy++ {
 		row := cy * w
 		north := f.wn[cy] * e.Dy // the length of the row's northern edge
@@ -725,9 +735,32 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 	return b
 }
 
-// solve is x with A x = b, to flowSettled of b.
-func (f *flow) solve(b []float64) []float64 {
-	x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost)
+// solve is x with A x = b, to flowSettled of b. Where the equations were
+// solved before, it is solved for what that answer leaves of b, held to the
+// same flowSettled of b itself, and added to it. The solve's vectors are what
+// s lends (Scratch.lend), and so is the x it gives back; the answer the next
+// solve starts from is kept in f's own memory.
+func (f *flow) solve(b []float64, s *Scratch) []float64 {
+	room := s.lend(gmresRoom(flowRestart), len(b))
+	if f.last == nil {
+		x, _, _ := gmres(b, f.apply, f.precondition, flowSettled, flowRestart, flowMost, room)
+		f.last = append([]float64(nil), x...)
+		return x
+	}
+	r := s.phaseWork(0).floats(slotFlowRest, len(b))
+	f.apply(f.last, r)
+	for i := range r {
+		r[i] = b[i] - r[i]
+	}
+	settled := flowSettled
+	if rn := norm(r); rn > 0 {
+		settled = math.Min(1, flowSettled*norm(b)/rn)
+	}
+	x, _, _ := gmres(r, f.apply, f.precondition, settled, flowRestart, flowMost, room)
+	for i := range x {
+		x[i] += f.last[i]
+	}
+	copy(f.last, x)
 	return x
 }
 

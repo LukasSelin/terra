@@ -81,7 +81,7 @@ func TestGMRESSettles(t *testing.T) {
 	for i := range b {
 		b[i] = math.Sin(float64(i))
 	}
-	x, done, res := gmres(b, apply, func(in, out []float64) { copy(out, in) }, 1e-10, 10, 200)
+	x, done, res := gmres(b, apply, func(in, out []float64) { copy(out, in) }, 1e-10, 10, 200, nil)
 	r := make([]float64, n)
 	apply(x, r)
 	for i := range r {

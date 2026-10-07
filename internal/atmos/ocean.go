@@ -132,15 +132,21 @@ const (
 // each cell's warmth: how many degrees the sea there stands over the mean of
 // its latitude, and nothing on land. The current, the upwelling and the
 // water's temperature it works out on the way are kept on e: see Env.Cu.
-func (e *Env) currents(u, v [Phases][]float32) []float64 {
+// ocean is the gyres' equations for the ground (newFlow), or nil; s is the
+// reading's working memory, or nil (see Scratch).
+func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 
 	// The wind's stress on the sea, in newtons a square metre, from the year's
 	// mean wind; and the current it drifts the surface at.
-	tx, ty := make([]float64, n), make([]float64, n)
-	cu, cv := make([]float64, n), make([]float64, n)
+	// They are worked out in the first phase's memory, whose wind is worked out by
+	// now; what of it they do not take is let go of. See Scratch.
+	all := s.phaseWork(0)
+	all.drop(slotStressX, slotCurrentV+1)
+	tx, ty := all.floats(slotStressX, n), all.floats(slotStressY, n)
+	cu, cv := all.floats(slotCurrentU, n), all.floats(slotCurrentV, n)
 	for i := range n {
 		var mu, mv float64
 		for k := range Phases {
@@ -168,8 +174,8 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// read as a current of metres a second. The models of the ocean and the
 	// air on a grid of parallels filter their rows near the poles for the
 	// same reason (Arakawa and Lamb, 1977).
-	psi := e.gyres(tx, ty)
-	thermo := e.thermocline(psi, tx)
+	psi := e.gyres(tx, ty, ocean, s)
+	thermo := e.thermocline(psi, tx, all)
 	widest := 0.0
 	for _, dx := range e.Dx {
 		widest = math.Max(widest, dx)
@@ -192,7 +198,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			cv[i] = (psi[e.at(cx+reach, cy)] - psi[e.at(cx-reach, cy)]) / (2 * float64(reach) * dx) / layer
 		}
 	}
-	e.Psi = make([]float32, n)
+	e.Psi = grow(e.Psi, n)
 	for i, p := range psi {
 		e.Psi[i] = float32(p / Sverdrup)
 	}
@@ -211,9 +217,9 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// shore, or the water its drift parts over in the open ocean, is replaced
 	// from under, and how cold what comes up is: the colder the shallower
 	// the thermocline under it.
-	rise := e.pumping(u, v)
-	deep := make([]float64, n)
-	land := make([]float64, n)
+	rise := e.pumping(u, v, all)
+	deep := all.floats(slotDeep, n)
+	land := all.floats(slotLand, n)
 	for i := range land {
 		land[i] = 1 - e.Sea[i]
 	}
@@ -250,7 +256,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// latitude's own, all in balance. One equation a cell, swept in the four
 	// orders a current can run in until it settles, the same as the air's
 	// moisture.
-	temp := make([]float64, n)
+	temp := all.floats(slotWaterTemp, n)
 	for i := range temp {
 		temp[i] = e.Mean[i/e.W]
 	}
@@ -264,9 +270,9 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// from and how hard is found once: the pull toward the latitude and up from
 	// under, the cell upstream along the row, and the cell upstream down the
 	// column, or across the diagonal where that is land. Land takes nothing.
-	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
+	sea := e.seaLinks(cu, cv, rise, deep, depth, relax, all)
 	sea.gaussSeidel(temp)
-	e.Cu, e.Cv, e.Rise, e.Thermocline = narrow(cu), narrow(cv), narrow(rise), narrow(thermo)
+	e.Cu, e.Cv, e.Rise, e.Thermocline = narrowInto(e.Cu, cu), narrowInto(e.Cv, cv), narrowInto(e.Rise, rise), narrowInto(e.Thermocline, thermo)
 
 	// Water colder than seaIce is under ice, and the air over ice is not
 	// warmed by the water under it: there the sea is worth no more than its
@@ -291,7 +297,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// the shore.
 	// The water's own temperature is given to the shore the same way; the
 	// land away from any sea keeps its latitude's mean.
-	shore := make([]float64, n)
+	shore := all.floats(slotShore, n)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -320,13 +326,26 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			warm[i] = s
 		}
 	}
-	e.WaterTemp = narrow(temp)
+	e.WaterTemp = narrowInto(e.WaterTemp, temp)
 	return warm
 }
 
 // narrow is v in single precision.
 func narrow(v []float64) []float32 {
 	out := make([]float32, len(v))
+	for i, x := range v {
+		out[i] = float32(x)
+	}
+	return out
+}
+
+// narrowInto is narrow written over out where out is as long as v, as it is
+// where the currents are worked out again in a round of the coupled solve
+// (coupled.go): what the round before kept is not read again.
+func narrowInto(out []float32, v []float64) []float32 {
+	if len(out) != len(v) {
+		return narrow(v)
+	}
 	for i, x := range v {
 		out[i] = float32(x)
 	}
@@ -365,14 +384,15 @@ type seaLinks struct {
 
 // seaLinks writes each cell's equation down. It takes over deep for its own
 // take, since nothing reads it once the warmth is being solved, and writes
-// its base and weights to scratch of its own: the currents and the upwelling
-// are kept (Env.Cu). A cell's are the only ones it reads.
-func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
+// its base and weights to scratch of its own, in all's slots (see Scratch):
+// the currents and the upwelling are kept (Env.Cu). A cell's are the only
+// ones it reads.
+func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64, all *work) *seaLinks {
 	n := e.W * e.H
 	l := &seaLinks{
 		w: e.W, h: e.H,
-		base: make([]float64, n), take: deep,
-		wa: make([]float64, n), wb: make([]float64, n),
+		base: all.floats(slotLinkBase, n), take: deep,
+		wa: all.floats(slotLinkA, n), wb: all.floats(slotLinkB, n),
 		ja: make([]int32, n), jb: make([]int32, n),
 	}
 	dy := e.Dy

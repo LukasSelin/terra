@@ -195,12 +195,16 @@ type vapourCell struct {
 	share             [4]float64
 }
 
-// vapour settles one phase's budget.
-func (e *Env) vapour(in vapourIn) vapourOut {
+// vapour settles one phase's budget, worked out in wk (see Scratch). What it
+// gives back is its own.
+func (e *Env) vapour(in vapourIn, wk *work) vapourOut {
 	defer phase.Start("airEnv.vapour")()
 	n := e.W * e.H
 	dy := e.Dy
-	f := e.vapourFluxes(in.u, in.v)
+	f := e.vapourFluxes(in.u, in.v, wk)
+	// What the fluxes were worked out through is done with, and what of it
+	// the sweeps do not take is let go of: see Scratch.
+	wk.let(slotRateBlur, slotChi, slotGx, slotGy, slotBoxMid)
 	east, north, gather := f.east, f.north, f.gather
 	westOf, southOf := f.westOf, f.southOf
 
@@ -209,11 +213,11 @@ func (e *Env) vapour(in vapourIn) vapourOut {
 	// gathering; its neighbours upwind are read as the sweeps go.
 	// Each is laid out in a vapourCell, so that a visit reads one run of
 	// memory.
-	cells := make([]vapourCell, n)
-	seaA := make([]float64, n)  // the sea's evaporation at W of nothing, kg/m²/s
-	seaB := make([]float64, n)  // and what each kg/m² of W takes off it, a second
-	satW := make([]float64, n)  // the saturated column
-	rainK := make([]float64, n) // what of the column's rain the air keeps
+	cells := wk.vapourCells(n)
+	seaA := wk.floats(slotSeaA, n)   // the sea's evaporation at W of nothing, kg/m²/s
+	seaB := wk.floats(slotSeaB, n)   // and what each kg/m² of W takes off it, a second
+	satW := make([]float64, n)       // the saturated column
+	rainK := wk.floats(slotRainK, n) // what of the column's rain the air keeps
 	for cy := 0; cy < e.H; cy++ {
 		area := e.Dx[cy] * dy
 		for cx := 0; cx < e.W; cx++ {
@@ -464,10 +468,12 @@ func (e *Env) zonalCorrection(w []float64, cells []vapourCell, oro, satW []float
 // cell, read against layerDepth: over high ground less air goes. Of that flux
 // the water near the ground goes with all of it, and the water above with the
 // part that does not gather (see the remark at the top).
-func (e *Env) vapourFluxes(u, v []float32) vapourFlux {
+//
+// It is worked out in wk, and its fields live there: see Scratch.
+func (e *Env) vapourFluxes(u, v []float32, wk *work) vapourFlux {
 	n := e.W * e.H
 	dy := e.Dy
-	east, north := make([]float64, n), make([]float64, n)
+	east, north := wk.floats(slotEast, n), wk.floats(slotNorth, n)
 	carry := func(i int, s []float32) float64 { return float64(s[i]) * e.depth[i] / layerDepth }
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
@@ -510,7 +516,7 @@ func (e *Env) vapourFluxes(u, v []float32) vapourFlux {
 		}
 	}
 	// What leaves each cell through its faces, net, in m²/s.
-	div := make([]float64, n)
+	div := wk.floats(slotDiv, n)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -521,16 +527,16 @@ func (e *Env) vapourFluxes(u, v []float32) vapourFlux {
 	// ground goes up and rains out, and what is left at the scale of a cell -
 	// the air squeezed round a hill, or hurried off the edge of a valley -
 	// which goes round rather than up, the whole column with it.
-	rate := make([]float64, n)
+	rate := wk.floats(slotRate, n)
 	for cy := 0; cy < e.H; cy++ {
 		area := e.Dx[cy] * dy
 		for cx := 0; cx < e.W; cx++ {
 			rate[cy*e.W+cx] = div[cy*e.W+cx] / area
 		}
 	}
-	rate = e.blur(rate, synopticReach)
-	gather := make([]float64, n)
-	remove := make([]float64, n)
+	rate = e.blurIn(wk, slotRateBlur, rate, synopticReach)
+	gather := wk.floats(slotGather, n)
+	remove := wk.floats(slotRemove, n)
 	for cy := 0; cy < e.H; cy++ {
 		area := e.Dx[cy] * dy
 		for cx := 0; cx < e.W; cx++ {
@@ -540,7 +546,7 @@ func (e *Env) vapourFluxes(u, v []float32) vapourFlux {
 			gather[i] = convLayer * math.Max(0, -rate[i])
 		}
 	}
-	gx, gy := e.gatheringFlux(remove)
+	gx, gy := e.gatheringFlux(remove, wk)
 	for i := range east {
 		east[i] -= gx[i]
 		north[i] -= gy[i]
@@ -591,7 +597,9 @@ func (f vapourFlux) southOf(cx, cy int) float64 {
 // On a globe whose rows are a power of two cells round, each row is taken to
 // its Fourier modes and each mode solved down the column exactly; a valley's
 // few cells are relaxed.
-func (e *Env) gatheringFlux(div []float64) (gx, gy []float64) {
+//
+// It is worked out in wk, and gx and gy live there: see Scratch.
+func (e *Env) gatheringFlux(div []float64, wk *work) (gx, gy []float64) {
 	n := e.W * e.H
 	dy := e.Dy
 	var mean float64
@@ -609,9 +617,9 @@ func (e *Env) gatheringFlux(div []float64) (gx, gy []float64) {
 			cn[cy] = 0.5 * (e.Dx[cy] + e.Dx[cy-1]) / dy
 		}
 	}
-	chi := make([]float64, n)
+	chi := wk.floats(slotChi, n)
 	if e.Wrap && kernel.PowerOfTwo(e.W) && e.H > 1 {
-		rows := make([]complex128, n)
+		rows := wk.complexes(n)
 		for i, d := range div {
 			rows[i] = complex(d-mean, 0)
 		}
@@ -655,7 +663,7 @@ func (e *Env) gatheringFlux(div []float64) (gx, gy []float64) {
 	} else {
 		e.relaxPotential(chi, div, mean, cx, cn)
 	}
-	gx, gy = make([]float64, n), make([]float64, n)
+	gx, gy = wk.floats(slotGx, n), wk.floats(slotGy, n)
 	for cy := 0; cy < e.H; cy++ {
 		for c := 0; c < e.W; c++ {
 			i := cy*e.W + c
