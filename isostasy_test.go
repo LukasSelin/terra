@@ -209,8 +209,10 @@ func weightedQuantile(v, wt []float64, f float64) float64 {
 // km over the floor. Held to the acceptance of G2 (#41), loosely: the land's
 // mean over 150 m, the freeboard between three and a half and six
 // kilometres, the highest land on a root, and the rebound per metre worn near
-// ρc/ρm, within a quarter under it or a tenth over. It comes out over, by
-// the plate bending up the land beside what it lost as well as under it.
+// ρc/ρm, within a quarter under it or a tenth over. It came out over on G2,
+// by the plate bending up the land beside what it lost as well as under it,
+// and comes out under now, 0.71 to 0.77: the wear falls on narrow, steep
+// ground, which the plate holds up, and not on whole drainages.
 //
 // And to G2b's (#78): the land's median in the hundreds of metres, between
 // two hundred and a thousand; the land from its 25th to its 99th hundredth
@@ -221,7 +223,7 @@ func weightedQuantile(v, wt []float64, f float64) float64 {
 // kilometres, since what the rivers took to the sea left it. See denude.go.
 //
 // The lowest twentieth and tenth of the land stand two to three times the
-// earth's, 75 to 120 metres against 36 and 70 to 190 against 71: the earth's
+// earth's, 70 to 110 metres against 36 and 130 to 185 against 71: the earth's
 // lowest land is coastal plain and delta, built by its rivers at the sea,
 // and a history's rivers lay nothing on land but in its hollows. That is
 // logged and not held.

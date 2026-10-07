@@ -6,6 +6,215 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Erosion at the history's scale, and the sediment kept (Rock G2b)
+
+**What this is.** On `claude/rock-history-erosion`, stacked on G2
+(`claude/rock-isostasy`, PR #77, b4820fc): issue #78. G2 found the low half
+of the history's land within 26-37 m of its sea. Each 4 Myr epoch's
+stream-power solve on 37.5 km tiles (K√Q·dt/dx of 50-200) cut every
+drainage to its outlet, and what the rivers took to the sea left the crust,
+so the continents thinned to 27-29 km. Three things change, all in a
+history and none on a drawn map (the valley's digest is unchanged):
+
+- **The law** (`denude.go`, `deepRate`). A history's tile comes down as a
+  landscape, by its relief: E = k·R/(1-(R/Rc)²)·(Q/Q₀)^½·r.
+  - R is the height over the tile its water goes to, or over the sea where
+    that is lower.
+  - k is Ahnert's (1970) 0.1535 mm/kyr per metre of relief, used as
+    published.
+  - Rc is 1.5 km, after Montgomery and Brandon (2002), who found the rate
+    leaves Ahnert's line above a kilometre. It is followed to 0.99 of Rc,
+    fifty times the line.
+  - Q₀ is a tile's own water at 300 mm/yr, the land's mean runoff.
+  - r is the root of the rock's share of the water's cut (shale against
+    granite 3.5×, not 12×).
+  - It is linear in the height over the receiver, so the implicit solve
+    (`fluvial.solve`) takes it unchanged. The coefficient is 0.61 an epoch
+    on a tile that sheds only its own water.
+- **The sea is the floor of the cut.** A coast whose water went to a tile of
+  the deep floor was cut toward that, kilometres down, so the coast went back
+  every epoch. `fluvial.floor` is now the history's sea.
+- **The sediment is kept** (`shelve`). What reaches the sea from each mouth
+  (`fluvial.mouth`, the same load `exported` counts) is laid on the floor off
+  it.
+  - Nearest floor first, up to 50 m under the sea, and 1 m deeper for every
+    kilometre out (`shelfTop`, `shelfFall`).
+  - It is thickened crust under G2's flexure, a bed of sandstone or shale in
+    the pile, and grains in the book.
+  - A basin under the sea's level with no way to the ocean passes what it has
+    no room for along the shortest way over the land to the ocean.
+  - Mouths within a 4-tile block (150 km) that drain to one body of water lay
+    their loads together, from the largest of them (`pool`). Laid mouth by
+    mouth, each of a globe's thousands of coastal mouths walked across the
+    whole shelf to find room, and `shelve` took 5.6-6.8 s of a globe.
+  - The crust carries how much of itself is sediment (`crust.sed`, 8 B a
+    tile with its move buffer). `accrete` does not count it: a margin's
+    wedge is floor with mud on it.
+
+**Options measured.** Each option was run on small globes 1 and 2, and some
+on globe 1. Readings are taken at the end of the last epoch and weighted by
+cos(latitude). Every option except the first has the sea floor and the
+shelving. Denudation is the land's median, and the highest twentieth's
+median, in mm/yr, at the last epoch.
+
+| option | land median, m (s1 / s2 / g1) | cont. crust, km | land share | denudation, median / top 5% | |
+| --- | --- | --- | --- | --- | --- |
+| G2: stream power, one step an epoch | 28 / 26 / 37 | 27.5 / 27.0 / 29.1 | 0.13 / 0.07 / 0.15 | 0.044 / 1.43 | the issue |
+| stream power + sea floor + shelving | 100 / 71 / 74 | 32.2 / 32.1 / 33.3 | 0.33 / 0.23 / 0.31 | 0.026 / 1.09 | still planed |
+| A: stream power grades the channels; the tile relaxes to them at a hillslope's pace (L 1.5 km, D 0.06 m²/yr) | 476 / 449 / 457 | 37.2 / 37.1 / 38.8 | 0.35 / 0.25 / 0.34 | 0.028 / 0.37 | ranges never come down: 99.9% at 9.5-11.6 km |
+| A, with the rate running away as M&B | 465 / 424 / 436 | 34.5 / 34.0 / 35.8 | | 0.028 / 0.96 | a plateau at 400-450 m from 10% to 50% |
+| C: stream power on a Hack channel length (×2.9), 8 steps an epoch with local rebound | 62 / 111 / 14 | 28.2 / 27.6 / 28.5 | 0.07 / 0.04 / 0.12 | 0.22 / 5.4 | worse: smaller steps cut more; 20× slower |
+| B: Ahnert relief only, k as published | 735 / 682 / - | 35.7 / 34.7 | 0.35 / 0.24 | 0.035 / 0.94 | plateau at the starting freeboard |
+| B, k ×3 | 590 / 465 / 734 | 34.5 / 33.7 / 37.2 | | 0.048 / 1.00 | globe: 25-75% at 473-1,123 |
+| **B with (Q/Q₀)^½, k as published (chosen)** | **443 / 361 / 474** | **34.4 / 33.4 / 35.7** | **0.33 / 0.24 / 0.32** | **0.039-0.052 / 1.0-1.2** | |
+
+Lowering the plateau by a sub-grid term, φ times the height over the sea
+added to R, put the median at 240-275 m with the plateau intact (φ 0.1-0.25),
+so it was dropped. Holding the runaway at ten times the line, as the creep
+is, left the highest tile of globe 1 at 14.3 km; at fifty times it is 9.0.
+
+**Readings.** `TestTheHistoryStandsOnItsCrust`, now also held to G2b: median
+200-1,000 m, the 25th-99th percentiles within ×2 of Cogley, and continental
+crust within 3 km of 35.
+
+| m | 5% | 10% | 25% | 50% | 75% | 90% | 95% | 99% | 99.9% | top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| earth | 36 | 71 | 179 | 461 | 1,106 | 2,240 | 3,026 | 4,748 | 5,600 | 8,000 |
+| small 1, G2 | 2 | 4 | 12 | 28 | 177 | 529 | 1,087 | 2,715 | 3,966 | 4,476 |
+| small 1 | 110 | 184 | 291 | 443 | 844 | 1,986 | 3,137 | 4,864 | 6,210 | 6,780 |
+| small 2, G2 | 2 | 4 | 10 | 26 | 150 | 942 | 1,367 | 2,887 | 5,067 | 5,452 |
+| small 2 | 71 | 128 | 229 | 361 | 690 | 1,665 | 2,511 | 4,149 | 6,141 | 7,082 |
+| globe 1, G2 | 6 | 10 | 20 | 37 | 393 | 1,552 | 2,628 | 4,215 | 5,879 | 10,113 |
+| globe 1 | 91 | 163 | 288 | 474 | 1,022 | 2,501 | 3,705 | 5,323 | 6,755 | 8,970 |
+
+| | land share | mean land, m | freeboard, m | cont. crust, km | top 1%: m / crust km / root km | rebound per m worn |
+| --- | --- | --- | --- | --- | --- | --- |
+| small 1 | 0.331 | 816 | 4,139 | 34.4 | 5,460 / 63.1 / 27.7 | 0.768 |
+| small 2 | 0.243 | 668 | 4,493 | 33.4 | 4,951 / 59.7 / 24.7 | 0.715 |
+| globe 1 | 0.324 | 932 | 4,653 | 35.7 | 6,008 / 64.3 / 28.3 | 0.712 |
+
+- **Denudation, mm/yr, by epoch.** Median over the land, rising from ~0 in
+  the first epoch (the continents start flat at their freeboard) to
+  0.06-0.08, then easing to 0.04-0.05 by the last. The lower half is
+  0.03-0.06. The highest twentieth is 1.0-1.8. The mean is 0.14-0.26.
+  Against Portenga and Bierman (2011): basins have a median of 0.054 and a
+  mean of 0.218, cratons 0.01-0.1, and active ranges reach mm/yr.
+- **Laid on the margins** over the history: 160,000, 94,000 and 2.57 M km
+  over a tile. A quarter to a third of it went on past a filled basin. 1-3.5% went off
+  the map at the poles.
+- **The low tail** is 2-3× the earth's: 70-110 m at 5% against 36. The
+  earth's lowest land is coastal plain and delta, which a history's rivers do
+  not build. This is logged, not held.
+- **The rebound per metre worn** fell from 0.86 to 0.71-0.77. Wear now falls
+  on narrow steep ground, which the plate holds up, rather than on whole
+  drainages.
+
+**Yardsticks.** `go test -run 'TestRealNumbers|TestTheRealWorld' -timeout
+60m .` on G2 (b4820fc) and here:
+
+| yardstick | G2 | here | |
+| --- | --- | --- | --- |
+| discharge exceedance exponent, small globe | 0.5083 ✗ | inside ✓ | now inside |
+| meander wavelength, small globe | 15.03 ✗ | 16.28 ✗ | fails on both |
+| midlatitude over subtropical rain, globe | 0.9066 ✗ | 0.9191 ✗ | fails on both |
+| land share of Gelisols | 0.1152 ✗ | 0.1124 ✗ | fails on both |
+| drainage area exceedance exponent, small globe | 0.4871 ✗ | 0.4774 ✗ | fails on both |
+| **channel concavity, small globe** | 0.3874 | 0.1681 ✗ | new |
+| **Flint's law fit R², small globe** | inside | 0.6347 ✗ | new |
+| **channel concavity, 2x less 1x, small globe** | inside | 0.289 ✗ | new |
+| **Hack exponent, small globe** | inside | 0.607 ✗ | new (ceiling 0.60) |
+| **Hack exponent, globe** | inside | 0.6243 ✗ | new |
+| **land relief intermittency C1, three globes** | 0.0906 | 0.0547 ✗ | new |
+| **right angles of the continents' coasts** | inside | 0.1534 ✗ | new (ceiling 0.15) |
+| **mean soil organic carbon, globe** | inside | 8.395 ✗ | new (floor 9) |
+
+Why the new failures, as far as they are read:
+
+- **The map only partly sees the history.** It takes the history's heights
+  by rank, at the drawn spread (`basins`), and shapes its rivers to the
+  history's uplift by rank (`shapeUplift`). The history's spread itself
+  reaches the map only through G1.
+- **What changed under the map is twofold.**
+  - The history keeps 2-2.5× the land: 0.32 against 0.15 on globe 1. The
+    continents' outlines and the land's latitudes move, which is where the
+    coast-angle and soil-carbon readings come from.
+  - The interiors are no longer planed to their outlets each epoch. They are
+    plateaus with escarpments, so the order the map's ground takes inside a
+    continent is no longer a graded drainage's.
+- **Which readings move consistently.** Over four builds of this law that
+  differed only in the shelving, C1 (0.054-0.057), the coasts' angles
+  (0.152-0.161) and soil carbon (8.35-8.45) moved together.
+- **Which readings are noisy.** Over the same builds, the small globes'
+  network readings did not: concavity was 0.23, 0.30, 0.17 and 0.26, Hack
+  0.506-0.616, and Gelisols, the meander wavelength and the discharge
+  exponent went in and out.
+- **One cause ruled out.** With the history's uplift taken out of the
+  shaping (a throwaway run), concavity read 0.26 and Hack 0.62, so the
+  uplift is not the cause.
+- None of these is loosened or marked.
+
+**Other tests.**
+
+- `TestTheChainForOneTileOfTheAncientValley` moved to tile 2232, an arc 52
+  Myr ago. No arc tile from the first epoch is worn down to its granite any
+  more.
+- `TestAPlatesWallRunsStraight` fails: 1.01 over seeds 1-3, floor 1.05.
+  - Over 16 small globes it reads 1.011 against G2's 1.030, and a seed
+    scatters by ±0.12. G2's own 16-seed mean is under the floor; its seeds
+    1-3 happen to read 1.11.
+  - Counting sediment toward `accrete` took the 8-seed mean to 0.944.
+    That is why `crust.sed` exists.
+- `TestAGlobeHasASeaItsRiversReach` fails: the north polar row is 0.64
+  bare, under two thirds. There is more land in the history, at the poles
+  too.
+- `TestTheWeatherChangesFromDayToDay`, which fails on G2, passes.
+- `TestMakingAWorldDoesNotDependOnTheGoroutines` passes.
+- `go test -short` fails only `TestAPlatesWallRunsStraight`.
+
+**The world.** Moved. `TERRA_DIGEST=write`: ancient 67e456e6ee7335eb ->
+34c47dbbaebd8a68, globe128 996361afd1877218 -> 3b0eb5e499958d76. The valley
+is unchanged.
+
+**The heap.** Rewritten with `TERRA_PERF_UPDATE=1`.
+
+- globe128: 396.95 -> 405.44 MB, 27,506 -> 30,181 allocations.
+- ancient: 56.88 -> 58.60 MB, 9,057 -> 9,748.
+- What it is:
+  - `toSea`, 24 B a tile, dropped when the history ends.
+  - `crust.sed` and its move buffer, 8 B a tile.
+  - `crust.was`, 8 B a tile.
+  - shelve's bodies, ways and stamps, 12 B a tile.
+  - The floor, 8 B a tile.
+  - A few slices an epoch for the denudation log.
+
+**Timing.** Full globe, `TERRA_PHASES=1`, interleaved, G2 then this, two
+each, on a machine that was not quiet:
+
+| | G2 | G2b |
+| --- | --- | --- |
+| Generate | 50.8, 49.0 s | 54.5, 48.7 s |
+| history | 37.7, 36.6 s | 41.7, 37.2 s |
+| wear | 9.14, 9.35 s | 10.17, 9.04 s |
+| shelve | - | 1.39, 1.24 s (16 calls) |
+| isostasy | 0.71, 0.61 s | 0.68, 0.57 s |
+| tectonics | 2.68, 2.37 s | 2.51, 2.23 s |
+| move | 5.18, 4.72 s | 5.26, 4.63 s |
+| drain | 20.7, 20.1 s | 21.3, 19.0 s |
+| B/op | 9.93 GB | 10.27 GB (+3.4%) |
+
+A quiet-machine `scripts/perf.sh check` is still owed, as on G2.
+
+**Open.**
+
+- The map's network and relief yardsticks, above.
+- The low tail of the land.
+- The plates' walls on seeds 1-3, and the polar row.
+- The coefficients that were chosen rather than measured: Rc, the 0.99
+  runaway, Q₀'s 300 mm, the rock's root, shelfTop/shelfFall and the 4-tile
+  pool.
+
+---
+
 ## 2026-10-07 - The crust floats: thickness, isostasy, flexure and rebound (Rock G2)
 
 **What this is.** On `claude/rock-isostasy`, from `main` (2c51bea): issue
