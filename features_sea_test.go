@@ -47,7 +47,11 @@ func poleward(heading float32, lat float64) bool {
 // no gyre's. coldUncounted is how many gyres read so; it fails if a cold
 // current goes, and fails when the gap closes, so that the marker comes off.
 func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
-	const coldUncounted = 4 // of the four, on M1 (#73)
+	// Four of the four on M1 (#73). On M2 (#79) the thermocline's Ekman
+	// pumping carries the gyre's water to the eastern shore, and every gyre
+	// counts its cold current: the gap is closed here, and the marker holds
+	// it closed.
+	const coldUncounted = 0
 	g := twoOceans()
 	g.weather()
 	all, reg := seaOf(g, g.winds)
