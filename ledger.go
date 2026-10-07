@@ -67,7 +67,7 @@ const (
 // Both are the history's metres, and the history's metres are a planet's:
 // its rates are real - millimetres a year of rock uplift over four million
 // years an epoch, see epochYears - so a seam raises tens of kilometres in
-// an epoch and the weather and the plate's settling take most of it back
+// an epoch and the plate's root and the weather take most of it back
 // before the next, while the ground stands a few kilometres high. The
 // finished heights are handed to the map by rank alone (see normalise and
 // basins), so the map's metres say nothing of these and these nothing of
