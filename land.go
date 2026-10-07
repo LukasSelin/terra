@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/LukasSelin/terra/clock"
+	"github.com/LukasSelin/terra/internal/atmos"
 )
 
 // Land is the world itself: the ground, the weather over it, what grows on
@@ -179,7 +180,28 @@ type Terms struct {
 	// the rivers that cut down to the low sea, and a hundred thousand years of
 	// the water's work on all the rest of the ground. See sealevel.go.
 	Glacial bool
+	// Forcing is the sun, the orbit and the carbon in the air a globe's
+	// climate is worked out under: its warmth by latitude and the swing of
+	// its year come from the energy balance under it. Nothing, as a Terms
+	// written without it says, is today's - see TodaysForcing - and a forcing
+	// that is given is taken whole, so a change to one figure of it starts
+	// from TodaysForcing. A valley's weather is written down and reads none
+	// of it.
+	Forcing Forcing
 }
+
+// Forcing is what drives a globe's climate from outside its air and ground:
+// the carbon dioxide in the air (ppm), the orbit's eccentricity, the tilt of
+// the spin (radians), the longitude of perihelion from the moving vernal
+// equinox (radians, as Berger, 1978, tabulates it) and the sun's flux at the
+// mean distance (W/m²). See internal/atmos/forcing.go. Its OrbitBefore gives
+// the orbit of a time before 1950 from Berger's series.
+type Forcing = atmos.Forcing
+
+// TodaysForcing is the forcing a world is made under when its terms give
+// none: today's sun and orbit, and the air the climate's outgoing longwave
+// was fitted under, 330 ppm.
+func TodaysForcing() Forcing { return atmos.Today() }
 
 // Rule is which of two readings of the land a world is made with: its tuned
 // rules or its climate.

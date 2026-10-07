@@ -1,6 +1,8 @@
 package terra
 
 import (
+	"encoding/binary"
+	"hash/fnv"
 	"math"
 	"testing"
 
@@ -132,10 +134,80 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 	if g.winds.Warm != nil || g.winds.Coast != nil {
 		t.Fatal("a valley has currents")
 	}
+	if e := g.winds.Env; e.Cu != nil || e.Cv != nil || e.Rise != nil || e.WaterTemp != nil {
+		t.Fatal("a valley keeps a current, an upwelling or a sea's temperature")
+	}
 	for i := range g.Tiles {
 		if g.SeaWarmth(i) != 0 || g.CoastWarmth(i) != 0 {
 			t.Fatalf("tile %d of a valley is warmed by the sea", i)
 		}
+		if u, v := g.SeaCurrent(i); u != 0 || v != 0 || g.Upwelling(i) != 0 || g.SeaTemp(i) != 0 {
+			t.Fatalf("tile %d of a valley has a current under it", i)
+		}
+	}
+}
+
+// The current, the upwelling and the water's temperature are kept beside the
+// warmth they make, and keeping them changes it not at all: the hash is of
+// Warm and Coast on twoOceans as main made them before they were kept
+// (53eb8bf). And the warmth is the kept temperature over its latitude's
+// mean, held to seaWarmMost.
+func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	e := g.winds.Env
+	h := fnv.New64a()
+	var b [8]byte
+	for _, s := range [][]float64{e.Warm, e.Coast} {
+		for _, x := range s {
+			binary.LittleEndian.PutUint64(b[:], math.Float64bits(x))
+			h.Write(b[:])
+		}
+	}
+	if got, want := h.Sum64(), uint64(0xafdf8947c074a07c); got != want {
+		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
+	}
+	const most = 10 // atmos.seaWarmMost
+	for i, w := range e.Warm {
+		if e.Sea[i] <= 0.5 {
+			continue
+		}
+		over := float64(e.WaterTemp[i]) - e.Mean[i/e.W]
+		if math.Abs(over) >= most {
+			over = math.Copysign(most, over)
+		}
+		// The temperature is kept in single precision: some microdegrees.
+		if math.Abs(over-w) > 1e-4 {
+			t.Fatalf("cell %d: the water stands %+.6f over its latitude and its warmth is %+.6f", i, over, w)
+		}
+	}
+}
+
+// The water a gyre drives toward the equator across an ocean comes back
+// toward the pole in the narrow current against its western shore: north in
+// the north, south in the south. The interior drifts the other way, slower.
+func TestTheWesternBoundaryCurrentRunsPoleward(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	north := func(i int) float64 { _, v := g.SeaCurrent(i); return v }
+	for _, hemi := range []float64{1, -1} {
+		lo, hi := min(20*hemi, 40*hemi), max(20*hemi, 40*hemi)
+		west := band(g, lo, hi, 40, 44, north)
+		inside := band(g, lo, hi, 70, 110, north)
+		t.Logf("at 20 to 40 degrees %+v: the western current runs %+.3f m/s north, the interior %+.3f", hemi, west, inside)
+		if west*hemi < 0.05 {
+			t.Errorf("at 20 to 40 degrees %+v the western current runs %+.3f m/s north", hemi, west)
+		}
+		if inside*hemi > 0 || math.Abs(inside) > math.Abs(west) {
+			t.Errorf("at 20 to 40 degrees %+v the interior runs %+.3f m/s north against the western current's %+.3f", hemi, inside, west)
+		}
+	}
+	// And the cold coast is where the water comes up.
+	up := band(g, 15, 30, 124, 128, g.Upwelling) + band(g, -30, -15, 124, 128, g.Upwelling)
+	west := band(g, 15, 30, 40, 44, g.Upwelling) + band(g, -30, -15, 40, 44, g.Upwelling)
+	t.Logf("upwelling off the eastern shore %.2g m/s, off the western %.2g", up/2, west/2)
+	if up <= west || up <= 0 {
+		t.Errorf("the water comes up at %.2g m/s off the eastern shore and %.2g off the western", up/2, west/2)
 	}
 }
 
@@ -148,8 +220,11 @@ func TestTheCurrentsDoNotDependOnTheGoroutines(t *testing.T) {
 		g := twoOceans()
 		g.weather()
 		var s float64
-		for i, w := range g.winds.Warm {
-			s += w*float64(i%89) + g.winds.Coast[i]
+		e := g.winds.Env
+		for i, w := range e.Warm {
+			s += w*float64(i%89) + e.Coast[i]
+			s += float64(e.Cu[i])*float64(i%83) + float64(e.Cv[i])*float64(i%79) +
+				float64(e.Rise[i])*1e6 + float64(e.WaterTemp[i])*float64(i%73)
 		}
 		for i, r := range g.rain {
 			s += r * float64(i%97)

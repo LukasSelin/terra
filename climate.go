@@ -67,6 +67,10 @@ type Climate struct {
 	// the sun by different amounts on different ground, so the day, and not
 	// just how far into its swing Temp is, is what a globe is read by.
 	tick int
+	// forcing is the sun, the orbit and the air's carbon a globe's warmth by
+	// latitude and its year's swing are worked out under: the terms'. The
+	// zero one is today's. See Terms.Forcing.
+	forcing Forcing
 }
 
 // NewClimate is the weather a world is founded in: an ordinary early spring,
@@ -78,7 +82,7 @@ func NewClimate() Climate {
 // NewClimateOn is the weather a world of the given shape is founded in.
 func NewClimateOn(cfg Terms) Climate {
 	c := NewClimate()
-	c.rows, c.globe = cfg.Height, cfg.Wrap
+	c.rows, c.globe, c.forcing = cfg.Height, cfg.Wrap, cfg.Forcing
 	return c
 }
 
@@ -100,7 +104,7 @@ func (c Climate) TempAt(y int) float64 {
 		return c.Temp
 	}
 	lat := c.latitude(y)
-	season := atmos.SwingAt(lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagAt(atmos.ContMiddling))
+	season := atmos.SwingUnder(c.forcing, lat, atmos.ContMiddling) * atmos.SeasonAt(c.tick, atmos.LagAt(atmos.ContMiddling))
 	return c.MeanAt(y) + season + c.Drift + c.Spell
 }
 
@@ -109,7 +113,7 @@ func (c Climate) MeanAt(y int) float64 {
 	if !c.globe {
 		return MeanTemp
 	}
-	return atmos.ZonalMean(c.latitude(y))
+	return atmos.ZonalMeanUnder(c.forcing, c.latitude(y))
 }
 
 // GrowthAt is Growth on row y, and ChillAt is Chill there.
@@ -239,7 +243,7 @@ func (w *Land) TempAt(p geom.Pos) float64 {
 	}
 	i := p.Y*g.W + p.X
 	cont := g.contAt(i)
-	t := c.MeanAt(p.Y) + atmos.SwingAt(c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagAt(cont)) + c.Drift - Lapse*h
+	t := c.MeanAt(p.Y) + atmos.SwingUnder(c.forcing, c.latitude(p.Y), cont)*atmos.SeasonAt(c.tick, atmos.LagAt(cont)) + c.Drift - Lapse*h
 	if g.Wrap {
 		t += g.CoastWarmth(i)
 	}
@@ -264,7 +268,7 @@ func (w *Land) yearAt(i int) (mean, swing float64) {
 	if g.Wrap {
 		mean += g.CoastWarmth(i)
 	}
-	return mean, atmos.SwingAt(c.latitude(y), g.contAt(i))
+	return mean, atmos.SwingUnder(c.forcing, c.latitude(y), g.contAt(i))
 }
 
 // GrowthAt is how much the weather at p lets green things grow, and ChillAt

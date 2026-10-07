@@ -140,7 +140,8 @@ const (
 
 // currents works out the water under the year's mean wind u, v and gives
 // each cell's warmth: how many degrees the sea there stands over the mean of
-// its latitude, and nothing on land.
+// its latitude, and nothing on land. The current, the upwelling and the
+// water's temperature it works out on the way are kept on e: see Env.Cu.
 func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	defer phase.Start("airEnv.currents")()
 	n := e.W * e.H
@@ -368,6 +369,7 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// the column. Land takes nothing.
 	sea := e.seaLinks(cu, cv, rise, deep, depth, relax)
 	sea.gaussSeidel(temp)
+	e.Cu, e.Cv, e.Rise = narrow(cu), narrow(cv), narrow(rise)
 
 	warm := make([]float64, n)
 	for i := range warm {
@@ -379,6 +381,8 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 	// that the sea read between the cells right up to the coast is the sea's
 	// and not half the land's nothing: the coldest water there is lies against
 	// the shore.
+	// The water's own temperature is given to the shore the same way; the
+	// land away from any sea keeps its latitude's mean.
 	shore := make([]float64, n)
 	for cy := 0; cy < e.H; cy++ {
 		for cx := 0; cx < e.W; cx++ {
@@ -386,19 +390,20 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			if wet(i) {
 				continue
 			}
-			var s, k float64
+			var s, st, k float64
 			for dy := -1; dy <= 1; dy++ {
 				if cy+dy < 0 || cy+dy >= e.H {
 					continue
 				}
 				for dx := -1; dx <= 1; dx++ {
 					if j := e.at(cx+dx, cy+dy); wet(j) {
-						s, k = s+warm[j], k+1
+						s, st, k = s+warm[j], st+temp[j], k+1
 					}
 				}
 			}
 			if k > 0 {
-				shore[i] = s / k
+				// Only the sea's temp is read here, so the land's is written as it goes.
+				shore[i], temp[i] = s/k, st/k
 			}
 		}
 	}
@@ -407,7 +412,17 @@ func (e *Env) currents(u, v [Phases][]float32) []float64 {
 			warm[i] = s
 		}
 	}
+	e.WaterTemp = narrow(temp)
 	return warm
+}
+
+// narrow is v in single precision.
+func narrow(v []float64) []float32 {
+	out := make([]float32, len(v))
+	for i, x := range v {
+		out[i] = float32(x)
+	}
+	return out
 }
 
 // seaRounds is the most rounds of the four sweeps the water's warmth is given
@@ -431,17 +446,16 @@ type seaLinks struct {
 	ja, jb     []int32
 }
 
-// seaLinks writes each cell's equation down. It takes over cu, cv, rise and
-// deep for its own, since nothing reads them once the warmth is being solved:
-// each cell's base and take are written over its rise and deep water, and its
-// weights over its currents, after they are read. A cell's are the only ones
-// it reads.
+// seaLinks writes each cell's equation down. It takes over deep for its own
+// take, since nothing reads it once the warmth is being solved, and writes
+// its base and weights to scratch of its own: the currents and the upwelling
+// are kept (Env.Cu). A cell's are the only ones it reads.
 func (e *Env) seaLinks(cu, cv, rise, deep, depth, relax []float64) *seaLinks {
 	n := e.W * e.H
 	l := &seaLinks{
 		w: e.W, h: e.H,
-		base: rise, take: deep,
-		wa: cu, wb: cv,
+		base: make([]float64, n), take: deep,
+		wa: make([]float64, n), wb: make([]float64, n),
 		ja: make([]int32, n), jb: make([]int32, n),
 	}
 	dy := e.Dy
@@ -600,4 +614,31 @@ func (w *Winds) CoastWarmth(i int) float64 {
 	}
 	fx, fy := w.CellAt(i)
 	return w.Sample(w.Coast, fx, fy)
+}
+
+// SeaCurrent is terra.Grid.SeaCurrent for a tile of the map.
+func (w *Winds) SeaCurrent(i int) (east, north float64) {
+	if w.Cu == nil {
+		return 0, 0
+	}
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.Cu, fx, fy), w.Sample32(w.Cv, fx, fy)
+}
+
+// Upwelling is terra.Grid.Upwelling for a tile of the map.
+func (w *Winds) Upwelling(i int) float64 {
+	if w.Rise == nil {
+		return 0
+	}
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.Rise, fx, fy)
+}
+
+// WaterTempAt is terra.Grid.SeaTemp for a tile of the map.
+func (w *Winds) WaterTempAt(i int) float64 {
+	if w.WaterTemp == nil {
+		return 0
+	}
+	fx, fy := w.CellAt(i)
+	return w.Sample32(w.WaterTemp, fx, fy)
 }

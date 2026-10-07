@@ -26,12 +26,15 @@ type windField struct {
 	u, v   []float64
 	across []float64 // kilometres a tile is along each row
 	down   float64   // and down one
+	// full is the speed a streamline is drawn its full length at, and calm
+	// the least one is drawn at, m/s: the wind's when nought.
+	full, calm float64
 }
 
 // windOf reads the wind on day of the year off g, or the year's mean wind
 // if day is below zero.
 func windOf(g *terra.Grid, day int) *windField {
-	f := &windField{w: g.W, h: g.H, wrap: g.Wrap, u: make([]float64, len(g.Tiles)), v: make([]float64, len(g.Tiles))}
+	f := fieldOf(g)
 	for i := range g.Tiles {
 		if day < 0 {
 			f.u[i], f.v[i] = g.MeanWind(i)
@@ -39,6 +42,22 @@ func windOf(g *terra.Grid, day int) *windField {
 			f.u[i], f.v[i] = g.WindOn(i, day)
 		}
 	}
+	return f
+}
+
+// currentsOf is the sea's current over every tile of g, over the year.
+func currentsOf(g *terra.Grid) *windField {
+	f := fieldOf(g)
+	f.full, f.calm = currentMost, currentCalm
+	for i := range g.Tiles {
+		f.u[i], f.v[i] = g.SeaCurrent(i)
+	}
+	return f
+}
+
+// fieldOf is a still field over the tiles of g.
+func fieldOf(g *terra.Grid) *windField {
+	f := &windField{w: g.W, h: g.H, wrap: g.Wrap, u: make([]float64, len(g.Tiles)), v: make([]float64, len(g.Tiles))}
 	f.across = make([]float64, g.H)
 	f.down = 1
 	if g.Wrap {
@@ -82,6 +101,14 @@ func (f *windField) at(x, y float64) (u, v float64) {
 // speedMost is the speed the colours of the wind are full at, m/s.
 const speedMost = 14.0
 
+// currentMost is the speed a current's streamline is drawn its full length
+// at, m/s, and currentCalm the least current drawn: the Gulf Stream runs at
+// some seventy centimetres a second, a gyre's interior at a few.
+const (
+	currentMost = 0.5
+	currentCalm = 0.02
+)
+
 // windColor is the colour-wheel reading of a wind: hue for the way it blows,
 // brightness for how hard.
 func windColor(u, v float64) color.RGBA {
@@ -100,6 +127,10 @@ func streamlines(img *image.RGBA, f *windField, px int) {
 	}
 	width, height := float64(f.w*px), float64(f.h*px)
 	ink := color.RGBA{20, 24, 32, 255}
+	full, calm := speedMost, 0.3
+	if f.full > 0 {
+		full, calm = f.full, f.calm
+	}
 	for sy := spacing / 2; sy < height; sy += spacing {
 		for sx := spacing / 2; sx < width; sx += spacing {
 			// A starting point scattered about its place in the lattice, the
@@ -108,10 +139,10 @@ func streamlines(img *image.RGBA, f *windField, px int) {
 			x, y := sx+(jx-0.5)*spacing*0.8, sy+(jy-0.5)*spacing*0.8
 			u, v := f.at(x/float64(px), y/float64(px))
 			s := math.Hypot(u, v)
-			if s < 0.3 {
+			if s < calm {
 				continue
 			}
-			length := clamp(s/speedMost, 0.3, 1.2) * spacing * 1.8
+			length := clamp(s/full, 0.3, 1.2) * spacing * 1.8
 			var tail [][2]float64
 			for done := 0.0; done < length; done += 0.5 {
 				tail = append(tail, [2]float64{x, y})
@@ -200,14 +231,13 @@ func jitter(x, y int) (float64, float64) {
 // ring for a tropical storm.
 func weatherDrawing(land *terra.Land, shade func(geom.Pos) float64) drawing {
 	g := land.Grid
-	f := &windField{w: g.W, h: g.H, wrap: g.Wrap, u: make([]float64, len(g.Tiles)), v: make([]float64, len(g.Tiles))}
+	f := fieldOf(g)
 	pres := make([]float64, len(g.Tiles))
 	for i := range g.Tiles {
 		p := g.PosOf(i)
 		f.u[i], f.v[i] = land.WindAt(p)
 		pres[i] = land.PressureAt(p)
 	}
-	f.across, f.down = windOf(g, 0).across, windOf(g, 0).down
 	counts := map[terra.SystemKind]int{}
 	if land.Weather != nil {
 		for _, s := range land.Weather.Systems {

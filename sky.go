@@ -103,6 +103,45 @@ func (g *Grid) CoastWarmth(i int) float64 {
 	return w.CoastWarmth(i)
 }
 
+// SeaCurrent is the sea's current over tile i, in metres a second toward the
+// east and the north, over the year: the gyres' interior drift and the narrow
+// fast current against an ocean's western shore, the flow that carries it
+// across the ocean, and the surface's drift under the wind. It is nothing on
+// land, on a valley, and on a map whose weather has not been read.
+func (g *Grid) SeaCurrent(i int) (east, north float64) {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return 0, 0
+	}
+	return w.SeaCurrent(i)
+}
+
+// Upwelling is how fast, in metres a second, cold water comes up from under
+// the sea over tile i where the wind drives the surface water off a coast:
+// the Humboldt off Peru, the Benguela off Namibia. It is nothing on land, on a
+// valley, and on a map whose weather has not been read.
+func (g *Grid) Upwelling(i int) float64 {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return 0
+	}
+	return w.Upwelling(i)
+}
+
+// SeaTemp is the year's mean temperature of the sea's surface water over tile
+// i, in degrees: its latitude's mean with what the currents and the upwelling
+// bring, not held to SeaWarmth's bounds. The land along a shore reads the sea
+// beside it and the land inland its latitude's mean. It is nothing on a
+// valley, which has no ocean worked out, and on a map whose weather has not
+// been read; nothing there is not a frozen sea.
+func (g *Grid) SeaTemp(i int) float64 {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return 0
+	}
+	return w.WaterTempAt(i)
+}
+
 // AdvanceWeather moves the day's weather on to today, w.Tick. A game calls it
 // once a day, beside Climate.Advance; nothing about the land needs it to have
 // been called, and it draws nothing from the world's chance. The first call
