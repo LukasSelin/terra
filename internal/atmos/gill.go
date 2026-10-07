@@ -68,9 +68,11 @@ var rainHeat = rainSlope / 86400 * latentHeat / (heatAir * columnMass) *
 // exactly (Thomas's algorithm): no iterating, and nothing that depends on
 // the goroutines. The rows past gillReach are held still, with nothing
 // crossing into them. It is for a globe only.
-func (e *Env) gill(q []float64) (phi, u, v []float64) {
+//
+// It is worked out in wk, and φ, u and v are in its slots (see Scratch).
+func (e *Env) gill(q []float64, wk *work) (phi, u, v []float64) {
 	n := e.W * e.H
-	phi, u, v = make([]float64, n), make([]float64, n), make([]float64, n)
+	phi, u, v = wk.floats(slotGillPhi, n), wk.floats(slotGillU, n), wk.floats(slotGillV, n)
 	lo, hi := -1, -1
 	for cy := 0; cy < e.H; cy++ {
 		if math.Abs(e.lat[cy]) < gillReach {
@@ -106,9 +108,10 @@ func (e *Env) gill(q []float64) (phi, u, v []float64) {
 	transform(first, false)
 
 	spec := make([][]complex128, rows)
+	room := wk.complexes(rows * w)
 	for r := range spec {
 		cy := lo + r
-		spec[r] = make([]complex128, w)
+		spec[r] = room[r*w : (r+1)*w : (r+1)*w]
 		for cx := range w {
 			spec[r][cx] = complex(-q[cy*w+cx], 0)
 		}
@@ -116,7 +119,7 @@ func (e *Env) gill(q []float64) (phi, u, v []float64) {
 	}
 	dy2 := e.Dy * e.Dy
 	sub, diag, sup := make([]complex128, rows), make([]complex128, rows), make([]complex128, rows)
-	rhs := make([]complex128, rows)
+	rhs, c := make([]complex128, rows), make([]complex128, rows)
 	for k := range w {
 		for r := range rows {
 			cy := lo + r
@@ -139,7 +142,7 @@ func (e *Env) gill(q []float64) (phi, u, v []float64) {
 			sup[r] = complex(-c2*south, 0) // the row after
 			rhs[r] = spec[r][k]
 		}
-		thomas(sub, diag, sup, rhs)
+		thomas(sub, diag, sup, rhs, c)
 		for r := range rows {
 			spec[r][k] = rhs[r]
 		}
@@ -172,10 +175,10 @@ func (e *Env) gill(q []float64) (phi, u, v []float64) {
 }
 
 // thomas solves the three-banded system sub, diag, sup in place of rhs:
-// sub[r] multiplies the row before r, sup[r] the row after.
-func thomas(sub, diag, sup, rhs []complex128) {
+// sub[r] multiplies the row before r, sup[r] the row after. c is room for
+// its working, as long as rhs.
+func thomas(sub, diag, sup, rhs, c []complex128) {
 	n := len(rhs)
-	c := make([]complex128, n)
 	d := diag[0]
 	c[0] = sup[0] / d
 	rhs[0] /= d

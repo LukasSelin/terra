@@ -595,7 +595,7 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64, was *Winds, s *Scratch)
 	// it, where it was, and the wind and the water are then worked out
 	// together. See ocean.go and coupled.go.
 	if e.Wrap {
-		e.carry(was)
+		e.carry(was, s)
 	}
 	w.solve(s)
 	if e.Wrap {
@@ -709,7 +709,7 @@ func (e *Env) solve(w *work, sinT float64, temp, extra, warm []float64, u, v, p 
 	// within them it is the trades' layer's and the rain's (coupled.go,
 	// walker). Then the pressure it and the belts make between them.
 	if e.seaAir != nil {
-		over := make([]float64, n)
+		over := w.floats(slotSeaAir, n)
 		for i := range over {
 			over[i] = temp[i] + e.seaAir[i]*(1-e.tropicShare(i/e.W))
 		}

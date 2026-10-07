@@ -38,7 +38,7 @@ func TestAHeatingDrawsGillsWinds(t *testing.T) {
 				q[cy*w+cx] = 0.01 * math.Exp(-dx*dx/(2*1.5*1.5)-dy*dy/(2*0.6*0.6))
 			}
 		}
-		phi, u, _ := e.gill(q)
+		phi, u, _ := e.gill(q, nil)
 		eq := e.H / 2 // the row just south of the equator
 		low := phi[eq*w+mid]
 		east := u[eq*w+(mid+w/8)]

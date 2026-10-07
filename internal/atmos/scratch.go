@@ -14,7 +14,12 @@ package atmos
 // rather than new memory. The wind's fields and the rain's take the same
 // slots in turn, the currents take the first phase's once its wind is
 // worked out and the gyres' solve the next two phases', and within the rain
-// a field done with early hands its slot on (see the slots below).
+// a field done with early hands its slot on (see the slots below). Where the
+// sea and the air are worked out together (coupled.go), each round works the
+// Walker circulation out in the first phase's memory before that phase's
+// wind, and the currents in it after, as the first round did: the rounds
+// ask the heap again only for what the currents let go of so that the most
+// it holds at once stays what it was.
 //
 // It is made for one reading and let go of with it (terra.Grid.weather). It
 // was tried kept from one reading to the next, which asks the heap for less
@@ -142,6 +147,10 @@ const (
 	slotLam      = slotAirTemp
 )
 
+// The air's warmth with the sea's under it (Solve) takes the pressure's slot:
+// it is blurred into slotTempBlur before the pressure is begun.
+const slotSeaAir = slotPres
+
 const (
 	slotStressX = slotsBoth + iota
 	slotStressY
@@ -151,7 +160,45 @@ const (
 	slotLand
 	slotWaterTemp
 	slotShore
+	// The gyres' forcing and the residual their solve starts from, done with
+	// once the gyres are solved; the transport they solve for, done with once
+	// the currents are read off it; and the thermocline, read to the end.
+	slotForcing
+	slotFlowRest
+	slotPsi
+	slotThermo
+	slotLinkB
 	slotsCurrents
+)
+
+// The currents' fields taken over once what was in them is done with: the
+// thermocline's guided stress and its rows' level take the gyres' forcing
+// and residual; the pumping's drift takes them in turn once the thermocline
+// is worked out, and its sum the transport's; and the sea's equations take
+// the drift's slots once the pumping is summed.
+const (
+	slotGuided   = slotForcing
+	slotLevel    = slotFlowRest
+	slotDriftX   = slotForcing
+	slotDriftY   = slotFlowRest
+	slotPumped   = slotPsi
+	slotLinkBase = slotForcing
+	slotLinkA    = slotFlowRest
+)
+
+// The Walker circulation's (coupled.go, gill.go), in the shared work, between
+// the wind's solves: the sea's warmth over its row's, the trades' layer's
+// warmth blurred, its pressure, the rain's heating, and Gill's answer to it.
+const (
+	slotAnomaly = slotsBoth + iota
+	slotWalkBlur
+	slotWalkWarm
+	slotWalkPres
+	slotHeat
+	slotGillPhi
+	slotGillU
+	slotGillV
+	slotsWalker
 )
 
 // The rain: RainCells and orographic phase by phase, and the vapour's budget
@@ -200,7 +247,7 @@ const (
 )
 
 // workSlots is how many slots a work has: the most any reading uses.
-const workSlots = max(slotsWind, slotsCurrents, slotsRain, slotsRainAll)
+const workSlots = max(slotsWind, slotsCurrents, slotsRain, slotsRainAll, slotsWalker)
 
 // The fields of a work in single precision.
 const (

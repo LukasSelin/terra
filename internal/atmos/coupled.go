@@ -119,7 +119,7 @@ func (w *Winds) couple(ocean *flow, s *Scratch) {
 		for i := range n {
 			e.seaAir[i] += coupleDamp * (e.Sea[i]*e.Warm[i] - e.seaAir[i])
 		}
-		e.walker()
+		e.walker(s.phaseWork(0))
 		w.solve(s)
 		e.Warm = e.currents(w.U, w.V, ocean, s)
 	}
@@ -132,7 +132,10 @@ func (w *Winds) couple(ocean *flow, s *Scratch) {
 // which is a round of the coupled solve taken across the two readings. Each
 // cell that is still sea has it for as much of the cell as is still sea;
 // where the land has come up out of the sea there is none.
-func (e *Env) carry(was *Winds) {
+//
+// The Walker circulation it starts from is worked out in the first phase's
+// memory, before that phase's wind is (see walker).
+func (e *Env) carry(was *Winds, s *Scratch) {
 	n := e.W * e.H
 	if was == nil || was.Env == nil || was.W != e.W || was.H != e.H || len(was.seaAir) != n || len(was.Warm) != n {
 		return
@@ -144,7 +147,7 @@ func (e *Env) carry(was *Winds) {
 			e.seaAir[i] = read / s * math.Min(s, e.Sea[i])
 		}
 	}
-	e.walker()
+	e.walker(s.phaseWork(0))
 }
 
 // residual is how far the sea's warmth stands from what the air reads of
@@ -189,9 +192,13 @@ func (e *Env) tropicShare(cy int) float64 {
 // land and comes to nothing along the row: the warmth of the whole row is
 // the belts' (circulation.go), and only how it lies along the row is the
 // Walker circulation's.
-func (e *Env) walker() {
+//
+// It is worked out in wk (see Scratch), the first phase's memory, which
+// holds nothing then that is read again: the wind is worked out in it
+// next, and the currents before it are kept on e. Only Walk is kept.
+func (e *Env) walker(wk *work) {
 	n := e.W * e.H
-	anomaly := make([]float64, n)
+	anomaly := wk.floats(slotAnomaly, n)
 	for cy := 0; cy < e.H; cy++ {
 		share := e.tropicShare(cy)
 		if share == 0 {
@@ -213,8 +220,8 @@ func (e *Env) walker() {
 
 	// The trades' layer: the warmth spread as the air near the ground's is
 	// (Solve), and the pressure it takes off the ground.
-	a := e.blur(e.blur(anomaly, synopticReach), synopticReach)
-	p := make([]float64, n)
+	a := e.blurIn(wk, slotWalkWarm, e.blurIn(wk, slotWalkBlur, anomaly, synopticReach), synopticReach)
+	p := wk.floats(slotWalkPres, n)
 	for cy := 0; cy < e.H; cy++ {
 		row := cy * e.W
 		var zonal float64
@@ -228,11 +235,11 @@ func (e *Env) walker() {
 	}
 
 	// The rain's.
-	q := make([]float64, n)
+	q := wk.floats(slotHeat, n)
 	for i, t := range anomaly {
 		q[i] = rainHeat * t
 	}
-	phi, gu, gv := e.gill(q)
+	phi, gu, gv := e.gill(q, wk)
 
 	for k := range e.Walk {
 		if len(e.Walk[k]) != n {

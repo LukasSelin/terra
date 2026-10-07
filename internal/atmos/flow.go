@@ -168,8 +168,9 @@ func (e *Env) gyres(tx, ty []float64, f *flow, s *Scratch) []float64 {
 	if f == nil {
 		f = e.newFlow()
 	}
-	x := f.solve(f.forcing(tx, ty), s)
-	return f.spread(x)
+	all := s.phaseWork(0)
+	x := f.solve(f.forcing(tx, ty, all.floats(slotForcing, f.levels[0].n)), s)
+	return f.spread(x, all.floats(slotPsi, f.n))
 }
 
 // newFlow labels the landmasses and writes down the equations at every
@@ -286,8 +287,7 @@ func (f *flow) label() {
 
 // spread lays the unknowns x out over the map as ψ: the sea's own, each
 // island's level on its cells, and nought on the mainland.
-func (f *flow) spread(x []float64) []float64 {
-	psi := make([]float64, f.n)
+func (f *flow) spread(x, psi []float64) []float64 {
 	for i, u := range f.unknown {
 		if u >= 0 {
 			psi[i] = x[u]
@@ -698,7 +698,8 @@ func (f *flow) precondition(r, z []float64) {
 // island, as the right side of the equations: the wind's pull round the
 // cell's edges, each edge taking the stress of the sea beside it so that the
 // wind over the land, slowed by it, is not read as a turning at the coast.
-func (f *flow) forcing(tx, ty []float64) []float64 {
+// It is written to b, as many as the finest level has unknowns, all nought.
+func (f *flow) forcing(tx, ty, b []float64) []float64 {
 	e, w, h := f.e, f.w, f.h
 	wet := func(i int) bool { return f.mass[i] < 0 }
 	face := func(t []float64, i, j int) float64 {
@@ -710,7 +711,6 @@ func (f *flow) forcing(tx, ty []float64) []float64 {
 		}
 		return (t[i] + t[j]) / 2
 	}
-	b := make([]float64, f.levels[0].n)
 	for cy := 0; cy < h; cy++ {
 		row := cy * w
 		north := f.wn[cy] * e.Dy // the length of the row's northern edge
@@ -747,7 +747,7 @@ func (f *flow) solve(b []float64, s *Scratch) []float64 {
 		f.last = append([]float64(nil), x...)
 		return x
 	}
-	r := make([]float64, len(b))
+	r := s.phaseWork(0).floats(slotFlowRest, len(b))
 	f.apply(f.last, r)
 	for i := range r {
 		r[i] = b[i] - r[i]

@@ -107,16 +107,17 @@ const (
 // thermocline is the depth of the warm layer on every cell, in metres, from
 // the gyres' transport psi in cubic metres a second and the wind's stress
 // along the parallels tx in newtons a square metre. It is nought on land.
-func (e *Env) thermocline(psi, tx []float64) []float64 {
+// It and what it works out on the way are in all's slots (see Scratch).
+func (e *Env) thermocline(psi, tx []float64, all *work) []float64 {
 	n := e.W * e.H
-	h := make([]float64, n)
+	h := all.floats(slotThermo, n)
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 	east := reducedGravity * thermoEast * thermoEast / 2
 	ring := reducedGravity * thermoMean * thermoMean / 2
-	tx = e.guided(tx)
+	tx = e.guided(tx, all.floats(slotGuided, len(tx)))
 	// Each row works in its own stretch of these, so that the rows can be
 	// spread over goroutines.
-	phi, runs := make([]float64, n), make([]int, n)
+	phi, runs := all.floats(slotLevel, n), make([]int, n)
 	e.rows(func(cy int) {
 		row := cy * e.W
 		dx, f := e.Dx[cy], e.f[cy]
@@ -208,10 +209,10 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 // where the year's mean wind is the doldrums' calm and its drifts meet, has
 // the trades of one hemisphere or the other blowing across it for half the
 // year, and the water comes up then.
-func (e *Env) pumping(u, v [Phases][]float32) []float64 {
+func (e *Env) pumping(u, v [Phases][]float32, all *work) []float64 {
 	n := e.W * e.H
-	mx, my := make([]float64, n), make([]float64, n)
-	w := make([]float64, n)
+	mx, my := all.floats(slotDriftX, n), all.floats(slotDriftY, n)
+	w := all.floats(slotPumped, n)
 	wet := func(i int) bool { return e.Sea[i] > 0.5 }
 	for k := range Phases {
 		for i := range n {
@@ -266,8 +267,7 @@ func (e *Env) upwelled(cy int, h float64) float64 {
 // equator is tilted by the trades either side of it as well as by the wind on
 // it, which under the rising air of the doldrums is little. Land takes no
 // part.
-func (e *Env) guided(tx []float64) []float64 {
-	out := make([]float64, len(tx))
+func (e *Env) guided(tx, out []float64) []float64 {
 	c := math.Sqrt(reducedGravity * thermoMean)
 	e.rows(func(cy int) {
 		beta := 2 * omega * math.Cos(e.lat[cy]*math.Pi/180) / planetRadius
