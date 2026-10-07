@@ -221,7 +221,8 @@ func (g *Grid) shape() (area []float64) {
 //	the rate, by rank                .455   .493       .557   .367       .864
 //
 // Most of a continent rises at a twentieth of a collision's rate or less - the
-// plate settling, and the bow it rides in - and only the seams' belts faster,
+// plate floating up under what the weather takes off it - and only the seams'
+// belts faster,
 // so read as a rate the uplift was all but even over the land, the lowland
 // graded as steeply as the upland, and the discharge exponent fell to a third.
 // Over the 99th centile it came nearer, and the mainstreams fell short of
@@ -230,7 +231,9 @@ func (g *Grid) shape() (area []float64) {
 //
 // What it cannot hand on is how high. At a 25 metre tile the shaping lays the
 // ground to the map's own scale whatever uplift it is given - see shapeTop -
-// and a range kilometres high is a wall there.
+// and a range kilometres high is a wall there. On a globe how high is the
+// country's, which the map's ground stands on and the air's warmth reads: see
+// hypsometry.go.
 func (g *Grid) shapeUplift(uplift []float64, root []bool) {
 	var order []int
 	var spread []float64

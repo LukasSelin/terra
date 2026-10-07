@@ -115,13 +115,16 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 	if poleward > 0 {
 		t.Errorf("%d river tiles run off the top or the bottom of the map", poleward)
 	}
-	// The poles are bare and the middle is not. Which tile of the pole's row
-	// is land is the plates' to say, and polar land whose summer comes over
-	// freezing is tundra, which is open ground: so it is the row that is
-	// bare, mostly ice and outcrop, and not any one tile of it. Seed 1's
-	// northern row was 70% bare with the gyres solved a row at a time and is
-	// 64% solved over the whole ocean, which took the one tile this read,
-	// (100, 0), from bare ground to tundra.
+	// The poles are bare: most of the rows along them is rock, water or ice.
+	// It was one tile, the hundredth along the north pole's row, and the row
+	// is not all bare - the air's poles are some ten degrees too warm (see
+	// the realism gaps) and the land on them is open ground: main's first
+	// globe had 305 tiles of 1024 open along the north pole and 109 along
+	// the south. With the crust floating on its thickness (isostasy.go) the
+	// hundredth came out on one of them, in a row 74 in a hundred bare.
+	// Solving the gyres over the whole ocean at once rather than a row at a
+	// time (internal/atmos/flow.go) moves the pole's rows' warmth too; the
+	// bar is main's two thirds, kept on the merged world.
 	for _, y := range []int{0, g.H - 1} {
 		bare := 0
 		for x := 0; x < g.W; x++ {
@@ -130,8 +133,8 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 				bare++
 			}
 		}
-		if share := float64(bare) / float64(g.W); share < 0.5 {
-			t.Fatalf("the pole's row %d is %.0f%% bare", y, 100*share)
+		if share := float64(bare) / float64(g.W); share < 2.0/3 {
+			t.Fatalf("the pole's row %d is %.2f bare", y, share)
 		}
 	}
 	// A globe is made out of its own history now, which is sixteen epochs of
