@@ -182,7 +182,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0x2a6c1f0a7fddbc4d); got != want {
+	if got, want := h.Sum64(), uint64(0xdae7bf2cb5adf204); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	for i, w := range e.Warm {

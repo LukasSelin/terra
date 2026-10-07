@@ -277,10 +277,21 @@ func (l *seaSlab) flows(q, cx, cy int, u, v, dx, dy float64) {
 // some twenty directions on a globe. Sweeping the columns as well as the
 // rows, or each row's mean first, took as many. Its vectors are lent from s,
 // as the gyres' are.
-func (l *seaSlab) solve(t, d []float64, s *Scratch) {
+//
+// from is the two layers' warmth as they were last solved, the mixed
+// layer's and then the water's under it, or nil: in the coupled solve's
+// round (coupled.go) under a wind a little changed, and in the reading
+// before over ground a little moved. Where it is given the equations are
+// solved for what it leaves of the right-hand side, held to the same
+// slabSettled of the right-hand side itself, and that added to it, as the
+// gyres' second solve is (flow.solve): the warmth is the same to within
+// what the solve is held to, in fewer directions. On a cell that is land
+// now it is taken as nought, which the land's unknowns are.
+func (l *seaSlab) solve(t, d []float64, s *Scratch, from []float64) {
 	e := l.e
 	n := e.W * e.H
-	b := make([]float64, 2*n)
+	room := s.lend(gmresRoom(slabRestart)+2, 2*n)
+	b, x0 := room[gmresRoom(slabRestart)], room[gmresRoom(slabRestart)+1]
 	copy(b, l.base[0])
 	copy(b[n:], l.base[1])
 	l.factor()
@@ -292,7 +303,35 @@ func (l *seaSlab) solve(t, d []float64, s *Scratch) {
 		clear(out)
 		l.sweep(out, in, rows)
 	}
-	x, _, _ := gmresOn(b, l.applyRows, precondition, slabSettled, slabRestart, slabMost, s.lend(gmresRoom(slabRestart), 2*n), l.spans())
+	spans := l.spans()
+	settled := slabSettled
+	warm := len(from) == 2*n
+	if warm {
+		for _, sp := range spans {
+			copy(x0[sp[0]:sp[1]], from[sp[0]:sp[1]])
+		}
+		// b is what x0 leaves of it from here on.
+		bn := math.Sqrt(dotOn(b, b, spans))
+		r := room[0]
+		l.applyRows(x0, r)
+		for _, sp := range spans {
+			for i := sp[0]; i < sp[1]; i++ {
+				b[i] -= r[i]
+			}
+		}
+		clear(r)
+		if rn := math.Sqrt(dotOn(b, b, spans)); rn > 0 {
+			settled = math.Min(1, slabSettled*bn/rn)
+		}
+	}
+	x, _, _ := gmresOn(b, l.applyRows, precondition, settled, slabRestart, slabMost, room[:gmresRoom(slabRestart)], spans)
+	if warm {
+		for _, sp := range spans {
+			for i := sp[0]; i < sp[1]; i++ {
+				x[i] += x0[i]
+			}
+		}
+	}
 	copy(t, x[:n])
 	copy(d, x[n:])
 }

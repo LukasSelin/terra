@@ -261,15 +261,22 @@ func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float6
 	temp := all.floats(slotWaterTemp, n)
 	deep := all.floats(slotDeep, n)
 	done := phase.Start("airEnv.slab")
+	// The coupled round's solve starts from where the first left the sea,
+	// under a wind a little changed (#28): it solves for the round's
+	// correction only.
 	var was *seaSlab
+	var from []float64
 	if ocean != nil {
-		was = ocean.slab
+		was, from = ocean.slab, ocean.sea
 	}
 	slab := e.newSlab(was, gu, gv, rise, sink, thermo, func(i int) (east, north float64) { return ekman(i, i/e.W) })
+	slab.solve(temp, deep, s, from)
 	if ocean != nil {
 		ocean.slab = slab
+		ocean.sea = grow(ocean.sea, 2*n)
+		copy(ocean.sea, temp)
+		copy(ocean.sea[n:], deep)
 	}
-	slab.solve(temp, deep, s)
 	done()
 	e.Carried = slab.carried(temp, deep)
 	e.SeaHeat = e.seaHeat(e.Carried)

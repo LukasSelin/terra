@@ -137,6 +137,18 @@ type flow struct {
 	// currents over this ground wrote them, whose memory the next writes
 	// over: a reading's flow lives as long as its rounds.
 	slab *seaSlab
+	// sea is the two layers' warmth as the last currents over this ground
+	// solved them, the mixed layer's and then the water's under it, which
+	// the coupled round's solve starts from (seaSlab.solve).
+	//
+	// The reading before's answers, over ground a little moved, were tried
+	// as where a reading's first solves start, the sea's and the gyres'
+	// both. They are worse than nought: the equations are stiff - the
+	// currents and the eddies pull far harder than the air - and what the
+	// last reading's warmth left of this one's right-hand side was five to
+	// thirty times the right-hand side itself, so the solve had further to
+	// go, not less.
+	sea []float64
 }
 
 // level is the equations at one coarseness: the unknowns of the cells, row
