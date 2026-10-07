@@ -205,8 +205,8 @@ func estuary() *Grid {
 // them when the air came to swing the energy balance's year (see
 // atmos.Env.seasonTemp): small globes 1-8 hold 0, 1, 3, 0, 0, 1, 2 and 0, and
 // the third was the one read. Since a cold year's precipitation lies as snow
-// and reaches the rivers in the spring (see snow.go) they hold 0, 0, 0, 0, 1,
-// 2, 1 and 3, and the eighth is the one read.
+// and reaches the rivers in the spring (see snow.go) they hold 0, 0, 0, 0, 0,
+// 0, 3 and 6, and the eighth is the one read.
 func TestTheTideLaysFlatsOnlyWhereItReaches(t *testing.T) {
 	for _, c := range []struct {
 		name string

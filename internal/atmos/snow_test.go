@@ -183,3 +183,20 @@ func TestSnowLineIsOhmuras(t *testing.T) {
 		}
 	}
 }
+
+// The table the snow is read off is the snow's own functions, to a part in a
+// hundred thousand.
+func TestSnowTable(t *testing.T) {
+	worst := 0.0
+	for x := -40.0; x <= 40; x += 0.0137 {
+		share, days := snowAt(x)
+		s := snowShare(x)
+		if s < snowLeast {
+			s = 0
+		}
+		worst = math.Max(worst, math.Max(math.Abs(share-s), math.Abs(days-degreeDays(x))))
+	}
+	if worst > 1e-5 {
+		t.Errorf("the table is off by %.2g", worst)
+	}
+}

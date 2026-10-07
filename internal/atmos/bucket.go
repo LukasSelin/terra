@@ -153,9 +153,7 @@ func bucketRun(hold float64, rain, pet *[Phases]float64, spins, steps int, cold 
 	} else {
 		in, dry = make([]float64, n), make([]float64, n)
 	}
-	if cold != nil {
-		snowYear(rain, pet, cold.mean, cold.swing, steps, in, dry, &out)
-	} else {
+	if cold == nil || !snowYear(rain, pet, cold.mean, cold.swing, steps, in, dry, &out) {
 		for s := range n {
 			k := yearOrder[s/steps]
 			in[s] = math.Max(0, rain[k]) / float64(steps)

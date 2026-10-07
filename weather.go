@@ -250,6 +250,7 @@ func (g *Grid) rainOn() {
 	// out of the air there.
 	g.EachRow(func(y int) {
 		fy := (float64(y)+0.5)/float64(e.Cell) - 0.5
+		swingSea, swingLand := g.snowSwings(y)
 		for x := 0; x < g.W; x++ {
 			i := y*g.W + x
 			fx := (float64(x)+0.5)/float64(e.Cell) - 0.5
@@ -310,7 +311,7 @@ func (g *Grid) rainOn() {
 				}
 			}
 			hold := atmos.Hold(float64(g.Soil[i]), float64(g.paw[i]), atmos.RootDepth(pe/math.Max(p, 1e-9)))
-			mean, swing := g.snowYear(i, t)
+			mean, swing := g.snowYearOn(i, t, swingSea, swingLand)
 			b := atmos.BucketCold(hold, &rain, &take, mean, swing)
 			g.runoff[i], g.soilHold[i], g.ice[i] = b.Shed(), float32(hold), float32(b.Ice)
 			for k := range atmos.Phases {

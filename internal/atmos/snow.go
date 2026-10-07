@@ -106,15 +106,67 @@ func degreeDays(t float64) float64 {
 	return normalMean(t, snowSpread)
 }
 
-// snowFree is how warm, in degrees, a year's coldest fortnight has to stand
-// for no day of it to snow: snowWarm, and five spreads of the days above it.
-const snowFree = snowWarm + 5*snowSpread
+// The two are read off a table, every snowStep of a degree from snowLo to
+// snowHi: a land's every tile asks them at every step of its year each time
+// the rain is read, and the exponentials and error functions were half of
+// what reading the rain cost. Six spreads of the days below snowCold no day
+// of a fortnight is warm enough to rain or to melt, and six above snowWarm
+// none is cold enough to snow or to lie under freezing, to a part in a
+// thousand million.
+const (
+	snowLo   = snowCold - 6*snowSpread
+	snowHi   = snowWarm + 6*snowSpread
+	snowStep = 1.0 / 64
+	// snowLeast is the share of a fortnight's precipitation under which
+	// it is taken that none of it fell as snow, so that a year with no day
+	// near freezing is the bucket's without snow, exactly.
+	snowLeast = 1e-6
+)
+
+var snowTable = func() [][2]float64 {
+	out := make([][2]float64, int((snowHi-snowLo)/snowStep)+2)
+	for k := range out {
+		t := snowLo + float64(k)*snowStep
+		share := snowShare(t)
+		if share < snowLeast {
+			share = 0
+		}
+		out[k] = [2]float64{share, degreeDays(t)}
+	}
+	return out
+}()
+
+// snowAt is snowShare and degreeDays at t, off the table.
+func snowAt(t float64) (share, days float64) {
+	switch {
+	case t <= snowLo:
+		return 1, 0
+	case t >= snowHi:
+		return 0, t
+	}
+	f := (t - snowLo) / snowStep
+	k := min(int(f), len(snowTable)-2)
+	f -= float64(k)
+	a, b := &snowTable[k], &snowTable[k+1]
+	return a[0] + (b[0]-a[0])*f, a[1] + (b[1]-a[1])*f
+}
 
 // SnowFree reports whether a year whose mean at the ground is mean, swinging
-// swing either side of it, is too warm for snow ever to lie.
+// swing either side of it, is too warm for snow ever to fall.
 func SnowFree(mean, swing float64) bool {
-	return mean-math.Abs(swing) > snowFree
+	return mean-math.Abs(swing) >= snowNone
 }
+
+// snowNone is the warmth over which the table says no snow falls at all.
+var snowNone = func() float64 {
+	last := 0
+	for k, v := range snowTable {
+		if v[0] > 0 {
+			last = k
+		}
+	}
+	return snowLo + float64(last+1)*snowStep
+}()
 
 // stepAngle is the place in the year of step j of steps of phase k: the
 // angle whose sine is how far into the north's summer the year stands (see
@@ -122,6 +174,19 @@ func SnowFree(mean, swing float64) bool {
 func stepAngle(k, j, steps int) float64 {
 	return float64(k-1)*math.Pi/2 + ((float64(j)+0.5)/float64(steps)-0.5)*math.Pi/2
 }
+
+// stepSins is the sine of every step's place in the year at bucketSteps a
+// phase, in the year's order.
+var stepSins = func() (out [Phases * bucketSteps]float64) {
+	s := 0
+	for _, k := range yearOrder {
+		for j := range bucketSteps {
+			out[s] = math.Sin(stepAngle(k, j, bucketSteps))
+			s++
+		}
+	}
+	return out
+}()
 
 // snowYear is a snowpack's steady year under a year's precipitation, phase by
 // phase in rain, with the air able to take up pet in each, on ground whose
@@ -134,7 +199,10 @@ func stepAngle(k, j, steps int) float64 {
 // mm; and the phases' snow into out. Where the snow outlasts the year it is
 // a glacier, and out.Ice is its mass balance; the surplus is in neither in
 // nor dry but in out.Runoff, to be added to what the bucket sheds.
-func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dry []float64, out *BucketYear) {
+//
+// It reports whether any snow fell. Where none did it writes nothing, and
+// the year is the bucket's without snow.
+func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dry []float64, out *BucketYear) bool {
 	n := Phases * steps
 	// Each step's precipitation share as snow and its potential melt, in
 	// the year's order.
@@ -146,17 +214,31 @@ func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dr
 		fall, melt = make([]float64, n), make([]float64, n)
 	}
 	days := daysPerYear / float64(n)
-	var balance float64 // the year's, under a pack that never melts out
+	// Each phase's precipitation and evaporation a step.
+	var pk, ek [Phases]float64
+	for k := range Phases {
+		pk[k] = max(0, rain[k]) / float64(steps)
+		ek[k] = max(0, pet[k]) / float64(steps)
+	}
+	var balance, fell float64 // the year's, under a pack that never melts out
 	s := 0
 	for _, k := range yearOrder {
 		for j := range steps {
-			t := mean + swing*math.Sin(stepAngle(k, j, steps))
-			p := math.Max(0, rain[k]) / float64(steps)
-			fall[s] = snowShare(t) * p
-			melt[s] = meltFactor * degreeDays(t) * days
-			balance += fall[s] - melt[s] - math.Max(0, pet[k])/float64(steps)
+			sin := stepSins[min(s, len(stepSins)-1)]
+			if steps != bucketSteps {
+				sin = math.Sin(stepAngle(k, j, steps))
+			}
+			share, dd := snowAt(mean + swing*sin)
+			p := pk[k]
+			fall[s] = share * p
+			melt[s] = meltFactor * dd * days
+			balance += fall[s] - melt[s] - ek[k]
+			fell += fall[s]
 			s++
 		}
+	}
+	if fell <= 0 {
+		return false
 	}
 	out.Ice = 0
 	if balance > 0 {
@@ -173,12 +255,12 @@ func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dr
 		for _, k := range yearOrder {
 			var water, molten, fell float64
 			for range steps {
-				p := math.Max(0, rain[k]) / float64(steps)
-				e := math.Max(0, pet[k]) / float64(steps)
+				p := pk[k]
+				e := ek[k]
 				in[s] = p - fall[s] + melt[s]
 				dry[s] = 0
 				pack += fall[s] - e - melt[s]
-				least = math.Min(least, pack)
+				least = min(least, pack)
 				water += pack
 				molten += melt[s]
 				fell += fall[s]
@@ -197,50 +279,73 @@ func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dr
 		for k := range Phases {
 			out.Snow[k] -= least
 		}
-		return
+		return true
 	}
 
 	// A pack that melts out. Its steady year starts where the year it
 	// first melts out in ends, which a pack that does not grow from year
-	// to year reaches: from there on each year is the one before.
+	// to year reaches: from there on each year is the one before. It is
+	// run from the end of the summer, the north's autumn or the south's,
+	// when a pack that melts out has done so, so that the year read is
+	// most often the first year run.
+	from := 0
+	if swing > 0 {
+		from = 2 * steps
+	}
 	pack, least := 0.0, 0.0
 	run := func(write bool) bool {
 		gone := false
 		least = math.Inf(1)
-		s := 0
-		for _, k := range yearOrder {
-			var water, molten, fell, covered float64
-			for range steps {
-				p := math.Max(0, rain[k]) / float64(steps)
-				e := math.Max(0, pet[k]) / float64(steps)
-				pack += fall[s]
-				c := math.Tanh(pack / coverDepth)
-				up := math.Min(pack, c*e)
-				pack -= up
-				m := math.Min(pack, melt[s])
-				pack -= m
-				if pack <= 0 {
-					pack, gone = 0, true
-				}
-				least = math.Min(least, pack)
-				if write {
-					in[s] = p - fall[s] + m
-					dry[s] = e - up
-					water += pack
-					molten += m
-					fell += fall[s]
-					covered += c
-					out.Evap[k] += up
-				}
-				s++
+		var water, molten, fell, covered [Phases]float64
+		for j := range n {
+			s := from + j
+			if s >= n {
+				s -= n
 			}
+			k := yearOrder[s/steps]
+			p := pk[k]
+			e := ek[k]
+			pack += fall[s]
+			// The share covered is only wanted where the air takes up
+			// something, or where it is read.
+			c := 0.0
+			if pack > 0 && (write || e > 0) {
+				c = 1
+				if pack < 20*coverDepth {
+					c = math.Tanh(pack / coverDepth)
+				}
+			}
+			up := min(pack, c*e)
+			pack -= up
+			m := min(pack, melt[s])
+			pack -= m
+			if pack <= 0 {
+				pack, gone = 0, true
+			}
+			least = min(least, pack)
 			if write {
-				out.Snow[k] = water / float64(steps)
-				out.Melt[k], out.Snowfall[k], out.Cover[k] = molten, fell, covered/float64(steps)
+				in[s] = p - fall[s] + m
+				dry[s] = e - up
+				water[k] += pack
+				molten[k] += m
+				fell[k] += fall[s]
+				covered[k] += c
+				out.Evap[k] += up
+			}
+		}
+		if write {
+			for k := range Phases {
+				out.Snow[k] = water[k] / float64(steps)
+				out.Melt[k], out.Snowfall[k], out.Cover[k] = molten[k], fell[k], covered[k]/float64(steps)
 			}
 		}
 		return gone
 	}
+	if run(true); pack == 0 {
+		// It ended the year where it started it, with nothing.
+		return true
+	}
+	out.Evap = [Phases]float64{}
 	// A thin pack the air takes the last of at less than its fill can
 	// waste away a year at a time without melting out. The year after it
 	// is much the same year lower down, so it is let down by the least it
@@ -276,4 +381,5 @@ func snowYear(rain, pet *[Phases]float64, mean, swing float64, steps int, in, dr
 			out.Runoff[k] += gain * share
 		}
 	}
+	return true
 }

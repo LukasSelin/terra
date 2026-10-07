@@ -28,10 +28,25 @@ import (
 // tile's own, with the sea and the currents round it, as the frost and the
 // tree line do; the swing is the one the air's year has there either way.
 func (g *Grid) snowYear(i int, t float64) (mean, swing float64) {
-	swing = atmos.Swing
-	if g.Wrap && g.air != nil {
-		y := i / g.W
-		swing = atmos.SwingUnder(g.air.Forcing, g.air.Lat[y], g.contAt(i))
+	sea, land := g.snowSwings(i / g.W)
+	return g.snowYearOn(i, t, sea, land)
+}
+
+// snowSwings is the swing of row y's year over the open sea and deep in a
+// continent, which a tile's is between by the land round it: the air's
+// forcing's, and the valley's Swing on a map that does not wrap.
+func (g *Grid) snowSwings(y int) (sea, land float64) {
+	if !g.Wrap || g.air == nil {
+		return atmos.Swing, atmos.Swing
+	}
+	return atmos.SwingUnder(g.air.Forcing, g.air.Lat[y], 0), atmos.SwingUnder(g.air.Forcing, g.air.Lat[y], 1)
+}
+
+// snowYearOn is snowYear, with tile i's row's swings sea and land.
+func (g *Grid) snowYearOn(i int, t, sea, land float64) (mean, swing float64) {
+	swing = sea
+	if sea != land {
+		swing = sea + (land-sea)*clamp01(g.contAt(i))
 	}
 	if len(g.warm) == len(g.Tiles) {
 		t = g.meanOn(i, g.laidHeight(i))
