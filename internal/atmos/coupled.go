@@ -60,10 +60,12 @@ import (
 // What holds the feedback is the sea's own physics, and not a cap of the
 // loop's: the thermocline comes no nearer the surface than thermoLeast, and
 // the water that comes up from under it can be no colder than the deep
-// (upwelled), so however strong the easterlies grow, the east of an ocean
-// can be no colder than the water under it; the sea's warmth is held to
-// seaWarmMost of its latitude's; and the air over ice reads none of the
-// water's warmth under it.
+// (slab.go), so however strong the easterlies grow, the east of an ocean
+// can be no colder than the water under it; the two layers trade their heat
+// with the air and with each other, and carry it, as the energy balance
+// answers it (#22: the warmth is no longer held to ten degrees, and
+// realism_ocean_test.go holds the sea to that instead); and the air over ice
+// reads none of the water's warmth under it.
 //
 // The rounds are a fixed number, so the world is the same whatever they
 // came to, on any number of goroutines: each round's solves are the ones

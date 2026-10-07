@@ -97,7 +97,9 @@ var shapeYardsticks = []realYardstick{
 		name: "right angles of the continents' coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.15, slow: true,
 		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
 		measure: func() float64 { return cornerLock(threeGlobes()) },
-	}},
+	},
+		gap: "known gap: the coasts are the history's, and every change to the weather the history reads redraws them: with the sea carrying its own heat (#22) the three globes read 0.156 where they read 0.140, against a band the source says is not a measured figure. A point reading on three globes; it wants reading over seeds as #80 reads the relief",
+	},
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own

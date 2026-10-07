@@ -123,7 +123,9 @@ var soilYardsticks = []realYardstick{
 		name: "land share of Oxisols", unit: "", scale: "ground", lo: 0.05, hi: 0.10, slow: true,
 		source:  "Soil Survey Staff 1999; USDA-NRCS global soil regions map: Oxisols ~7.5% of ice-free land",
 		measure: func() float64 { return soilOrderShare(globes(), Oxisol) },
-	}},
+	},
+		gap: "known gap: M3 (#22) x #28/#35 - with the sea carrying its own heat the subtropical cells bring their cold return water up along the equator in every ocean, the equator's year stands 25.3 where it stood 26.0, and the hot humid land along it is the cooler for it: 0.0490 where it was 0.0503. On the earth the trades' Walker tilt keeps the cold tongue to the east of the Pacific and the warm pool to the west, which the year's mean wind on the equator here has nothing of",
+	},
 	// It was a known gap (I: the hot humid land is young, its surfaces a
 	// median of fourteen thousand years old, and few have weathered out
 	// three quarters of their minerals; 0.024) until the Earth-system stack

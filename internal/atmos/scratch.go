@@ -167,23 +167,24 @@ const (
 	slotFlowRest
 	slotPsi
 	slotThermo
-	slotLinkB
+	// The gyres' own current, which the two layers of the sea are carried by
+	// (slab.go), and how fast the drifts' meeting presses water down.
+	slotGyreU
+	slotGyreV
+	slotSunk
 	slotsCurrents
 )
 
 // The currents' fields taken over once what was in them is done with: the
 // thermocline's guided stress and its rows' level take the gyres' forcing
 // and residual; the pumping's drift takes them in turn once the thermocline
-// is worked out, and its sum the transport's; and the sea's equations take
-// the drift's slots once the pumping is summed.
+// is worked out, and its sum the transport's.
 const (
-	slotGuided   = slotForcing
-	slotLevel    = slotFlowRest
-	slotDriftX   = slotForcing
-	slotDriftY   = slotFlowRest
-	slotPumped   = slotPsi
-	slotLinkBase = slotForcing
-	slotLinkA    = slotFlowRest
+	slotGuided = slotForcing
+	slotLevel  = slotFlowRest
+	slotDriftX = slotForcing
+	slotDriftY = slotFlowRest
+	slotPumped = slotPsi
 )
 
 // The Walker circulation's (coupled.go, gill.go), in the shared work, between
