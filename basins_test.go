@@ -84,7 +84,7 @@ type basinReading struct {
 	held, fill float64
 	// shed, kept and shelved are what the land lost to the weather, what of
 	// that the land kept in its own basins, and what was laid on the sea's
-	// floor, over the history, in metres over the land; land is the land's
+	// floor, in metres an epoch over the land as it stood; land is the land's
 	// share of the planet at the end.
 	shed, kept, shelved, land float64
 	span                      float64
@@ -211,8 +211,10 @@ func readBasins(seed uint64, terms Terms) basinReading {
 // The forelands: the ground about a collision, on the plate that went under
 // it and on the plate that stayed up, by how far it is from the suture: how
 // far under its own column's level the plate's bend holds it, and how much
-// the epoch laid on it. In front of the belt the collision raises, the
-// foredeep is on the plate that went under: away from the overriding plate.
+// the epoch laid on it. In front of the range, from two flexural parameters
+// out, the plate that went under is bent further under its columns and
+// filled faster than the plate that stayed up: the foredeep is away from the
+// overriding plate.
 //
 // The passive margins: the sediment on the sea floor within marginWidth of a
 // continent, away from the seams. The earth's old margins carry up to ten to
