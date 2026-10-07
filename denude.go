@@ -82,6 +82,10 @@ const (
 	// degree.
 	shelfTop  = 50 * metre
 	shelfFall = 1e-3
+	// shelfPool is how many tiles across the blocks are whose mouths lay
+	// what they bring together: see pool. Four is a hundred and fifty
+	// kilometres at the globe's span.
+	shelfPool = 4
 )
 
 // deepRate is how hard a history's weather wears tile i, standing relief
@@ -122,6 +126,7 @@ func rockFactor(t *Tile) float64 {
 func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, spilt, lost float64) {
 	defer phase.Start("shelve")()
 	sh := g.shelfWork()
+	sh.pool(g, toSea)
 	for m := range toSea {
 		load := toSea[m]
 		total := carrying(load)
@@ -150,6 +155,43 @@ func (g *Grid) shelve(toSea [][Grains]float64, epoch int, book []record) (laid, 
 		lost += left
 	}
 	return laid, spilt, lost
+}
+
+// pool gathers what the mouths within a block shelfPool tiles across send
+// into one body of water onto the one of them that sends the most, which lays
+// it all. A coast's currents carry what its rivers bring along it, and laid
+// mouth by mouth, each of the thousands of tiles of a globe's coast walked out
+// across the whole width of its shelf to find room, a ninth of the making of
+// a globe.
+func (sh *shelfScratch) pool(g *Grid, toSea [][Grains]float64) {
+	for by := 0; by < g.H; by += shelfPool {
+		for bx := 0; bx < g.W; bx += shelfPool {
+			best, most := -1, 0.0
+			for y := by; y < min(by+shelfPool, g.H); y++ {
+				for x := bx; x < min(bx+shelfPool, g.W); x++ {
+					m := y*g.W + x
+					if c := carrying(toSea[m]); c > most && g.sunk(m) {
+						best, most = m, c
+					}
+				}
+			}
+			if best < 0 {
+				continue
+			}
+			for y := by; y < min(by+shelfPool, g.H); y++ {
+				for x := bx; x < min(bx+shelfPool, g.W); x++ {
+					m := y*g.W + x
+					if m == best || !g.sunk(m) || sh.body[m] != sh.body[best] {
+						continue
+					}
+					for gr := range toSea[m] {
+						toSea[best][gr] += toSea[m][gr]
+					}
+					toSea[m] = [Grains]float64{}
+				}
+			}
+		}
+	}
 }
 
 // shelfScratch is shelve's working, kept on the Grid while a history runs:
