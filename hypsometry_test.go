@@ -287,9 +287,11 @@ func TestHowOftenARiverClimbsTheCountry(t *testing.T) {
 }
 
 // countryClimbs is the share of the water's steps over dry land that may
-// climb the country where the ground under them falls: the drainage is
-// taken again after the country is last graded where the tide lays its
-// mud (see silt), and a step that moved there is not graded.
+// climb the country where the ground under them falls. The country is graded
+// on the drainage as the tide's mud leaves it (see silt and stageCoast), and
+// none does on the five worlds read; it was graded only after the cutting,
+// and up to 0.0015 did on the small globes once the plates rifted into
+// halves (#87).
 const countryClimbs = 0.001
 
 // earthShareUnder is the share of the earth's land under h metres.

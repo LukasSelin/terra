@@ -219,6 +219,13 @@ func (w *Land) stageCoast(g *Grid, cfg Terms) {
 			g.relevel(cfg.SeaShare)
 		}
 	})
+	// The mud takes the drainage again, round by round, and that is the last
+	// time it is taken: so the country is graded along it once more. Graded
+	// only after the cutting, the water climbed the country where the ground
+	// fell on a step or two in a thousand where the mud had moved it, which
+	// is past what TestHowOftenARiverClimbsTheCountry holds once the plates
+	// rifted into halves (#87) and the coasts came out elsewhere.
+	g.gradeCountry()
 }
 
 // stageCover is what stands on the ground and what it will grow: the woods,

@@ -6,6 +6,80 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - A rift splits a plate into halves (#87)
+
+**What this is.** On `claude/rock-rift-halves`, stacked on Rock G1c
+(`claude/rock-history-heights`, PR #96, f6d5cb4). The fix pushed as
+`claude/rift-even-halves` (2d16a3f), re-applied onto this base; the
+history.go part applied as it was. It moves every history.
+
+- **split** (`history.go`). The floods start a quarter of the way along the
+  rift's line from either end, not at the plate's furthest tiles. Those lie
+  on its edge, among the fractures the floods are slowest across, and one
+  flood was walled in (0.385 of the world rifted into 0.054 and 0.332). On a
+  globe the line is measured through the planet (`lineAcross`), so a plate
+  more than half the world round no longer folds onto itself. Up to four
+  lines are drawn; the first leaving the smaller half 0.3 of the plate is
+  kept, or the most even.
+- **reshape.** Each half is asked again whether it is over `plateCeiling`,
+  so a plate that welded on a third of the world in one epoch is halved
+  until it is under.
+- **Two side effects corrected**, both older than this change and found by
+  the redrawn coasts:
+  - `stageCoast` grades the country once more after `silt`, which takes the
+    drainage for the last time. Graded only after the cutting, 0.0011 and
+    0.0015 of the small globes' steps climbed the country where the ground
+    fell (`TestHowOftenARiverClimbsTheCountry` holds 0.001). Now none do on
+    the five worlds read.
+  - `soilTexture` leaves a flat's ground as the tide laid it. The cover stage
+    set it back to its rock's grain, finer than the sand the tide had graded
+    it on, and one flat of small globe 2 read 0.019 against the 0.016 the sea
+    grades it to (`TestTheTideLaysFlatsOnlyWhereItReaches`).
+- **Golden re-picked:** `TestTheChainForOneTileOfTheAncientValley` reads tile
+  667 (an arc, the first epoch, some 9 km), the oldest arc tile that bares
+  its granite now.
+
+**Plates** (share of the sphere, cos(latitude)-weighted; the ceiling test
+reads tiles):
+
+| | largest by tiles, max of 16 small | small globes over 0.22 by tiles | largest on the sphere, median [range] of 16 small | plates over 0.05, median [range] | globes 1-3 largest (sphere) | globes 1-3 over 0.05 | Bird exponent, 8 small (0.15-0.35) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| earth (Bird 2003) | | | Pacific ~0.20 | 7 | | 7 | 0.25 |
+| G1c (base) | 0.349 | 6 of 16 | 0.244 [0.204, 0.390] | 6.5 [4, 8] | 0.200, 0.164, 0.192 | 8, 6, 5 | 0.324 |
+| here | 0.214 | 0 of 16 | 0.203 [0.144, 0.265] | 7 [5, 9] | 0.263, 0.161, 0.157 | 8, 7, 7 | 0.311 |
+
+`TestAPlatesWallRunsStraight` over 16 small globes: median 0.988 [0.936,
+1.089] on the base, 1.007 [0.954, 1.054] here. The intervals overlap and both
+straddle the 1.05 floor. Its three-seed mean is 1.01 on the base and 1.02
+here, failing on both.
+
+**Calibration.** Full root suite on the base and here, fresh histories, with
+#80's `spread_test.go` and its changes copied in for the runs and not
+committed. All twelve seeded readings overlap the base's intervals: noise.
+On the old rule (pooled, the suite as committed), drainage exceedance,
+concavity 2x-1x and Flint's R2 come into band, and Hack on the globe and C1
+stay out. The point yardsticks fail the same list as on the base: meander
+wavelength, midlatitude rain, Aridisols, Gelisols. The right angles of the
+coasts move 0.156 -> 0.183 under their known gap, and the shelves' quiet over
+active 0.91 -> 1.37 toward their band. The tests fail the same list as on the
+base (`TestAPlatesWallRunsStraight`, `TestTheColdKeepsToThePoles`), less
+`TestAGlobeHasASeaItsRiversReach`, which passes here.
+
+**Hypsometry** (`TestTheGlobeStandsAtTheEarthsHeights`), land over the sea,
+m, at 5 / 25 / 50 / 75 / 99%: globe 1 40 / 259 / 467 / 941 / 5,413; globe 2
+52 / 223 / 436 / 724 / 5,104; globe 3 52 / 282 / 476 / 714 / 4,845; small 1
+44 / 289 / 447 / 768 / 4,432; small 2 39 / 138 / 278 / 574 / 3,740. Earth
+36 / 179 / 461 / 1,106 / 4,748. The 75% share runs lower than G1c's (714-941
+against 812-982 on the globes).
+
+**Rules.** Digest rewritten: ancient `34c47dbbaebd8a68` -> `ff073fbb4b83051d`,
+globe128 `d135dcb0035533d1` -> `814a1afe2406cea5`; valley unchanged. Budget
+rewritten: globe128 406.26 -> 391.57 MB, 30,226 -> 29,243 allocations;
+ancient 58.60 -> 58.98 MB. Taken on a loaded machine; a quiet
+`scripts/perf.sh check` is still owed, as on G2, G2b and G1c.
+
+---
+
 ## 2026-10-07 - The map stands on the history's own heights (Rock G1c)
 
 **What this is.** On `claude/rock-history-heights`: G2b

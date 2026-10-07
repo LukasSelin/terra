@@ -224,7 +224,8 @@ func (v TileView) Elevation() float64 { return v.g.Elevation(v.i) }
 // tile to the tile its water goes to. The sea's tiles are outside it, and a
 // tile whose water goes to the sea, or nowhere, is free of anything below
 // it. It is taken again wherever the drainage is taken for good: at the end
-// of the shaping and of the cutting. See the note above.
+// of the shaping, of the cutting and of the mud the tide lays (see silt).
+// See the note above.
 func (g *Grid) gradeCountry() {
 	defer phase.Start("gradeCountry")()
 	n := len(g.Tiles)

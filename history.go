@@ -2997,7 +2997,7 @@ func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []floa
 	// the way an epoch, its ranges stood out of the sea to the end of the
 	// history as islands of granite in the middle of an ocean.
 	ceiling := plateCeiling * float64(len(g.Tiles))
-	for k := 0; k < stride; k++ {
+	for k := 0; k < len(plates); k++ {
 		r := rootOf(plates, uint8(k))
 		if int(r) != k || area[r] <= ceiling || len(plates) >= plateCap {
 			continue
@@ -3020,7 +3020,15 @@ func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []floa
 		plates[to].DX, plates[to].DY = g.velocity(&whole, plates[to].cx, plates[to].cy, scale)
 		plates[to].DX += driftFast * ux
 		plates[to].DY += driftFast * uy
-		area[r] /= 2
+		// Each half is asked again whether it is too large: the old one now,
+		// and the new one when the loop comes to it. A plate that welded more
+		// than a ceiling's worth on in an epoch was halved once and left over
+		// the ceiling with it, epoch after epoch: on the third small globe of
+		// TestNoPieceOfCrustIsASliverOrAHemisphere the largest plate stood at
+		// half the world before its rift and a third after it, the last four
+		// epochs running.
+		area[r], area[to] = g.plateArea(r), g.plateArea(to)
+		k--
 	}
 
 	// And small pieces breaking off. Nothing above makes a plate smaller than
@@ -3162,15 +3170,102 @@ func enclosedBy(plates []Plate, touch []float64, r uint8, stride int) (uint8, bo
 
 // split rifts plate of in two, giving the part of it on one side to plate to,
 // and says which way that part lies from the rest. A line is drawn across the
-// plate at random, the tiles of it furthest along that line either way are
-// flooded from at the same rate over the plate's own ground, and whatever the
-// far flood reaches first is the new plate - so the rift is ragged, and the
-// two halves are near enough halves.
+// plate at random, the tiles a quarter of the way along it from either end
+// are flooded from at the same rate over the plate's own ground, and whatever
+// the far flood reaches first is the new plate - so the rift is ragged, and
+// the two halves are near enough halves.
+//
+// They were not. The floods started from the plate's furthest tiles either
+// way, which are on its edge, and a plate's edges lie along the fractures the
+// floods are slowest across (see flood): one flood would be walled in where it
+// started and the other take the plate. On the small globes the halves came
+// out anywhere from even to a few tiles against the rest - a third of the
+// world rifted into a twentieth and the rest. Started a quarter of the way
+// in, a flood starts on open ground; and a line is drawn up to splitTries
+// times, the first that leaves the smaller half splitEven of the whole kept
+// (or the most even of them).
 func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, uy float64, ok bool) {
-	a := 2 * math.Pi * w.RNG.Float64()
-	ux, uy = math.Cos(a), math.Sin(a)
-	first, lo, hi := -1, -1, -1
-	low, high := math.Inf(1), math.Inf(-1)
+	// The new plate floods at its parent's rate and along its parent's grain,
+	// so neither half is favoured.
+	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
+		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
+	best, bestA := -1.0, 0.0
+	for range splitTries {
+		a := 2 * math.Pi * w.RNG.Float64()
+		even, ok := g.riftAlong(fl, plates, of, to, a)
+		if !ok {
+			continue
+		}
+		if even > best {
+			best, bestA = even, a
+		}
+		if even >= splitEven {
+			break
+		}
+	}
+	if best < 0 {
+		return 0, 0, false
+	}
+	if g.riftShare(of, to) != best {
+		g.riftAlong(fl, plates, of, to, bestA)
+	}
+	return math.Cos(bestA), math.Sin(bestA), true
+}
+
+// riftShare is the smaller of plates of and to's shares of the two together.
+func (g *Grid) riftShare(of, to uint8) float64 {
+	var a, b float64
+	for i := range g.Tiles {
+		switch g.Tiles[i].Plate {
+		case of:
+			a++
+		case to:
+			b++
+		}
+	}
+	if a+b == 0 {
+		return 0
+	}
+	return math.Min(a, b) / (a + b)
+}
+
+// plateArea is how many tiles plate p holds.
+func (g *Grid) plateArea(p uint8) float64 {
+	var n float64
+	for i := range g.Tiles {
+		if g.Tiles[i].Plate == p {
+			n++
+		}
+	}
+	return n
+}
+
+// splitTries is how many lines a rift is drawn along at most, and splitEven
+// the share of the plate the smaller half has to have for the first to do.
+const (
+	splitTries = 4
+	splitEven  = 0.3
+)
+
+// riftAlong rifts plates of and to, which were one plate, along a line at
+// angle a, and says what share of it the smaller half is.
+func (g *Grid) riftAlong(fl *flooding, plates []Plate, of, to uint8, a float64) (float64, bool) {
+	for i := range g.Tiles {
+		if g.Tiles[i].Plate == to {
+			g.Tiles[i].Plate = of
+		}
+	}
+	ux, uy := math.Cos(a), math.Sin(a)
+	type at struct {
+		along float64
+		i     int
+	}
+	var line []at
+	first := -1
+	var across func(i int) float64
+	if g.Wrap {
+		across = g.lineAcross(&plates[of], ux, uy)
+	}
 	for i := 0; i < len(g.Tiles); i += 3 {
 		if g.Tiles[i].Plate != of {
 			continue
@@ -3178,36 +3273,56 @@ func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, u
 		if first < 0 {
 			first = i
 		}
-		// Measured from one tile of the plate, the short way round a globe.
-		dx := float64(i%g.W - first%g.W)
-		if g.Wrap {
-			if dx > float64(g.W)/2 {
-				dx -= float64(g.W)
-			} else if dx < -float64(g.W)/2 {
-				dx += float64(g.W)
-			}
+		var along float64
+		if across != nil {
+			along = across(i)
+		} else {
+			along = float64(i%g.W-first%g.W)*ux + float64(i/g.W-first/g.W)*uy
 		}
-		along := dx*ux + float64(i/g.W-first/g.W)*uy
-		if along < low {
-			low, lo = along, i
-		}
-		if along > high {
-			high, hi = along, i
-		}
+		line = append(line, at{along, i})
 	}
-	if first < 0 || lo == hi {
-		return 0, 0, false
+	if len(line) < 2 {
+		return 0, false
+	}
+	sort.SliceStable(line, func(p, q int) bool { return line[p].along < line[q].along })
+	lo, hi := line[len(line)/4].i, line[len(line)*3/4].i
+	if lo == hi {
+		return 0, false
 	}
 	seeds := []middle{
 		{X: float64(lo%g.W) + 0.5, Y: float64(lo/g.W) + 0.5, at: of},
 		{X: float64(hi%g.W) + 0.5, Y: float64(hi/g.W) + 0.5, at: to},
 	}
-	// The new plate floods at its parent's rate and along its parent's grain,
-	// so neither half is favoured.
-	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
-		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
 	g.floodOver(plates, seeds, fl, int(of))
-	return ux, uy, true
+	return g.riftShare(of, to), true
+}
+
+// lineAcross is how far along a line through plate p's middle, running ux, uy
+// across the map (x to the east, y down the rows), each tile of a map that
+// goes round lies.
+//
+// It is measured through the planet: the line is the direction ux, uy on the
+// ground at the plate's middle, and each tile is read as a point on the
+// sphere, so that the furthest tiles of the plate either way along it are the
+// ends of the plate however far round the world it reaches. It was measured
+// on the map from one tile of the plate, the short way round, and a plate
+// more than half the world round folded onto itself: its ends could be a few
+// tiles apart on the ground, and the rift between them cut a sliver off a
+// plate a third of the world. See split.
+func (g *Grid) lineAcross(p *Plate, ux, uy float64) func(i int) float64 {
+	sphere := func(x, y float64) (lon, lat float64) {
+		return 2 * math.Pi * x / float64(g.W), math.Pi * (0.5 - (y+0.5)/float64(g.H))
+	}
+	lon0, lat0 := sphere(p.cx, p.cy)
+	// East and north on the ground at the middle; down the rows is south.
+	ex, ey := -math.Sin(lon0), math.Cos(lon0)
+	nx, ny, nz := -math.Sin(lat0)*math.Cos(lon0), -math.Sin(lat0)*math.Sin(lon0), math.Cos(lat0)
+	tx, ty, tz := ux*ex-uy*nx, ux*ey-uy*ny, -uy*nz
+	return func(i int) float64 {
+		lon, lat := sphere(float64(i%g.W), float64(i/g.W))
+		c := math.Cos(lat)
+		return c*math.Cos(lon)*tx + c*math.Sin(lon)*ty + math.Sin(lat)*tz
+	}
 }
 
 // axisOf is how far from the seam a meeting's fire is: under the arc, where
