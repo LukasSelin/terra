@@ -110,18 +110,16 @@ func continent(lat float64) *Grid {
 //
 // What is held is the turn: the summer's wind across the south coast is more
 // than a metre a second further onshore than the winter's, and the continent
-// stands under the sea's pressure in its summer and over it in its winter.
-// That the summer's wind at seven degrees blows onto the land, against the
-// trades, is logged and not held. It did, at half a metre a second, while
-// the air swung a year of its own that grew with the latitude to Temperate
-// and stood a continent's at one and three fifths of the valley's; under the
-// energy balance's year, which the ground reads too, the land between five
-// and fifteen degrees swings under four degrees where it swung up to six,
-// and the summer's wind there is the trades' less the monsoon's turn. The
-// balance's land is a band's mean land, a coast as much as an interior, and
-// the real Sahel and Thar swing some twice as far; the monsoon worked out
-// from the heating, Gill's (1980), is a later step of the air's (#35), and
-// should hold it then.
+// stands under the sea's pressure in its summer and over it in its winter;
+// and that the summer's wind at seven degrees blows onto the land, against
+// the trades. That last was let go for a while: under the energy balance's
+// year the land between five and fifteen degrees swings under four degrees,
+// and with the trough moved a fixed five degrees with the sun the summer's
+// wind there was the trades' less the monsoon's turn, offshore. The ITCZ on
+// the balance's energy flux equator goes further into the summer's
+// hemisphere - some six degrees on this planet of sea with one continent -
+// and draws the coast's air north across it. The monsoon worked out from
+// the heating, Gill's (1980), is a later step of the air's (#35).
 func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 	g := continent(25)
 	g.weather()
@@ -144,7 +142,7 @@ func TestAHotContinentDrawsTheSeaWindInInSummer(t *testing.T) {
 		t.Errorf("the summer wind blows %.1f m/s onto the land and the winter wind %.1f", summer, winter)
 	}
 	if summer <= 0 {
-		t.Logf("a known gap: the summer's wind at the south coast is offshore (see above)")
+		t.Errorf("the summer wind at the south coast blows %.1f m/s offshore", -summer)
 	}
 	low := func(day int) float64 {
 		return g.PressureOn(g.W*32+96, day) - g.PressureOn(g.W*32+200, day)
