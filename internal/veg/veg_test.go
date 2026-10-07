@@ -70,7 +70,8 @@ func steady(c Climate) (State, [PFTs]Potential) {
 		pot[p] = y.Potential(p)
 	}
 	s := Equilibrium(&pot)
-	Spin(&s, &pot, 300)
+	f := y.Fire()
+	Spin(&s, &pot, &f, 300)
 	return s, pot
 }
 
@@ -128,7 +129,8 @@ func TestAWoodDiesBackWhereItsGroundDries(t *testing.T) {
 	for p := range PFTs {
 		pot[p] = y.Potential(p)
 	}
-	Grow(&s, &pot, 30)
+	f := y.Fire()
+	Grow(&s, &pot, &f, 30)
 	after := s.Trees()
 	t.Logf("tree cover %.2f, thirty years after its water was cut %.2f", before, after)
 	if before < 0.7 || after > 0.2*before {
@@ -147,7 +149,8 @@ func TestAFrostKillsTheTropicalTrees(t *testing.T) {
 	for p := range PFTs {
 		pot[p] = y.Potential(p)
 	}
-	Grow(&s, &pot, 20)
+	f := y.Fire()
+	Grow(&s, &pot, &f, 20)
 	if c := s.Cover[TropicalEvergreen]; c > 0.01 {
 		t.Errorf("tropical evergreen covers %.3f twenty years into frost", c)
 	}

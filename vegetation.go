@@ -27,6 +27,15 @@ import (
 // wood a settlement felled is still the ground's to grow back: a Field
 // carries the vegetation its ground would hold.
 //
+// It burns. A year has its fires, lit by the lightning and run through the
+// grass and the litter as far as their dryness and the wind take them, and
+// they kill the trees as their bark lets them; a drought kills, and the
+// storms throw trees down (see package veg's fires). Over a band of rain a
+// savanna the fires hold open and a forest that shades the grass out are
+// each a state that holds itself, and which a place has is its history's:
+// the land is laid as the last glacial's drier centuries left it, and run on
+// under today's year (see glacialRain).
+//
 // It is today's. A history's epochs are rained on with the roots the dryness
 // gives (atmos.RootDepth): plants come to deep time with the carbon cycle
 // that needs them (docs/earth-system-plan.md, owner decision 3).
@@ -54,7 +63,8 @@ func PFTName(p PFT) string { return veg.Kinds[p].Name }
 // How the state is kept: a byte for each type's cover, in 255ths of the
 // tile; two for its carbon, in grams a square metre of the tile, to 65 kg;
 // and a byte for its leaf area over its own cover, in twentieths, to 12.75.
-// Thirty-six bytes a tile.
+// Thirty-six bytes a tile, and two more for the share of it its fires burn
+// a year (see Burned).
 const (
 	coverStep = 1.0 / 255
 	massStep  = 1e-3 // kg
@@ -261,23 +271,39 @@ func (g *Grid) rewater() {
 
 // vegClimate is tile i's year as the plants read it (see veg.Climate), and
 // false where nothing grows: under the water, or where the weather has not
-// been read. sun is the row's light by phase, and twiMean the land's mean
-// wetness index.
-func (g *Grid) vegClimate(i int, sea, land float64, sun *[atmos.Phases]float64, twiMean float64) (veg.Climate, bool) {
+// been read. sun is the row's light by phase, twiMean the land's mean
+// wetness index, and throw the storms' throw over the air's cells (nil
+// where there are none). wet is the share of its rain the year has: one for
+// today's, less for a drier past's.
+func (g *Grid) vegClimate(i int, sea, land float64, sun *[atmos.Phases]float64, twiMean float64, throw []float64, wet float64) (veg.Climate, bool) {
 	var c veg.Climate
 	rain, take, mean, swing, _, ok := g.soilYear(i, sea, land)
 	if !ok {
 		return c, false
 	}
-	c.Mean, c.Swing, c.Sun, c.Take = mean, swing, *sun, take
+	for k := range atmos.Phases {
+		rain[k] *= wet
+	}
+	c.Mean, c.Swing, c.Sun, c.Take, c.Rain = mean, swing, *sun, take, rain
+	if g.winds != nil {
+		cell := g.winds.Env.CellOfTile(i)
+		for k := range atmos.Phases {
+			if len(g.winds.U[k]) > cell {
+				c.Wind[k] = math.Hypot(float64(g.winds.U[k][cell]), float64(g.winds.V[k][cell]))
+			}
+		}
+		if len(throw) > cell {
+			c.Throw = throw[cell]
+		}
+	}
 	p := g.PosOf(i)
 	c.Bare = g.Barren(p)
 	c.Treeless = g.Treeless(p) || g.Slope(p) > soilCritical
 	// A hollow the water gathers in is wetter than the soil's own bucket, and
 	// a crest drier, by its wetness index against the land's: see twi.
-	wet := 1.0
+	hollow := 1.0
 	if twiMean > 0 {
-		wet = math.Max(1/wetHollow, math.Min(wetHollow, g.twi(i)/twiMean))
+		hollow = math.Max(1/wetHollow, math.Min(wetHollow, g.twi(i)/twiMean))
 	}
 	soil, paw := float64(g.Soil[i]), float64(g.paw[i])
 	for _, lot := range [2]struct {
@@ -288,7 +314,7 @@ func (g *Grid) vegClimate(i int, sea, land float64, sun *[atmos.Phases]float64, 
 		for k := range atmos.Phases {
 			lot.into[k] = 1
 			if take[k] > 0 {
-				lot.into[k] = math.Min(1, wet*b.Evap[k]/take[k])
+				lot.into[k] = math.Min(1, hollow*b.Evap[k]/take[k])
 			}
 		}
 	}
@@ -331,9 +357,9 @@ func (g *Grid) rowSun(y int) (sun [atmos.Phases]float64) {
 }
 
 // growVegetation runs every tile's vegetation on through years of its year
-// as the air last read it: from BIOME4's answer to the climate's steady
-// state where nothing has been laid (veg.Spin, years at the most), and from
-// what stands where it has.
+// as the air last read it, with its fires and its storms: from its history
+// to the climate's steady state where nothing has been laid (veg.Spin, years
+// at the most, see glacialRain), and from what stands where it has.
 func (g *Grid) growVegetation(years int) {
 	defer phase.Start("growVegetation")()
 	if len(g.rainIn) != len(g.Tiles)*atmos.Phases || g.air == nil {
@@ -344,35 +370,81 @@ func (g *Grid) growVegetation(years int) {
 		n := len(g.Tiles) * int(PFTs)
 		g.vegCover, g.vegMass, g.vegLeaf = make([]uint8, n), make([]uint16, n), make([]uint8, n)
 	}
+	if len(g.burned) != len(g.Tiles) {
+		g.burned = make([]uint16, len(g.Tiles))
+	}
 	g.soilBucket()
 	twiMean := g.landTwiMean()
+	var throw []float64
+	if g.winds != nil {
+		throw = g.winds.Env.Throw()
+	}
 	g.EachRow(func(y int) {
 		sea, land := g.snowSwings(y)
 		sun := g.rowSun(y)
 		for i := y * g.W; i < (y+1)*g.W; i++ {
-			c, ok := g.vegClimate(i, sea, land, &sun, twiMean)
+			c, ok := g.vegClimate(i, sea, land, &sun, twiMean, throw, 1)
 			if !ok {
 				clear(g.vegCover[i*int(PFTs) : (i+1)*int(PFTs)])
 				clear(g.vegMass[i*int(PFTs) : (i+1)*int(PFTs)])
 				clear(g.vegLeaf[i*int(PFTs) : (i+1)*int(PFTs)])
+				g.burned[i] = 0
 				continue
 			}
 			yr := veg.Read(&c)
-			var pot [PFTs]veg.Potential
-			for p := range PFTs {
-				pot[p] = yr.Potential(p)
-			}
+			pot, fire := potentials(&yr)
+			var s veg.State
 			if fresh {
-				s := veg.Equilibrium(&pot)
-				veg.Spin(&s, &pot, years)
-				g.keep(i, &s, &pot)
-				continue
+				// The history: BIOME4's answer under the glacial's drier
+				// year, run to the state the glacial's fires held it at,
+				// and run on from there under today's.
+				was, _ := g.vegClimate(i, sea, land, &sun, twiMean, throw, glacialRain)
+				wyr := veg.Read(&was)
+				wpot, wfire := potentials(&wyr)
+				s = veg.Equilibrium(&wpot)
+				veg.Spin(&s, &wpot, &wfire, years)
+				veg.Spin(&s, &pot, &fire, years)
+			} else {
+				s = g.stateOf(i)
+				veg.Grow(&s, &pot, &fire, years)
 			}
-			s := g.stateOf(i)
-			veg.Grow(&s, &pot, years)
 			g.keep(i, &s, &pot)
+			g.burned[i] = uint16(math.Round(veg.Burned(&s, &pot, &fire) / burnedStep))
 		}
 	})
+}
+
+// potentials is what each type would make of a year, and the year's fires
+// and storms.
+func potentials(yr *veg.Year) (pot [PFTs]veg.Potential, fire veg.Fire) {
+	for p := range PFTs {
+		pot[p] = yr.Potential(p)
+	}
+	return pot, yr.Fire()
+}
+
+// glacialRain is the share of today's rain the land's history leaves it
+// with: the vegetation laid on a new map is the state it came to through the
+// last glacial's drier centuries, run on under today's year. Which of a
+// savanna and a forest a place in the band of rain that holds either has is
+// its history's: a savanna whose fires held it open through the glacial
+// holds itself open still, and a forest that closed over the grass keeps
+// it shaded out (Staver and others, 2011). The tropics' land was some
+// fifth to a third drier at the last glacial maximum than today, and the
+// savannas wider (Bartlein and others, 2011; Anhuf and others, 2006): three
+// quarters of the rain.
+const glacialRain = 0.75
+
+// burnedStep is what Burned is kept in: 65535ths.
+const burnedStep = 1.0 / 65535
+
+// Burned is the share of tile i's ground its fires burn in a year, as the
+// vegetation on it last ran: see package veg's fires.
+func (g *Grid) Burned(i int) float64 {
+	if i < 0 || i >= len(g.burned) {
+		return 0
+	}
+	return float64(g.burned[i]) * burnedStep
 }
 
 // layVegetation lays the land's vegetation at its steady state under

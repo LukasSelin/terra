@@ -183,6 +183,9 @@ type Grid struct {
 	// See vegetation.go.
 	vegCover, vegLeaf []uint8
 	vegMass           []uint16
+	// burned is the share of each tile's ground its fires burn in a year, in
+	// 65535ths. See Burned.
+	burned []uint16
 	// winds is the climate of the wind the rain was last read from. It is
 	// never changed once made, so copies of the map share it. See package atmos.
 	winds *Winds
@@ -377,6 +380,7 @@ func (g *Grid) Clone() *Grid {
 	c.ice = slices.Clone(g.ice)
 	c.petShare = g.petShare // the air's, never written once read
 	c.vegCover, c.vegMass, c.vegLeaf = slices.Clone(g.vegCover), slices.Clone(g.vegMass), slices.Clone(g.vegLeaf)
+	c.burned = slices.Clone(g.burned)
 	// pet reads dayRange: a copy without it evaporates otherwise, and reads
 	// its soil's climate otherwise with it.
 	c.dayRange = slices.Clone(g.dayRange)

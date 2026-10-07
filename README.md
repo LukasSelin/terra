@@ -43,7 +43,10 @@ area it puts up, grown to the climate's steady state by the year's warmth,
 light, snow and soil water and by competition, and living on through every
 age the ground is worn; the woods a game sees are read off them, and a wood
 whose ground stops suiting it dies back (`Grid.Cover`, `Biomass`, `LeafArea`,
-`LAI`, `BiomeAt`). How worn a path is and how fast it fades.
+`LAI`, `BiomeAt`). Its fires, lit by the lightning and spread with the wind
+through the grass and the litter, hold a savanna open where the rain would
+grow a forest, and which of the two a place has is its history's; droughts
+and the storms' gales kill trees too (`Grid.Burned`). How worn a path is and how fast it fades.
 Where a walker can get to, and the cheapest way there, with landmark bounds
 and a wrapping map if the world is a globe.
 

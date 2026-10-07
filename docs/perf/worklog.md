@@ -6,6 +6,69 @@ measurements is in [README.md](README.md).
 
 ---
 
+## 2026-10-07 - Land L4: fire and disturbance (#52)
+
+**What this is.** On `claude/land-fire`, stacked on `claude/land-vegetation`
+(L3, #85) at d3cad33. Fire inside L3's yearly dynamics, SPITFIRE-lite
+(Thonicke et al. 2010; `internal/veg/fire.go`): fuel from the grass above
+the ground and the litter the leaves drop (rotting by a Q10 of two); dryness
+from L1's bucket under a herb's roots, phase by phase, read over five years
+of a phase's water (±1/3 swing) and nothing under snow; ignitions from
+lightning, the flashes going with the convective share of a phase's rain
+(0.035 flashes/km² a mm, a fifth to the ground, 4% lighting a fire), a sixth
+of each phase's falling on each neighbour's fuel; fires that run with the
+wind for SPITFIRE's dryness-limited duration, as ellipses, and spread only
+where the flammable cover is continuous (Archibald et al. 2009). Fire kills
+by bark (savanna trees keep 0.9 of their cover, rainforest 0.4, boreal 0.15,
+grass resprouts) and holds the trees' young down (gain × e^(-3·burned)).
+Drought dieback for woody types under their establishment water (up to 5%/yr)
+and windthrow as a mean rate from synoptic.go's storm rules
+(`atmos.Env.Throw`: cyclones within reach of summer sea over 26.5 °C,
+gales at 30-70°). A new map's vegetation is laid as the last glacial's
+drier year (0.75 of the rain) left it and then spun under today's, so
+which of a savanna and a forest a bistable place has is its history's.
+`Grid.Burned` is new; the game API is unchanged, and the tuned valley's
+woods rule is untouched.
+
+**Bytes a tile.** 38: L3's 36 and two for the burned share (65535ths).
+
+**The digest.** Rewritten, as meant: valley 45a8959a1ca0468b, ancient
+0254d53d801725ba, globe128 4fc693b3a16ca85c.
+
+**The heap.** Budget rewritten: valley 10.44 MiB in 1326 allocations (10.42
+in 1323), ancient 56.87 MiB in 8807 (56.85 in 8802), globe128 399.2 MiB in
+29466 (399.07 in 29468). The full globe allocates 11.04 GB, as before.
+
+**Time.** `TERRA_PHASES=1`, `NewLand/globe`, the base at d3cad33 in its own
+copy then this branch, the machine shared with other sessions (noise of
+±10 s on Generate): Generate 70.7-83.2 s on the base, 79.1-81.8 here;
+growVegetation 0.26-0.29 s against 1.6-1.7 s at first. Two thirds of that
+was the storms' throw, a 600 km window searched over every cell; a chamfer
+sweep (Borgefors 1986) made it 20 ms, and growVegetation now reads 0.76-0.78
+s laid fresh (in a test on globe 1: two spins, glacial and today's, where L3
+had one) and 0.28 s for an age's 25 years. The valley's making on the
+budget's four workers: 194 ms -> 392 ms, under load. `scripts/perf.sh check`
+was not run: the machine was never quiet.
+
+**What it reads** (GlobeTerms seed 1):
+- Burned a year: savanna 0.281 (GFED 0.2-0.4), boreal forest 0.0076
+  (0.005-0.01), tropical rainforest 0.0000. All the land 0.079, 11.8 Mkm²
+  scaled to the earth's (GFED ~4: temperate grassland 0.12 and shrubland 0.08
+  burn too much).
+- Tropical tree cover at 1000-2500 mm, by tenths: 0.29 0.08 0.10 0.07 0.02
+  0.01 0.00 0.02 0.33 0.08; Sarle's bimodality 0.81 (5/9 uniform). 11% of
+  that land holds either state by where it starts, and two thirds of it is
+  savanna as laid.
+- Vegetation carbon 453 Gt C (510 on L3; band 450-650). Shrubland 0.236 of
+  the land (0.265). Temperate broadleaf LAI 2.96, conifer 2.90 (3.0, 2.9).
+
+**Yardsticks.** Base and branch with #80's interval rule applied and not
+committed: the same four failures (midlatitude/subtropical rain, rain 2x/1x,
+Aridisols, Gelisols). Every river and relief interval is identical to the
+digit but the advisory discharge exceedance (0.442 -> 0.449).
+
+---
+
 ## 2026-10-07 - Land L3: vegetation as a state (#51)
 
 **What this is.** On `claude/land-vegetation`, stacked on `claude/land-snow`

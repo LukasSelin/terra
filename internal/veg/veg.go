@@ -238,6 +238,12 @@ type Climate struct {
 	// Take is what the air could take up in each phase, in mm, which the
 	// year's α weighs the phases' by.
 	Take [Phases]float64
+	// Rain is what falls in each phase, in mm, whose showers bring the
+	// lightning that lights the fires; Wind is the wind near the ground
+	// through each phase, in metres a second, which drives them; and Throw
+	// is the share of a canopy the storms blow down in a year. See Fire.
+	Rain, Wind [Phases]float64
+	Throw      float64
 	// Treeless is ground above the tree line (atmos.TreeLineMean) or too
 	// steep to hold the soil a tree stands in; Bare is ground nothing grows
 	// on, under ice.
@@ -254,6 +260,10 @@ type Potential struct {
 	// carbon. Surplus is NPP less what replacing its leaves takes: what it
 	// has to grow by.
 	LAI, NPP, Surplus float64
+	// Drought is the share of its cover a woody type loses in a year to
+	// the drought of a year whose water is under what it establishes on:
+	// see droughtMost.
+	Drought float64
 }
 
 // stepAngle is the place in the year of step j of steps of phase k, as the
@@ -377,6 +387,9 @@ func (y *Year) Potential(p PFT) Potential {
 	alpha := yearAlpha(water, &c.Take)
 	pot.Survive = y.cold >= k.coldDies && alpha >= dryKeep*k.dry
 	pot.Establish = pot.Survive && y.cold >= k.coldFrom && y.cold <= k.coldTo && y.gdd5 >= k.gdd && y.warm <= k.warmTo && alpha >= k.dry
+	if k.Woody && k.dry > 0 && alpha < k.dry {
+		pot.Drought = droughtMost * math.Min(1, (k.dry-alpha)/((1-dryKeep)*k.dry))
+	}
 	var a, s [Phases]float64
 	var leafQ, woodQ float64 // the year's upkeep factors, leaves while in leaf and stems all year
 	for ph := range Phases {
@@ -525,22 +538,25 @@ func settle(s *State, pot *[PFTs]Potential, tree bool, room float64) float64 {
 }
 
 // Grow runs a state through years of the year whose types' potentials are
-// pot. Each year the trees take the canopy, and the rest the ground the trees
-// leave: each type grows its cover by what it has to grow by into the room
-// left, takes some of what is left by seeding where it may establish, and
-// loses cover to age, to starving, to a winter it does not survive, and to
-// the better types it is crowded by; and its carbon follows its cover and
-// its productivity.
+// pot and whose fires and storms are f. Each year the trees take the canopy,
+// and the rest the ground the trees leave: each type grows its cover by what
+// it has to grow by into the room left, takes some of what is left by
+// seeding where it may establish, and loses cover to age, to starving, to a
+// winter it does not survive, to the better types it is crowded by, and to
+// the year's fires, drought and storms; and its carbon follows its cover and
+// its productivity. The fires are the state's own: what it has standing at
+// the year's start is their fuel (see Burned).
 //
 // A state that has stopped moving - no type's cover changing by stillCover
 // of the ground in a year nor its carbon by stillMass - is left where it is:
 // the years after would only creep on by less than the land keeps the state
 // to (a 255th of the ground, a gram of carbon) every few decades.
-func Grow(s *State, pot *[PFTs]Potential, years int) {
+func Grow(s *State, pot *[PFTs]Potential, f *Fire, years int) {
 	var loss [PFTs]float64
 	for range years {
-		trees := grow(s, pot, true, treesMost, 1, &loss)
-		grow(s, pot, false, 1-trees, 1, &loss)
+		burned := Burned(s, pot, f)
+		trees := grow(s, pot, true, treesMost, 1, burned, f.Throw, &loss)
+		grow(s, pot, false, 1-trees, 1, burned, 0, &loss)
 	}
 }
 
@@ -553,7 +569,7 @@ func Grow(s *State, pot *[PFTs]Potential, years int) {
 // it. The carbon follows the cover by its residence, decades for a tree, and
 // left to the years it takes centuries to settle to the gram after the cover
 // has; its steady value is had at once.
-func Spin(s *State, pot *[PFTs]Potential, years int) {
+func Spin(s *State, pot *[PFTs]Potential, f *Fire, years int) {
 	const (
 		stillCover = 1e-5
 		spinYears  = 30 // taken a year at a time, before spinStride at a time
@@ -567,8 +583,9 @@ func Spin(s *State, pot *[PFTs]Potential, years int) {
 		}
 		y += dt
 		was := s.Cover
-		trees := grow(s, pot, true, treesMost, float64(dt), &loss)
-		grow(s, pot, false, 1-trees, float64(dt), &loss)
+		burned := Burned(s, pot, f)
+		trees := grow(s, pot, true, treesMost, float64(dt), burned, f.Throw, &loss)
+		grow(s, pot, false, 1-trees, float64(dt), burned, 0, &loss)
 		still := true
 		for p := range PFTs {
 			if math.Abs(s.Cover[p]-was[p]) > stillCover*float64(dt) {
@@ -588,9 +605,11 @@ func Spin(s *State, pot *[PFTs]Potential, years int) {
 }
 
 // grow is one year of the canopy's or the open ground's types on room, and
-// reports their cover at its end: dt years of it, taken at once. It writes
-// into loss the share of each type's carbon a year takes.
-func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt float64, loss *[PFTs]float64) float64 {
+// reports their cover at its end: dt years of it, taken at once. burned is
+// the share of the ground the year's fires burn, and throw the share of the
+// cover the storms blow down. It writes into loss the share of each type's
+// carbon a year takes.
+func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw float64, loss *[PFTs]float64) float64 {
 	var held, best float64
 	for p := range PFTs {
 		if Kinds[p].Tree == tree {
@@ -601,6 +620,10 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt float64, loss *[PF
 		}
 	}
 	free := math.Max(0, room-held)
+	young := 1.0 // what the fires leave of the canopy's young
+	if tree && burned > 0 {
+		young = math.Exp(-trap * burned)
+	}
 	crowd := 0.0
 	if room > 0 {
 		crowd = math.Min(1, held/room)
@@ -632,10 +655,22 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt float64, loss *[PF
 		if !pt.Survive {
 			m += killed
 		}
+		// The fires kill what they burn as its bark lets them, and hold a
+		// canopy's young down; the drought and the storms take their share.
+		m += burned*(1-fireTraits[p].resist) + throw + pt.Drought
+		gain *= young
 		next := math.Max(0, (c+dt*gain)/(1+dt*m))
 		// The carbon: what the cover makes, less what passes through it, and
-		// what dies with the cover lost past the type's own turnover.
+		// what dies with the cover lost past the type's own turnover; and
+		// what the fires burn of the grass and the shrubs that live through
+		// them.
 		extra := m - k.mortality
+		switch {
+		case !k.Woody:
+			extra += burned * burnHerb
+		case !k.Tree:
+			extra += burned * burnShrub
+		}
 		loss[p] = 1/k.residence + extra
 		mass := (s.Mass[p] + dt*next*pt.NPP) / (1 + dt*loss[p])
 		s.Cover[p], s.Mass[p] = next, math.Max(0, mass)
