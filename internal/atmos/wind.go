@@ -274,8 +274,23 @@ func airCell(m *geom.Map, a *Air) int {
 		m.W/(2*cell) >= airLeast && m.H/(2*cell) >= airLeast {
 		cell *= 2
 	}
+	for c := cellCoarsen; c > 1 && m.W%(2*cell) == 0 && m.H%(2*cell) == 0 && m.W/(2*cell) >= airLeast && m.H/(2*cell) >= airLeast; c /= 2 {
+		cell *= 2
+	}
 	return cell
 }
+
+// cellCoarsen is how many times wider than airCell would make them the air's
+// cells are made, in powers of two, as far as the map allows. It is one, and
+// only the deep-time climate's cost study sets it otherwise, for the length
+// of a history: see SetCellCoarsen.
+var cellCoarsen = 1
+
+// SetCellCoarsen makes the air's cells n times wider than the air would have
+// them, n a power of two, until it is set back to one. It is for the
+// deep-time climate's cost study (terra's deepclimate.go) and nothing else:
+// a world made under it is not the world its seed and terms make.
+func SetCellCoarsen(n int) { cellCoarsen = max(1, n) }
 
 // airLeast is how few cells a map may be read on either way. A valley is a
 // couple of kilometres of ground to a cell rather than the eighty airReach
