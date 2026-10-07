@@ -144,15 +144,32 @@ func (g *Grid) SeaCurrent(i int) (east, north float64) {
 }
 
 // Upwelling is how fast, in metres a second, cold water comes up from under
-// the sea over tile i where the wind drives the surface water off a coast:
-// the Humboldt off Peru, the Benguela off Namibia. It is nothing on land, on a
-// valley, and on a map whose weather has not been read.
+// the sea over tile i, over the year: where the wind drives the surface water
+// off a coast, the Humboldt off Peru and the Benguela off Namibia, and where
+// the wind's drift parts in the open ocean, on the equator and under the
+// subpolar lows. It is nothing on land, on a valley, and on a map whose
+// weather has not been read.
 func (g *Grid) Upwelling(i int) float64 {
 	w := g.winds
 	if w == nil || i < 0 || i >= len(g.Tiles) {
 		return 0
 	}
 	return w.Upwelling(i)
+}
+
+// Thermocline is how deep, in metres, the warm water over the cold deep goes
+// under the sea over tile i: some fifty metres against an ocean's eastern
+// shore, a few hundred under the subtropical gyres, deeper in the west of the
+// tropics than the east where the trades blow, and up at the surface in the
+// west of the subpolar gyres. The water that comes up is as cold as this is
+// shallow. It is nothing on land, on a valley, and on a map whose weather has
+// not been read.
+func (g *Grid) Thermocline(i int) float64 {
+	w := g.winds
+	if w == nil || i < 0 || i >= len(g.Tiles) {
+		return 0
+	}
+	return w.ThermoclineAt(i)
 }
 
 // SeaTemp is the year's mean temperature of the sea's surface water over tile
