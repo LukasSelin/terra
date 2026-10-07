@@ -486,7 +486,8 @@ func (wx *Weather) Solve(day int) {
 			}
 		}
 	}
-	e.Solve(sinT, e.airTempOn(day), extra, wx.warm, wx.U, wx.V, wx.P)
+	m := seasonWeights(day)
+	e.solve(nil, sinT, &m, e.airTempOn(day), extra, wx.warm, wx.U, wx.V, wx.P)
 }
 
 // carry moves the warmth of the air on by a day of yesterday's wind, and lets
