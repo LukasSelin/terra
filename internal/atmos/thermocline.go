@@ -114,6 +114,9 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 	east := reducedGravity * thermoEast * thermoEast / 2
 	ring := reducedGravity * thermoMean * thermoMean / 2
 	tx = e.guided(tx)
+	// Each row works in its own stretch of these, so that the rows can be
+	// spread over goroutines.
+	phi, runs := make([]float64, n), make([]int, n)
 	e.rows(func(cy int) {
 		row := cy * e.W
 		dx, f := e.Dx[cy], e.f[cy]
@@ -124,7 +127,7 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 				break
 			}
 		}
-		p := make([]float64, e.W)
+		p := phi[row : row+e.W]
 		if shore < 0 {
 			// All the way round: Φ is f ψ and the wind's pull less its mean
 			// along the parallel, about thermoMean's on the mean.
@@ -158,7 +161,7 @@ func (e *Env) thermocline(psi, tx []float64) []float64 {
 			y := e.lat[cy] * math.Pi / 180 * planetRadius
 			keep := math.Exp(-y * y / (2 * equatorRadius * equatorRadius))
 			level, pull := psi[row+shore], 0.0
-			var run []int
+			run := runs[row : row : row+e.W]
 			for k := 1; k <= e.W; k++ {
 				cx := ((shore-k)%e.W + e.W) % e.W
 				i := row + cx
