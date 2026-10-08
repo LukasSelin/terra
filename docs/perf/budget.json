@@ -3,22 +3,22 @@
 	"workers": 4,
 	"worlds": {
 		"ancient": {
-			"bytes": 58104888,
-			"allocs": 10345,
-			"peak": 11899320,
-			"nanos": 1083560200
+			"bytes": 58252544,
+			"allocs": 13113,
+			"peak": 10530512,
+			"nanos": 435712800
 		},
 		"globe128": {
-			"bytes": 546543992,
-			"allocs": 51730,
-			"peak": 52161760,
-			"nanos": 4813491800
+			"bytes": 546508304,
+			"allocs": 52053,
+			"peak": 60113312,
+			"nanos": 2984442600
 		},
 		"valley": {
-			"bytes": 10288064,
-			"allocs": 1272,
-			"peak": 4264344,
-			"nanos": 497471800
+			"bytes": 10312104,
+			"allocs": 1581,
+			"peak": 4191120,
+			"nanos": 153910300
 		}
 	}
 }
