@@ -421,6 +421,13 @@ func (g *Grid) growVegetation(years int) {
 			}
 			yr := veg.Read(&c)
 			pot, fire := potentials(&yr)
+			// The fires a game has people light on it, on top of the
+			// lightning's, through its history and on (see SetBurning).
+			every := 0.0
+			if burning != nil {
+				every = burning(g, i)
+				fire.Burn(every)
+			}
 			var s veg.State
 			if fresh {
 				// The history: BIOME4's answer under the glacial's drier
@@ -429,6 +436,7 @@ func (g *Grid) growVegetation(years int) {
 				was, _ := g.vegClimate(i, sea, land, &sun, twiMean, throw, glacialRain)
 				wyr := veg.Read(&was)
 				wpot, wfire := potentials(&wyr)
+				wfire.Burn(every)
 				s = veg.Equilibrium(&wpot)
 				veg.Spin(&s, &wpot, &wfire, years)
 				veg.Spin(&s, &pot, &fire, years)
@@ -446,6 +454,31 @@ func (g *Grid) growVegetation(years int) {
 		}
 	})
 }
+
+// Burning is how often people burn tile i of g, as the years between their
+// fires: two for a prairie burned every second year, and zero or less where
+// nobody burns it. See SetBurning.
+type Burning func(g *Grid, i int) float64
+
+// burning is what SetBurning was told: nil, nobody burns anything.
+var burning Burning
+
+// SetBurning says where people burn the land, and how often. There is
+// nobody on a world, so by default nothing is burned but what the lightning
+// lights; a game whose people burn their country - a prairie burned every
+// year or two to keep it open, as the tallgrass prairie was (Knapp and
+// others, 1998), a heath, a savanna fired for the grazing - tells the land
+// so, once, before the world is made or before an age is lived through
+// (Erode). The fires it declares are added to the lightning's in L4's own
+// process: they burn what the ground's fuel and its continuity let them,
+// kill what they burn as its bark lets them, and hold the trees' young
+// down. A closed wood, with no grass to carry them, does not burn.
+//
+// b is asked of every tile of the land as its vegetation is grown, from
+// many goroutines at once, and must answer the same for the same tile:
+// read the tile's mark, its terrain or where it is, not anything that
+// changes as the land is read. Nil, the default, burns nothing.
+func SetBurning(b Burning) { burning = b }
 
 // potentials is what each type would make of a year, and the year's fires
 // and storms.

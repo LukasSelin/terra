@@ -1,6 +1,9 @@
 package veg
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // The places' fires (see places: their rain and wind are the stations').
 var (
@@ -98,5 +101,25 @@ func TestAFireKillsByTheBark(t *testing.T) {
 	r, e, g := fireTraits[TropicalRaingreen].resist, fireTraits[TropicalEvergreen].resist, fireTraits[C4Grass].resist
 	if r <= e || g != 1 {
 		t.Errorf("a fire leaves %.2f of the savanna's trees, %.2f of the rainforest's, %.2f of the grass", r, e, g)
+	}
+}
+
+// The fires a game's people light are on top of the lightning's: none where
+// nobody burns, and every second year the reach that burns half of a full,
+// cured fuel bed a year.
+func TestPeopleBurnOnTopOfTheLightning(t *testing.T) {
+	c := kano.climate()
+	y := Read(&c)
+	f := y.Fire()
+	same := f
+	same.Burn(0)
+	if same != f {
+		t.Errorf("nobody burning moved the fires: %+v to %+v", f, same)
+	}
+	two := f
+	two.Burn(2)
+	d := two.Reach - f.Reach
+	if d < 0.69 || d > 0.7 || math.Abs(two.Cured-f.Cured-d) > 1e-12 || math.Abs(two.Cured2-f.Cured2-d) > 1e-12 {
+		t.Errorf("burned every second year: %+v to %+v", f, two)
 	}
 }

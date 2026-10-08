@@ -242,6 +242,24 @@ func (y *Year) Fire() Fire {
 	return f
 }
 
+// Burn adds to the year's fires the ones people light, burning the ground
+// every so many years: the reach that would burn full, unbroken fuel that
+// often, through cured grass, as a dormant season's fires burn it (a
+// prairie's are lit before the grass greens; Knapp and others, 1998). It is
+// on top of the lightning's, and what it burns goes by the state's own fuel
+// and its continuity like any fire (see Burned). Every year or more often
+// is read as 0.99 of the ground a year; every of zero or less is no fire.
+func (f *Fire) Burn(every float64) {
+	if every <= 0 {
+		return
+	}
+	share := math.Min(0.99, 1/every)
+	r := -math.Log(1 - share)
+	f.Reach += r
+	f.Cured += r
+	f.Cured2 += r
+}
+
 // Burned is the share of the ground the year's fires burn under a state:
 // 1 - e^(-reach·fuel·continuity), the fires falling where they fall.
 //
