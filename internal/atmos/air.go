@@ -380,15 +380,18 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	// What the land sends up in each phase is what its bucket gives the air
 	// through its year, under the rain the last round gave it. The spring's
 	// budget stands for the autumn's too (see temp above), so it takes up
-	// what the land gives in both, between them.
-	landYear := func(i int) {
+	// what the land gives in both, between them (see lakeYear). It gives back
+	// what the cell's land shed and what the air could still have taken up
+	// off it, each in mm times the land's area in km², for the world's lakes
+	// (see Env.lakes).
+	landYear := func(i int) (shed, spare float64) {
 		if annual[i] > 0 {
 			pet[i] = pet0[i] * Diurnal(cellCont(e, i), pet0[i]/annual[i])
 		} else {
 			pet[i] = pet0[i] * Diurnal(cellCont(e, i), 1)
 		}
 		if e.Sea[i] >= 1 {
-			return
+			return 0, 0
 		}
 		var rain, take [Phases]float64
 		for k := range Phases {
@@ -411,13 +414,43 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		for k := range Phases {
 			landEvap[k][i] = b.Evap[k] * Phases / secondsPerYear
 		}
+		for k := range Phases {
+			spare += math.Max(0, take[k]-b.Evap[k])
+		}
+		land := (1 - e.Sea[i]) * e.Dx[i/e.W] * e.Dy
+		return land * b.Shed(), land * spare
+	}
+	// lakeYear adds what the world's lakes send up off cell i's land, the
+	// share lakes of what its air could still take up in each phase, and then
+	// takes the spring's and the autumn's together.
+	lakeYear := func(i int, lakes float64) {
+		if lakes > 0 && e.Sea[i] < 1 {
+			for k := range Phases {
+				take := pet[i] * share[k][i] / Phases
+				if spare := take - landEvap[k][i]*secondsPerYear/Phases; spare > 0 {
+					landEvap[k][i] += lakes * spare * Phases / secondsPerYear
+				}
+			}
+		}
 		landEvap[1][i] = (landEvap[1][i] + landEvap[3][i]) / 2
 	}
+	// Every map spreads its settling rounds (#135); the lakes' sums are taken
+	// per row and then in row order, so the goroutines do not change them.
 	rowWorkers := workersFor(e.H)
+	rowShed, rowSpare := make([]float64, e.H), make([]float64, e.H)
 	for round := range settleRounds {
 		inParallel(e.H, rowWorkers, func(cy, _ int) {
+			rowShed[cy], rowSpare[cy] = 0, 0
 			for i := cy * e.W; i < (cy+1)*e.W; i++ {
-				landYear(i)
+				shed, spare := landYear(i)
+				rowShed[cy] += shed
+				rowSpare[cy] += spare
+			}
+		})
+		lakes := e.lakes(&phases, rowShed, rowSpare)
+		inParallel(e.H, rowWorkers, func(cy, _ int) {
+			for i := cy * e.W; i < (cy+1)*e.W; i++ {
+				lakeYear(i, lakes)
 			}
 		})
 		inParallel(Phases-1, workers, func(k, _ int) {
@@ -505,4 +538,61 @@ func soilCells(e *Env, soil, paw []float32, wk *work) (depth, water []float64) {
 	}
 	wk.let(slotSoilCount)
 	return depth, water
+}
+
+// lakes is the share of what the air could still take up off a globe's land
+// that its lakes send up, where its sea cannot take back what its land sheds.
+//
+// What the land's bucket sheds runs off to the sea, and the sea's water is
+// the air's for the taking whatever came into it: a valley's leaves over the
+// edge, to the sea beyond the map, and a globe's sea sends up far more than
+// its rivers bring it. A globe with no sea has nowhere for it to go. Its
+// rivers run to its poles, and the water lies on its land, in the hollows,
+// the lakes and the wet ground, and goes back up off them: the planet keeps
+// the water it has. Counted as lost, every round of the budget sent the air
+// less than it rained, and the land's rain ran down towards none round after
+// round - a sea-free globe's from some 700 mm to 50 over a call's forty
+// rounds - and a dry globe grew nothing (#132).
+//
+// So what the land sheds over a year, less what the sea sent up in the last
+// round, is sent back up as the lakes', spread over the land where the air
+// could still take more and in the seasons it could: rowShed and rowSpare
+// are each row's land's runoff and the evaporation the air was not given,
+// in mm times km². A globe whose sea sends up more than its land sheds -
+// every world with a sea worth the name - has no such lakes and is as it
+// was; one whose sea is too small for its rivers has them for the
+// difference, as its sea would grow over the low ground. It is never more
+// than the air could take up: what is over that is lost, as it was.
+func (e *Env) lakes(phases *[Phases - 1]*vapourBudget, rowShed, rowSpare []float64) float64 {
+	if !e.Wrap {
+		return 0
+	}
+	var shed, spare float64
+	for cy := range e.H {
+		shed += rowShed[cy]
+		spare += rowSpare[cy]
+	}
+	if shed <= 0 || spare <= 0 {
+		return 0
+	}
+	// What the sea sent up in a year, the spring's phase standing for the
+	// autumn's too.
+	for k, b := range phases {
+		year := secondsPerYear / Phases
+		if k == 1 {
+			year *= 2
+		}
+		for cy := range e.H {
+			area := e.Dx[cy] * e.Dy
+			for i := cy * e.W; i < (cy+1)*e.W; i++ {
+				if b.seaA[i] != 0 {
+					shed -= (b.seaA[i] - b.seaB[i]*b.w[i]) * area * year
+				}
+			}
+		}
+	}
+	if shed <= 0 {
+		return 0
+	}
+	return math.Min(1, shed/spare)
 }
