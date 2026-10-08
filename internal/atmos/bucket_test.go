@@ -155,3 +155,39 @@ func TestBucketRunsAfterTheRain(t *testing.T) {
 		t.Errorf("the rivers ran %.1f mm after the monsoon and %.1f before it", b.Runoff[3], b.Runoff[1])
 	}
 }
+
+// A year with no dry season needs no store to carry it; a monsoon's year
+// needs its dry phases' use of the year's water, and a deeper rooted bucket
+// under it gives the air more of its wet season's rain.
+func TestDrySeasonRoots(t *testing.T) {
+	rain, pet := even(1200), even(1000)
+	if need := DryNeed(&rain, &pet); need != 0 {
+		t.Errorf("unseasonal wet year needs %.1f mm of store, want none", need)
+	}
+	// Nine tenths of 900 mm in the north's summer, under 1600 mm of PET
+	// spread evenly: the cover uses 900 over the year, 225 a phase, and the
+	// three dry phases' 675 less their 90 of rain are what it draws down.
+	rain = [Phases]float64{30, 30, 810, 30}
+	pet = even(1600)
+	need := DryNeed(&rain, &pet)
+	if math.Abs(need-585) > 1e-9 {
+		t.Errorf("monsoon year needs %.1f mm of store, want 585", need)
+	}
+	const soil, paw = 1.0, 0.15
+	if r := Reach(soil, paw, 2, 0); r != 2 {
+		t.Errorf("no need reaches %.2f m, want the cover's own 2", r)
+	}
+	r := Reach(soil, paw, 2, need)
+	if got := Hold(soil, paw, r); r < rootDeepest && math.Abs(got-need) > 1e-6 {
+		t.Errorf("reach %.2f m holds %.1f mm, want %.1f", r, got, need)
+	}
+	if r > rootDeepest || r <= 2 {
+		t.Errorf("reach %.2f m, want deeper than 2 and no deeper than %.0f", r, rootDeepest)
+	}
+	shallow := Bucket(Hold(soil, paw, 2), &rain, &pet)
+	deep := Bucket(Hold(soil, paw, r), &rain, &pet)
+	if deep.Evaporated() <= shallow.Evaporated() {
+		t.Errorf("deep roots give the air %.0f mm, shallow %.0f: want more", deep.Evaporated(), shallow.Evaporated())
+	}
+	t.Logf("monsoon year: need %.0f mm, roots %.1f m, evaporation %.0f mm against %.0f at 2 m", need, r, deep.Evaporated(), shallow.Evaporated())
+}

@@ -108,6 +108,33 @@ func TestTheColdCoastIsADesert(t *testing.T) {
 	}
 }
 
+// The subtropical highs' descent is not the same all the way round their
+// parallel: in the summer it comes down over the cool eastern side of an
+// ocean, west of the continent the monsoon heats, and hardly at all over
+// the continent's eastern side and the warm western side of the next ocean
+// (Rodwell and Hoskins, 2001), whose lid stands the higher for it, or is
+// not there.
+func TestTheSummersDescentLiesOverTheEasternOcean(t *testing.T) {
+	g := twoOceans()
+	g.weather()
+	w := g.winds
+	for _, b := range []struct {
+		lat    float64
+		summer int
+	}{{25, 2}, {-25, 0}} {
+		lo, hi := b.lat-5, b.lat+5
+		descent := func(i int) float64 { return 1000 * w.Subsides[b.summer][w.CellOfTile(i)] }
+		east := band(g, lo, hi, 116, 128, descent)
+		coast := band(g, lo, hi, 156, 168, descent)
+		west := band(g, lo, hi, 168, 180, descent)
+		t.Logf("at %v degrees in the summer the air comes down at %.2f mm/s over the ocean's eastern side, %.2f over the continent's eastern side and %.2f over the next ocean's western side",
+			b.lat, east, coast, west)
+		if east <= west || east <= coast {
+			t.Errorf("at %v degrees in the summer the air comes down at %.2f mm/s over the eastern ocean, against %.2f over the continent's eastern side and %.2f over the western ocean", b.lat, east, coast, west)
+		}
+	}
+}
+
 // desertCoast is the most rain, mm a year, a coast counts as a desert with:
 // the Atacama's and the Namib's coasts have a few millimetres to a few tens.
 const desertCoast = 50.0
@@ -166,10 +193,12 @@ func TestAValleyHasNoCurrents(t *testing.T) {
 // currents worked out again under the wind it makes; and when the heat the
 // ground gives the tropical air, and the waves the westerlies stand, were
 // added to the wind (#35; see atmos's waves); and when the sea came to carry
-// its own heat in two layers, into the energy balance (#22). And the warmth
-// is the kept temperature over its latitude's mean, as far as it stands (it
-// was held to ten degrees either way before #22), and nothing over it where
-// the water is under ice.
+// its own heat in two layers, into the energy balance (#22); and when the
+// tropical air came to take the latent heat of its water only as far as it
+// rains it, and the sea the stress of each season's wind (#130). And the
+// warmth is the kept temperature over its latitude's mean, as far as it
+// stands (it was held to ten degrees either way before #22), and nothing over
+// it where the water is under ice.
 func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 	g := twoOceans()
 	g.weather()
@@ -182,7 +211,7 @@ func TestKeepingTheCurrentsLeavesTheWarmthAsItWas(t *testing.T) {
 			h.Write(b[:])
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xdae7bf2cb5adf204); got != want {
+	if got, want := h.Sum64(), uint64(0x9a86076508837df8); got != want {
 		t.Errorf("the sea's warmth hashes to %#x, and was %#x", got, want)
 	}
 	for i, w := range e.Warm {

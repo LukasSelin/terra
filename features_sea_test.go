@@ -33,27 +33,20 @@ func poleward(heading float32, lat float64) bool {
 // with a warm current up its western side toward the pole, and a cold one
 // down its eastern side.
 //
-// Known gap (#88 x the gyres' reading, #120): the cold current is there, and is not
-// counted as the gyre's. With the trades strongest at seventeen degrees
-// rather than twenty-four, each subtropical gyre lies between seventeen and
-// forty-eight degrees, centred at 24.6 where it was 29, and carries 33.8 Sv
-// where it carried 40.3: the wind's curl over its southern half is spread
-// over more of it. Down the eastern shore the water runs equatorward and
-// cold, 2.0 under its latitude's mean, from 51°N to 34°N and from 33°S north;
-// but a current is one of a gyre's only if it lies within gyreReach, 1000 km,
-// of the gyre's tiles, those with 5 Sv or more between them and the shore,
-// and at 34.5°N those begin some fourteen tiles, 1800 km, west of the shore.
-// The short pieces that were counted, at 31.6°N and 27.4°S, ran within it.
-// The remedy is the reading's - a current along a parallel from a gyre's
-// water that keeps its sign is the gyre's - and is left to the sea's
-// features (#120) rather than made here. Until then the test holds what is
-// there: every gyre has its warm western current, and every gyre without a
-// cold current of its own has one down the eastern shore of its ocean, cold
-// and running equatorward, that is no gyre's. coldUncounted is how many
-// gyres read so; it fails if a cold current goes, and fails when the gap
-// closes, so that the marker comes off.
+// It was a known gap (#88 x the gyres' reading, #120) from #88 to #130.
+// With the trades strongest at seventeen degrees rather than twenty-four,
+// each subtropical gyre lay between seventeen and forty-eight degrees and
+// carried 33.8 Sv where it carried 40.3, and its cold eastern current, which
+// ran down the shore some 1800 km east of the gyre's tiles with 5 Sv or more
+// between them and the shore, was beyond gyreReach of them and no gyre's.
+// Since the stress is the year's mean of each season's (#130; see atmos's
+// currents), the gyres carry 40.3-40.7 Sv centred at 27 degrees, where they
+// carried 35.4 at 25 just before, and reach their eastern shores, and each
+// counts its own cold current there. The reading's remedy (#120),
+// a current along a parallel from a gyre's water is the gyre's, is still
+// the sea's features' to make; until it is, a gyre whose cold current is
+// no gyre's is a failure, and the current is named.
 func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
-	const coldUncounted = 4 // of the four, on the integration (#82)
 	g := twoOceans()
 	g.weather()
 	all, reg := seaOf(g, g.winds)
@@ -67,7 +60,6 @@ func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
 	if len(gyres) != 4 {
 		t.Fatalf("%d subtropical gyres, not 4", len(gyres))
 	}
-	uncounted := 0
 	for _, gy := range gyres {
 		lat := g.air.Lat[int(gy.Centre)/g.W]
 		x := int(gy.Centre) % g.W
@@ -129,14 +121,7 @@ func TestTwoOceansHaveTheirGyresAndTheirCurrents(t *testing.T) {
 			t.Errorf("the gyre at %.0f degrees, column %d: no cold current down its east, its own or any", lat, x)
 			continue
 		}
-		uncounted++
-		t.Logf("known gap (#120): the gyre at %.0f degrees, column %d: its cold eastern current is no gyre's: %s", lat, x, describeCurrent(g, east))
-	}
-	switch {
-	case uncounted > coldUncounted:
-		t.Errorf("%d gyres have a cold eastern current that is not theirs, where the known gap (#120) is %d", uncounted, coldUncounted)
-	case uncounted < coldUncounted:
-		t.Errorf("%d gyres have a cold eastern current that is not theirs, where the known gap (#120) is %d: it has closed, so lower coldUncounted or take the marker off", uncounted, coldUncounted)
+		t.Errorf("the gyre at %.0f degrees, column %d: its cold eastern current is no gyre's (#120): %s", lat, x, describeCurrent(g, east))
 	}
 }
 

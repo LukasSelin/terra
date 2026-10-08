@@ -88,9 +88,11 @@ type Kind struct {
 	coldDies, coldFrom, coldTo, gdd, warmTo float64
 	// dry is the least of what the air could take up in a year the soil
 	// under the type's roots must give it for the type to establish, its
-	// evaporation over its potential, Priestley and Taylor's α: BIOME1's
-	// limits (Prentice and others, 1992, table 1), which BIOME3 and BIOME4
-	// keep in their drought tolerances. A type survives down to dryKeep of it.
+	// evaporation over its potential, on the bucket's scale (Climate.Herb
+	// and Wood, where one is all of it). They are BIOME1's limits (Prentice
+	// and others, 1992, table 1), which BIOME3 and BIOME4 keep in their
+	// drought tolerances, read onto that scale: see ptTop. A type survives
+	// down to dryKeep of it.
 	dry float64
 	// leafWarm is the least a phase's mean may be for a summergreen type to
 	// be in leaf through it.
@@ -129,7 +131,7 @@ type Kind struct {
 var Kinds = [PFTs]Kind{
 	TropicalEvergreen: {
 		Name: "tropical evergreen", Tree: true, Woody: true,
-		dry: 0.8, leafWarm: 5,
+		dry: 0.8 / ptTop, leafWarm: 5,
 		coldDies: 15.5, coldFrom: 15.5, coldTo: inf, warmTo: inf,
 		temp: [4]float64{2, 25, 30, 55}, lue: lueC3, wue: 1, phen: evergreen,
 		laiMost: 7, leafKeep: 22, leafTurn: 35, woodKeep: 190,
@@ -137,7 +139,7 @@ var Kinds = [PFTs]Kind{
 	},
 	TropicalRaingreen: {
 		Name: "tropical raingreen", Tree: true, Woody: true,
-		dry: 0.45, leafWarm: 5,
+		dry: 0.45 / ptTop, leafWarm: 5,
 		coldDies: 15.5, coldFrom: 15.5, coldTo: inf, warmTo: inf,
 		temp: [4]float64{2, 25, 30, 55}, lue: lueC3, wue: 1, phen: raingreen,
 		laiMost: 6, leafKeep: 22, leafTurn: 70, woodKeep: 190,
@@ -145,7 +147,7 @@ var Kinds = [PFTs]Kind{
 	},
 	TemperateBroadleaf: {
 		Name: "temperate broadleaf", Tree: true, Woody: true,
-		dry: 0.65, leafWarm: 5,
+		dry: 0.65 / ptTop, leafWarm: 5,
 		coldDies: -17, coldFrom: -17, coldTo: 18.8, gdd: 1200, warmTo: inf,
 		temp: [4]float64{-4, 20, 30, 42}, lue: lueC3, wue: 1, phen: summergreen,
 		laiMost: 6, leafKeep: 22, leafTurn: 40, woodKeep: 170,
@@ -153,7 +155,7 @@ var Kinds = [PFTs]Kind{
 	},
 	TemperateNeedleleaf: {
 		Name: "temperate needleleaf", Tree: true, Woody: true,
-		dry: 0.65, leafWarm: 5,
+		dry: 0.65 / ptTop, leafWarm: 5,
 		coldDies: -2, coldFrom: -2, coldTo: 22, gdd: 900, warmTo: inf,
 		temp: [4]float64{-4, 20, 30, 42}, lue: lueC3, wue: 1, phen: evergreen,
 		laiMost: 6, leafKeep: 22, leafTurn: 50, woodKeep: 190,
@@ -161,7 +163,7 @@ var Kinds = [PFTs]Kind{
 	},
 	BorealNeedleleaf: {
 		Name: "boreal needleleaf", Tree: true, Woody: true,
-		dry: 0.65, leafWarm: 5,
+		dry: 0.65 / ptTop, leafWarm: 5,
 		coldDies: -inf, coldFrom: -inf, coldTo: -2, gdd: 350, warmTo: inf,
 		temp: [4]float64{-4, 15, 25, 38}, lue: lueC3, wue: 1, phen: evergreen,
 		laiMost: 5, leafKeep: 22, leafTurn: 45, woodKeep: 220,
@@ -169,7 +171,7 @@ var Kinds = [PFTs]Kind{
 	},
 	C3Grass: {
 		Name: "C3 grass",
-		dry:  0.33, leafWarm: 5,
+		dry:  0.33 / ptTop, leafWarm: 5,
 		coldDies: -inf, coldFrom: -inf, coldTo: 15.5, gdd: 300, warmTo: inf,
 		temp: [4]float64{-4, 10, 30, 45}, lue: lueC3, wue: 1, phen: raingreen,
 		laiMost: 4, leafKeep: 22, leafTurn: 80, woodKeep: 0,
@@ -177,7 +179,7 @@ var Kinds = [PFTs]Kind{
 	},
 	C4Grass: {
 		Name: "C4 grass",
-		dry:  0.18, leafWarm: 5,
+		dry:  0.18 / ptTop, leafWarm: 5,
 		coldDies: 15.5, coldFrom: 15.5, coldTo: inf, warmTo: inf,
 		temp: [4]float64{6, 20, 45, 55}, lue: lueC4, wue: 1.5, phen: raingreen,
 		laiMost: 4, leafKeep: 22, leafTurn: 80, woodKeep: 0,
@@ -193,7 +195,7 @@ var Kinds = [PFTs]Kind{
 	},
 	Tundra: {
 		Name: "tundra",
-		dry:  0.33, leafWarm: 0,
+		dry:  0.33 / ptTop, leafWarm: 0,
 		coldDies: -inf, coldFrom: -inf, coldTo: inf, warmTo: 15,
 		temp: [4]float64{-4, 8, 18, 30}, lue: lueC3, wue: 1, phen: summergreen,
 		laiMost: 1.5, leafKeep: 22, leafTurn: 40, woodKeep: 0,
@@ -202,6 +204,18 @@ var Kinds = [PFTs]Kind{
 }
 
 var inf = math.Inf(1)
+
+// ptTop is the top of BIOME1's moisture index: Priestley and Taylor's
+// (1972) 1.26. BIOME1's α is the year's actual evaporation over its
+// equilibrium evaporation, and a soil that is wet meets a demand of 1.26
+// times the equilibrium rate, so its α runs from nothing to 1.26 (Prentice
+// and others, 1992; Prentice, Sykes and Cramer, 1993). The bucket's is
+// what the soil gives over what the air could take up, which runs from
+// nothing to one. So a limit of BIOME1's α is that over 1.26 on the
+// bucket's: the tropical evergreen's 0.80 is 0.63 here, and the C4 grass's
+// 0.18 is 0.14. Read on the bucket's scale as they stood, every type's
+// water limit was 26% too strict (#125).
+const ptTop = 1.26
 
 // The light-use efficiencies, grams of carbon fixed for each MJ of light
 // the leaves take up at the best temperature, unstressed: the C3 pathway's,

@@ -74,7 +74,16 @@ never looks inside, and it is told, once, what those numbers do:
 terra.SetMark(door, terra.MarkDef{Cost: 1.2, Roofs: true})
 terra.SetGrowth(terra.None, terra.Forest, []terra.Growth{{Full: 6 * terra.Year, Rate: 0.0004, Stock: timber}})
 terra.SetWear(1, 1)
+terra.SetBurning(func(g *terra.Grid, i int) float64 { return prairie(g, i) }) // years between fires; 0 for none
 ```
+
+Nor does it know that anybody burns the land. Its fires are the lightning's
+only, so a prairie with the rain to grow a wood goes to wood, as the
+tallgrass prairie does when its people stop burning it. A game whose people
+burn their country says where and how often with `SetBurning`, before the
+world is made or an age is lived through. The burning is added to the
+lightning's fires, and spreads, kills and keeps the trees' young down by
+the same rules. By default nothing is burned.
 
 and two things it is handed by whoever is walking: a `Holder`, which is a
 bare identity it compares and never looks inside, and a load.

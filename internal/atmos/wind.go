@@ -251,7 +251,9 @@ type Env struct {
 
 	// Subsides is how fast the Hadley cell's air comes down over each cell
 	// in each phase of the year, metres a second at 500 hPa, which lays the
-	// trade-wind inversion over it. See circulation.go.
+	// trade-wind inversion over it: the cell's zonal mean, and on a globe
+	// where along the parallel the wind brings it down (localDescents). See
+	// circulation.go.
 	Subsides [Phases][]float64
 	// Psi is the transport streamfunction the gyres are read off, in
 	// sverdrups: the water between two cells flows past them at the
@@ -636,6 +638,8 @@ func WindsFor(m *geom.Map, a *Air, above, wet []float64, was *Winds, s *Scratch)
 		e.Warm = e.currents(w.U, w.V, ocean, s)
 		w.couple(ocean, s)
 		e.Coast = e.coastal(e.Warm)
+		// The Hadley cell's descent, laid where the wind brings it down.
+		e.localDescents(&w.P)
 	}
 	return w
 }

@@ -18,14 +18,22 @@ func sunAt(lat float64) (sun [Phases]float64) {
 }
 
 // place is a year somewhere on the earth, with the water its soil gives the
-// air in each phase.
+// air in each phase, and the rain and the wind its fires read.
 type place struct {
 	name       string
 	lat, mean  float64
 	swing      float64
 	herb, wood [Phases]float64
 	snow       [Phases]float64
+	rain       [Phases]float64 // mm in each phase, whose showers bring the lightning
+	wind       float64         // m/s near the ground
 	treeless   bool
+	// open is a place its history has left open ground, run from it rather
+	// than from BIOME4's answer; and every, where it is set, is the years
+	// between the fires a game's people light on it (Fire.Burn, as
+	// SetBurning lights them), on top of the lightning's.
+	open       bool
+	every      float64
 	trees, lai [2]float64 // the tree cover and leaf area it should come to
 	mass       [2]float64 // and its carbon, kg a square metre
 	dominant   PFT
@@ -40,26 +48,102 @@ var wet = [Phases]float64{1, 1, 1, 1}
 // MODIS vegetation continuous fields (Hansen and others, 2003), leaf area
 // from MODIS (Myneni and others, 2002) and carbon from the IPCC's tier-1
 // tables (Ruesch and Gibbs, 2008), each widened to the spread of the biome.
+// Their rain is the stations' by phase (Walter and Lieth's atlas, to the ten
+// mm), and their wind a station's mean: every place reads L4's fires.
 var places = []place{
 	{name: "Manaus, tropical rainforest", lat: -3, mean: 27, swing: -1, herb: wet, wood: wet,
+		rain: [Phases]float64{700, 600, 300, 600}, wind: 2,
 		trees: [2]float64{0.8, 0.951}, lai: [2]float64{4.5, 7}, mass: [2]float64{12, 25}, dominant: TropicalEvergreen},
 	{name: "Kano, savanna", lat: 12, mean: 26, swing: 4, herb: [Phases]float64{0.1, 0.15, 0.9, 0.5}, wood: [Phases]float64{0.15, 0.25, 0.95, 0.7},
+		rain: [Phases]float64{5, 60, 600, 135}, wind: 4,
 		trees: [2]float64{0, 0.6}, lai: [2]float64{0.5, 3}, mass: [2]float64{0.5, 8}},
 	{name: "Bonn, temperate broadleaf forest", lat: 51, mean: 10, swing: 8, herb: [Phases]float64{1, 1, 0.8, 1}, wood: [Phases]float64{1, 1, 0.9, 1},
+		rain: [Phases]float64{150, 160, 220, 170}, wind: 3,
 		trees: [2]float64{0.7, 0.95}, lai: [2]float64{3.5, 7}, mass: [2]float64{7, 20}, dominant: TemperateBroadleaf},
 	{name: "Yakutsk-ish taiga", lat: 62, mean: -6, swing: 22, herb: [Phases]float64{1, 1, 0.7, 1}, wood: [Phases]float64{1, 1, 0.85, 1}, snow: [Phases]float64{1, 0.8, 0, 0.5},
+		rain: [Phases]float64{40, 60, 150, 70}, wind: 4,
 		trees: [2]float64{0.5, 0.95}, lai: [2]float64{1.5, 4}, mass: [2]float64{3, 10}, dominant: BorealNeedleleaf},
-	{name: "Kansas, temperate grassland", lat: 39, mean: 12, swing: 13, herb: [Phases]float64{0.9, 0.7, 0.35, 0.5}, wood: [Phases]float64{0.9, 0.75, 0.4, 0.55}, snow: [Phases]float64{0.2, 0, 0, 0},
-		trees: [2]float64{0, 0.3}, lai: [2]float64{0.7, 2.5}, mass: [2]float64{0.3, 3}},
+	kansas,
 	{name: "Phoenix, hot desert", lat: 33, mean: 23, swing: 10, herb: [Phases]float64{0.15, 0.08, 0.05, 0.08}, wood: [Phases]float64{0.18, 0.1, 0.06, 0.1},
+		rain: [Phases]float64{70, 40, 50, 50}, wind: 3,
 		trees: [2]float64{0, 0.05}, lai: [2]float64{0, 0.5}, mass: [2]float64{0, 1}},
 	{name: "Barrow-ish tundra", lat: 70, mean: -10, swing: 16, herb: wet, wood: wet, snow: [Phases]float64{1, 1, 0.1, 0.8}, treeless: true,
+		rain: [Phases]float64{10, 10, 60, 40}, wind: 5,
 		trees: [2]float64{0, 0}, lai: [2]float64{0.2, 1.5}, mass: [2]float64{0.1, 1.5}, dominant: Tundra},
+	kansasUnburned,
 }
+
+// kansas is the tallgrass prairie's year (Manhattan, Kansas, by Konza
+// Prairie), burned by people every second year. Its 850 mm would grow a
+// wood: with BIOME1's drought limits read on the bucket's scale (#125) the
+// temperate trees establish on its water. It is a grassland because it
+// burns, every one to three years before the plough, and is grazed (Knapp
+// and others, 1998), and many of those fires were lit by its people (Knapp
+// and others, 1998; Anderson, 2006). A world has nobody on it, so those
+// fires are a game's to light (SetBurning): here, every second year on top
+// of the lightning, through L4's own fuel, spread, kill and trap. It is
+// run from its open ground, where the prairie has stood since it spread
+// east in the mid-Holocene's drier millennia (Webb, Cushing and Wright,
+// 1983).
+var kansas = place{name: "Kansas, burned every second year", lat: 39, mean: 12, swing: 13, herb: [Phases]float64{0.9, 0.7, 0.35, 0.5}, wood: [Phases]float64{0.9, 0.75, 0.4, 0.55}, snow: [Phases]float64{0.2, 0, 0, 0},
+	rain: [Phases]float64{80, 250, 340, 190}, wind: 5, open: true, every: 2,
+	trees: [2]float64{0, 0.3}, lai: [2]float64{0.7, 2.5}, mass: [2]float64{0.3, 3}, dominant: C3Grass}
+
+// kansasUnburned is the same year with nobody on it: only its lightning
+// burns it, read through L4 off its rain and wind, a seventh of the prairie
+// a year at first. That is too seldom. The trees come in, close over the
+// grass and shade out its fuel, and nothing burns after. Konza's watersheds
+// burned every four years or less often do the same, going to shrubs and
+// then trees within decades (Briggs and others, 2005), and past a fire
+// every three or four years the woody state takes over and holds itself
+// (Ratajczak and others, 2014). So unburned it is an open broadleaf wood,
+// the oak woodland the prairie's edge turns to when its fires stop. Its
+// bands are its reading's, widened: trees 0.83, LAI 1.6, 3.8 kg C/m².
+var kansasUnburned = func() place {
+	pl := kansas
+	pl.name, pl.every = "Kansas, nobody burning it", 0
+	pl.trees, pl.lai, pl.mass, pl.dominant = [2]float64{0.6, 0.95}, [2]float64{1, 2.5}, [2]float64{2.5, 6}, TemperateBroadleaf
+	return pl
+}()
 
 func (pl place) climate() Climate {
 	sun := sunAt(pl.lat)
-	return Climate{Mean: pl.mean, Swing: pl.swing, Sun: sun, Take: sun, Snow: pl.snow, Herb: pl.herb, Wood: pl.wood, Treeless: pl.treeless}
+	c := Climate{Mean: pl.mean, Swing: pl.swing, Sun: sun, Take: sun, Snow: pl.snow, Herb: pl.herb, Wood: pl.wood, Treeless: pl.treeless, Rain: pl.rain}
+	for k := range c.Wind {
+		c.Wind[k] = pl.wind
+	}
+	return c
+}
+
+// fire is the place's fires: L4's, lit by its lightning, and its people's
+// where it has them.
+func (pl place) fire(y *Year) Fire {
+	f := y.Fire()
+	f.Burn(pl.every)
+	return f
+}
+
+// run is a place's state run to the steady one under its fires, from
+// BIOME4's answer or, open, from its open ground with the trees taken off
+// it; and the share of it the steady state's fires burn a year.
+func (pl place) run(open bool) (State, [PFTs]Potential, float64) {
+	c := pl.climate()
+	y := Read(&c)
+	var pot [PFTs]Potential
+	for p := range PFTs {
+		pot[p] = y.Potential(p)
+	}
+	f := pl.fire(&y)
+	s := Equilibrium(&pot)
+	if open {
+		for p := range PFTs {
+			if Kinds[p].Tree {
+				s.Cover[p], s.Mass[p] = 0, 0
+			}
+		}
+	}
+	Spin(&s, &pot, &f, 300)
+	return s, pot, Burned(&s, &pot, &f)
 }
 
 // steady is a place's state run from BIOME4's answer to the steady one.
@@ -78,7 +162,8 @@ func steady(c Climate) (State, [PFTs]Potential) {
 // What the places grow, against what the biomes they are on grow.
 func TestThePlacesGrowTheirBiomes(t *testing.T) {
 	for _, pl := range places {
-		s, pot := steady(pl.climate())
+		s, pot, burned := pl.run(pl.open)
+		t.Logf("%-34s %.3f burned a year", pl.name, burned)
 		var lai, mass, npp float64
 		best := PFT(0)
 		for p := range PFTs {
