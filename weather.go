@@ -262,7 +262,7 @@ func (g *Grid) rainOn() {
 
 	// Each tile's rain: the column's over it, and what its own ground wrings
 	// out of the air there.
-	g.EachRow(func(y int) {
+	g.EachDearRow(func(y int) {
 		fy := (float64(y)+0.5)/float64(e.Cell) - 0.5
 		swingSea, swingLand := g.snowSwings(y)
 		for x := 0; x < g.W; x++ {

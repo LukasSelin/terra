@@ -93,3 +93,32 @@ func (g *Grid) EachRow(f func(y int)) {
 	}
 	InParallel(g.H, WorkersFor(g.H), func(y, _ int) { f(y) })
 }
+
+// EachDearRow is EachRow for a pass that is dear on every tile: it spreads
+// the rows over goroutines however small the map. The soil's state laid over
+// the age of its surface, and the soil's bucket run through its year, cost
+// microseconds a tile, and on a valley of three thousand tiles - under
+// spreadTiles, so EachRow would do them in turn - they are a good part of
+// its making (#89). f keeps EachRow's rules, and
+// the rows are spread exactly as EachRow spreads them on a globe, so the
+// world is the same over any number of goroutines.
+func (g *Grid) EachDearRow(f func(y int)) {
+	InParallel(g.H, WorkersFor(g.H), func(y, _ int) { f(y) })
+}
+
+// dearSpan is how many tiles EachDearSpan hands a goroutine at a time.
+const dearSpan = 16
+
+// EachDearSpan is EachDearRow cut finer, for a pass whose f reads nothing
+// that the pass writes but at the tile it writes it: it runs f over the
+// tiles dearSpan at a time, [lo, hi) in index order, spread over goroutines
+// however small the map. A valley's thirty-six rows over twenty-four
+// goroutines leave half of them idle for the second round; its hundred and
+// eighty spans do not. f writes only at the tiles of its span and draws no
+// chance, so the world is the same over any number of goroutines.
+func (g *Grid) EachDearSpan(f func(lo, hi int)) {
+	n := (len(g.Tiles) + dearSpan - 1) / dearSpan
+	InParallel(n, WorkersFor(n), func(k, _ int) {
+		f(k*dearSpan, min((k+1)*dearSpan, len(g.Tiles)))
+	})
+}
