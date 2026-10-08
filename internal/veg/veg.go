@@ -693,7 +693,7 @@ func Spin(s *State, pot *[PFTs]Potential, f *Fire, years int) {
 	}
 	for p := range PFTs {
 		if loss[p] > 0 {
-			s.Mass[p] = math.Max(0, s.Cover[p]*pot[p].NPP/loss[p])
+			s.Mass[p] = max(0, s.Cover[p]*pot[p].NPP/loss[p])
 		}
 	}
 }
@@ -709,7 +709,7 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		if Kinds[p].Tree == tree {
 			held += s.Cover[p]
 			if s.Cover[p] > 0 {
-				best = math.Max(best, pot[p].worth())
+				best = max(best, pot[p].worth())
 			}
 		}
 	}
@@ -732,17 +732,17 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		if !tree {
 			rp *= pt.Room
 		}
-		free := math.Max(0, rp-held)
+		free := max(0, rp-held)
 		crowd := 0.0
 		if rp > 0 {
-			crowd = math.Min(1, held/rp)
+			crowd = min(1, held/rp)
 		}
 		if held > rp {
 			m += starving * (1 - rp/held)
 		}
 		gain := 0.0
 		if pt.Surplus > 0 {
-			gain = pt.Surplus / k.seed * c * free / math.Max(rp, 1e-9)
+			gain = pt.Surplus / k.seed * c * free / max(rp, 1e-9)
 			if pt.Establish {
 				seed := seedOpen
 				if tree {
@@ -763,7 +763,7 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		// canopy's young down; the drought and the storms take their share.
 		m += burned*(1-fireTraits[p].resist) + throw + pt.Drought
 		gain *= young
-		next := math.Max(0, (c+dt*gain)/(1+dt*m))
+		next := max(0, (c+dt*gain)/(1+dt*m))
 		// The carbon: what the cover makes, less what passes through it, and
 		// what dies with the cover lost past the type's own turnover; and
 		// what the fires burn of the grass and the shrubs that live through
@@ -777,7 +777,7 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		}
 		loss[p] = 1/k.residence + extra
 		mass := (s.Mass[p] + dt*next*pt.NPP) / (1 + dt*loss[p])
-		s.Cover[p], s.Mass[p] = next, math.Max(0, mass)
+		s.Cover[p], s.Mass[p] = next, max(0, mass)
 		total += next
 	}
 	// Seeding and growing into the same room in one step can overfill it by

@@ -251,9 +251,15 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 	temp[3], sst[3] = temp[1], sst[1]
 	// What the ground's lift would rain out of saturated air in each phase,
 	// tile by tile; see orographic.go.
-	for k := range Phases - 1 {
-		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k], s.phaseWork(k))
+	// A map too small for orographic to spread its patches over the
+	// goroutines has its phases spread instead: each is a field of its own.
+	oroWorkers := 1
+	if m.W*m.H < spreadTiles {
+		oroWorkers = workersFor(Phases - 1)
 	}
+	inParallel(Phases-1, oroWorkers, func(k, _ int) {
+		lift[k] = orographic(m, a, e, w.U[k], w.V[k], temp[k], ground, e.Subsides[k], s.phaseWork(k))
+	})
 	lift[3] = lift[1]
 	liftCell := func(k int) []float64 {
 		c := s.phaseWork(k).floats(slotLiftCells, n)
@@ -351,14 +357,12 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 			annual[i] = firstRain
 		}
 	}
-	// The budget is settled in a dozen rounds or so, each a pass over the
-	// cells for each phase and a year of a bucket's seventy steps for each
-	// cell of land, and so it is spread over the goroutines at an eighth of
-	// the cells a single pass over the lattice is.
-	workers := 1
-	if n >= spreadTiles/8 {
-		workers = workersFor(Phases)
-	}
+	// The budget is settled in up to settleRounds rounds, each a pass over
+	// the cells for each phase and a year of a bucket's seventy steps for
+	// each cell of land, and so it is spread over the goroutines on any map:
+	// on a valley, too small for a single pass over the lattice to be worth
+	// spreading, the rounds are the most of a reading (#89).
+	workers := workersFor(Phases)
 	var phases [Phases - 1]*vapourBudget
 	inParallel(Phases-1, workers, func(k, _ int) {
 		phases[k] = e.newVapour(vapourIn{
@@ -430,10 +434,9 @@ func RainCells(m *geom.Map, a *Air, w *Winds, ground []float64, soil, paw []floa
 		}
 		landEvap[1][i] = (landEvap[1][i] + landEvap[3][i]) / 2
 	}
-	rowWorkers := 1
-	if n >= spreadTiles/8 {
-		rowWorkers = workersFor(e.H)
-	}
+	// Every map spreads its settling rounds (#135); the lakes' sums are taken
+	// per row and then in row order, so the goroutines do not change them.
+	rowWorkers := workersFor(e.H)
 	rowShed, rowSpare := make([]float64, e.H), make([]float64, e.H)
 	for round := range settleRounds {
 		inParallel(e.H, rowWorkers, func(cy, _ int) {

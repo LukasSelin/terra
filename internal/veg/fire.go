@@ -299,6 +299,6 @@ const reachLeast = 1e-5
 
 // smooth is 0 below lo, 1 above hi, and a smooth step between.
 func smooth(lo, hi, x float64) float64 {
-	t := math.Max(0, math.Min(1, (x-lo)/(hi-lo)))
+	t := max(0, min(1, (x-lo)/(hi-lo)))
 	return t * t * (3 - 2*t)
 }

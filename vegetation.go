@@ -258,7 +258,7 @@ func (g *Grid) rewater() {
 		return
 	}
 	g.soilBucket()
-	g.EachRow(func(y int) {
+	g.EachDearRow(func(y int) {
 		sea, land := g.snowSwings(y)
 		for i := y * g.W; i < (y+1)*g.W; i++ {
 			rain, take, mean, swing, pe, ok := g.soilYear(i, sea, land)
@@ -394,10 +394,20 @@ func (g *Grid) growVegetation(years int) {
 	if g.winds != nil {
 		throw = g.winds.Env.Throw()
 	}
-	g.EachRow(func(y int) {
-		sea, land := g.snowSwings(y)
-		sun := g.rowSun(y)
-		for i := y * g.W; i < (y+1)*g.W; i++ {
+	// The rows' light and swings, read once a row rather than once a span.
+	type rowYear struct {
+		sea, land float64
+		sun       [atmos.Phases]float64
+	}
+	rows := make([]rowYear, g.H)
+	for y := range rows {
+		rows[y].sea, rows[y].land = g.snowSwings(y)
+		rows[y].sun = g.rowSun(y)
+	}
+	g.EachDearSpan(func(lo, hi int) {
+		for i := lo; i < hi; i++ {
+			r := &rows[i/g.W]
+			sea, land, sun := r.sea, r.land, r.sun
 			c, ok := g.vegClimate(i, sea, land, &sun, twiMean, throw, 1)
 			if !ok {
 				clear(g.vegCover[i*int(PFTs) : (i+1)*int(PFTs)])
