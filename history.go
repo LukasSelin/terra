@@ -729,6 +729,27 @@ const (
 	rifting  = riftRate * epochYears
 )
 
+// arcGrowth is the share of what an arc raises that it lays on its crust.
+// The rates above are rock uplift, read where the rock is rising fastest,
+// and a collision's is what its crust is thickened by: two continents
+// driven into each other have nowhere to put their crust but up and down.
+// An arc is not crust shortened but crust grown, by what melts out of the
+// slab and the wedge over it, and the earth's arcs grow by some 60 km³ a
+// kilometre of arc a million years (2.5 km³ a year over 43,000 km of them,
+// Clift and others 2009), 100 to 250 where the plate behind them is being
+// shortened as well, as the central Andes' is. Laid whole across a belt as
+// wide as a collision's, the arcs of the first globe grew by 1,500 km³ a
+// kilometre a million years in the first epoch and by 270 in the last, and
+// every coast a floor had gone under stood in a range: the land's mean
+// height peaked 225 km in from the sea, at four times what it stood at
+// 1,000 km in, and the highest twentieth of the land was two parts in
+// three arc. A fifth of it is 300 to 54, the Andes' rate while the plates
+// are fast and an ordinary arc's once they have slowed. The rock an arc
+// makes is read off what it raises and not off what it lays (see the
+// book's pluton and crush below), so the arcs' granite and schist are
+// what they were.
+const arcGrowth = 0.2
+
 // How high a plate floats is its crust's: see isostasy.go. It was two fixed
 // levels, a continent's 4.5 km over the floor's, with every plate brought a
 // share of the way to the level of the crust it carried each epoch (over a
@@ -1052,16 +1073,20 @@ func (w *Land) startHistory(g *Grid, epochs int, sea, water float64) *running {
 	cr.layCrust(g)
 	// What the bow was drawn from - the field of swells a kilometre either
 	// way that the plates rode in before they floated on their crust, in
-	// octaves from sixty-four tiles to six - is drawn still and thrown away,
-	// so that the grain, the hotspots and the plates' breaking, which are
-	// drawn after it, are drawn as they were. What moves a world is then what
-	// its crust does, and not a new draw of everything after it: over eight
-	// small globes the plates' straight walls read 1.05 with the draws kept
-	// and 1.00 without, against 1.08 before, and the draw alone is that far
-	// from seed to seed.
+	// octaves from sixty-four tiles to six - is drawn still, so that the
+	// grain, the hotspots and the plates' breaking, which are drawn after it,
+	// are drawn as they were: over eight small globes the plates' straight
+	// walls read 1.05 with the draws kept and 1.00 without, against 1.08
+	// before, and the draw alone is that far from seed to seed. It is no
+	// longer thrown away: it is where the first continents' old belts run.
+	// See oldBelts.
+	var octaves [][]float64
+	var spans []float64
 	for span := math.Min(float64(g.Span())/2, 64/g.coarseness()); span >= 6/g.coarseness(); span /= 2 {
-		w.lattice(g, span)
+		octaves = append(octaves, w.lattice(g, span))
+		spans = append(spans, span)
 	}
+	cr.oldBelts(g, octaves, spans)
 	grain := w.grain(g)
 	book := make([]record, len(g.Tiles))
 	// And the part of it that is kept when the history is over. See ledger.
@@ -2839,7 +2864,13 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				laid = cr.thicken(i, by*math.Min(1, was/continentCrust))
 				cr.stretch(i, was, epoch)
 			default:
-				laid = cr.thicken(i, by)
+				// An arc thickens its crust by a share of what it raises:
+				// see arcGrowth.
+				grow := by
+				if s.makes == arc {
+					grow *= arcGrowth
+				}
+				laid = cr.thicken(i, grow)
 			}
 			g.Height[i] += laid
 			cr.lifted[i] += laid

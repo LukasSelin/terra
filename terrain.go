@@ -120,6 +120,8 @@ func (cfg Terms) poured() bool { return cfg.Epochs > 0 && cfg.Water > 0 }
 // basins are, and otherwise the lowest share of the ground. See water.go.
 func (w *Land) stageSea(g *Grid, cfg Terms) {
 	if cfg.poured() {
+		// Dry ground never stands beside the deep floor: see underTheDeep.
+		g.underTheDeep(g.level(cfg.Water))
 		g.pour(cfg.Water, w.RNG)
 		// And a globe's land is stood on the country its history raised,
 		// now that the sea says which of it is land. See hypsometry.go.
