@@ -19,9 +19,10 @@
 // A long history - a globe of sixty-four epochs, or a big map - is printed
 // epoch by epoch as it runs. -checkpoint keeps it in a file after every
 // epoch, and the same command run again on the same file goes on from the
-// last epoch kept rather than from the start. A globe's checkpoint is half a
-// gigabyte and takes a second to write, so it is kept at most once a minute
-// (-checkpoint-every): stop it, and it loses at most that minute.
+// last epoch kept rather than from the start. A globe's checkpoint is about
+// a hundred megabytes and takes a third of a second to write; it is kept at
+// most once a minute by default (-checkpoint-every), and 0 keeps every
+// epoch: stop it, and it loses at most the time between two.
 //
 //	go run ./cmd/overview -preset globe -epochs 64 -checkpoint globe64.ckpt
 //
@@ -218,7 +219,7 @@ func makeLand(o options, t terra.Terms) (*terra.Land, error) {
 		defer f.Close()
 		return terra.LandFromHistory(f)
 	}
-	m := terra.Making{Epochs: printEpoch, Checkpoint: o.Checkpoint, CheckpointEvery: o.CheckpointEvery}
+	m := terra.Making{Epochs: func(e terra.EpochDone) { printEpoch(e, o.Checkpoint) }, Checkpoint: o.Checkpoint, CheckpointEvery: o.CheckpointEvery}
 	if o.Checkpoint != "" {
 		if seed, kept, done, err := terra.CheckpointTerms(o.Checkpoint); err == nil && seed == o.Seed && kept == t {
 			fmt.Printf("going on from epoch %d of %d, kept in %s\n", done, t.Epochs, o.Checkpoint)
@@ -240,14 +241,19 @@ func makeLand(o options, t terra.Terms) (*terra.Land, error) {
 }
 
 // printEpoch prints a line for an epoch of a history as it ends: how far it
-// has got, how long it has taken and a guess at how long it has to go.
-func printEpoch(e terra.EpochDone) {
+// has got, how long it has taken and a guess at how long it has to go, and
+// how big the checkpoint kept after it in kept is, where one was.
+func printEpoch(e terra.EpochDone, kept string) {
 	line := fmt.Sprintf("  epoch %*d/%d  %8v", len(strconv.Itoa(e.Epochs)), e.Epoch, e.Epochs, e.Took.Round(time.Second))
 	if e.Epoch < e.Epochs {
 		line += fmt.Sprintf("  ~%v left", e.Left().Round(time.Second))
 	}
 	if e.Kept > 0 {
-		line += fmt.Sprintf("  (kept in %v)", e.Kept.Round(time.Millisecond))
+		line += fmt.Sprintf("  (kept in %v", e.Kept.Round(time.Millisecond))
+		if fi, err := os.Stat(kept); err == nil {
+			line += fmt.Sprintf(", %.1f MiB", float64(fi.Size())/(1<<20))
+		}
+		line += ")"
 	}
 	fmt.Println(line)
 }

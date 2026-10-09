@@ -1,9 +1,11 @@
 package terra
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -230,4 +232,191 @@ func TestACheckpointOfAHistoryOnACoarserGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	sameWorld(t, "taken up on a coarser grid", l, want)
+}
+
+// Every field checkpointDropped names is a field of a struct a checkpoint
+// holds, one the codec writes field by field, and has a reason.
+func TestEveryFieldACheckpointDropsIsThere(t *testing.T) {
+	fields := map[string]bool{}
+	seen := map[reflect.Type]bool{}
+	var walk func(reflect.Type)
+	walk = func(ty reflect.Type) {
+		if seen[ty] {
+			return
+		}
+		seen[ty] = true
+		switch ty.Kind() {
+		case reflect.Struct:
+			for i := range ty.NumField() {
+				if !flat(ty) {
+					fields[ty.Name()+"."+ty.Field(i).Name] = true
+				}
+				walk(ty.Field(i).Type)
+			}
+		case reflect.Array, reflect.Slice, reflect.Pointer:
+			walk(ty.Elem())
+		}
+	}
+	walk(reflect.TypeFor[running]())
+	for _, f := range historyFields() {
+		fields["Grid."+f.Name] = true
+		walk(f.Type)
+	}
+	for name, why := range checkpointDropped {
+		if !fields[name] {
+			t.Errorf("checkpointDropped names %s, which a checkpoint does not hold field by field", name)
+		}
+		if why == "" {
+			t.Errorf("checkpointDropped gives no reason for %s", name)
+		}
+	}
+}
+
+// What a checkpoint drops is not read: a history with every field
+// checkpointDropped names spoilt after every epoch - numbers made NaN or
+// flipped, pointers let go - makes the same world as one left alone.
+func TestWhatACheckpointDropsIsNotRead(t *testing.T) {
+	for _, w := range checkpointWorlds {
+		t.Run(w.name, func(t *testing.T) {
+			terms := w.terms()
+			if testing.Short() && terms.Wrap {
+				t.Skip("a globe takes seconds to make")
+			}
+			want := madeLand(1, terms)
+			checkpointDropWatch = func(g *Grid, h *running) {
+				spoilDropped(reflect.ValueOf(g).Elem())
+				spoilDropped(reflect.ValueOf(h).Elem())
+			}
+			defer func() { checkpointDropWatch = nil }()
+			got, err := MakeLandWith(1, terms, Making{Epochs: func(EpochDone) {}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sameWorld(t, "spoilt", got, want)
+		})
+	}
+}
+
+// spoilDropped spoils every field of v, a struct, that checkpointDropped
+// names, and looks for more in the structs v points at.
+func spoilDropped(v reflect.Value) {
+	ty := v.Type()
+	for i := range ty.NumField() {
+		f := reflect.NewAt(ty.Field(i).Type, v.Field(i).Addr().UnsafePointer()).Elem()
+		if _, ok := checkpointDropped[ty.Name()+"."+ty.Field(i).Name]; ok {
+			spoil(f)
+			continue
+		}
+		if f.Kind() == reflect.Pointer && !f.IsNil() && f.Elem().Kind() == reflect.Struct && f.Type() != reflect.TypeFor[*Grid]() {
+			spoilDropped(f.Elem())
+		}
+	}
+}
+
+// spoil makes v nonsense: its numbers NaN or flipped, its bools turned,
+// its pointers nil.
+func spoil(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Float32, reflect.Float64:
+		v.SetFloat(math.NaN())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		v.SetInt(v.Int() ^ 0x55)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		v.SetUint(v.Uint() ^ 0x55)
+	case reflect.Bool:
+		v.SetBool(!v.Bool())
+	case reflect.Complex64, reflect.Complex128:
+		v.SetComplex(complex(math.NaN(), math.NaN()))
+	case reflect.Pointer:
+		v.SetZero()
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			spoil(v.Index(i))
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			spoil(reflect.NewAt(v.Field(i).Type(), v.Field(i).Addr().UnsafePointer()).Elem())
+		}
+	}
+}
+
+// What the packing writes comes back as it was: slices of noughts, slices
+// shared with another, elements of every size and slices of many blocks,
+// through the compression.
+func TestPackedSlicesComeBackAsTheyWere(t *testing.T) {
+	type odd struct {
+		a float32
+		b [3]uint8
+		c float64
+	}
+	type held struct {
+		Zero   []float64
+		Many   []float64
+		Shared []float64
+		Odd    []odd
+		Flags  []bool
+		None   []int32
+		Empty  []uint16
+		Phases [4][]float32
+		Gone   []float64
+	}
+	var h held
+	h.Zero = make([]float64, 1000)
+	h.Many = make([]float64, shuffleBlock*shuffleSide*2+77)
+	for i := range h.Many {
+		h.Many[i] = math.Sin(float64(i) / 1000)
+	}
+	h.Shared = h.Many
+	h.Odd = make([]odd, shuffleBlock+5)
+	for i := range h.Odd {
+		h.Odd[i] = odd{float32(i), [3]uint8{uint8(i), 1, 2}, -float64(i)}
+	}
+	h.Flags = []bool{true, false, true}
+	h.Empty = []uint16{}
+	for k := range h.Phases {
+		h.Phases[k] = make([]float32, 300)
+		h.Phases[k][k] = float32(k)
+	}
+	h.Phases[3] = h.Phases[1]
+	h.Gone = []float64{1, 2, 3}
+	drop := map[string]string{"held.Gone": "a test's"}
+
+	var file bytes.Buffer
+	body := newPackWriter(&file)
+	w := bufio.NewWriter(body)
+	e := historyCodec{w: w, drop: drop, pack: true}
+	e.encode(reflect.ValueOf(&h).Elem(), "held")
+	if e.err != nil {
+		t.Fatal(e.err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if raw := 8 * len(h.Many); file.Len() >= raw {
+		t.Errorf("packed in %d bytes, where the one slice of it that is not noughts or shared is %d", file.Len(), raw)
+	}
+
+	r := newPackReader(bufio.NewReader(&file))
+	defer r.Close()
+	var got held
+	got.Gone = []float64{9}
+	d := historyCodec{r: bufio.NewReader(r), limit: 1 << 30, drop: drop, pack: true}
+	d.decode(reflect.ValueOf(&got).Elem(), "held")
+	if d.err != nil {
+		t.Fatal(d.err)
+	}
+	want := h
+	want.Gone = []float64{9}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("the packing did not come back as it was")
+	}
+	if &got.Shared[0] != &got.Many[0] || &got.Phases[3][0] != &got.Phases[1][0] {
+		t.Errorf("the slices shared are not shared again")
+	}
+	if got.None != nil || got.Empty == nil {
+		t.Errorf("a nil slice came back %v and an empty one %v", got.None, got.Empty)
+	}
 }
