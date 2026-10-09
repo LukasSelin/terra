@@ -24,7 +24,7 @@ func deepRun(seed uint64, terms Terms, shrink int) (from *Grid, d *deepStage, to
 		from = to
 		to = w.newGround(terms)
 	}
-	d = w.history(from, terms.Epochs, terms.SeaShare, terms.Water)
+	d = w.history(from, terms.Epochs, terms.SeaShare, terms.Water, nil)
 	return from, d, to
 }
 

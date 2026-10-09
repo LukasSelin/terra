@@ -314,3 +314,24 @@ bit (`TestAWorldResumedFromItsHistoryIsTheSameWorld`). A history file is
 refused by a build whose grid is laid out differently, but not by one whose
 history code has changed: after a change to anything the ground stage runs,
 keep the history again.
+
+## Long histories: progress and checkpoints
+
+`cmd/overview` prints a line as each epoch of a history ends, with the time
+taken and a guess at the time left. A long making - a globe of sixty-four
+epochs, a big map - can keep its history in a checkpoint after every epoch
+(`terra.Making.Checkpoint`, `checkpoint.go`) and go on from it:
+
+```bash
+go run ./cmd/overview -preset globe -epochs 64 -checkpoint globe64.ckpt
+```
+
+Stopped - Ctrl-C, a crash, the machine shut - the same command goes on from
+the last epoch kept. Each checkpoint is written beside the file and renamed
+over it, so a stop mid-write leaves the last one whole. The world taken up
+from any epoch is the world made straight through, to the bit
+(`TestAWorldResumedFromACheckpointIsTheSameWorld`); a checkpoint of another
+seed, other terms or another layout of the history's state is refused. Like
+a history file, a checkpoint written before a change to the history code is
+that code's history: move it aside after such a change. `-checkpoint-every`
+sets the least time between two, where writing every epoch costs too much.

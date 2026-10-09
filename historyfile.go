@@ -77,24 +77,7 @@ func MakeLandKeepingHistory(seed uint64, t Terms, out io.Writer) (*Land, error) 
 // is not nil, as MakeLandKeepingHistory does, and telling watch of each stage
 // as it ends where watch is not nil. The world is the same world either way.
 func MakeLandWatching(seed uint64, t Terms, out io.Writer, watch StageWatch) (*Land, error) {
-	if err := t.Check(); err != nil {
-		return nil, err
-	}
-	if err := t.fits(); err != nil {
-		return nil, err
-	}
-	defer phase.Start("Generate")()
-	l := unmade(seed, t)
-	g := l.newGround(t)
-	l.generateFrom(g, t, stageGround, stageSea, watch)
-	if out != nil {
-		if err := l.writeHistory(out, g, stageSea); err != nil {
-			return nil, err
-		}
-	}
-	l.generateFrom(g, t, stageSea, len(stages), watch)
-	l.handOver()
-	return l, nil
+	return MakeLandWith(seed, t, Making{History: out, Stages: watch})
 }
 
 // LandFromHistory makes the world a history file was kept from: the stages
@@ -228,27 +211,30 @@ func historyFields() []reflect.StructField {
 // name, type and offset, down through the slices and pointers.
 func historyLayout() uint64 {
 	h := fnv.New64a()
-	var walk func(t reflect.Type)
-	walk = func(t reflect.Type) {
-		fmt.Fprintf(h, "%s/%d/%d{", t.String(), t.Kind(), t.Size())
-		switch t.Kind() {
-		case reflect.Struct:
-			for i := range t.NumField() {
-				f := t.Field(i)
-				fmt.Fprintf(h, "%s@%d:", f.Name, f.Offset)
-				walk(f.Type)
-			}
-		case reflect.Array, reflect.Slice, reflect.Pointer:
-			walk(t.Elem())
-		}
-		fmt.Fprint(h, "}")
-	}
-	walk(reflect.TypeFor[Terms]())
+	layoutOf(h, reflect.TypeFor[Terms]())
 	for _, f := range historyFields() {
 		fmt.Fprintf(h, "%s:", f.Name)
-		walk(f.Type)
+		layoutOf(h, f.Type)
 	}
 	return h.Sum64()
+}
+
+// layoutOf writes to h how a value of type t is laid out in memory: its
+// name, size and kind, and every field's name, type and offset, down through
+// the slices and pointers.
+func layoutOf(h io.Writer, t reflect.Type) {
+	fmt.Fprintf(h, "%s/%d/%d{", t.String(), t.Kind(), t.Size())
+	switch t.Kind() {
+	case reflect.Struct:
+		for i := range t.NumField() {
+			f := t.Field(i)
+			fmt.Fprintf(h, "%s@%d:", f.Name, f.Offset)
+			layoutOf(h, f.Type)
+		}
+	case reflect.Array, reflect.Slice, reflect.Pointer:
+		layoutOf(h, t.Elem())
+	}
+	fmt.Fprint(h, "}")
 }
 
 // historyCodec writes or reads values by their type: a value with no

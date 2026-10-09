@@ -82,7 +82,7 @@ func historySeas(seed uint64, terms Terms, watch func(g *Grid, cr *crust, e int)
 	w := unmade(seed, terms)
 	to := w.newGround(terms)
 	from := w.historyGround(to, terms)
-	w.history(from, terms.Epochs, terms.SeaShare, terms.Water)
+	w.history(from, terms.Epochs, terms.SeaShare, terms.Water, nil)
 	return seas
 }
 

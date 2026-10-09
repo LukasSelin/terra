@@ -93,8 +93,13 @@ func (w *Land) stageGround(g *Grid, cfg Terms) {
 		// what its history left. See history.go.
 		// It runs on a grid of its own size, and is handed down onto the
 		// map when that is not the map's. See historygrid.go.
-		hg := w.historyGround(g, cfg)
-		d := w.history(hg, cfg.Epochs, cfg.SeaShare, cfg.Water)
+		// A history taken up from a checkpoint runs on the grid it was kept
+		// on, from the epoch it stopped at. See checkpoint.go.
+		hg, h := w.making.taken()
+		if hg == nil {
+			hg = w.historyGround(g, cfg)
+		}
+		d := w.history(hg, cfg.Epochs, cfg.SeaShare, cfg.Water, h)
 		if hg != g {
 			d = handDown(hg, g, d)
 		}
