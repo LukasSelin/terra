@@ -61,7 +61,7 @@ var shapeYardsticks = []realYardstick{
 	// coasts round all of them rough at every scale they have been measured at.
 	{yardstick: yardstick{
 		name: "land share of the surface, furthest of three globes", unit: "", scale: "ground", lo: 0.2, hi: 0.4, slow: true,
-		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure. These three globes come out in the band by the luck of their first plates' draw, 0.33, 0.38 and 0.37: a globe's land is its continental crust, 97 to 99 hundredths of it above the sea, and the crust is drawn at 45% continent and put right only past crustSlack, counting tiles and not the sphere's area",
+		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure. A globe's land is its continental crust less what its history's sea drowned (basins), 0.83 to 0.89 of it above the sea on these three, 0.30, 0.34 and 0.37; the crust is drawn at 45% continent and put right only past crustSlack, counting tiles and not the sphere's area",
 		measure: func() float64 {
 			far := math.NaN()
 			for _, g := range threeGlobes() {
@@ -99,13 +99,12 @@ var shapeYardsticks = []realYardstick{
 		name: "right angles of the continents' coasts, three globes", unit: "", scale: "ground", lo: 0, hi: 0.15, slow: true,
 		source:  "how strongly a continent's coasts gather at four bearings a right angle apart, whichever way it is turned. No figure for the earth's has been read this way; a Brownian relief's coasts read 0.02-0.07, a hexagon's 0.02, the cells of a Voronoi 0.45 and a square 1, and the band is not a measured figure: the first globes' continents were cut in rectangles at 0.18",
 		measure: func() float64 { return cornerLock(threeGlobes()) },
-	},
-		// It was a known gap with the sea carrying its own heat (#22) on the
-		// trades, 0.156; on the waves (#35) the three globes read 0.140 again.
-		// The coasts are the history's, redrawn by every change to the weather
-		// it reads: a point reading on three globes.
-		gap: "known gap: K - since the history's ground comes down by its relief (denude.go) it keeps two to two and a half times the land over its sea, and the continents' outlines are its margins, which gather at right angles a shade more than the band, itself not a measured figure: 0.153 on G2b, 0.153-0.161 over its builds, 0.156 with the country the history's own height",
-	},
+	}},
+	// It was a known gap (K) while the continents' outlines were their
+	// crust's: 0.153-0.161 over G2b's builds, 0.160 on main at b97954f. With
+	// the coast where the history's sea stands on rough ground (basins,
+	// margin.go) and the rifts grown across their plates (rift.go) it reads
+	// 0.125.
 
 	// 14. The shelf. Where the land meets the sea the floor runs out shallow
 	// for a while before it falls away, and how far it runs is the margin's own
