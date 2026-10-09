@@ -261,7 +261,7 @@ func runClimateStudy(t *testing.T, seed uint64, terms Terms, v deepVariant, same
 	hg := w.historyGround(g, terms)
 	today = hg.air
 	start := time.Now()
-	w.history(hg, terms.Epochs, terms.SeaShare, terms.Water)
+	w.history(hg, terms.Epochs, terms.SeaShare, terms.Water, nil)
 	run.history = time.Since(start).Seconds()
 	return run
 }

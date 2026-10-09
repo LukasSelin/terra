@@ -74,6 +74,11 @@ type Land struct {
 
 	// routers is the working memory deciding routes on, one per goroutine.
 	routers []*Router
+
+	// making is whom a making tells of its epochs and where it keeps them,
+	// while MakeLandWith is making the land, and nil otherwise. See
+	// checkpoint.go.
+	making *making
 }
 
 // NewLand makes a world's ground and hands it over, with nobody on it. It is
