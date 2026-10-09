@@ -291,6 +291,14 @@ func (cr *crust) worn(g *Grid) []float64 {
 // go of in an epoch: see relaxTime.
 var relaxing = -math.Expm1(-epochYears / relaxTime)
 
+// relaxOver is the share it lets go of in part of an epoch.
+func relaxOver(part float64) float64 {
+	if part == 1 {
+		return relaxing
+	}
+	return -math.Expm1(-epochYears * part / relaxTime)
+}
+
 // flexure is load, a field of Airy deflections in metres, filtered as an
 // elastic plate of flexuralRigidity bends under it: by the transform, the
 // filter, and the transform back, over a field padded to a power of two. Round
