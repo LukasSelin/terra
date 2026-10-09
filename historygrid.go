@@ -54,6 +54,20 @@ func shrinkFromEnv() int {
 	return 1
 }
 
+// historySteps is how many steps an epoch of a history is run in: see
+// epochSteps. It is a variable so that the tests can run a history in other
+// steps, and TERRA_HISTORY_STEPS sets it for an experiment. It is read once,
+// when the package is initialised; nothing else sets it, and a world made
+// under another count is not the world its seed and terms make.
+var historySteps = stepsFromEnv()
+
+func stepsFromEnv() int {
+	if n, err := strconv.Atoi(os.Getenv("TERRA_HISTORY_STEPS")); err == nil && n >= 1 {
+		return n
+	}
+	return epochSteps
+}
+
 // epochWatch, where it is set, is told of each epoch of a history as it
 // ends: the grid, the crust and the plates as the epoch left them, and the
 // epoch - and once before the first, as epoch -1, with the first plates laid

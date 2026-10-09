@@ -159,6 +159,9 @@ func codeKey() (string, error) {
 		h.Write(b)
 	}
 	fmt.Fprintln(h, runtime.Version(), runtime.GOARCH)
+	// And the knobs the environment turns, which make another history from
+	// the same code.
+	fmt.Fprintln(h, "shrink", historyShrink, "steps", historySteps)
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, s := range info.Settings {
 			if !strings.HasPrefix(s.Key, "vcs") {
