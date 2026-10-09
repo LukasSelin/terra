@@ -105,7 +105,7 @@ func (g *Grid) riftPath(fl *flooding, plates []Plate, book []record, of, to uint
 		across = func(i int) float64 { return (float64(i%g.W)-cx)*ux + (float64(i/g.W)-cy)*uy }
 		along = func(i int) float64 { return -(float64(i%g.W)-cx)*uy + (float64(i/g.W)-cy)*ux }
 	}
-	var tiles []int32
+	tiles := make([]int32, 0, int(g.plateArea(of)))
 	for i := range g.Tiles {
 		if g.Tiles[i].Plate == of {
 			tiles = append(tiles, int32(i))
@@ -114,69 +114,77 @@ func (g *Grid) riftPath(fl *flooding, plates []Plate, book []record, of, to uint
 	if len(tiles) < 16 {
 		return 0, false
 	}
-	t, s := make(map[int32]float64, len(tiles)), make(map[int32]float64, len(tiles))
-	ts, ss := make([]float64, len(tiles)), make([]float64, len(tiles))
+	// Each tile of the plate's place in tiles, and -1 off the plate: what the
+	// path keeps is kept by that place.
+	at := make([]int32, len(g.Tiles))
+	for i := range at {
+		at[i] = -1
+	}
+	m := len(tiles)
+	t, s := make([]float64, m), make([]float64, m)
+	ts, ss := make([]float64, m), make([]float64, m)
 	for k, i := range tiles {
-		t[i], s[i] = across(int(i)), along(int(i))
-		ts[k], ss[k] = t[i], s[i]
+		at[i] = int32(k)
+		t[k], s[k] = across(int(i)), along(int(i))
+		ts[k], ss[k] = t[k], s[k]
 	}
 	slices.Sort(ts)
 	slices.Sort(ss)
-	mid, lo, hi := ts[len(ts)/2], ss[0], ss[len(ss)-1]
+	mid, lo, hi := ts[m/2], ss[0], ss[m-1]
 	long := hi - lo
 	if long < 4 {
 		return 0, false
 	}
-	// The staircase: the line the rift is held to at each place along it.
-	want := func(si float64) float64 {
-		k := int(float64(len(plan.steps)) * (si - lo) / long)
-		k = max(0, min(len(plan.steps)-1, k))
-		return mid + plan.steps[k]*long
-	}
+	// The staircase: the line the rift is held to at each place along it,
+	// and how far each tile of the plate lies off it.
 	wide := math.Max(1.5, riftWidth*long)
-	cost := make(map[int32]float64, len(tiles))
-	for _, i := range tiles {
+	off := make([]float64, m)
+	cost := make([]float64, m)
+	for k, i := range tiles {
+		step := int(float64(len(plan.steps)) * (s[k] - lo) / long)
+		step = max(0, min(len(plan.steps)-1, step))
+		off[k] = t[k] - (mid + plan.steps[step]*long)
 		c := math.Pow(float64(fl.cost[i]), -riftWeak)
 		if book != nil {
 			c *= math.Exp(-riftSuture * math.Min(1, book[i].crush/sutureFull))
 		}
-		off := (t[i] - want(s[i])) / wide
-		cost[i] = c * (1 + riftHold*off*off)
+		cost[k] = c * (1 + riftHold*(off[k]/wide)*(off[k]/wide))
 	}
 	// The ends: the edge of the plate within a corridor of the staircase,
 	// below and above its middle along it.
-	edge := func(i int32) bool {
-		on := false
-		g.eachNear(int(i), func(j int) {
-			if g.Tiles[j].Plate != of {
-				on = true
-			}
-		})
-		return on
-	}
-	smid := ss[len(ss)/2]
-	var from []int32
-	end := map[int32]bool{}
-	for _, i := range tiles {
-		if math.Abs(t[i]-want(s[i])) > 2*wide || !edge(i) {
+	smid := ss[m/2]
+	end := make([]bool, m)
+	from := make([]int32, 0, m)
+	ends := 0
+	for k, i := range tiles {
+		if math.Abs(off[k]) > 2*wide {
 			continue
 		}
-		if s[i] < smid {
-			from = append(from, i)
+		on := false
+		g.eachNear(int(i), func(j int) { on = on || g.Tiles[j].Plate != of })
+		if !on {
+			continue
+		}
+		if s[k] < smid {
+			from = append(from, int32(k))
 		} else {
-			end[i] = true
+			end[k] = true
+			ends++
 		}
 	}
-	if len(from) == 0 || len(end) == 0 {
+	if len(from) == 0 || ends == 0 {
 		return 0, false
 	}
 	// The cheapest path from one end to the other, over the plate.
-	dist := make(map[int32]float64, len(tiles))
-	back := make(map[int32]int32, len(tiles))
-	var q riftHeap
-	for _, i := range from {
-		dist[i], back[i] = 0, -1
-		q.push(riftNode{0, i})
+	dist := make([]float64, m)
+	back := make([]int32, m)
+	for k := range dist {
+		dist[k], back[k] = math.Inf(1), -1
+	}
+	q := make(riftHeap, 0, m)
+	for _, k := range from {
+		dist[k] = 0
+		q.push(riftNode{0, k})
 	}
 	reached := int32(-1)
 	for len(q) > 0 {
@@ -188,7 +196,8 @@ func (g *Grid) riftPath(fl *flooding, plates []Plate, book []record, of, to uint
 			reached = n.i
 			break
 		}
-		x, y := int(n.i)%g.W, int(n.i)/g.W
+		i := int(tiles[n.i])
+		x, y := i%g.W, i/g.W
 		for _, dir := range Dirs {
 			qx, qy := x+dir.X, y+dir.Y
 			if qy < 0 || qy >= g.H {
@@ -200,50 +209,49 @@ func (g *Grid) riftPath(fl *flooding, plates []Plate, book []record, of, to uint
 				}
 				qx = g.WrapX(qx)
 			}
-			j := int32(qy*g.W + qx)
-			cj, ok := cost[j]
-			if !ok {
+			k := at[qy*g.W+qx]
+			if k < 0 {
 				continue
 			}
 			l := 1.0
 			if dir.X != 0 && dir.Y != 0 {
 				l = math.Sqrt2
 			}
-			nd := n.d + l*(cost[n.i]+cj)/2
-			if d, seen := dist[j]; !seen || nd < d {
-				dist[j], back[j] = nd, n.i
-				q.push(riftNode{nd, j})
+			if nd := n.d + l*(cost[n.i]+cost[k])/2; nd < dist[k] {
+				dist[k], back[k] = nd, n.i
+				q.push(riftNode{nd, k})
 			}
 		}
 	}
 	if reached < 0 {
 		return 0, false
 	}
-	path := map[int32]bool{}
-	for i := reached; i >= 0; i = back[i] {
-		path[i] = true
+	path := end // the ends are spent; the space is reused for the path
+	clear(path)
+	for k := reached; k >= 0; k = back[k] {
+		path[k] = true
 	}
 	// The far side of the path, the way the halves part, is the new plate:
 	// a flood through the sides of tiles only, which a path that steps
 	// across corners still holds.
-	far, most := int32(-1), math.Inf(-1)
-	near, least := int32(-1), math.Inf(1)
-	for _, i := range tiles {
-		if path[i] {
+	far, near := -1, -1
+	for k := range tiles {
+		if path[k] {
 			continue
 		}
-		if d := t[i] - want(s[i]); d > most {
-			far, most = i, d
+		if far < 0 || off[k] > off[far] {
+			far = k
 		}
-		if d := t[i] - want(s[i]); d < least {
-			near, least = i, d
+		if near < 0 || off[k] < off[near] {
+			near = k
 		}
 	}
-	if far < 0 || near < 0 {
+	if far < 0 {
 		return 0, false
 	}
-	side := []int32{far}
-	g.Tiles[far].Plate = to
+	side := make([]int32, 1, m)
+	side[0] = tiles[far]
+	g.Tiles[tiles[far]].Plate = to
 	four := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 	for len(side) > 0 {
 		i := side[len(side)-1]
@@ -260,49 +268,52 @@ func (g *Grid) riftPath(fl *flooding, plates []Plate, book []record, of, to uint
 				}
 				qx = g.WrapX(qx)
 			}
-			j := int32(qy*g.W + qx)
-			if g.Tiles[j].Plate == of && !path[j] {
+			j := qy*g.W + qx
+			if k := at[j]; k >= 0 && !path[k] && g.Tiles[j].Plate == of {
 				g.Tiles[j].Plate = to
-				side = append(side, j)
+				side = append(side, int32(j))
 			}
 		}
 	}
-	if g.Tiles[near].Plate == to {
+	if g.Tiles[tiles[near]].Plate == to {
 		// The path went round and did not part the plate.
 		for _, i := range tiles {
 			g.Tiles[i].Plate = of
 		}
 		return 0, false
 	}
-	g.onePiece(tiles, of, to)
+	g.onePiece(tiles, at, of, to)
 	return g.riftShare(of, to), true
 }
 
 // onePiece gives every piece of plate of but its largest to plate to, which
 // it borders: a rift's near side is what the far side's flood left, and a
 // plate that wrapped round a neighbour can leave more than one piece of it.
-func (g *Grid) onePiece(tiles []int32, of, to uint8) {
-	label := map[int32]int{}
+// tiles are the plate's tiles before the rift, and at each tile's place in
+// them.
+func (g *Grid) onePiece(tiles, at []int32, of, to uint8) {
+	label := make([]int32, len(tiles))
+	for k := range label {
+		label[k] = -1
+	}
 	var sizes []int
-	for _, s := range tiles {
-		if g.Tiles[s].Plate != of {
+	stack := make([]int32, 0, len(tiles))
+	for s := range tiles {
+		if g.Tiles[tiles[s]].Plate != of || label[s] >= 0 {
 			continue
 		}
-		if _, ok := label[s]; ok {
-			continue
-		}
-		id := len(sizes)
+		id := int32(len(sizes))
 		sizes = append(sizes, 0)
 		label[s] = id
-		stack := []int32{s}
+		stack = append(stack[:0], int32(s))
 		for len(stack) > 0 {
-			i := stack[len(stack)-1]
+			k := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			sizes[id]++
-			g.eachNear(int(i), func(j int) {
-				if _, ok := label[int32(j)]; !ok && g.Tiles[j].Plate == of {
-					label[int32(j)] = id
-					stack = append(stack, int32(j))
+			g.eachNear(int(tiles[k]), func(j int) {
+				if q := at[j]; q >= 0 && label[q] < 0 && g.Tiles[j].Plate == of {
+					label[q] = id
+					stack = append(stack, q)
 				}
 			})
 		}
@@ -310,15 +321,15 @@ func (g *Grid) onePiece(tiles []int32, of, to uint8) {
 	if len(sizes) < 2 {
 		return
 	}
-	big := 0
+	big := int32(0)
 	for k, n := range sizes {
 		if n > sizes[big] {
-			big = k
+			big = int32(k)
 		}
 	}
-	for i, id := range label {
-		if id != big {
-			g.Tiles[i].Plate = to
+	for k, id := range label {
+		if id >= 0 && id != big {
+			g.Tiles[tiles[k]].Plate = to
 		}
 	}
 }

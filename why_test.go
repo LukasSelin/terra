@@ -138,9 +138,12 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // by some 9 km. On main's rock stack (the history's heights, the rift fix and
 // the poured sea) the air reaching it crosses a range that wrings a rain
 // shadow's worth out of it, so its rain's chain ends in RainShadow too.
+// When a rift came to grow across its plate along the old sutures (rift.go)
+// the plates parted elsewhere, and 667's rock came to be the fill laid over
+// it; its neighbour 666 is the arc's of the first epoch, by some 12 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(667)
+	p := g.PosOf(666)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -159,7 +162,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 667 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 666 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {
