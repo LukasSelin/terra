@@ -32,7 +32,7 @@ func TestAShelfIsWideWhereItsMarginIsQuiet(t *testing.T) {
 	}
 
 	g.keepPlates([]Plate{{into: 0}, {into: 1}})
-	_, share, _, _ := g.floorDepths(cr, 16)
+	_, share, _, _ := g.floorDepths(cr, 16, nil, nil)
 	quiet, active := first(share, west, -1), first(share, east-1, 1)
 	if !(active < quiet) {
 		t.Errorf("the floor goes down %d tiles out of the active margin and %d out of the quiet one", active, quiet)
@@ -42,7 +42,7 @@ func TestAShelfIsWideWhereItsMarginIsQuiet(t *testing.T) {
 	}
 
 	g.keepPlates([]Plate{{into: 0}, {into: 0}})
-	_, share, _, _ = g.floorDepths(cr, 16)
+	_, share, _, _ = g.floorDepths(cr, 16, nil, nil)
 	if welded := first(share, east-1, 1); welded != quiet {
 		t.Errorf("welded to the continent's plate, the east floor goes down %d tiles out, and the west %d", welded, quiet)
 	}

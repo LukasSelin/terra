@@ -73,6 +73,10 @@ import (
 // with that draw held within crustSlack of the asked share. Without that it
 // came to .771 on the first globe and .774 on the fourth small one, whose
 // first plates had drawn eight tenths of their ground as floor: see crustSlack.
+// floorFill is the most of a world's water the floor's own room may hold
+// where the drowned crust is laid with it: see basins.
+const floorFill = 0.8
+
 const (
 	DefaultWater = 7.5
 	BasinDepth   = 20.0
@@ -182,7 +186,7 @@ func (g *Grid) room() float64 {
 // hundredths of their crust, and every coast on the map was the edge of the
 // crust, a plate's outline, where the history's own sea stood a seventh to a
 // fifth of the way in, on the continents' ground. drowned may be nil.
-func (w *Land) basins(g *Grid, ocean, drowned []bool) {
+func (w *Land) basins(g *Grid, ocean, drowned []bool, water float64) {
 	defer phase.Start("basins")()
 	n := len(g.Tiles)
 	// sunk is which of the three a tile is laid with: the floor's own crust
@@ -233,9 +237,20 @@ func (w *Land) basins(g *Grid, ocean, drowned []bool) {
 	// foot. Laid as a straight line of the order; a floor that lay deeper for
 	// more of its width, at a square or a fourth power, came up steeper at the
 	// coast and left the flats on one seed of four.
+	//
+	// With the drowned crust in it the floor can be most of a world, and laid
+	// BasinDepth deep it held more than the water: on the second small globe
+	// the sea stood a quarter of a metre under the foot, the top of the floor
+	// stood dry beside the deep floor, and the shaping cut the land down to it
+	// (see shelfLeast). So the floor is laid no deeper than its room comes to
+	// floorFill of the water, and the rest stands over the foot.
+	deep := BasinDepth
+	if drowned != nil && water > 0 {
+		deep = math.Min(deep, 2*floorFill*water*float64(n)/float64(floor))
+	}
 	for rank := 0; rank < floor; rank++ {
 		i := order[rank]
-		g.Height[i] = BasinDepth * float64(rank) / math.Max(1, float64(floor-1))
+		g.Height[i] = BasinDepth - deep + deep*float64(rank)/math.Max(1, float64(floor-1))
 	}
 	// The continents, onto the drawn map's heights: the lowest of them onto the
 	// lowest the drawn map has, and so on up, over the whole of its spread.

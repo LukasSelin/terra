@@ -116,9 +116,23 @@ func floorDepth(t float64) float64 {
 // depth it is given for how far it is from continental crust: nothing on the
 // shelf, all of it past the slope. The shelf is a quiet margin's where the
 // nearest continental crust rides the tile's own plate, or one welded to it,
-// and an active margin's where it rides another. Continental crust is given
+// and an active margin's where it rides another. Dry continental crust is given
 // nothing. It is read while the tiles are still a history's, at their deep
 // span, and once the plates are kept: see keepPlates.
+//
+// drowned, where it is given, is the continental crust a globe's history
+// left under its sea (drownedCrust), and country how far over that sea each
+// tile stood: a drowned tile is given the depth it stood at, -country, and
+// the shelf and the slope, its own and the floor's, are read from the dry
+// crust and not from all of it, so that the dry land keeps a shelf round it
+// whatever lies beyond. Laid with the floor at the top of its order and no
+// deeper (see basins), all of the drowned crust was shelf: a quarter of the
+// continents' crust within two hundred metres of the sea, and the sea floor
+// within it 0.15 of the whole on the first three globes, against GEBCO's
+// 0.073. The earth's drowned crust is its shelves and the slope below them,
+// the crust its rifting thinned down to the floor, and the history's heights
+// are that: the shallow seas over its continents at their own depths, a
+// margin's slope at its.
 //
 // A tile's age is the middle of the epoch its crust was made in, to the end of
 // the history. The crust the first plates broke is the whole history old, and
@@ -126,22 +140,27 @@ func floorDepth(t float64) float64 {
 // ages is each tile's, in millions of years, and NaN on continental crust,
 // and sediment the metres of it the floor carries: see floorSediment. The
 // depth is the floor's under that sediment.
-func (g *Grid) floorDepths(cr *crust, epochs int) (depth, share, ages, sediment []float64) {
+func (g *Grid) floorDepths(cr *crust, epochs int, drowned []bool, country []float64) (depth, share, ages, sediment []float64) {
 	n := len(g.Tiles)
 	depth, share, ages, sediment = make([]float64, n), make([]float64, n), make([]float64, n), make([]float64, n)
-	away, near := g.nearestTo(func(i int) bool { return !cr.ocean[i] }, true)
+	away, near := g.nearestTo(func(i int) bool { return !cr.ocean[i] && (drowned == nil || !drowned[i]) }, true)
 	span := g.span()
 	quiet := math.Max(shelfLeast, tilesAcross(quietShelf, span))
 	active := math.Max(shelfLeast, tilesAcross(activeShelf, span))
 	slope := math.Max(1, tilesAcross(slopeWidth, span))
 	for i := range g.Tiles {
 		ages[i] = math.NaN()
-		if !cr.ocean[i] {
+		if !cr.ocean[i] && (drowned == nil || !drowned[i]) {
 			continue
 		}
 		shelf := quiet
 		if k := near[i]; k >= 0 && g.rootPlate(g.Tiles[k].Plate) != g.rootPlate(g.Tiles[i].Plate) {
 			shelf = active
+		}
+		if !cr.ocean[i] {
+			depth[i] = math.Max(0, -country[i])
+			share[i] = smooth(clamp01((away[i] - shelf) / slope))
+			continue
 		}
 		age := (float64(epochs) - float64(cr.born[i]) - 0.5) * epochYears
 		if cr.born[i] == 0 {

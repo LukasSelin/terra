@@ -1057,12 +1057,12 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *dee
 	g.keepPlates(plates)
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
-		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
-		d.uplift = g.upliftOf(cr)
 		if g.Wrap {
 			d.country = g.countryOf()
 			d.drowned = drownedCrust(d.country, cr.ocean)
 		}
+		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs, d.drowned, d.country)
+		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean)
@@ -1300,7 +1300,7 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// The beds are carried through the rescaling with the ground over them.
 	was := g.heights()
 	if water > 0 {
-		w.basins(g, d.ocean, d.drowned)
+		w.basins(g, d.ocean, d.drowned, water)
 		g.restrata(was, g.heights(), d.ocean)
 		g.uplift = d.uplift
 		g.planetHeight = d.country
