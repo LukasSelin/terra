@@ -16,6 +16,15 @@
 //	go run ./cmd/overview -preset globe -keep-history globe.history
 //	go run ./cmd/overview -from-history globe.history
 //
+// A long history - a globe of sixty-four epochs, or a big map - is printed
+// epoch by epoch as it runs. -checkpoint keeps it in a file after every
+// epoch, and the same command run again on the same file goes on from the
+// last epoch kept rather than from the start. A globe's checkpoint is half a
+// gigabyte and takes a second to write, so it is kept at most once a minute
+// (-checkpoint-every): stop it, and it loses at most that minute.
+//
+//	go run ./cmd/overview -preset globe -epochs 64 -checkpoint globe64.ckpt
+//
 // It writes into -out (overview/ by default) an index.html and a png per
 // layer, and prints a summary to the terminal.
 //
@@ -71,6 +80,11 @@ type options struct {
 	// FromHistory a file to make the world from instead, on the seed and
 	// terms it carries. See terra.LandFromHistory.
 	KeepHistory, FromHistory string
+	// Checkpoint is a file to keep the history in after each epoch, and to
+	// go on from where it already holds one of this world; CheckpointEvery
+	// the least time between two. See terra.Making.
+	Checkpoint      string
+	CheckpointEvery time.Duration
 }
 
 func main() {
@@ -92,6 +106,8 @@ func main() {
 	flag.BoolVar(&o.Max, "max", false, "make the world as big as memory allows, in the shape of the preset or of -w and -h")
 	flag.StringVar(&o.KeepHistory, "keep-history", "", "write the world's history to this file as it is made")
 	flag.StringVar(&o.FromHistory, "from-history", "", "make the world from a history file -keep-history wrote, on the seed and terms it carries, instead of from the other flags")
+	flag.StringVar(&o.Checkpoint, "checkpoint", "", "keep the history in this file after each epoch, and go on from the last epoch it holds where it already holds this world's")
+	flag.DurationVar(&o.CheckpointEvery, "checkpoint-every", time.Minute, "the least time between two checkpoints, the last epoch always kept (0 keeps every epoch)")
 	var (
 		out   = flag.String("out", "overview", "directory to write into")
 		serve = flag.String("serve", "", "serve a page that makes worlds at this address (e.g. :8080) instead of making one; the other flags are what it makes")
@@ -190,28 +206,50 @@ func presetOf(t terra.Terms) string {
 }
 
 // makeLand makes the land on t: from o's history file if it names one, and
-// keeping its history in the file o names for that if it does.
+// otherwise printing each epoch of its history as it ends, keeping the
+// history in the file o names for that if it does, and keeping and going on
+// from its checkpoint if o names one.
 func makeLand(o options, t terra.Terms) (*terra.Land, error) {
-	switch {
-	case o.FromHistory != "":
+	if o.FromHistory != "" {
 		f, err := os.Open(o.FromHistory)
 		if err != nil {
 			return nil, err
 		}
 		defer f.Close()
 		return terra.LandFromHistory(f)
-	case o.KeepHistory != "":
+	}
+	m := terra.Making{Epochs: printEpoch, Checkpoint: o.Checkpoint, CheckpointEvery: o.CheckpointEvery}
+	if o.Checkpoint != "" {
+		if seed, kept, done, err := terra.CheckpointTerms(o.Checkpoint); err == nil && seed == o.Seed && kept == t {
+			fmt.Printf("going on from epoch %d of %d, kept in %s\n", done, t.Epochs, o.Checkpoint)
+		}
+	}
+	if o.KeepHistory != "" {
 		f, err := os.Create(o.KeepHistory)
 		if err != nil {
 			return nil, err
 		}
-		land, err := terra.MakeLandKeepingHistory(o.Seed, t, f)
+		m.History = f
+		land, err := terra.MakeLandWith(o.Seed, t, m)
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
 		return land, err
 	}
-	return terra.MakeLand(o.Seed, t)
+	return terra.MakeLandWith(o.Seed, t, m)
+}
+
+// printEpoch prints a line for an epoch of a history as it ends: how far it
+// has got, how long it has taken and a guess at how long it has to go.
+func printEpoch(e terra.EpochDone) {
+	line := fmt.Sprintf("  epoch %*d/%d  %8v", len(strconv.Itoa(e.Epochs)), e.Epoch, e.Epochs, e.Took.Round(time.Second))
+	if e.Epoch < e.Epochs {
+		line += fmt.Sprintf("  ~%v left", e.Left().Round(time.Second))
+	}
+	if e.Kept > 0 {
+		line += fmt.Sprintf("  (kept in %v)", e.Kept.Round(time.Millisecond))
+	}
+	fmt.Println(line)
 }
 
 // generate makes the world the options describe and draws it into out: an

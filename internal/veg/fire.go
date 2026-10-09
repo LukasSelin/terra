@@ -126,14 +126,24 @@ const yearsSwing = 1.0 / 3
 // 2010). It runs as long as the fuel's dryness, d, lets it: burnMinutes /
 // (1 + 240·e^(-11.06·d)), SPITFIRE's duration, which is near its four hours
 // in a dry season and minutes in a damp one. In a moderate wind of five
-// metres a second that is three tenths of a metre a second, a savanna's
-// grass fire as Rothermel's model runs it in SPITFIRE, and some seven km²
-// burned through a dry season's afternoon. The rate is the one figure here
-// set against the burned area itself: at twice it, the savannas burned half
-// their ground a year and the land five times GFED's.
+// metres a second that is 0.27 m/s, sixteen metres a minute, a savanna's
+// grass fire as Rothermel's model runs it in SPITFIRE, and some six km²
+// burned through a dry season's afternoon. The Canadian Fire Behaviour
+// Prediction System's fully cured standing grass (O-1b; Forestry Canada,
+// 1992, with Wotton and others' 2009 curing) runs at 12 to 34 metres a
+// minute in that wind, its fine fuel at an FFMC of 85 to 90.
+//
+// The rate is the one figure here set against the burned area itself: at
+// twice it, the savannas burned half their ground a year and the land five
+// times GFED's. It was 0.05 and 0.05 while the vegetation's spin flipped
+// the grass between two covers a year and read the savannas' fires where
+// year three hundred left them; spun to its steady cover the grass carries
+// more fire, and at 0.05 the savannas burned 0.48 of their ground a year
+// against GFED's 0.1 to 0.45. At nine tenths of it they burn 0.43, what
+// they burned before (#136).
 const (
-	rosCalm     = 0.05
-	rosWind     = 0.05
+	rosCalm     = 0.045
+	rosWind     = 0.045
 	burnMinutes = 241.0
 	ellipse     = 2.0
 )

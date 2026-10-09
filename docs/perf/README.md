@@ -315,6 +315,27 @@ refused by a build whose grid is laid out differently, but not by one whose
 history code has changed: after a change to anything the ground stage runs,
 keep the history again.
 
+## Long histories: progress and checkpoints
+
+`cmd/overview` prints a line as each epoch of a history ends, with the time
+taken and a guess at the time left. A long making - a globe of sixty-four
+epochs, a big map - can keep its history in a checkpoint after every epoch
+(`terra.Making.Checkpoint`, `checkpoint.go`) and go on from it:
+
+```bash
+go run ./cmd/overview -preset globe -epochs 64 -checkpoint globe64.ckpt
+```
+
+Stopped - Ctrl-C, a crash, the machine shut - the same command goes on from
+the last epoch kept. Each checkpoint is written beside the file and renamed
+over it, so a stop mid-write leaves the last one whole. The world taken up
+from any epoch is the world made straight through, to the bit
+(`TestAWorldResumedFromACheckpointIsTheSameWorld`); a checkpoint of another
+seed, other terms or another layout of the history's state is refused. Like
+a history file, a checkpoint written before a change to the history code is
+that code's history: move it aside after such a change. `-checkpoint-every`
+sets the least time between two, where writing every epoch costs too much.
+
 ## The history's steps
 
 A history's epoch can be run in `epochSteps` steps, each of a share of the
@@ -322,10 +343,10 @@ epoch's four million years: the plates slid that share of their drift, the
 meetings' uplift and the weather's wear taking turns. It is one: at eight,
 the yardsticks held main's count of misses, but the land stood lower than
 the earth's curve and the sea and the ocean moved with it, which six tests
-outside them read. See the PR that brought it in. The weather is read
-once an epoch, where its first step finds it stale, and the water found again
-every step, so the history costs what its steps' moves, meetings, wear and
-drainage cost on top of an epoch's weather. On this machine, one seed,
+outside them read. The weather is read once an epoch, where its first step
+finds it stale, and the water found again every step, so the history costs
+what its steps' moves, meetings, wear and drainage cost on top of an epoch's
+weather. On this machine, one seed,
 history seconds:
 
 | steps | `globe256` (four seeds' mean) | `globe` |
@@ -339,4 +360,5 @@ history seconds:
 experiment, and `TERRA_STEPS_STUDY=1,2,4,8 go test -run
 TestHistoryStepsStudy -timeout 60m .` reads the time, hypsometry and
 high ground of each (`steps_test.go`). A history in one step an epoch is the
-history before there were steps, to the bit.
+history before there were steps, to the bit. A checkpoint kept in other
+steps than the making taking it up is refused.

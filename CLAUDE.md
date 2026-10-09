@@ -70,3 +70,23 @@ commit message; the work log kept until 2026-10-07 is in git history
 `Generate` runs in stages (`stages.go`); the first is the history. Work on
 the later stages from a kept history (`cmd/overview -keep-history` once,
 then `-from-history`); see the end of `docs/perf/README.md`.
+
+## Duplication
+
+[doppel](https://github.com/LukasSelin/doppel) reads every function in the
+repo and reports the pairs that share shape and role. The repo enables its
+Claude Code plugin (`.claude/settings.json`); it needs the `doppel` binary
+on `PATH` (`go install github.com/LukasSelin/doppel@latest`). The plugin
+gives each session the corpus at the start, names a file's twins before it
+is edited, and says at the end of a turn which new merge-worthy pairs the
+session made. `.doppel.json` holds the settings; `hook-notify` set to
+`user` stops the end-of-turn note from costing a turn.
+
+- Before writing a helper, ask whether terra has one:
+  `doppel query --near <package> .` reads the draft on stdin and names its
+  nearest relatives. The two commands under `cmd/` are both `main` to
+  doppel, so `--near main` covers either.
+- A new pair the Stop hook names is merged or the PR says why the two stay
+  apart. The pairs that were there before the branch are not its business.
+- `doppel analyze . -o doppel.html` draws the whole map; `doppel families .`
+  lists the groups of three and more.

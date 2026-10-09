@@ -990,8 +990,85 @@ func (r *record) banded(k int, share, near float64) {
 // the drainage worked out, so that everything after it in Generate - the
 // woods, the outcrops, the soils, the market - reads the same kind of ground
 // it would have read from the picture.
-func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
+//
+// h, where it is not nil, is a history part-way through, taken up from a
+// checkpoint with g as it was kept: the epochs it has not run are run on it.
+// Where it is nil the history starts from the molten world. See
+// checkpoint.go.
+func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *deepStage {
 	defer phase.Start("history")()
+	if h == nil {
+		h = w.startHistory(g, epochs, sea, water)
+	}
+	// The climate of each epoch, where the study's switch is on: see
+	// deepclimate.go. Nil, and nothing, where it is off.
+	dc := newEpochClimate(g)
+	if epochWatch != nil && h.next == 0 {
+		epochWatch(g, h.cr, h.plates, -1) // the first plates, before any has moved
+	}
+	w.making.begin(h.next)
+	for h.next < epochs {
+		e := h.next
+		w.epoch(g, h, e, epochs, dc)
+		h.next++
+		if epochWatch != nil {
+			epochWatch(g, h.cr, h.plates, e)
+		}
+		w.making.ended(w, g, h, epochs, dc != nil)
+	}
+	if dc != nil {
+		dc.done(g)
+	}
+	plates, cr, book := h.plates, h.cr, h.book
+
+	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
+
+	// The ages of the floor and how fast the ground is rising are read while
+	// the tiles are still pieces of a planet, and once the plates are kept,
+	// since how wide a shelf is depends on which plate the continent beside it
+	// has become part of. See floorDepths and upliftOf.
+	g.keepPlates(plates)
+	d := &deepStage{ocean: cr.ocean}
+	if water > 0 {
+		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
+		d.uplift = g.upliftOf(cr)
+		if g.Wrap {
+			d.country = g.countryOf()
+		}
+	}
+	g.base, g.deep = -1, 0
+	g.settleRock(book, cr.ocean)
+	if g.planet > 0 {
+		d.book = book // the foot of every pile is laid on the map
+	}
+	for k := 0; k < g.passes(smoothing); k++ {
+		g.soften()
+	}
+	return d
+}
+
+// running is what a history carries from one epoch to the next beside its
+// grid and the land's chance: everything an epoch reads that an epoch before
+// it wrote. It is what a checkpoint keeps, found by reflection as a history
+// file's grid is, so that a field added here is kept without anybody
+// remembering to keep it. See checkpoint.go.
+type running struct {
+	plates []Plate
+	cr     *crust
+	book   []record
+	grain  []float64
+	fl     *flooding
+	// What the plates have done to each other, kept across the epochs because
+	// welding is something that happens over an age and not in one. touch is
+	// taken afresh each epoch, and kept with weld because it is one with it.
+	touch, weld []float64
+	// next is the epoch to run next, which is how many have been run.
+	next int
+}
+
+// startHistory is a history up to its first epoch: the molten world, the
+// first plates and the crust they carry.
+func (w *Land) startHistory(g *Grid, epochs int, sea, water float64) *running {
 	// The tiles are pieces of a planet until the history is over. See
 	// epochYears.
 	g.deep = deepSpan(g)
@@ -1028,65 +1105,31 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 	book := make([]record, len(g.Tiles))
 	// And the part of it that is kept when the history is over. See ledger.
 	g.openBook(epochs)
-	// What the plates have done to each other, kept across the epochs because
-	// welding is something that happens over an age and not in one.
-	touch := make([]float64, plateCap*plateCap)
-	weld := make([]float64, plateCap*plateCap)
+	return &running{
+		plates: plates, cr: cr, book: book, grain: grain, fl: fl,
+		touch: make([]float64, plateCap*plateCap),
+		weld:  make([]float64, plateCap*plateCap),
+	}
+}
 
-	// The climate of each epoch, where the study's switch is on: see
-	// deepclimate.go. Nil, and nothing, where it is off.
-	dc := newEpochClimate(g)
-	if epochWatch != nil {
-		epochWatch(g, cr, plates, -1) // the first plates, before any has moved
+// epoch runs epoch e of a history of epochs on g, carrying h on: in its
+// steps (see epochSteps), and then what an epoch writes down once.
+func (w *Land) epoch(g *Grid, h *running, e, epochs int, dc *epochClimate) {
+	plates, cr, book, fl, grain, touch, weld := h.plates, h.cr, h.book, h.fl, h.grain, h.touch, h.weld
+	// How far through the era we are, which is how far the world has
+	// cooled: the plates slow as it goes.
+	through := float64(e) / math.Max(1, float64(epochs-1))
+	for s := 0; s < historySteps; s++ {
+		w.step(g, plates, cr, book, fl, grain, touch, weld, dc, e, s)
 	}
-	for e := 0; e < epochs; e++ {
-		// How far through the era we are, which is how far the world has
-		// cooled: the plates slow as it goes.
-		through := float64(e) / math.Max(1, float64(epochs-1))
-		// The epoch, in its steps: see epochSteps.
-		for s := 0; s < historySteps; s++ {
-			w.step(g, plates, cr, book, fl, grain, touch, weld, dc, e, s)
-		}
-		g.keepBook(book, e, cr.epochLanded, cr.shelved, cr.epochWorn)
-		// What the epoch floored with lava, filled or silted over is a new
-		// surface, and its soil starts from nothing. See pedogenesis.go.
-		g.restartBuried(e)
-		// And the weather next epoch meets the rock this one has bared.
-		g.expose()
-		plates = w.reshape(g, plates, fl, touch, weld)
-		slow(plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
-		if epochWatch != nil {
-			epochWatch(g, cr, plates, e)
-		}
-	}
-	if dc != nil {
-		dc.done(g)
-	}
-
-	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
-
-	// The ages of the floor and how fast the ground is rising are read while
-	// the tiles are still pieces of a planet, and once the plates are kept,
-	// since how wide a shelf is depends on which plate the continent beside it
-	// has become part of. See floorDepths and upliftOf.
-	g.keepPlates(plates)
-	d := &deepStage{ocean: cr.ocean}
-	if water > 0 {
-		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
-		d.uplift = g.upliftOf(cr)
-		if g.Wrap {
-			d.country = g.countryOf()
-		}
-	}
-	g.base, g.deep = -1, 0
-	g.settleRock(book, cr.ocean)
-	if g.planet > 0 {
-		d.book = book // the foot of every pile is laid on the map
-	}
-	for k := 0; k < g.passes(smoothing); k++ {
-		g.soften()
-	}
-	return d
+	g.keepBook(book, e, cr.epochLanded, cr.shelved, cr.epochWorn)
+	// What the epoch floored with lava, filled or silted over is a new
+	// surface, and its soil starts from nothing. See pedogenesis.go.
+	g.restartBuried(e)
+	// And the weather next epoch meets the rock this one has bared.
+	g.expose()
+	h.plates = w.reshape(g, plates, fl, touch, weld)
+	slow(h.plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
 }
 
 // step is step s of epoch e, one historySteps-th of it: the plates carried on

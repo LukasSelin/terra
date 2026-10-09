@@ -74,7 +74,7 @@ func nudgedHistory(seed uint64, terms Terms, d float64) (rain []float64, height 
 		hg.air = &a
 	}
 	start := time.Now()
-	w.history(hg, terms.Epochs, terms.SeaShare, terms.Water)
+	w.history(hg, terms.Epochs, terms.SeaShare, terms.Water, nil)
 	return rain, height, time.Since(start).Seconds()
 }
 
