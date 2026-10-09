@@ -34,7 +34,7 @@ func TestARiftSinksAsMcKenzieHas(t *testing.T) {
 			cr.thick[0] = float32(continentCrust / beta)
 			cr.stretch(0, continentCrust, 0)
 			for range k {
-				cr.cool()
+				cr.cool(1)
 			}
 			here := wetRise*continentCrust*(1-1/beta) - float64(cr.rift[0].warm)
 			want := mcKenzie(continentCrust, beta, years)

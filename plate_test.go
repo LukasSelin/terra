@@ -467,7 +467,7 @@ func TestATurnCarriesAPlateRoundWhole(t *testing.T) {
 	cr := newCrust(g)
 	book := make([]record, len(g.Tiles))
 	for e := 1; e <= epochs; e++ {
-		(&Land{}).move(g, plates, cr, book, e)
+		(&Land{}).move(g, plates, cr, book, e, 1, true)
 	}
 
 	held, fresh := 0, 0
@@ -643,7 +643,7 @@ func TestASlowSlideIsNotHeldBack(t *testing.T) {
 		}
 		book := make([]record, len(g.Tiles))
 		for e := 1; e <= 10; e++ {
-			(&Land{}).move(g, plates, cr, book, e)
+			(&Land{}).move(g, plates, cr, book, e, 1, true)
 			travel := perEpoch * float64(e)
 			var sx float64
 			carried, hole := 0, 0

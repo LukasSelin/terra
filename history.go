@@ -619,6 +619,34 @@ const (
 // The unit plumbing is what it needs first, and is what this is.
 const epochYears = 4 * myr
 
+// epochSteps is how many steps an epoch is run in, each of epochYears over
+// epochSteps: the plates slid that share of their drift, their meetings
+// raising and dropping the ground at their rates for that share of the years,
+// the rifts cooling, the plate relaxing and the weather wearing over them. Run
+// in one, an epoch raised a range by its four million years' worth and only
+// then let the weather at it, and moved every plate a whole tile before any
+// of it; in steps, the uplift and the wear take turns as they compete in the
+// world, and a plate's tile of travel falls in whichever step it comes to.
+//
+// What happens once an epoch is not stepped. The plates are turned whole in
+// its last step (see turn), and weld, break and are slowed at its end
+// (reshape, slow); its beds are laid once, by what all its steps' weather
+// laid and took (keepBook, shelve); the rock it makes is dated from it, and
+// its fresh floor is born in it, whichever step made either. A hotspot is
+// awake or asleep for the whole of it. Nor is the weather read again every
+// step: it is read where an epoch's first step finds it stale and held
+// through the rest, as it was held through an epoch in one step, while the
+// water is found again on every step's ground. See step.
+//
+// Checkpoints fall between epochs, where nothing of a step is left over but
+// what the crust carries across epochs anyway: a plate's travel short of a
+// whole tile, and its crust's offsets.
+//
+// The design this falls short of is the one at the end of epochYears'
+// comment: a grid fine enough that a plate takes many steps to cross a tile.
+// Here a tile is still deepSpan, and a step moves a plate a share of one.
+const epochSteps = 1
+
 // deepSpan is how wide, in metres, a tile of g is read as while a history
 // runs. See epochYears.
 func deepSpan(g *Grid) float64 {
@@ -1004,64 +1032,11 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		// How far through the era we are, which is how far the world has
 		// cooled: the plates slow as it goes.
 		through := float64(e) / math.Max(1, float64(epochs-1))
-		// The plates carry their ground on: where they run into each other
-		// one goes down, and where they part new floor comes up. See move.
-		w.move(g, plates, cr, book, e)
-		g.joinUp(fl)
-		cr.kinds(g, plates)
-		// How much boundary each pair shares is a fact about this epoch and
-		// is taken afresh; how hard they have driven into each other is what
-		// welds, and that adds up over the whole history.
-		for i := range touch {
-			touch[i] = 0
+		// The epoch, in its steps: see epochSteps.
+		for s := 0; s < historySteps; s++ {
+			w.step(g, plates, cr, book, fl, grain, touch, weld, dc, e, s)
 		}
-		// The rifts lose an epoch's heat, and sink as they do: see subside.go.
-		cr.cool()
-		w.tectonics(g, plates, cr, book, e, arcGapOn(g, standing(plates)), touch, weld, grain)
-		// An age of weather between the ages of the earth. What was raised
-		// this epoch starts coming down in the next, and what comes off it is
-		// what fills the basins - which is where a finished map's sandstone
-		// and shale come from.
-		// The water is worked out on the ground the plates have just moved
-		// before it is asked to cut it: the cutting walks from each tile to
-		// the one its water goes to, and the hollows the plates have made
-		// hold what the water brings them: see stillWork.
-		// The sea stands where the planet's water fills the basins the
-		// plates have just left. See seawater.go.
-		g.pourSea(cr, e)
-		if dc != nil {
-			dc.epoch(g, e)
-		}
-		g.drain()
-		worn := cr.worn(g)
-		cr.was = append(cr.was[:0], worn...)
-		if len(g.toSea) != len(g.Tiles) {
-			g.toSea = make([][Grains]float64, len(g.Tiles))
-		}
-		clear(g.toSea)
-		g.wear(epochYears)
-		// What the weather laid on the land, and then what the rivers
-		// brought the sea, laid on the margins off their mouths: both are
-		// crust where they lie, and both are the beds the epoch leaves. See
-		// shelve and keepBook.
-		cr.laidBy(g, cr.was, cr.landed)
-		var shelf denudation
-		shelf.shelved, shelf.spilt, shelf.lost = g.shelve(g.toSea, e, book)
-		cr.laidBy(g, cr.step, cr.shelved)
-		// What the weather took off is crust gone, and what it laid down is
-		// crust laid; and the plate floats up under what it lost while it
-		// was losing it, which is the rebound. See isostasy.go.
-		for i := range worn {
-			worn[i] -= g.Height[i]
-			by := cr.thicken(i, -worn[i])
-			cr.sed[i] = float32(math.Max(0, float64(cr.sed[i])+by))
-		}
-		d := readDenudation(g, cr, cr.was, worn)
-		d.shelved, d.spilt, d.lost = shelf.shelved, shelf.spilt, shelf.lost
-		cr.denuded = append(cr.denuded, d)
-		g.isostasy(cr, e, worn, relaxing)
-		cr.riseBy()
-		g.keepBook(book, e, cr.landed, cr.shelved, worn)
+		g.keepBook(book, e, cr.epochLanded, cr.shelved, cr.epochWorn)
 		// What the epoch floored with lava, filled or silted over is a new
 		// surface, and its soil starts from nothing. See pedogenesis.go.
 		g.restartBuried(e)
@@ -1101,6 +1076,111 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64) *deepStage {
 		g.soften()
 	}
 	return d
+}
+
+// step is step s of epoch e, one historySteps-th of it: the plates carried on
+// by that share of their drift and their turn, what their meetings raise and
+// drop over that share of the epoch's years, the rifts cooling and the plate
+// relaxing over them, and the weather wearing the ground for them. What an
+// epoch writes down once - its beds, the soil it buries, the plates it welds,
+// breaks and slows - is the caller's, after the last step. See epochSteps.
+//
+// What the weather sent the sea over the epoch's steps is laid off the
+// mouths once, in the last of them: a shelf's bed is the epoch's, as a
+// land's fill is.
+func (w *Land) step(g *Grid, plates []Plate, cr *crust, book []record, fl *flooding, grain, touch, weld []float64, dc *epochClimate, e, s int) {
+	part := 1 / float64(historySteps)
+	last := s == historySteps-1
+	// The plates carry their ground on: where they run into each other
+	// one goes down, and where they part new floor comes up. See move.
+	w.move(g, plates, cr, book, e, part, last)
+	g.joinUp(fl)
+	cr.kinds(g, plates)
+	// How much boundary each pair shares is a fact about the plates as they
+	// stand and is taken afresh; how hard they have driven into each other
+	// is what welds, and that adds up over the whole history.
+	for i := range touch {
+		touch[i] = 0
+	}
+	// The rifts lose the step's heat, and sink as they do: see subside.go.
+	cr.cool(part)
+	w.tectonics(g, plates, cr, book, e, s, part, arcGapOn(g, standing(plates)), touch, weld, grain)
+	// An age of weather between the ages of the earth. What was raised
+	// this epoch starts coming down in the next, and what comes off it is
+	// what fills the basins - which is where a finished map's sandstone
+	// and shale come from.
+	// The water is worked out on the ground the plates have just moved
+	// before it is asked to cut it: the cutting walks from each tile to
+	// the one its water goes to, and the hollows the plates have made
+	// hold what the water brings them: see stillWork.
+	// The sea stands where the planet's water fills the basins the
+	// plates have just left. See seawater.go. The epoch's sea, as it is
+	// read, is its last step's.
+	g.pourSea(cr, e, s == 0)
+	if s > 0 {
+		n := len(cr.seas)
+		cr.seas[n-2] = cr.seas[n-1]
+		cr.seas = cr.seas[:n-1]
+	}
+	if dc != nil && s == 0 {
+		dc.epoch(g, e)
+	}
+	// The weather is the epoch's: read again at its first step where the
+	// ground has moved far enough for it to be stale, and held through the
+	// rest. Asked at every step, it was read again at nine in ten of them:
+	// a plate that steps a tile carries a coast with it, and the coasts
+	// flipped are what a stale weather is counted in. The water is still
+	// found again on the ground each step leaves. See weatherStale.
+	if s == 0 {
+		g.drain()
+	} else {
+		g.drainHeld()
+	}
+	worn := cr.worn(g)
+	cr.was = append(cr.was[:0], worn...)
+	if s == 0 {
+		cr.epochWas = append(cr.epochWas[:0], worn...)
+		if len(g.toSea) != len(g.Tiles) {
+			g.toSea = make([][Grains]float64, len(g.Tiles))
+		}
+		clear(g.toSea)
+	}
+	g.wear(epochYears * part)
+	// What the weather laid on the land, and then what the rivers
+	// brought the sea, laid on the margins off their mouths: both are
+	// crust where they lie, and both are the beds the epoch leaves. See
+	// shelve and keepBook.
+	cr.laidBy(g, cr.was, cr.landed)
+	var shelf denudation
+	if last {
+		shelf.shelved, shelf.spilt, shelf.lost = g.shelve(g.toSea, e, book)
+	}
+	cr.laidBy(g, cr.step, cr.shelved)
+	// What the weather took off is crust gone, and what it laid down is
+	// crust laid; and the plate floats up under what it lost while it
+	// was losing it, which is the rebound. See isostasy.go.
+	for i := range worn {
+		worn[i] -= g.Height[i]
+		by := cr.thicken(i, -worn[i])
+		cr.sed[i] = float32(math.Max(0, float64(cr.sed[i])+by))
+	}
+	// And what the epoch's steps took off and laid, for its book.
+	if s == 0 {
+		cr.epochWorn = append(cr.epochWorn[:0], worn...)
+		cr.epochLanded = append(cr.epochLanded[:0], cr.landed...)
+	} else {
+		for i := range worn {
+			cr.epochWorn[i] += worn[i]
+			cr.epochLanded[i] += cr.landed[i]
+		}
+	}
+	if last {
+		d := readDenudation(g, cr, cr.epochWas, cr.epochWorn)
+		d.shelved, d.spilt, d.lost = shelf.shelved, shelf.spilt, shelf.lost
+		cr.denuded = append(cr.denuded, d)
+	}
+	g.isostasy(cr, e, worn, relaxOver(part))
+	cr.riseBy(part)
 }
 
 // deepStage is what a history hands the map beside the grid it ran on: which
@@ -1793,6 +1873,13 @@ type crust struct {
 	was             []float64
 	plan            *flexPlan
 	eroded, rebound float64
+	// epochWas is the heights as the epoch's first step found them before
+	// its weather, and epochWorn and epochLanded what all its steps' weather
+	// took off and laid: what the epoch writes in its book. See step.
+	epochWas, epochWorn []float64
+	epochLanded         []float32
+	// awake is which of the hotspots is awake this epoch: see hotspot.
+	awake []bool
 	// denuded is what each epoch's weather took off the land. See
 	// readDenudation.
 	denuded []denudation
@@ -1924,7 +2011,14 @@ func newCrust(g *Grid) *crust {
 // opens and new crust comes up: a ridge, made this epoch, and given to
 // whichever of the plates beside it holds most of the ground round it - which,
 // where two are pulling apart, is the nearer of them.
-func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int) {
+//
+// part is the share of the epoch's drift that is moved: an epoch is run in
+// steps (see epochSteps), and a step slides the plates that share of the way.
+// What a plate has travelled short of a whole tile is kept across the steps
+// as across the epochs, so a plate going a tile an epoch steps a tile in
+// whichever of the epoch's steps its travel comes to one. The epoch's turn is
+// done whole, where turning is set: in its last step. See turn.
+func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int, part float64, turning bool) {
 	defer phase.Start("move")()
 	g.piles()
 	scale := driftScale(g)
@@ -1935,10 +2029,10 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 	for k := range plates {
 		p := &plates[k]
 		if p.into == uint8(k) {
-			cr.acc[k][0] += p.DX * scale
-			cr.acc[k][1] += p.DY * scale
+			cr.acc[k][0] += p.DX * scale * part
+			cr.acc[k][1] += p.DY * scale * part
 			// The drift is how the middle goes, and it turns with the plate.
-			s, c := math.Sin(p.Spin), math.Cos(p.Spin)
+			s, c := math.Sin(p.Spin*part), math.Cos(p.Spin*part)
 			p.DX, p.DY = c*p.DX-s*p.DY, s*p.DX+c*p.DY
 		}
 	}
@@ -1987,7 +2081,12 @@ func (w *Land) move(g *Grid, plates []Plate, cr *crust, book []record, epoch int
 	// and a slide of the whole plate come to the same thing in either order,
 	// so what the slides above did not do is the turns, and where what is left
 	// of the slides puts the plate.
-	cr.turn(g, plates, &shift)
+	//
+	// In an epoch run in steps, the turning is the last step's, and the whole
+	// epoch's: see turn.
+	if turning {
+		cr.turn(g, plates, &shift)
+	}
 
 	copy(cr.tiles, g.Tiles)
 	copy(cr.height, g.Height)
@@ -2158,6 +2257,15 @@ func (cr *crust) settle(g *Grid, shun func(k uint8) bool) {
 // rounding trades a tile here for a tile there, and an arc fed by that would
 // be an arc fed by arithmetic. How hard the seam is closing still counts - see
 // tectonics.
+//
+// And it is done once an epoch where the epoch is run in steps, in the last of
+// them, for the same reason: turned a step's share at a time, read backwards
+// each time, a sixteen-epoch globe of 128 tiles lost a tenth more of its
+// continental crust to the rounding over three seeds at two steps and four
+// than in one, and turned whole in the last step it lost a fifth less. The
+// drift still turns with the plate step by step (see move), and how fast a
+// plate turns is still read at every step's meetings (see closing): only the
+// carrying of its ground round is the epoch's.
 func (cr *crust) turn(g *Grid, plates []Plate, shift *[plateCap][2]float64) {
 	// A plate is read backwards where it turns or where its crust has been
 	// slid short of a whole tile.
@@ -2619,7 +2727,14 @@ func (g *Grid) eachNear(i int, f func(j int)) {
 // edge nothing happens at all, which is why the middle of a plate is the
 // oldest, flattest ground on a map and everything worth looking at is at the
 // seams.
-func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch int, gap float64, touch, weld, grain []float64) {
+//
+// It is step s of the epoch, and does part of what an epoch does: see
+// epochSteps. What is a rate - the ground raised and dropped, the crust
+// crushed and melted, how hard two plates have driven into each other - is
+// that share of an epoch's; what is a mark - the rock dated from this epoch,
+// what the book says is the most a meeting did to a tile - is read at the
+// epoch's rate, as if the step's meeting had gone on for the whole of it.
+func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoch, s int, part, gap float64, touch, weld, grain []float64) {
 	defer phase.Start("tectonics")()
 	g.piles()
 	n := len(g.Tiles)
@@ -2685,7 +2800,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		}
 		touch[int(a)*plateCap+int(b)]++
 		if !mine.Ocean && !at.Ocean && worst > 0 {
-			weld[int(a)*plateCap+int(b)] += worst / driftFast
+			weld[int(a)*plateCap+int(b)] += worst / driftFast * part
 		}
 		closing := worst / driftFast
 		if worst > 0 && gain > 0 {
@@ -2701,6 +2816,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		// What the meeting does is what the crust on either side of it is made
 		// of, whatever the plates carrying it mostly are.
 		lift, makes := liftOf(cr.ocean[i], cr.ocean[j], closing)
+		lift *= part
 		// An arc and a trench are the two halves of one plate going under
 		// another, and each belongs to its own side of it.
 		under := worst > 0 && cr.ocean[i] != cr.ocean[j]
@@ -2802,7 +2918,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 			cr.lifted[i] += laid
 			// And the book, where this is the most any meeting has done to
 			// the tile. See ledger.
-			g.ledger[i].meet(s.side, s.with, s.raisedBy(), epoch, by)
+			g.ledger[i].meet(s.side, s.with, s.raisedBy(), epoch, by/part)
 			// And the beds go up with it, by as much as the ground over them.
 			// A belt is raised most at its axis and least at its feet, so the
 			// beds on its flanks are left tipped away from it: the hogbacks
@@ -2881,7 +2997,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 					// one part of crushing is laid in front of it: see above.
 					book[i].pluton += 2 * math.Abs(by) / 3
 				case melt:
-					book[i].melt = math.Max(book[i].melt, math.Abs(by))
+					book[i].melt = math.Max(book[i].melt, math.Abs(by)/part)
 					// What comes up floods what is there: a bed of lava
 					// over the pile, which is the hard cap a plateau of
 					// basalt stands on long after the rift has gone quiet.
@@ -2897,7 +3013,7 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 		}
 		g.Height[i] = math.Max(0, g.Height[i])
 	}
-	w.hotspot(g, book, cr, epoch)
+	w.hotspot(g, book, cr, epoch, s, part)
 	cr.accrete()
 	// And the plate answers what was laid on it, before the weather starts on
 	// it: a range rises by what its crust is thickened by, less the root it
@@ -2905,13 +3021,17 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 	g.isostasy(cr, epoch, nil, 0)
 }
 
-// riseBy folds what the epoch raised the rock by - the seams, the hotspots,
+// riseBy folds what the step raised the rock by - the seams, the hotspots,
 // and the plate's answer to both and to the weather - into how fast the
-// ground has lately been rising. See upliftMemory.
-func (cr *crust) riseBy() {
-	keep := math.Exp(-epochYears / upliftMemory)
+// ground has lately been rising, over part of an epoch. See upliftMemory.
+func (cr *crust) riseBy(part float64) {
+	keep, years := math.Exp(-epochYears/upliftMemory), float64(epochYears)
+	if part != 1 {
+		years = epochYears * part
+		keep = math.Exp(-years / upliftMemory)
+	}
 	for i, by := range cr.lifted {
-		cr.rise[i] = keep*cr.rise[i] + (1-keep)*by/epochYears
+		cr.rise[i] = keep*cr.rise[i] + (1-keep)*by/years
 	}
 }
 
@@ -3567,7 +3687,10 @@ func liftOf(mineOcean, otherOcean bool, closing float64) (float64, made) {
 // and it is what puts a volcano where nothing is colliding. Where they are is
 // drawn once for a world and does not move, so the same places go on erupting
 // age after age under whatever crust is passing over them.
-func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
+//
+// Whether one is awake is drawn at the first of an epoch's steps, and an
+// awake one works through all of them, at part of an epoch's lift a step.
+func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch, s int, part float64) {
 	g.piles()
 	if g.hot == nil {
 		// Two of them on a valley, and as many again for every valley's width
@@ -3580,10 +3703,16 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 			g.hot[i] = geom.Pos{X: w.RNG.IntN(g.W), Y: w.RNG.IntN(g.H)}
 		}
 	}
+	if s == 0 {
+		cr.awake = cr.awake[:0]
+		for range g.hot {
+			cr.awake = append(cr.awake, w.RNG.Float64() <= hotspotWakes)
+		}
+	}
 	reach := hotspotOn(g)
 	r := int(reach)
-	for _, h := range g.hot {
-		if w.RNG.Float64() > hotspotWakes {
+	for k, h := range g.hot {
+		if !cr.awake[k] {
 			continue // quiet this age
 		}
 		for dy := -r; dy <= r; dy++ {
@@ -3599,7 +3728,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				if !g.In(q) {
 					continue
 				}
-				lift := hotspotLift * smooth(1-d/reach)
+				lift := hotspotLift * part * smooth(1-d/reach)
 				j := g.Index(q)
 				lift = cr.thicken(j, lift)
 				g.Height[j] += lift
@@ -3609,7 +3738,7 @@ func (w *Land) hotspot(g *Grid, book []record, cr *crust, epoch int) {
 				// The cone is lava laid on whatever was there.
 				g.strata[j].lay(Basalt, g.Tiles[j].Formed, 0, g.Height[j]-lift, g.Height[j])
 				// The book: a hotspot is one plate's, with no other.
-				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, Hotspot, epoch, lift)
+				g.ledger[j].meet(g.Tiles[j].Plate, noPlate, Hotspot, epoch, lift/part)
 				g.ledger[j].bury(byLava, epoch)
 			}
 		}
