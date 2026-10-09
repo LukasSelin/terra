@@ -139,6 +139,20 @@ func (g *Grid) countryOf() []float64 {
 	return c
 }
 
+// drownedCrust is which tiles of continental crust a globe's history left
+// under its sea, by the country they stand at: below nothing. They are the
+// earth's shelves and drowned margins - its continental crust is some four
+// tenths of its surface and its land under three - and the map lays them
+// with the floor, so that its coast is where the history's sea stood on the
+// continents' own ground and not the edge of their crust. See basins.
+func drownedCrust(country []float64, ocean []bool) []bool {
+	out := make([]bool, len(country))
+	for i, c := range country {
+		out[i] = !ocean[i] && c <= 0
+	}
+	return out
+}
+
 // layCountry gives a globe's dry land the height its country stands at. It is
 // laid once, when the sea has been poured and before the ground is shaped,
 // off the heights the history ended at (planetHeight), which it lets go of.

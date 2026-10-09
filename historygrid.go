@@ -185,6 +185,12 @@ func handDown(from, to *Grid, d *deepStage) *deepStage {
 			out.ages[i] = d.ages[at[i].near]
 		}
 	}
+	if d.drowned != nil {
+		out.drowned = make([]bool, n)
+		for i := range out.drowned {
+			out.drowned[i] = d.drowned[at[i].near]
+		}
+	}
 	if d.ocean != nil {
 		out.ocean = make([]bool, n)
 		for i := range out.ocean {

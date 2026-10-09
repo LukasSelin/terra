@@ -1044,6 +1044,12 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *dee
 
 	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
 
+	// A globe's continents meet the sea on a margin, over rough ground, and
+	// not at the edge of their crust. See margin.go.
+	if water > 0 && g.Wrap {
+		w.roughMargins(g, cr.ocean)
+	}
+
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet, and once the plates are kept,
 	// since how wide a shelf is depends on which plate the continent beside it
@@ -1055,6 +1061,7 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *dee
 		d.uplift = g.upliftOf(cr)
 		if g.Wrap {
 			d.country = g.countryOf()
+			d.drowned = drownedCrust(d.country, cr.ocean)
 		}
 	}
 	g.base, g.deep = -1, 0
@@ -1273,6 +1280,10 @@ type deepStage struct {
 	// country is how high each tile stood over the history's sea when the
 	// history ended, in a planet's metres, on a globe: see countryOf.
 	country []float64
+	// drowned is which tiles of continental crust lay under the history's sea
+	// when it ended, on a globe: the shelves and the drowned margins, which
+	// the map lays with the floor. See basins.
+	drowned []bool
 	// book is the history's book of what was done to each tile, where the
 	// feet of the piles are still to be laid on the map: a history run on a
 	// grid coarser than the map. See handDown.
@@ -1289,7 +1300,7 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// The beds are carried through the rescaling with the ground over them.
 	was := g.heights()
 	if water > 0 {
-		w.basins(g, d.ocean)
+		w.basins(g, d.ocean, d.drowned)
 		g.restrata(was, g.heights(), d.ocean)
 		g.uplift = d.uplift
 		g.planetHeight = d.country
