@@ -136,6 +136,12 @@ type Grid struct {
 	// map's own ground; nil on any other map. See hypsometry.go.
 	country []float64
 
+	// fill is, for each tile of a globe made by a history, how deep the
+	// alluvium the shaping laid it on runs, in metres: deepest under the
+	// plains its rivers built, nothing under the ranges they cut and the sea.
+	// nil on any other map. See shape.go.
+	fill []float32
+
 	// planetHeight is, on a globe made by a history, how high each tile stood
 	// over the history's sea when the history ended, in a planet's metres,
 	// from the end of the history until layCountry has laid the country off
@@ -387,9 +393,9 @@ func (g *Grid) Clone() *Grid {
 		Lakes: slices.Clone(g.Lakes), down: slices.Clone(g.down), route: slices.Clone(g.route)}
 	copy(c.Tiles, g.Tiles)
 	c.strata = slices.Clone(g.strata)
-	c.abyss, c.uplift, c.floorAge = g.abyss, g.uplift, g.floorAge       // laid once, and never written again
-	c.country, c.planetHeight = g.country, g.planetHeight               // and so are these
-	c.hot, c.welds, c.deep, c.planet = g.hot, g.welds, g.deep, g.planet // hot, like abyss, is never written once drawn
+	c.abyss, c.uplift, c.floorAge = g.abyss, g.uplift, g.floorAge         // laid once, and never written again
+	c.country, c.planetHeight, c.fill = g.country, g.planetHeight, g.fill // and so are these
+	c.hot, c.welds, c.deep, c.planet = g.hot, g.welds, g.deep, g.planet   // hot, like abyss, is never written once drawn
 	c.ledger, c.epochs, c.plateRoot = slices.Clone(g.ledger), g.epochs, g.plateRoot
 	c.features = g.features // built once, and never written again; Erode builds the copy its own
 	c.warm = append([]float32(nil), g.warm...)

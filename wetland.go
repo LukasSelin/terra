@@ -28,7 +28,8 @@ import (
 // thawed year.
 //
 // T is the ground's conductivity through the depth that drains: drainK
-// through drainDepth, the weathered layer the soil is made from. Permafrost
+// through drainDepth, the weathered layer the soil is made from, and
+// alluvialK through the alluvium under it where there is any. Permafrost
 // blocks the drainage. Only the active layer over it drains, so over frozen
 // ground T is the active layer's share of it, and the water of the thaw
 // stands on the flats of the tundra where a deeper ground would have taken
@@ -70,6 +71,14 @@ import (
 // wetland's water table stands at its surface: half of it, chosen.
 const drainK = 1.0 // m/day
 
+// alluvialK is the conductivity of the alluvium a history's plains are laid
+// on (see Grid.fill), in metres a day: the sands and gravels of a valley's
+// fill pass water ten to a hundred times as fast as a loam (Freeze and
+// Cherry 1979), and the Mississippi's alluvial aquifer, some forty metres of
+// it, passes a couple of thousand square metres a day. Over shapeFill of it
+// the first globe's wetlands are 0.071 of its land.
+const alluvialK = 60.0 // m/day
+
 const (
 	drainDepth    = regolithDepth
 	wetlandSeason = 0.25
@@ -108,20 +117,25 @@ func (g *Grid) waterTable(i int) (float64, bool) {
 		len(g.runoffIn) != n*atmos.Phases || len(g.warm) != n {
 		return 0, false
 	}
-	// How deep the ground drains: the weathered layer, the active layer
-	// over the share of it that is frozen, and a peat's acrotelm over a
-	// peat.
-	drained := drainDepth
+	// How much the ground can pass on: the weathered layer and the alluvium
+	// under it, the active layer over the share of it that is frozen, and a
+	// peat's acrotelm over a peat.
+	fill := g.fillAt(i)
+	pass := func(z float64) float64 {
+		return drainK*math.Min(z, drainDepth) + alluvialK*math.Min(fill, math.Max(0, z-drainDepth))
+	}
+	deep := drainDepth + fill
+	t := pass(deep)
 	if f, ok := g.groundFrost(i); ok {
 		s := frostShareOf(f.ttop)
-		drained = (1-s)*drainDepth + s*math.Min(drainDepth, f.thaw)
+		t = (1-s)*t + s*pass(math.Min(deep, f.thaw))
 	}
 	if g.PeatDepth(i) >= acrotelm {
-		drained = math.Min(drained, acrotelm)
+		t = math.Min(t, drainK*acrotelm)
 	}
 	// The water table is at the surface in a phase whose recharge, in metres
 	// a day, is over T/e^λ.
-	need := drainK * math.Max(drained, 1e-3) / math.Exp(g.twi(i))
+	need := math.Max(t, drainK*1e-3) / math.Exp(g.twi(i))
 	days := daysAYear / atmos.Phases
 	mean, swing := g.meanOn(i, g.Elevation(i)), float64(g.swing[i])
 	var thawed, wet float64
