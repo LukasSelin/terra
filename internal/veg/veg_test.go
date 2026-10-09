@@ -142,7 +142,7 @@ func (pl place) run(open bool) (State, [PFTs]Potential, float64) {
 			}
 		}
 	}
-	Spin(&s, &pot, &f, 300)
+	Spin(&s, &pot, &f, spinMost)
 	return s, pot, Burned(&s, &pot, &f)
 }
 
@@ -155,8 +155,58 @@ func steady(c Climate) (State, [PFTs]Potential) {
 	}
 	s := Equilibrium(&pot)
 	f := y.Fire()
-	Spin(&s, &pot, &f, 300)
+	Spin(&s, &pot, &f, spinMost)
 	return s, pot
+}
+
+// spinMost is as many years as the land spins a state for: see vegSpin.
+const spinMost = 10000
+
+// Every place's spin settles, from BIOME4's answer and from open ground,
+// well inside the years it is given, and stays settled: a year more, or a
+// century more, moves no type's cover by more than the spin's test of
+// steady allowed. The open ground's types grow at up to sixteen times their
+// cover a year, and taken a year at a time with their room closing at the
+// year's start they overshot it and fell back, a year up and a year down
+// for ever (#136).
+func TestTheSpinSettles(t *testing.T) {
+	for _, pl := range places {
+		for _, open := range []bool{false, true} {
+			c := pl.climate()
+			y := Read(&c)
+			var pot [PFTs]Potential
+			for p := range PFTs {
+				pot[p] = y.Potential(p)
+			}
+			f := pl.fire(&y)
+			s := Equilibrium(&pot)
+			if open {
+				for p := range PFTs {
+					if Kinds[p].Tree {
+						s.Cover[p], s.Mass[p] = 0, 0
+					}
+				}
+			}
+			years := Spin(&s, &pot, &f, spinMost)
+			if years >= spinMost {
+				t.Errorf("%s (open %v): the spin ran its %d years out", pl.name, open, spinMost)
+				continue
+			}
+			was := s
+			Grow(&s, &pot, &f, 1)
+			year := s
+			Grow(&s, &pot, &f, 99)
+			for p := range PFTs {
+				if d := math.Abs(year.Cover[p] - was.Cover[p]); d > stillCover {
+					t.Errorf("%s (open %v): %s moves %.2g of the ground the year after the spin", pl.name, open, Kinds[p].Name, d)
+				}
+				if d := math.Abs(s.Cover[p] - was.Cover[p]); d > 10*stillCover {
+					t.Errorf("%s (open %v): %s moves %.2g of the ground the century after the spin", pl.name, open, Kinds[p].Name, d)
+				}
+			}
+			t.Logf("%-34s open %-5v settled in %4d years", pl.name, open, years)
+		}
+	}
 }
 
 // What the places grow, against what the biomes they are on grow.
