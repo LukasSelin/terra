@@ -314,3 +314,29 @@ bit (`TestAWorldResumedFromItsHistoryIsTheSameWorld`). A history file is
 refused by a build whose grid is laid out differently, but not by one whose
 history code has changed: after a change to anything the ground stage runs,
 keep the history again.
+
+## The history's steps
+
+A history's epoch can be run in `epochSteps` steps, each of a share of the
+epoch's four million years: the plates slid that share of their drift, the
+meetings' uplift and the weather's wear taking turns. It is one: at eight,
+the yardsticks held main's count of misses, but the land stood lower than
+the earth's curve and the sea and the ocean moved with it, which six tests
+outside them read. See the PR that brought it in. The weather is read
+once an epoch, where its first step finds it stale, and the water found again
+every step, so the history costs what its steps' moves, meetings, wear and
+drainage cost on top of an epoch's weather. On this machine, one seed,
+history seconds:
+
+| steps | `globe256` (four seeds' mean) | `globe` |
+|---|---|---|
+| 1 | 6.0 | 47 |
+| 2 | 6.8 | 63 |
+| 4 | 8.6 | 95 |
+| 8 | 12.5 | 160 |
+
+`TERRA_HISTORY_STEPS=n` runs a history in `n` steps an epoch for an
+experiment, and `TERRA_STEPS_STUDY=1,2,4,8 go test -run
+TestHistoryStepsStudy -timeout 60m .` reads the time, hypsometry and
+high ground of each (`steps_test.go`). A history in one step an epoch is the
+history before there were steps, to the bit.

@@ -645,6 +645,17 @@ const epochYears = 4 * myr
 // The design this falls short of is the one at the end of epochYears'
 // comment: a grid fine enough that a plate takes many steps to cross a tile.
 // Here a tile is still deepSpan, and a step moves a plate a share of one.
+//
+// It is one. At eight the globe's land stood lower - the ranges no longer
+// stand a whole epoch's uplift high before the weather starts on them, and
+// its 99th centile over the sea fell from 5.9 km to 3.9 - and the yardsticks
+// held main's count of misses, trading the globe's Hack exponent and its
+// wetlands in for its peatland and its savannas' fires; but the land fell
+// under the earth's curve (TestTheGlobeStandsAtTheEarthsHeights), the
+// heights stopped standing on their roots (TestTheHistoryStandsOnItsCrust),
+// and the sea and the ocean moved with them. Once the history keeps its
+// real heights (#40), those lower ranges are the globe's mountains, and the
+// count wants reading again with them.
 const epochSteps = 1
 
 // deepSpan is how wide, in metres, a tile of g is read as while a history
