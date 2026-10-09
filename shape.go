@@ -121,6 +121,20 @@ func (g *Grid) shape() (area []float64) {
 	// shapeRock.
 	soft := 1 / g.meanHard()
 	was := g.heights()
+	// The water a tile drains to stands where its surface is: the sea's level
+	// over the sea, and not the floor under it. Read off the floor, the land
+	// over a coast with no shelf - floor that came up out of a sea too small
+	// to cover it, beside the deep floor laid at its age - was laid up from
+	// kilometres down, and since the whole map is put back on the scale of
+	// the most any ground stood over its water, every coast on it went under:
+	// a globe of 256 whose continents were a quarter of it came out with no
+	// land at all.
+	surface := func(r int32) float64 {
+		if root[r] && g.underSea(int(r)) {
+			return math.Max(h[r], g.sea)
+		}
+		return h[r]
+	}
 
 	recv := make([]int32, n)
 	run := make([]float64, n)
@@ -161,7 +175,7 @@ func (g *Grid) shape() (area []float64) {
 		for _, i := range stack {
 			r := recv[i]
 			if r == i {
-				base[i] = h[i]
+				base[i] = surface(i)
 				continue
 			}
 			gathered := math.Max(area[i], shapeHead) / shapeHead
@@ -171,11 +185,12 @@ func (g *Grid) shape() (area []float64) {
 			// crossing from a hard bed onto a soft one drops over its edge.
 			// The rock is the rock the channel is cutting, half way up the
 			// fall it would have over middling rock.
+			from := surface(r)
 			if g.strata != nil {
-				mid := h[r] + 0.5*math.Min(Repose, fall)*run[i]
+				mid := from + 0.5*math.Min(Repose, fall)*run[i]
 				fall *= math.Pow(g.hardAt(int(i), mid)*soft, shapeRock)
 			}
-			h[i] = h[r] + math.Min(Repose, fall)*run[i]
+			h[i] = from + math.Min(Repose, fall)*run[i]
 			base[i] = base[r]
 		}
 		// The beds are carried onto the ground this round laid, as they are
