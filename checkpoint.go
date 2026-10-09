@@ -8,10 +8,12 @@ import (
 	"hash/fnv"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"time"
 
 	"github.com/LukasSelin/terra/internal/phase"
@@ -26,18 +28,75 @@ import (
 // holds that for several epochs.
 //
 // It is a history file (historyfile.go) made part-way through the ground
-// stage rather than after it, and it is written and read the same way: every
-// field of the Grid a history file keeps and every field of running, by
-// reflection, as memory lies, under a header that says whose memory it is. A
-// field added to running is kept without anybody remembering to keep it.
+// stage rather than after it, and it is written and read by the same codec:
+// every field of the Grid a history file keeps and every field of running,
+// by reflection, under a header that says whose memory it is. A field added
+// to running is kept without anybody remembering to keep it. Two things are
+// done that a history file does not do, because a globe's checkpoint as
+// memory lies was 548 MiB: the working memory the epochs rewrite before
+// they read it is left out (checkpointDropped), and the rest is packed and
+// compressed (checkpointpack.go). A globe's is now about a hundred MiB.
 //
 // It is written to a file beside it and renamed over it, so that a making
 // stopped while one is being written leaves the last one whole.
 
 const (
 	checkpointMagic   = "terra checkpoint\n"
-	checkpointVersion = 1
+	checkpointVersion = 2
 )
+
+// checkpointDropped are the fields of a history's state a checkpoint does not
+// keep, by "Type.field", and why the epochs after it, and the stages after
+// the last of them, do not need them: each is written before it is read
+// again. A field of the Grid is left as the history's grid is made (see
+// historyGround), and a field of the crust or the floods as newCrust or
+// newFlooding makes it.
+// TestWhatACheckpointDropsIsNotRead runs a history with every one of them
+// spoilt after every epoch and makes the same world.
+var checkpointDropped = map[string]string{
+	"Grid.toSea": "each epoch clears it before the weather adds to it",
+
+	"crust.tiles":   "move copies the grid's tiles into it before it reads it",
+	"crust.height":  "move copies the grid's heights into it before it reads it",
+	"crust.soil":    "move copies the grid's soil into it before it reads it",
+	"crust.sand":    "move copies the grid's sand into it before it reads it",
+	"crust.clay":    "move copies the grid's clay into it before it reads it",
+	"crust.book":    "move copies the book into it before it reads it",
+	"crust.strata":  "move copies the grid's strata into it before it reads it",
+	"crust.nrift":   "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nrise":   "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nthick":  "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nsag":    "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nsed":    "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nplate":  "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.norg":    "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nfresh":  "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nborn":   "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.naged":   "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.nocean":  "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.noff":    "move's working copy: turn writes every tile of it before it is swapped in",
+	"crust.mark":    "move's fill of the gaps clears it before it marks it",
+	"crust.ring":    "move's fill of the gaps empties it before it uses it",
+	"crust.next":    "move's fill of the gaps empties it before it uses it",
+	"crust.lifted":  "tectonics sets every tile of it to nought before anything adds to it",
+	"crust.was":     "each epoch copies what the weather wore into it before it reads it",
+	"crust.step":    "the shelves copy the heights into it before they read it",
+	"crust.local":   "isostasy writes every tile of it before it reads it",
+	"crust.load":    "isostasy writes every tile of it before it reads it",
+	"crust.wear":    "worn copies the heights into it before it is read",
+	"crust.landed":  "laidBy writes every tile of it before keepBook reads it",
+	"crust.shelved": "laidBy writes every tile of it before keepBook reads it",
+	"crust.plan":    "the flexure's transform and its working, made afresh the first time it is asked for",
+
+	"flooding.dist": "partition sets every tile of it before a flood reads it",
+	"flooding.from": "partition sets it on every tile a flood reaches before it reads it there",
+	"flooding.done": "partition clears it before a flood reads it",
+	"flooding.head": "the floods' frontier, which reset empties and a flood leaves empty",
+	"flooding.next": "the floods' frontier, which reset empties and a flood leaves empty",
+	"flooding.at":   "the floods' frontier, which reset empties and a flood leaves empty",
+
+	"vapourOut.sat": "the air's budget writes it and nothing reads it",
+}
 
 // ErrCheckpoint is what taking up a checkpoint fails with when the file is
 // not one this build wrote, or was kept from another world: another seed,
@@ -173,6 +232,12 @@ type making struct {
 	run  *running
 }
 
+// checkpointDropWatch, where it is not nil, is shown the history's grid and
+// running after each epoch of a making with an EpochWatch or a checkpoint,
+// once the checkpoint is kept: TestWhatACheckpointDropsIsNotRead spoils what
+// checkpointDropped names in it.
+var checkpointDropWatch func(g *Grid, h *running)
+
 // checkpointFailed is how a checkpoint that cannot be written stops a making
 // from inside its history. See MakeLandWith.
 type checkpointFailed struct{ err error }
@@ -217,6 +282,9 @@ func (mk *making) ended(l *Land, g *Grid, h *running, epochs int, climate bool) 
 		mk.wrote = time.Now()
 		done.Kept = mk.wrote.Sub(began)
 	}
+	if checkpointDropWatch != nil {
+		checkpointDropWatch(g, h)
+	}
 	done.Took = time.Since(mk.start)
 	if mk.watch != nil {
 		mk.watch(done)
@@ -251,11 +319,29 @@ func (mk *making) take(l *Land, g *Grid, t Terms) error {
 	hg := l.historyGround(g, t)
 	w, ht := hg.W, hg.H
 	run := new(running)
-	d := historyCodec{r: r, limit: checkpointLimit(w, ht)}
-	for _, f := range historyFields() {
+	body := newPackReader(r)
+	defer body.Close()
+	d := historyCodec{r: bufio.NewReaderSize(body, 1<<20), limit: checkpointLimit(w, ht), drop: checkpointDropped, pack: true,
+		fresh: func(t reflect.Type) (reflect.Value, bool) {
+			// The crust's and the floods' working memory is made as the
+			// history makes it.
+			switch t {
+			case reflect.TypeFor[*crust]():
+				return reflect.ValueOf(newCrust(hg)), true
+			case reflect.TypeFor[*flooding]():
+				return reflect.ValueOf(newFlooding(len(hg.Tiles))), true
+			}
+			return reflect.Value{}, false
+		}}
+	for _, f := range checkpointFields() {
 		d.decode(reflect.ValueOf(hg).Elem().Field(f.Index[0]), "Grid."+f.Name)
 	}
 	d.decode(reflect.ValueOf(run).Elem(), "running")
+	if d.err == nil {
+		if _, err := d.r.ReadByte(); err != io.EOF {
+			d.err = fmt.Errorf("more than the history in it")
+		}
+	}
 	if d.err != nil {
 		return fmt.Errorf("%s: %w: %w", mk.path, ErrCheckpoint, d.err)
 	}
@@ -332,14 +418,42 @@ func (l *Land) writeCheckpoint(out io.Writer, g *Grid, h *running) error {
 	e.encode(reflect.ValueOf(&l.Terms).Elem(), "Terms")
 	e.uint(uint64(h.next))
 	e.bytes(chance)
-	for _, f := range historyFields() {
+	if e.err != nil {
+		return e.err
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	// The body is packed: see checkpointpack.go.
+	body := newPackWriter(w)
+	e.w = bufio.NewWriterSize(body, 1<<20)
+	e.drop, e.pack = checkpointDropped, true
+	for _, f := range checkpointFields() {
 		e.encode(reflect.ValueOf(g).Elem().Field(f.Index[0]), "Grid."+f.Name)
 	}
 	e.encode(reflect.ValueOf(h).Elem(), "running")
+	if e.err == nil {
+		e.err = e.w.Flush()
+	}
+	if err := body.Close(); e.err == nil {
+		e.err = err
+	}
 	if e.err != nil {
 		return e.err
 	}
 	return w.Flush()
+}
+
+// checkpointFields are the Grid's fields a checkpoint keeps: a history
+// file's, but for the ones checkpointDropped names.
+func checkpointFields() []reflect.StructField {
+	var kept []reflect.StructField
+	for _, f := range historyFields() {
+		if _, dropped := checkpointDropped["Grid."+f.Name]; !dropped {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 func readCheckpointHeader(r *bufio.Reader) (historyHeader, error) {
@@ -375,5 +489,6 @@ func checkpointLayout() uint64 {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%d:", historyLayout())
 	layoutOf(h, reflect.TypeFor[running]())
+	fmt.Fprintf(h, "%q", slices.Sorted(maps.Keys(checkpointDropped)))
 	return h.Sum64()
 }

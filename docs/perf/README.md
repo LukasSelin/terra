@@ -335,3 +335,15 @@ seed, other terms or another layout of the history's state is refused. Like
 a history file, a checkpoint written before a change to the history code is
 that code's history: move it aside after such a change. `-checkpoint-every`
 sets the least time between two, where writing every epoch costs too much.
+
+A checkpoint keeps only what the epochs after it read. The history's working
+copies - the crust's copies of the tiles, the book and the strata, its swap
+buffers, the flexure's transform, the floods' frontier - are rewritten before
+they are read, and are named in `checkpointDropped` with the reason for each;
+`TestWhatACheckpointDropsIsNotRead` spoils every one of them after every epoch
+and makes the same world. What is kept is packed (`checkpointpack.go`): a
+slice of noughts as its length, a slice shared with another once, the rest
+byte-shuffled and deflated at the fastest level in blocks compressed side by
+side. A 1024x512 globe's is 78 MiB after its first epoch and 107 MiB after its
+sixty-fourth, about 200 bytes a tile, written in a third of a second; it was
+548 MiB and a second.

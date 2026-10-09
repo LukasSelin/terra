@@ -247,6 +247,19 @@ type historyCodec struct {
 	r     *bufio.Reader
 	limit uint64 // the most bytes one slice read may ask for
 	err   error
+
+	// What a checkpoint asks of it beyond what a history file does: see
+	// checkpoint.go. drop is the fields of a struct neither written nor
+	// read, by "Type.field"; a field not read keeps what the value read
+	// into held. fresh, where it is not nil, is what a pointer to a value of
+	// a type is read into, where it gives one. pack writes the slices of
+	// numbers packed: see packSlice.
+	drop  map[string]string
+	fresh func(reflect.Type) (reflect.Value, bool)
+	pack  bool
+	seen  map[packedAt]uint64 // writing: the packed slices written, by where they lie
+	read  []reflect.Value     // reading: the packed slices read, in order
+	shuf  []byte              // the shuffled bytes of a few blocks of one
 }
 
 // flat reports whether a value of type t is only numbers: no pointer, slice,
@@ -339,7 +352,9 @@ func (c *historyCodec) encode(v reflect.Value, path string) {
 		}
 		c.uint(uint64(v.Len()))
 		if flat(t.Elem()) {
-			if c.err == nil {
+			if c.pack {
+				c.packSlice(v)
+			} else if c.err == nil {
 				_, c.err = c.w.Write(raw(v.UnsafePointer(), uintptr(v.Len())*t.Elem().Size()))
 			}
 			return
@@ -353,7 +368,9 @@ func (c *historyCodec) encode(v reflect.Value, path string) {
 		}
 	case reflect.Struct:
 		for i := range t.NumField() {
-			c.encode(v.Field(i), path+"."+t.Field(i).Name)
+			if !c.dropped(t, i) {
+				c.encode(v.Field(i), path+"."+t.Field(i).Name)
+			}
 		}
 	case reflect.Pointer:
 		if v.IsNil() {
@@ -394,6 +411,10 @@ func (c *historyCodec) decode(v reflect.Value, path string) {
 			c.err = fmt.Errorf("%w: %s has %d elements", ErrHistoryFile, path, n)
 			return
 		}
+		if flat(t.Elem()) && c.pack {
+			c.unpackSlice(v, int(n), path)
+			return
+		}
 		s := reflect.MakeSlice(t, int(n), int(n))
 		if flat(t.Elem()) {
 			c.fill(raw(s.UnsafePointer(), uintptr(n)*t.Elem().Size()))
@@ -409,14 +430,22 @@ func (c *historyCodec) decode(v reflect.Value, path string) {
 		}
 	case reflect.Struct:
 		for i := range t.NumField() {
-			c.decode(v.Field(i), path+"."+t.Field(i).Name)
+			if !c.dropped(t, i) {
+				c.decode(v.Field(i), path+"."+t.Field(i).Name)
+			}
 		}
 	case reflect.Pointer:
 		switch c.readUint() {
 		case 0:
 			v.SetZero()
 		case 1:
-			p := reflect.New(t.Elem())
+			p, ok := reflect.Value{}, false
+			if c.fresh != nil {
+				p, ok = c.fresh(t)
+			}
+			if !ok {
+				p = reflect.New(t.Elem())
+			}
 			c.decode(p.Elem(), "*"+path)
 			v.Set(p)
 		default:

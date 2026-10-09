@@ -1582,17 +1582,23 @@ func (w *Land) flood(g *Grid, reach float64) *flooding {
 	fine := w.lattice(g, roughGrain*reach/3)
 	fray := w.lattice(g, g.inTiles(math.Max(4, roughGrain*reach/9*g.coarseness())))
 	broke := w.fractures(g, reach)
-	fl := &flooding{
-		cost: make([]float32, len(g.Tiles)),
-		dist: make([]float32, len(g.Tiles)),
-		from: make([]uint8, len(g.Tiles)),
-		done: make([]bool, len(g.Tiles)),
-	}
+	fl := newFlooding(len(g.Tiles))
 	for i := range fl.cost {
 		v := ((coarse[i] - 0.5) + 0.5*(fine[i]-0.5) + 0.35*(fray[i]-0.5)) / 0.925 * 2
 		fl.cost[i] = float32(math.Exp(plateRough*v+fractureWall*broke[i]) * (1 + plateJitter*(w.RNG.Float64()-0.5)))
 	}
 	return fl
+}
+
+// newFlooding is the floods' working memory for n tiles, the cost still to
+// be drawn.
+func newFlooding(n int) *flooding {
+	return &flooding{
+		cost: make([]float32, n),
+		dist: make([]float32, n),
+		from: make([]uint8, n),
+		done: make([]bool, n),
+	}
 }
 
 // fractures breaks the crust: the lines it parted along when it went rigid,
