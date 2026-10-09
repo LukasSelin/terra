@@ -71,12 +71,16 @@ const (
 	leafStep  = 0.05
 )
 
-// vegSpin is how many years the types compete for from BIOME4's answer
-// before the state is read as the climate's steady one. LPJ spins up for a
-// thousand; most of a tile's change is over in its trees' first century, and
-// what is left is types of near the same worth trading the last tenths of
-// their ground.
-const vegSpin = 300
+// vegSpin is the most years the types compete for from BIOME4's answer
+// before the state is read as the climate's steady one, in each of the
+// glacial's year and today's (see veg.Spin, which stops when the state is
+// steady). Most of a tile settles in two or three centuries; the slowest are
+// two types of near the same worth trading ground - the C3 grass and the
+// tundra's plants, a tropical and a temperate tree at the edge of the
+// tropics - or a wood its fires tip over into a savanna, which on a globe
+// take up to seven thousand years. Ten thousand is about the Holocene's,
+// as long as today's year has had to run on from the glacial's.
+const vegSpin = 10000
 
 // parShare is the share of the sun at the top of the air that reaches the
 // ground as the light plants grow by: the surface takes some 0.55 of it

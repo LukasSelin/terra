@@ -654,55 +654,45 @@ func settle(s *State, pot *[PFTs]Potential, tree bool, room float64) float64 {
 // the year's fires, drought and storms; and its carbon follows its cover and
 // its productivity. The fires are the state's own: what it has standing at
 // the year's start is their fuel (see Burned).
-//
-// A state that has stopped moving - no type's cover changing by stillCover
-// of the ground in a year nor its carbon by stillMass - is left where it is:
-// the years after would only creep on by less than the land keeps the state
-// to (a 255th of the ground, a gram of carbon) every few decades.
 func Grow(s *State, pot *[PFTs]Potential, f *Fire, years int) {
 	var loss [PFTs]float64
 	for range years {
 		burned := Burned(s, pot, f)
-		trees := grow(s, pot, true, treesMost, 1, burned, f.Throw, &loss)
-		grow(s, pot, false, 1-trees, 1, burned, 0, &loss)
+		trees := grow(s, pot, true, treesMost, burned, f.Throw, &loss)
+		grow(s, pot, false, 1-trees, burned, 0, &loss)
 	}
 }
 
-// Spin is Grow run to the state's steady one: until no type's cover moves by
-// stillCover of the ground in a year, for years at the most - its first
-// spinYears a year at a time, and then spinStride years to a step, each step
-// implicit in what the type loses so that a long one cannot take more than
-// there is - and then each
-// type's carbon put where its cover, its productivity and its losses hold
-// it. The carbon follows the cover by its residence, decades for a tree, and
-// left to the years it takes centuries to settle to the gram after the cover
-// has; its steady value is had at once.
-func Spin(s *State, pot *[PFTs]Potential, f *Fire, years int) {
-	const (
-		stillCover = 1e-5
-		spinYears  = 30 // taken a year at a time, before spinStride at a time
-		spinStride = 5
-	)
+// Spin is Grow run to the state's steady one, a year at a time, for years
+// at the most, and reports how many years it ran. It is steady when over the
+// last spinWindow years no type's cover has moved by stillCover of the
+// ground nor its carbon by stillMass: a window, not a year, as a state whose
+// slowest part - two types of near the same worth trading ground, a
+// century or more to close each half of the gap between them - moves less
+// in a year than it has still to go. Then each type's carbon is
+// put where its cover, its productivity and its losses hold it. The carbon
+// follows the cover by its residence, decades for a tree, and left to the
+// years it takes centuries to settle to the gram after the cover has; its
+// steady value is had at once.
+//
+// The years are taken one at a time. Taken five at once, the open ground's
+// types each seeded the whole of the room left at the step's start, and
+// overfilled it and fell back a step up and a step down for ever, which a
+// window of a whole number of those steps read as steady.
+func Spin(s *State, pot *[PFTs]Potential, f *Fire, years int) int {
 	var loss [PFTs]float64
-	for y := 0; y < years; {
-		dt := 1
-		if y >= spinYears {
-			dt = spinStride
-		}
-		y += dt
-		was := s.Cover
+	mark := *s
+	y := 0
+	for y < years {
+		y++
 		burned := Burned(s, pot, f)
-		trees := grow(s, pot, true, treesMost, float64(dt), burned, f.Throw, &loss)
-		grow(s, pot, false, 1-trees, float64(dt), burned, 0, &loss)
-		still := true
-		for p := range PFTs {
-			if math.Abs(s.Cover[p]-was[p]) > stillCover*float64(dt) {
-				still = false
+		trees := grow(s, pot, true, treesMost, burned, f.Throw, &loss)
+		grow(s, pot, false, 1-trees, burned, 0, &loss)
+		if y%spinWindow == 0 {
+			if still(&mark, s) {
 				break
 			}
-		}
-		if still {
-			break
+			mark = *s
 		}
 	}
 	for p := range PFTs {
@@ -710,14 +700,38 @@ func Spin(s *State, pot *[PFTs]Potential, f *Fire, years int) {
 			s.Mass[p] = max(0, s.Cover[p]*pot[p].NPP/loss[p])
 		}
 	}
+	return y
+}
+
+// The spin's test of steady: see Spin. stillCover is a tenth of the 255th of
+// the ground the land keeps a type's cover to, and stillMass the gram of
+// carbon it keeps the carbon to. A state whose slowest part settles with a
+// time of a century or two is then within a few of those tenths of where it
+// is going: against the same state run on a year at a time for ten thousand
+// years, the spin is within 0.0004 of the ground on every type.
+const (
+	spinWindow = 50
+	stillCover = 0.1 / 255
+	stillMass  = 1e-3
+)
+
+// still says no type's cover or carbon has moved between was and is by
+// stillCover or stillMass.
+func still(was, is *State) bool {
+	for p := range PFTs {
+		if math.Abs(is.Cover[p]-was.Cover[p]) > stillCover || math.Abs(is.Mass[p]-was.Mass[p]) > stillMass {
+			return false
+		}
+	}
+	return true
 }
 
 // grow is one year of the canopy's or the open ground's types on room, and
-// reports their cover at its end: dt years of it, taken at once. burned is
+// reports their cover at its end. burned is
 // the share of the ground the year's fires burn, and throw the share of the
 // cover the storms blow down. It writes into loss the share of each type's
 // carbon a year takes.
-func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw float64, loss *[PFTs]float64) float64 {
+func grow(s *State, pot *[PFTs]Potential, tree bool, room, burned, throw float64, loss *[PFTs]float64) float64 {
 	var held, best float64
 	for p := range PFTs {
 		if Kinds[p].Tree == tree {
@@ -754,9 +768,20 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		if held > rp {
 			m += starving * (1 - rp/held)
 		}
-		gain := 0.0
+		// A type grows into the room left at r, what it has to grow by over
+		// what new cover takes, times its cover: r·c·(1 - held/rp), the
+		// room closing as the layer fills. The closing is taken at the
+		// year's end, with what it takes, as the losses are: r runs to
+		// sixteen a year for a grass, and taken whole at the year's start
+		// the grass overshot its room and fell back, a year up and a year
+		// down for ever (#136). Where the cover stands still the two are the
+		// same.
+		gain, closing := 0.0, 0.0
 		if pt.Surplus > 0 {
-			gain = pt.Surplus / k.seed * c * free / max(rp, 1e-9)
+			if held < rp {
+				r := pt.Surplus / k.seed
+				gain, closing = r*c, r*held/rp
+			}
 			if pt.Establish {
 				seed := seedOpen
 				if tree {
@@ -777,7 +802,8 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 		// canopy's young down; the drought and the storms take their share.
 		m += burned*(1-fireTraits[p].resist) + throw + pt.Drought
 		gain *= young
-		next := max(0, (c+dt*gain)/(1+dt*m))
+		closing *= young
+		next := max(0, (c+gain)/(1+m+closing))
 		// The carbon: what the cover makes, less what passes through it, and
 		// what dies with the cover lost past the type's own turnover; and
 		// what the fires burn of the grass and the shrubs that live through
@@ -790,7 +816,7 @@ func grow(s *State, pot *[PFTs]Potential, tree bool, room, dt, burned, throw flo
 			extra += burned * burnShrub
 		}
 		loss[p] = 1/k.residence + extra
-		mass := (s.Mass[p] + dt*next*pt.NPP) / (1 + dt*loss[p])
+		mass := (s.Mass[p] + next*pt.NPP) / (1 + loss[p])
 		s.Cover[p], s.Mass[p] = next, max(0, mass)
 		total += next
 	}
