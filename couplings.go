@@ -72,6 +72,7 @@ var couplings = []coupling{
 	{"expose", is("Grid.expose"), in("ground", "shape", "cut", "coast"), reads("height", "rock"), writes("rock")},
 	{"pour", is("Grid.pour", "Grid.repour"), in("sea", "cut", "coast"), reads("sea", "height", "floor", "cover"), writes("sea", "cover", "woods", "stocks")},
 	{"level", is("Grid.flood", "Grid.relevel"), in("sea", "cut", "coast"), reads("sea", "height", "cover"), writes("sea", "cover", "woods", "stocks")},
+	{"underTheDeep", is("Grid.underTheDeep"), in("sea"), reads("height", "floor", "rock"), writes("height", "rock")},
 	{"layCountry", is("Grid.layCountry"), in("sea"), reads("height", "sea"), writes("height")},
 	{"shape", is("Grid.shape"), in("shape"), reads("energy", "wind", "rain", "sea", "height", "floor", "rock", "soil", "cover"), writes("height", "rock", "soil")},
 	{"texture", is("Land.texture"), in("shape"), reads("floor", "height", "sea"), writes("height")},

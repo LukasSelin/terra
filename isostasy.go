@@ -215,6 +215,94 @@ func (cr *crust) layCrust(g *Grid) {
 	}
 }
 
+// The first continents are old. A history takes up a planet whose oceans
+// have been opening and closing for as long as it has had plates - the
+// first plates' floor is given the age it already had (firstFloorAges) -
+// and its continents are what those oceans' closing left: cratons sewn
+// together along the belts of the ranges that welded them, the belts worn
+// down to their roots (Hoffman 1988 on the assembly of North America;
+// Christensen and Mooney 1995 have the crust under the old orogens thicker
+// than the shields' beside them). Laid as one even slab, as they were, a
+// continent had nothing in it that a history of 64 million years could not
+// reach from its edges: its middle was the slab worn flat and let down,
+// 400 m over the sea, and every height it had stood within a belt's reach
+// of its coast.
+//
+// So the first continents' crust is thicker along old belts, oldBelt at
+// the axis of one and nothing oldBeltReach from it, and the belts run
+// where a field of the planet's old swells crosses its middle: the lines a
+// smooth field's level crosses are long, winding and closed, as the sutures
+// between a continent's blocks are, and they cross a continent without
+// regard for where its coast is. The field is the octaves the bow was drawn
+// from (see startHistory) that are no wider than oldBeltSpan, each half the
+// weight of the one before, so that the belts stand a continent's width
+// apart. Both are read in kilometres and not
+// in tiles: read in tiles, a small globe's belts, whose tiles are four
+// times as wide, covered its land, and its lowest quarter stood at twice
+// the earth's.
+//
+// Sixteen kilometres stands a belt's axis 2.4 km over the slab when the
+// history begins: worn down through it, the Urals and the Appalachians and
+// not the Himalaya. A thinned margin takes the share of it its thickness is
+// of a continent's over a floor's, so the belts do not stand on the
+// shelves. With them, and with the arcs growing as arcs do (arcGrowth),
+// the land more than 450 km from a plate's edge rises inland from its
+// coast and does not come down again: on the first globe it stands 140 m
+// at the coast and 330, 520, 690 and 650 from 75, 150, 300 and 600 km in,
+// where it stood 155, 400, 640, 560 and 410; on the seventh 220, 470, 740,
+// 830 and 790, where it stood 130, 310, 570, 520 and 390. Reach was read at 250 and 400 km: at 250 the
+// second small globe's highest hundredth stood under half the earth's.
+const (
+	oldBelt      = 16 * km
+	oldBeltReach = 400 * km
+	oldBeltSpan  = 2400 * km
+)
+
+// oldBelts thickens the first continents' crust along their old belts, off
+// the octaves of a field in [0,1] each, spans tiles across, and floats it at
+// its new thickness.
+func (cr *crust) oldBelts(g *Grid, octaves [][]float64, spans []float64) {
+	field := make([]float64, len(g.Tiles))
+	weight := 0.0
+	for k, o := range octaves {
+		if spans[k]*g.span() > oldBeltSpan*1.01 {
+			continue
+		}
+		if weight == 0 {
+			weight = 1
+		}
+		for i := range field {
+			field[i] += weight * (o[i] - 0.5)
+		}
+		weight /= 2
+	}
+	if weight == 0 {
+		return
+	}
+	line := func(i int) bool {
+		on := false
+		g.eachNear(i, func(j int) { on = on || (field[j] < 0) != (field[i] < 0) && field[i] >= 0 })
+		return on
+	}
+	away := g.awayFrom(line)
+	for i := range g.Tiles {
+		if cr.ocean[i] {
+			continue
+		}
+		belt := smooth(math.Max(0, 1-away[i]*g.span()/oldBeltReach))
+		t := float64(cr.thick[i])
+		by := oldBelt * belt * clamp01((t-oceanCrust)/(continentCrust-oceanCrust))
+		if by <= 0 {
+			continue
+		}
+		was := cr.levelAt(i, 0)
+		cr.thick[i] = float32(t + by)
+		up := cr.levelAt(i, 0) - was
+		g.Height[i] += up
+		g.strata[i].lift(up)
+	}
+}
+
 // isostasy brings the ground toward the level its crust floats at, through the
 // bending of the plate. What is filtered is the Airy deflection the ground as
 // it stands would have, column by column - how far it is above its level,

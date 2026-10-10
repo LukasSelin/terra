@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/LukasSelin/terra/geom"
+	"github.com/LukasSelin/terra/internal/phase"
 )
 
 // The deep sea floor, and how fast the land is rising.
@@ -501,6 +502,42 @@ func (g *Grid) sedimentOn(i int) float64 {
 		return 0
 	}
 	return math.Max(0, float64(c.top[0])-float64(c.top[foot]))
+}
+
+// underTheDeep holds that dry ground never stands beside the deep floor, for
+// a sea poured to level: a tile left standing over it beside the deep floor
+// is let down to a centimetre under it. The shelf the deep floor is kept off
+// is a tile and a half of floor round the continental crust, and the basins
+// lay that floor at the top of the floor's order, at most BasinDepth, with
+// the continents over it; the sea is poured over the floor's top, so the
+// shelf is under water. Where the floor is most of a world it is not: the
+// basins under BasinDepth hold more than the world's water, the sea stands a
+// few centimetres down the top of the floor, and the shelf's highest tiles
+// are dry beside the deep floor. The shaping lays the land over the water it
+// drains to, and laid over the deep floor a small globe's coast went down
+// three kilometres and its sea with it. Such a tile is floor, and floor is
+// under the sea: the room it adds moves the level by a millionth of a metre,
+// and only on a world where the tile was there.
+func (g *Grid) underTheDeep(level float64) {
+	defer phase.Start("underTheDeep")()
+	if g.abyss == nil || level < 0 {
+		return
+	}
+	for i := range g.Tiles {
+		if g.abyssal(i) || g.Height[i] <= level {
+			continue
+		}
+		beside := false
+		g.eachNear(i, func(j int) { beside = beside || g.abyssal(j) })
+		if !beside {
+			continue
+		}
+		by := level - 0.01 - g.Height[i]
+		g.Height[i] += by
+		if g.strata != nil {
+			g.strata[i].lift(by)
+		}
+	}
 }
 
 // abyssal reports whether tile i is deep sea floor: ground out of reach of the
