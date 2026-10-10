@@ -279,6 +279,35 @@ func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float6
 	}
 	slab := e.newSlab(was, gu, gv, rise, sink, thermo, func(i int) (east, north float64) { return ekman(i, i/e.W) })
 	slab.solve(temp, deep, s, from)
+	// The air over the sea is as much warmer or colder as the energy
+	// balance makes it for what the sea carries, and the sea is relaxed
+	// toward the air over it: so the water is solved again under the air the
+	// balance gives, and what it carries then handed to the balance again,
+	// until the two agree. See seaSlab.air.
+	var x []float64
+	for round := 1; ; round++ {
+		e.Carried = slab.carried(temp, deep)
+		e.SeaHeat = e.seaHeat(e.Carried)
+		dq := e.SeaHeat
+		for k := range dq {
+			dq[k] -= e.circ.seaIn[k]
+		}
+		e.seaShift = e.circ.respond(&dq)
+		moved := 0.0
+		for cy := range slab.air {
+			moved = math.Max(moved, math.Abs(ebmRead(&e.seaShift, e.lat[cy])-slab.air[cy]))
+		}
+		if moved < airSettled || round > airRounds {
+			break
+		}
+		slab.rewarm(func(cy int) float64 {
+			return slab.air[cy] + airStep*(ebmRead(&e.seaShift, e.lat[cy])-slab.air[cy])
+		})
+		x = grow(x, 2*n)
+		copy(x, temp)
+		copy(x[n:], deep)
+		slab.solve(temp, deep, s, x)
+	}
 	if ocean != nil {
 		ocean.slab = slab
 		ocean.sea = grow(ocean.sea, 2*n)
@@ -286,15 +315,10 @@ func (e *Env) currents(u, v [Phases][]float32, ocean *flow, s *Scratch) []float6
 		copy(ocean.sea[n:], deep)
 	}
 	done()
-	e.Carried = slab.carried(temp, deep)
-	e.SeaHeat = e.seaHeat(e.Carried)
-	dq := e.SeaHeat
-	for k := range dq {
-		dq[k] -= e.circ.seaIn[k]
-	}
-	e.seaShift = e.circ.respond(&dq)
+	// What the balance's last answer is over the air the water was last
+	// solved under, under airSettled, is added to it as it stands.
 	for cy := 0; cy < e.H; cy++ {
-		d := ebmRead(&e.seaShift, e.lat[cy])
+		d := ebmRead(&e.seaShift, e.lat[cy]) - slab.air[cy]
 		for i := cy * e.W; i < (cy+1)*e.W; i++ {
 			if wet(i) {
 				temp[i] += d
