@@ -78,7 +78,8 @@ import (
 // Once the coast was the history's sea contour (drownedCrust) that floor was
 // not enough: the history's country is steep at its sea, and the lowest
 // tenth stood 168 to 296 m up. So up to half the land the country is drawn
-// down to the floor, the more the lower (lowBlend).
+// down to the floor, the more the lower (lowBlend), and within some hundred
+// kilometres of the shore it comes down to the sea (coastWidth).
 // That is all of the earth's curve that is left in the making; the rest of
 // it is a test's (cogleyLand). Above that fifth the history's own height is
 // the country, and on the five worlds TestTheGlobeStandsAtTheEarthsHeights
@@ -136,18 +137,28 @@ const (
 // over that floor is let in smoothly, nothing at the foot of the order and
 // all of it at lowBlend: since the coast became the history's sea contour
 // the history's lowest land stands well over the floor, which then set only
-// a minimum. At 0.5 the five worlds' lowest tenth stands within 115 to 142 m
-// of the sea and 7 to 8.5 in a hundred of their land under 100 m, against
-// the floor's 168 to 296 m and 1.2 to 2.7 (the earth's: 71 m, and 14 in a
-// hundred); higher, the middle of the land comes down with it, 687 m to 672
-// on the first globe at 0.6 and to 551 at 0.8, and the middle is the
+// a minimum. Higher, the middle of the land comes down with it - 687 m to
+// 672 on the first globe at 0.6 and to 551 at 0.8 - and the middle is the
 // history's to say.
-//
-// It is the land low in the history's order that this lowers, and that is
-// not the coast's: the country within three tiles of the sea still stands
-// 373 to 528 m in the middle on the first three globes, the map's ground
-// there 7 to 12 m. The coast's own step is the margin's.
 const lowBlend = 0.5
+
+// coastWidth is how far from the shore, in a planet's metres, the country
+// comes up to its full height: from nothing at the water's edge, smoothly.
+// The land low in the history's order is not its coast's - the coast is the
+// history's sea contour, and the country beside it stands where the
+// history's margin did, 377 to 540 m in the middle within three tiles of the
+// sea on the first three globes, while the map's ground there is 7 to 12 m -
+// so the floor and lowBlend, which go by the order, do not reach it. The
+// earth's coasts are its plains and deltas, and its land under 100 m lies
+// along them. With both, the five worlds' lowest tenth stands within 63 to
+// 90 m of the sea and 11 to 14 in a hundred of their land under 100 m (the
+// earth's: 71 m and 14), where by the order alone it was 115 to 142 m and 7
+// to 8.5, and with the floor alone 168 to 296 m and 1.2 to 2.7; the land
+// within 50 km of the shore stands at 43 to 81 m in the middle, where it
+// stood at 211 to 375. At 100 km the share under 100 m was 10 to 13 in a
+// hundred, at 150 the lowest twentieth stood within 14 to 19 m against the
+// earth's 36.
+const coastWidth = 125e3
 
 // countryOf is how high each tile of a globe's history stands over the
 // history's sea as its last epoch ends, in a planet's metres, and below
@@ -190,7 +201,8 @@ func drownedCrust(country []float64, ocean []bool) []bool {
 // above it, at least the earth's at lowShare, so that the order is kept. And
 // below lowBlend of the land what the history has over that floor is let in
 // by degrees, so that the lowest land stands near the earth's and not on
-// the history's own.
+// the history's own; and near the shore all of it comes down to the sea,
+// the nearer the lower (coastWidth).
 func (g *Grid) layCountry() {
 	defer phase.Start("layCountry")()
 	deep := g.planetHeight
@@ -219,6 +231,7 @@ func (g *Grid) layCountry() {
 		return int(a - b) // ties by position, so a world repeats
 	})
 	g.country = make([]float64, len(g.Tiles))
+	inland := g.fromTheSea(coastWidth)
 	run := 0.0
 	for _, i := range dry {
 		w := g.rowArea(int(i) / g.W)
@@ -227,8 +240,53 @@ func (g *Grid) layCountry() {
 		low := lowTop * math.Min(r, lowShare) / lowFloor
 		at := math.Max(deep[i], low)
 		at = low + (at-low)*smooth(clamp01(r/lowBlend))
+		at *= smooth(clamp01(inland[i] / coastWidth))
 		g.country[i] = math.Max(0, at-(g.Height[i]-g.sea))
 	}
+}
+
+// fromTheSea is how far each tile of a globe lies from the nearest tile
+// under its sea, in a planet's metres from the shore - half a tile less than
+// from the tile's middle - and reach for any further than that. The tiles
+// are deepSpan apart north and south and that much by the cosine of the
+// latitude east and west (rowArea); the sea's own tiles are nothing.
+func (g *Grid) fromTheSea(reach float64) []float64 {
+	span := deepSpan(g)
+	out := make([]float64, len(g.Tiles))
+	ry := int(math.Ceil(reach/span)) + 1
+	g.EachRow(func(y int) {
+		for x := 0; x < g.W; x++ {
+			i := y*g.W + x
+			if g.sunk(i) {
+				continue
+			}
+			best := reach + span/2
+			for dy := -ry; dy <= ry; dy++ {
+				yy := y + dy
+				if yy < 0 || yy >= g.H {
+					continue
+				}
+				north := float64(dy) * span
+				if math.Abs(north) >= best {
+					continue
+				}
+				// East and west at the wider of the two rows, so that no
+				// tile is read nearer than it is.
+				c := math.Max(g.rowArea(y), g.rowArea(yy))
+				rx := min(g.W/2, int(math.Ceil(best/(span*math.Max(c, 1e-3)))))
+				for dx := -rx; dx <= rx; dx++ {
+					if !g.sunk(yy*g.W + ((x+dx)%g.W+g.W)%g.W) {
+						continue
+					}
+					if d := math.Hypot(north, float64(dx)*span*c); d < best {
+						best = d
+					}
+				}
+			}
+			out[i] = math.Min(reach, math.Max(0, best-span/2))
+		}
+	})
+	return out
 }
 
 // rowArea is how much of a sphere's surface a tile of row y of a globe

@@ -219,6 +219,63 @@ func TestTheGlobeStandsAtTheEarthsHeights(t *testing.T) {
 	}
 }
 
+// A globe's coast is its lowland: the land beside the sea stands low, and
+// the country rises to the history's height inland of it (coastWidth). The
+// land's elevation in the middle of each band of distance from the shore is
+// logged, with the share of the land in it; held: within 50 km of the shore
+// the middle of the land stands under coastLow. With the coast drawn on the
+// history's sea contour and the country laid by the order alone it stood at
+// 211 to 375 m.
+func TestTheGlobesCoastIsItsLowland(t *testing.T) {
+	if testing.Short() {
+		t.Skip("makes globes")
+	}
+	edges := []float64{0, 50e3, 100e3, 200e3, 400e3}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%-10s", "km")
+	for k := 1; k < len(edges); k++ {
+		fmt.Fprintf(&b, "%16s", fmt.Sprintf("%.0f-%.0f", edges[k-1]/1e3, edges[k]/1e3))
+	}
+	for _, c := range []struct {
+		name  string
+		seed  uint64
+		terms Terms
+	}{{"globe", 1, GlobeTerms()}, {"globe", 2, GlobeTerms()}, {"globe", 3, GlobeTerms()}, {"small", 1, smallGlobe()}, {"small", 2, smallGlobe()}} {
+		g := yardWorld(c.name, c.seed, c.terms)
+		far := g.fromTheSea(edges[len(edges)-1])
+		bands := make([][]float64, len(edges)-1)
+		n := 0
+		for i := range g.Tiles {
+			if g.Tiles[i].Wet() || g.sunk(i) {
+				continue
+			}
+			n++
+			k := len(bands) - 1
+			for far[i] < edges[k] {
+				k--
+			}
+			bands[k] = append(bands[k], g.Elevation(i)-g.sea)
+		}
+		fmt.Fprintf(&b, "\n%-10s", fmt.Sprintf("%s %d", c.name, c.seed))
+		for k, e := range bands {
+			slices.Sort(e)
+			middle := math.NaN()
+			if len(e) > 0 {
+				middle = e[len(e)/2]
+			}
+			fmt.Fprintf(&b, "%9.3f %4.0f m", float64(len(e))/math.Max(1, float64(n)), middle)
+			if k == 0 && !(middle < coastLow) {
+				t.Errorf("%s %d: the land within 50 km of the shore stands %.0f m in the middle", c.name, c.seed, middle)
+			}
+		}
+	}
+	t.Logf("the share of the land and its elevation in the middle, by distance from the shore:\n%s", b.String())
+}
+
+// coastLow is the height the middle of a globe's land within 50 km of its
+// shore stands under. The five worlds read 43 to 81 m.
+const coastLow = 150.0
+
 // The rivers are graded on Height, which is the map's ground, and the
 // country is the history's, which is not the shaping's: so a river's step
 // from one tile to the next could climb in Elevation where it falls in
