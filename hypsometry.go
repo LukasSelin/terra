@@ -75,6 +75,10 @@ import (
 // history holds lowest, the country is laid at least as high as the earth's
 // land stands at the same share: its lowest band, two hundred metres under
 // 28 in a hundred of the land, laid evenly (lowShare, lowTop and lowFloor).
+// Once the coast was the history's sea contour (drownedCrust) that floor was
+// not enough: the history's country is steep at its sea, and the lowest
+// tenth stood 168 to 296 m up. So up to half the land the country is drawn
+// down to the floor, the more the lower (lowBlend).
 // That is all of the earth's curve that is left in the making; the rest of
 // it is a test's (cogleyLand). Above that fifth the history's own height is
 // the country, and on the five worlds TestTheGlobeStandsAtTheEarthsHeights
@@ -127,6 +131,24 @@ const (
 	lowTop   = 200.0
 )
 
+// lowBlend is how far up the land's order the country comes to the history's
+// own height from the earth's lowest land. Below it the history's height
+// over that floor is let in smoothly, nothing at the foot of the order and
+// all of it at lowBlend: since the coast became the history's sea contour
+// the history's lowest land stands well over the floor, which then set only
+// a minimum. At 0.5 the five worlds' lowest tenth stands within 115 to 142 m
+// of the sea and 7 to 8.5 in a hundred of their land under 100 m, against
+// the floor's 168 to 296 m and 1.2 to 2.7 (the earth's: 71 m, and 14 in a
+// hundred); higher, the middle of the land comes down with it, 687 m to 672
+// on the first globe at 0.6 and to 551 at 0.8, and the middle is the
+// history's to say.
+//
+// It is the land low in the history's order that this lowers, and that is
+// not the coast's: the country within three tiles of the sea still stands
+// 373 to 528 m in the middle on the first three globes, the map's ground
+// there 7 to 12 m. The coast's own step is the margin's.
+const lowBlend = 0.5
+
 // countryOf is how high each tile of a globe's history stands over the
 // history's sea as its last epoch ends, in a planet's metres, and below
 // nothing under that sea. It is softened as the heights are when the history
@@ -165,7 +187,10 @@ func drownedCrust(country []float64, ocean []bool) []bool {
 // that height less the map's, and never less than nothing. Below lowShare of
 // the land, in the history's order and by the ground each tile stands for on
 // a sphere, the height it is laid to is at least the earth's at that share;
-// above it, at least the earth's at lowShare, so that the order is kept.
+// above it, at least the earth's at lowShare, so that the order is kept. And
+// below lowBlend of the land what the history has over that floor is let in
+// by degrees, so that the lowest land stands near the earth's and not on
+// the history's own.
 func (g *Grid) layCountry() {
 	defer phase.Start("layCountry")()
 	deep := g.planetHeight
@@ -197,9 +222,11 @@ func (g *Grid) layCountry() {
 	run := 0.0
 	for _, i := range dry {
 		w := g.rowArea(int(i) / g.W)
-		f := math.Min(lowShare, (run+w/2)/total)
+		r := (run + w/2) / total
 		run += w
-		at := math.Max(deep[i], lowTop*f/lowFloor)
+		low := lowTop * math.Min(r, lowShare) / lowFloor
+		at := math.Max(deep[i], low)
+		at = low + (at-low)*smooth(clamp01(r/lowBlend))
 		g.country[i] = math.Max(0, at-(g.Height[i]-g.sea))
 	}
 }
