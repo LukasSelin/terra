@@ -215,6 +215,15 @@ func (g *Grid) drain() {
 	g.flow()
 }
 
+// drainHeld is drain under the weather as it was last read, however far the
+// ground has moved since: for the steps of a history's epoch after its first.
+// See step.
+func (g *Grid) drainHeld() {
+	defer phase.Start("drain")()
+	g.pool()
+	g.flow()
+}
+
 // poolScratch is pool's working memory, kept on the Grid between calls: see
 // fit. order is every tile by height; own the basin each tile was taken into;
 // b, uf and tiles the basins' tree; runoff, loss, fall, bottom and gathered

@@ -183,12 +183,13 @@ func (g *Grid) iceHeld(cr *crust, epoch int) float64 {
 }
 
 // pourSea sets the sea a history runs against in epoch epoch, and writes down
-// what it was. The first epoch pours the planet's water where the old rule
-// stood the sea (firstSea); every epoch after stands the same water, less
-// what the ice holds, in the basins as they are. See the top of this file.
-func (g *Grid) pourSea(cr *crust, epoch int) {
+// what it was. The first step of the first epoch pours the planet's water
+// where the old rule stood the sea (firstSea); every step after stands the
+// same water, less what the ice holds, in the basins as they are. See the top
+// of this file. first is whether this is an epoch's first step.
+func (g *Grid) pourSea(cr *crust, epoch int, first bool) {
 	defer phase.Start("pourSea")()
-	if epoch == 0 || cr.oceanWater <= 0 {
+	if (epoch == 0 && first) || cr.oceanWater <= 0 {
 		cr.firstLevel = g.firstSea()
 		cr.oceanWater = g.roomUnder(cr.firstLevel)
 		_, _, cr.firstFloor = g.meanFloor(cr, epoch)

@@ -370,10 +370,15 @@ func readCheckpointHeader(r *bufio.Reader) (historyHeader, error) {
 	return h, nil
 }
 
-// checkpointLayout is historyLayout with running's layout beside it.
+// checkpointLayout is historyLayout with running's layout beside it, and
+// the steps an epoch is run in where they are not one: a history taken up
+// in other steps than it was kept in would be neither. See epochSteps.
 func checkpointLayout() uint64 {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%d:", historyLayout())
+	if historySteps != 1 {
+		fmt.Fprintf(h, "steps %d:", historySteps)
+	}
 	layoutOf(h, reflect.TypeFor[running]())
 	return h.Sum64()
 }

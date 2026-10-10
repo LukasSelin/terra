@@ -22,12 +22,13 @@ import (
 // find first-order valleys 30 to 160.
 //
 // So the ground is laid again as a landscape wearing at the rate it rises
-// would lay it. The map as it came is the uplift: high ground rises fastest,
-// the lowland at shapeFloor of that. A watered history says how fast its rock
-// was rising, and there that says which ground rises fastest instead: the
-// ranges its seams were still pushing up are the steep country, and a range
-// they stopped pushing two epochs ago is not, however high it stands. See
-// upliftOf and shapeUplift. Every tile sends its water down the steepest
+// would lay it. On a drawn map the map as it came is the uplift: high ground
+// rises fastest, the lowland at shapeFloor of that. A watered history says
+// how fast its rock was rising, and there that is the uplift instead: the
+// ranges its seams were still pushing up are the steep country, a range they
+// stopped pushing two epochs ago is not, however high it stands, and the
+// ground that is not rising is the plains its rivers laid. See upliftOf,
+// shapeUplift and shapeAlluvial. Every tile sends its water down the steepest
 // fall, and stands above the tile it drains to by the fall stream power holds a channel at in steady state, which eases with the ground the
 // channel drains as area^-shapeConcave (Whipple and Tucker 1999; the concavity
 // of real rivers is 0.4 to 0.6). Walked from the sea and the map's edges
@@ -46,6 +47,10 @@ import (
 // air more than its whole catchment sends it is a closed basin, and a closed
 // basin is not graded to the sea: its ground is not shaped, and it keeps its
 // salt lake. Everywhere wetter the hollows fill and spill, and join the rivers.
+// A history's plains are laid lower than the drawn ground a closed basin keeps,
+// and left so a basin stood over them as a plateau with a cliff round it: so
+// there the basin, and all the ground the shaping sent into it, is let down
+// under the plain about it, as far as the sea allows (lowerClosed).
 //
 // The constants were searched for over five valleys and eight small globes at
 // seeds 1 and 6, scored on every yardstick the ground and the water answer to
@@ -88,6 +93,7 @@ func (g *Grid) shape() (area []float64) {
 		}
 	}
 	g.openSea(root)
+	open := slices.Clone(root)
 	g.closedBasins(root)
 
 	lo, hi := math.Inf(1), math.Inf(-1)
@@ -112,8 +118,21 @@ func (g *Grid) shape() (area []float64) {
 		}
 		uplift[i] = shapeFloor + (1-shapeFloor)*clamp01((h[i]-lo)/(hi-lo))
 	}
+	// A history says how fast its rock rises, and where it is not rising its
+	// rivers lay the ground down rather than cut it: see shapeUplift and
+	// shapeAlluvial. The roughness is a share of the fall each tile is
+	// given, so that a plain's water is not sent down a hand's breadth of
+	// noise where its ground falls a few centimetres.
+	alluvial := 0.0
 	if g.uplift != nil {
 		g.shapeUplift(uplift, root)
+		alluvial = shapeAlluvial
+		for i := range g.Tiles {
+			if !root[i] {
+				share := (shapeCut*uplift[i] + alluvial) / (shapeCut + alluvial)
+				h[i] = g.Height[i] + shapeRough*roughAt(i, g.Height[i])*share
+			}
+		}
 	}
 	g.fillFrom(h, root)
 	// The rock charges each fall against the map's middling rock, so that a
@@ -121,11 +140,26 @@ func (g *Grid) shape() (area []float64) {
 	// shapeRock.
 	soft := 1 / g.meanHard()
 	was := g.heights()
+	// The water a tile drains to stands where its surface is: the sea's level
+	// over the sea, and not the floor under it. Read off the floor, the land
+	// over a coast with no shelf - floor that came up out of a sea too small
+	// to cover it, beside the deep floor laid at its age - was laid up from
+	// kilometres down, and since the whole map is put back on the scale of
+	// the most any ground stood over its water, every coast on it went under:
+	// a globe of 256 whose continents were a quarter of it came out with no
+	// land at all.
+	surface := func(r int32) float64 {
+		if root[r] && g.underSea(int(r)) {
+			return math.Max(h[r], g.sea)
+		}
+		return h[r]
+	}
 
 	recv := make([]int32, n)
 	run := make([]float64, n)
 	area = make([]float64, n)
 	base := make([]float64, n) // the height of the water each tile drains to
+	end := make([]int32, n)    // the root each tile drains to
 	for round := 0; round < shapeRounds; round++ {
 		for i := range recv {
 			recv[i], run[i] = int32(i), TileSpan
@@ -161,22 +195,23 @@ func (g *Grid) shape() (area []float64) {
 		for _, i := range stack {
 			r := recv[i]
 			if r == i {
-				base[i] = h[i]
+				base[i], end[i] = surface(i), i
 				continue
 			}
 			gathered := math.Max(area[i], shapeHead) / shapeHead
-			fall := shapeFall / math.Sqrt(shapeHead) * uplift[i] * math.Pow(gathered, -shapeConcave)
+			fall := (shapeCut*uplift[i] + alluvial) * math.Pow(gathered, -shapeConcave)
 			// A channel over hard rock has to stand steeper to cut as fast as
 			// the ground rises, and one over soft rock less: so a river
 			// crossing from a hard bed onto a soft one drops over its edge.
 			// The rock is the rock the channel is cutting, half way up the
 			// fall it would have over middling rock.
+			from := surface(r)
 			if g.strata != nil {
-				mid := h[r] + 0.5*math.Min(Repose, fall)*run[i]
+				mid := from + 0.5*math.Min(Repose, fall)*run[i]
 				fall *= math.Pow(g.hardAt(int(i), mid)*soft, shapeRock)
 			}
-			h[i] = h[r] + math.Min(Repose, fall)*run[i]
-			base[i] = base[r]
+			h[i] = from + math.Min(Repose, fall)*run[i]
+			base[i], end[i] = base[r], end[r]
 		}
 		// The beds are carried onto the ground this round laid, as they are
 		// through every pass that hands the ground its heights by rank.
@@ -201,33 +236,147 @@ func (g *Grid) shape() (area []float64) {
 		x := clamp01((h[i] - base[i]) / top)
 		g.Height[i] = base[i] + shapeTop*most*(1-math.Pow(1-x, shapeLift))
 	}
+	if alluvial > 0 {
+		g.lowerClosed(root, open, end)
+		// The alluvium under each tile: the share of its fall that is the
+		// plain's, of shapeFill. A closed basin is all fill.
+		g.fill = make([]float32, n)
+		for i := range g.fill {
+			switch {
+			case open[i]:
+			case root[i]:
+				g.fill[i] = float32(shapeFill)
+			default:
+				g.fill[i] = float32(shapeFill * alluvial / (alluvial + shapeCut*uplift[i]))
+			}
+		}
+	}
 	g.restrata(was, g.heights(), nil)
 	return area
 }
 
-// shapeUplift hands each tile a history left rising - see upliftOf - the
-// uplift the heights would have given it, by rank: the tile whose rock was
-// rising fastest takes the most the map's heights give any tile, and so on
-// down. The history says where the ground rises and in what order; the spread
-// stays the one the constants above were searched on.
+// fillAt is how deep the alluvium under tile i runs: see Grid.fill.
+func (g *Grid) fillAt(i int) float64 {
+	if i < 0 || i >= len(g.fill) {
+		return 0
+	}
+	return float64(g.fill[i])
+}
+
+// lowerClosed lets each closed basin down, with all the ground the shaping
+// drained into it, below the shaped ground round it, by as little as that
+// takes and never into the sea: a hollow stands under its rim.
+func (g *Grid) lowerClosed(root, open []bool, end []int32) {
+	n := len(g.Tiles)
+	// Each closed basin numbered from one, and each tile by the basin it
+	// drains to.
+	basin := make([]int32, n)
+	count := int32(0)
+	var body []int32
+	for i := range g.Tiles {
+		if !root[i] || open[i] || basin[i] != 0 {
+			continue
+		}
+		count++
+		body = append(body[:0], int32(i))
+		basin[i] = count
+		for k := 0; k < len(body); k++ {
+			p := g.PosOf(int(body[k]))
+			for _, off := range Dirs {
+				q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+				if !g.In(q) {
+					continue
+				}
+				if m := g.Index(q); root[m] && !open[m] && basin[m] == 0 {
+					basin[m] = count
+					body = append(body, int32(m))
+				}
+			}
+		}
+	}
+	if count == 0 {
+		return
+	}
+	group := make([]int32, n)
+	for i := range group {
+		group[i] = basin[end[i]]
+	}
+	drop := make([]float64, count+1)
+	floor := make([]float64, count+1)
+	for k := range floor {
+		floor[k] = math.Inf(1)
+	}
+	for i, k := range group {
+		if k == 0 {
+			continue
+		}
+		floor[k] = math.Min(floor[k], g.Height[i])
+		p := g.PosOf(i)
+		for _, off := range Dirs {
+			q := geom.Pos{X: p.X + off.X, Y: p.Y + off.Y}
+			if !g.In(q) {
+				continue
+			}
+			if m := g.Index(q); group[m] != k && !g.underSea(m) {
+				drop[k] = math.Min(drop[k], g.Height[m]-g.Height[i]-hollowDeep)
+			}
+		}
+	}
+	for k := range drop {
+		if g.sea >= 0 {
+			drop[k] = math.Max(drop[k], math.Min(0, g.sea+hollowDeep-floor[k]))
+		}
+	}
+	for i, k := range group {
+		g.Height[i] += drop[k]
+	}
+}
+
+// shapeCut is the fall at a channel head for each share of the most uplift.
+const shapeCut = shapeFall / 2 // over the square root of shapeHead
+
+// The plains, on a history's ground. Most of a continent is not rising - it
+// floats up under what the weather takes off it at a twentieth of a
+// collision's rate or less, or sinks - and its rivers do not cut it: they lay
+// it down, and the plain they lay falls only as steeply as it has to to carry
+// what comes down to it (the transport-limited channels of Whipple and
+// Tucker 2002). So on a
+// history's ground every tile falls by shapeAlluvial over its drainage, as a
+// fan or a flood plain does, and by as much again as its rock's rise asks
+// for, which is nothing where it does not rise.
 //
-// The rate itself was tried, and two ways between, over the eight small
-// globes with the deep floor laid on all of them:
+// The rise is the history's rate over the shapeRateTop centile of the land's,
+// to the shapeRateExponent: a steady channel's fall goes as its uplift to 1/n
+// (Whipple and Tucker 1999), and n is over one in most of the rivers it has
+// been read on (Lague 2014; Harel, Mudd and Attal 2016). It was tried at one,
+// which is what a
+// stream power with n of one would ask: half the land of the first globe fell
+// under five degrees, but the networks of the small globes branched past
+// Horton's five (5.45) and their meanders ran long (14.9 widths).
 //
-//	uplift given by                  area   discharge  Hack   concavity  Flint R2
-//	the heights, by rank (before)    .480   .533       .568   .345       .894
-//	the rate, over a collision's     .389   .339       .592   .344       .930
-//	the rate, over its 99th centile  .393   .445       .512   .381       .872
-//	the rate, by rank                .455   .493       .557   .367       .864
+// The plains lie on alluvium, shapeFill of it where the fall is all the
+// plain's and less as the cut takes over, and the water a plain's ground
+// passes on runs through it: see wetland.go. Laid on the regolith alone, a
+// quarter to a third of the first globe's land was wetland.
+const (
+	shapeAlluvial     = 0.01
+	shapeRateTop      = 0.95
+	shapeRateExponent = 0.75
+	shapeFill         = 50.0 // metres
+)
+
+// shapeUplift hands each tile of a history the uplift its rock's rate asks
+// for: the rate over the land's shapeRateTop centile, to shapeRateExponent,
+// and nothing where the rock is not rising. See shapeAlluvial.
 //
-// Most of a continent rises at a twentieth of a collision's rate or less - the
-// plate floating up under what the weather takes off it - and only the seams'
-// belts faster,
-// so read as a rate the uplift was all but even over the land, the lowland
-// graded as steeply as the upland, and the discharge exponent fell to a third.
-// Over the 99th centile it came nearer, and the mainstreams fell short of
-// Hack's. By rank nothing is asked of the constants they were not searched
-// for, and the history still says which country is steep.
+// It was the rate by rank, onto the spread the heights give a drawn map: the
+// tile rising fastest took the most any tile was given, and so on down to
+// shapeFloor. That kept the order of the history's ground and lost the rest.
+// The land's rates run over two orders of magnitude - on the first globe a
+// fiftieth of a millimetre a year at the median and over one at the 99th
+// centile - and by rank they were all within a third of each other: every
+// hillside on every continent fell at 15 to 22 degrees, the median slope at
+// 25 metres was 20 degrees and a twentieth of the land lay under five.
 //
 // What it cannot hand on is how high. At a 25 metre tile the shaping lays the
 // ground to the map's own scale whatever uplift it is given - see shapeTop -
@@ -235,26 +384,23 @@ func (g *Grid) shape() (area []float64) {
 // country's, which the map's ground stands on and the air's warmth reads: see
 // hypsometry.go.
 func (g *Grid) shapeUplift(uplift []float64, root []bool) {
-	var order []int
-	var spread []float64
+	var land []float64
 	for i := range uplift {
 		if !root[i] {
-			order = append(order, i)
-			spread = append(spread, uplift[i])
+			land = append(land, math.Max(0, g.uplift[i]))
 		}
 	}
-	slices.Sort(spread)
-	slices.SortFunc(order, func(a, b int) int {
-		switch ra, rb := g.uplift[a], g.uplift[b]; {
-		case ra < rb:
-			return -1
-		case ra > rb:
-			return 1
+	if len(land) == 0 {
+		return
+	}
+	top := quantile(land, shapeRateTop)
+	if !(top > 0) {
+		return
+	}
+	for i := range uplift {
+		if !root[i] {
+			uplift[i] = math.Pow(clamp01(g.uplift[i]/top), shapeRateExponent)
 		}
-		return a - b // ties by position, so a world repeats
-	})
-	for k, i := range order {
-		uplift[i] = spread[k]
 	}
 }
 

@@ -142,10 +142,14 @@ func (cr *crust) stretch(i int, was float64, epoch int) {
 // cooling is the share of a rift's heat an epoch keeps.
 var cooling = math.Exp(-epochYears / thermalTime)
 
-// cool is an epoch of every rift losing its heat.
-func (cr *crust) cool() {
+// cool is part of an epoch of every rift losing its heat.
+func (cr *crust) cool(part float64) {
+	keep := float32(cooling)
+	if part != 1 {
+		keep = float32(math.Exp(-epochYears * part / thermalTime))
+	}
 	for i := range cr.rift {
-		cr.rift[i].warm *= float32(cooling)
+		cr.rift[i].warm *= keep
 	}
 }
 

@@ -55,6 +55,7 @@ var historyDropped = map[string]string{
 	"router":       "made the first time a route is asked for",
 	"landmarks":    "a game's, laid once the world is handed over",
 	"features":     "read at the end of the cover stage",
+	"fill":         "laid by the shaping, which is after the history",
 }
 
 const (
