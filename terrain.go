@@ -137,6 +137,15 @@ func (w *Land) stageShape(g *Grid, cfg Terms) {
 	// down. See shape.go and slide.go.
 	area := g.shape()
 	w.texture(g, area)
+	// The soft beds come down along the way the water goes, and on a
+	// history's ground that is the shaping's way and not the way the ground
+	// drained before it: its plains are laid over the old valleys, and read
+	// down the old drainage the beds were hollowed out across the new one and
+	// its rivers broke up into short ones. A drawn map's shaping keeps the
+	// drainage it had closely enough, and keeps its world.
+	if g.uplift != nil {
+		g.drain()
+	}
 	// And the soft beds taken down against the hard ones, which is where the
 	// ridges and the scarps of layered country come from. See denude.
 	g.denude()
