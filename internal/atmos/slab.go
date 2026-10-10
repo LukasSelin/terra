@@ -36,14 +36,23 @@ import "math"
 //     2013).
 //
 // The mixed layer is as deep as it was, some fifty metres under the trades
-// and three hundred where the winter storms stir it, and the layer under it
-// Codron's hundred and fifty. Each is solved at its steady state under the
-// year's mean wind, cell by cell, the two layers of a row together.
+// and three hundred where the winter storms stir it, fifty again in a polar
+// sea over its halocline (see halocline), and the layer under it Codron's
+// hundred and fifty. Each is solved at its steady state under the year's
+// mean wind, cell by cell, the two layers of a row together.
 //
 // What the two layers carry toward the poles is read off them (carried),
 // handed to the energy balance by latitude (seaHeat), and the balance says
 // how much warmer or colder the air over each band of the sea stands for the
-// sea's carrying against what it was worked out with (ebm.go: respond).
+// sea's carrying against what it was worked out with (ebm.go: respond). The
+// mixed layer is relaxed toward that air, and solved again under it, until
+// what it carries and the air it warms agree (Env.currents). Read off the
+// first solve alone, under air that had not yet warmed, the water gave the
+// air as much as if it never would: the third globe's south carried two
+// petawatts into a ring of land and sea at seventy degrees, the balance
+// warmed the air there seven degrees for it and the pole beyond eight, and
+// the water, relaxed toward the cold air it had been solved under, was
+// warmed the eight on top.
 
 const (
 	// deepLayer is how thick, in metres, the water under the mixed layer is,
@@ -68,6 +77,14 @@ const (
 	// the gyres and the drift's return bring poleward under it, stood warmer
 	// than the surface over it.
 	convectDays = 90.0
+	// mixedIce is how deep, in metres, the mixed layer of a polar sea is:
+	// the Arctic's, thirty to fifty metres of water freshened by the rivers
+	// and the ice's melt over a halocline the winter does not stir through
+	// (Rudels, Anderson and Jones, 1996; Peralta-Ferriz and Woodgate, 2015).
+	// haloclineSpan is how many degrees under seaIce the year's air has to
+	// stand for its sea to be wholly the polar one: see halocline.
+	mixedIce      = 50.0
+	haloclineSpan = 6.0
 	// belowMost is the most of the layer under the mixed layer read as the
 	// cold under the thermocline.
 	belowMost = 0.9
@@ -77,6 +94,18 @@ const (
 	slabSettled = 1e-3
 	slabRestart = 12
 	slabMost    = 60
+	// airSettled is how near, in degrees, on every row, the air the water is
+	// solved under has to come to the energy balance's answer to what the
+	// water then carries for the two to be taken to agree, and airRounds the
+	// most rounds they are solved in. airStep is how much of the way to the
+	// balance's answer each round takes the air: the whole way overshoots,
+	// since warmer air takes less off the water and the water carries less
+	// for it, and the rounds swing about the answer by a quarter to a half
+	// of each step; four fifths of the way takes a globe's first reading to
+	// it in three rounds where the whole way took five. See currents.
+	airSettled = 0.1
+	airRounds  = 6
+	airStep    = 0.8
 )
 
 // seaSlab is each sea cell's two equations, for the warmth of the mixed
@@ -100,6 +129,12 @@ type seaSlab struct {
 	// below is how much of the layer under the mixed layer on each cell is
 	// the cold under the thermocline, and cold how cold that is on each row.
 	below, cold []float64
+	// air is how many degrees warmer than the row's mean the air over the
+	// sea of each row is taken to stand, which the mixed layer is relaxed
+	// toward: the energy balance's answer to what the sea carries (see
+	// currents). It is kept from one round of the coupled solve to the next,
+	// which starts from it.
+	air []float64
 }
 
 // newSlab writes each sea cell's two equations down, from the gyres' current
@@ -116,6 +151,9 @@ func (e *Env) newSlab(l *seaSlab, gu, gv, rise, sink, thermo []float64, ekman fu
 	}
 	l.f = nil
 	l.depth, l.cold, l.below = grow(l.depth, e.H), grow(l.cold, e.H), grow(l.below, n)
+	if len(l.air) != e.H {
+		l.air = make([]float64, e.H)
+	}
 	for q := range 2 {
 		l.take[q], l.base[q] = grow(l.take[q], n), grow(l.base[q], n)
 		l.west[q], l.east[q] = grow(l.west[q], n), grow(l.east[q], n)
@@ -127,13 +165,15 @@ func (e *Env) newSlab(l *seaSlab, gu, gv, rise, sink, thermo []float64, ekman fu
 	clampSpeed := func(v float64) float64 { return math.Max(-currentMost, math.Min(currentMost, v)) }
 	dy := e.Dy
 	e.rows(func(cy int) {
+		polar := halocline(e.Mean[cy])
 		h1 := mixedTropic + (mixedPolar-mixedTropic)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
+		h1 += (mixedIce - h1) * polar
 		l.depth[cy] = h1
 		relax := seaExchange / (seaHeat * h1)
 		c := math.Cos(e.lat[cy] * math.Pi / 180)
 		cold := e.Mean[cy] - deepContrast*c*c
 		l.cold[cy] = cold
-		mix := layerMix/((h1+deepLayer)/2) + deepLayer/(convectDays*86400)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))
+		mix := layerMix/((h1+deepLayer)/2) + deepLayer/(convectDays*86400)*smoothstep(mixedLow, mixedHigh, math.Abs(e.lat[cy]))*(1-polar)
 		dx := e.Dx[cy]
 		for cx := 0; cx < e.W; cx++ {
 			i := cy*e.W + cx
@@ -150,7 +190,7 @@ func (e *Env) newSlab(l *seaSlab, gu, gv, rise, sink, thermo []float64, ekman fu
 			up := rise[i] / h1
 			down := sink[i] / deepLayer
 			l.take[0][i] = relax + up + mix/h1
-			l.base[0][i] = relax*e.Mean[cy] + up*th*cold
+			l.base[0][i] = relax*(e.Mean[cy]+l.air[cy]) + up*th*cold
 			l.cross[0][i] = up*(1-th) + mix/h1
 
 			l.take[1][i] = down + mix/deepLayer
@@ -187,6 +227,48 @@ func (e *Env) newSlab(l *seaSlab, gu, gv, rise, sink, thermo []float64, ekman fu
 		}
 	})
 	return l
+}
+
+// rewarm sets the air the mixed layer of row cy is relaxed toward to air(cy)
+// degrees over the row's mean, and the equations with it: only their
+// right-hand side moves, and the rows' factors stand.
+func (l *seaSlab) rewarm(air func(cy int) float64) {
+	e := l.e
+	for cy := range l.air {
+		a := air(cy)
+		d := (a - l.air[cy]) * seaExchange / (seaHeat * l.depth[cy])
+		l.air[cy] = a
+		for i := cy * e.W; i < (cy+1)*e.W; i++ {
+			if l.take[0][i] != 0 {
+				l.base[0][i] += d
+			}
+		}
+	}
+}
+
+// halocline is how much of a polar sea's the sea under air whose year's
+// mean is mean degrees is: nothing where the air's year stands over the point
+// sea water freezes at, and all of it haloclineSpan degrees under it. A
+// polar sea's mixed layer is mixedIce deep, and the winter does not stir the
+// water under it into it.
+//
+// The mixed layer was three hundred metres deep and stirred to the water
+// under it every winter from the sixties to the poles, as the subpolar seas
+// are: the Labrador and the Irminger, where the air comes up over freezing.
+// Under air that never does, the sea is iced, and the ice's melt and the
+// rivers lay fresh water over it that the winter's cooling cannot overturn
+// (Aagaard, Coachman and Carmack, 1981). The warm water the currents bring
+// into a polar sea goes in under that, as the Atlantic's runs round the
+// Arctic two to eight hundred metres down and gives the ice over it a watt
+// or two a square metre of its warmth (Rudels, 2015). With the subpolar
+// seas' three hundred metres open to the air at the poles, the gyres carried
+// a polar sea all the warmth it could vent: the third globe's ocean reaches
+// the south pole through a strait, a gyre of forty sverdrups ran through it,
+// a petawatt crossed 73 degrees south into a cap of a hundred watts a square
+// metre, the energy balance warmed the air over it ten degrees, and the
+// pole's sea came out open water at ten under freezing.
+func halocline(mean float64) float64 {
+	return smoothstep(seaIce, seaIce-haloclineSpan, mean)
 }
 
 // softplus is ln(1 + eˣ), taken so that it does not overflow.
@@ -303,7 +385,9 @@ func (l *seaSlab) solve(t, d []float64, s *Scratch, from []float64) {
 	b, x0 := room[gmresRoom(slabRestart)], room[gmresRoom(slabRestart)+1]
 	copy(b, l.base[0])
 	copy(b[n:], l.base[1])
-	l.factor()
+	if l.f == nil {
+		l.factor()
+	}
 	rows := make([]*slabRow, slabBands(e.H))
 	for k := range rows {
 		rows[k] = newSlabRow(e.W)
