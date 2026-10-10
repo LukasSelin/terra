@@ -1044,6 +1044,12 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *dee
 
 	g.toSea, g.stepScratch.floor, g.stepScratch.shelf = nil, nil, shelfScratch{}
 
+	// A globe's continents meet the sea on a margin, over rough ground, and
+	// not at the edge of their crust. See margin.go.
+	if water > 0 && g.Wrap {
+		w.roughMargins(g, cr.ocean)
+	}
+
 	// The ages of the floor and how fast the ground is rising are read while
 	// the tiles are still pieces of a planet, and once the plates are kept,
 	// since how wide a shelf is depends on which plate the continent beside it
@@ -1051,11 +1057,12 @@ func (w *Land) history(g *Grid, epochs int, sea, water float64, h *running) *dee
 	g.keepPlates(plates)
 	d := &deepStage{ocean: cr.ocean}
 	if water > 0 {
-		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs)
-		d.uplift = g.upliftOf(cr)
 		if g.Wrap {
 			d.country = g.countryOf()
+			d.drowned = drownedCrust(d.country, cr.ocean)
 		}
+		d.depths, d.shares, d.ages, d.sediment = g.floorDepths(cr, epochs, d.drowned, d.country)
+		d.uplift = g.upliftOf(cr)
 	}
 	g.base, g.deep = -1, 0
 	g.settleRock(book, cr.ocean)
@@ -1153,7 +1160,7 @@ func (w *Land) epoch(g *Grid, h *running, e, epochs int, dc *epochClimate) {
 	g.restartBuried(e)
 	// And the weather next epoch meets the rock this one has bared.
 	g.expose()
-	h.plates = w.reshape(g, plates, fl, touch, weld)
+	h.plates = w.reshape(g, plates, fl, touch, weld, book)
 	slow(h.plates, float64(max(0, e-1))/math.Max(1, float64(epochs-1)), through)
 }
 
@@ -1273,6 +1280,10 @@ type deepStage struct {
 	// country is how high each tile stood over the history's sea when the
 	// history ended, in a planet's metres, on a globe: see countryOf.
 	country []float64
+	// drowned is which tiles of continental crust lay under the history's sea
+	// when it ended, on a globe: the shelves and the drowned margins, which
+	// the map lays with the floor. See basins.
+	drowned []bool
 	// book is the history's book of what was done to each tile, where the
 	// feet of the piles are still to be laid on the map: a history run on a
 	// grid coarser than the map. See handDown.
@@ -1289,7 +1300,7 @@ func (w *Land) settleHistory(g *Grid, d *deepStage, water float64) {
 	// The beds are carried through the rescaling with the ground over them.
 	was := g.heights()
 	if water > 0 {
-		w.basins(g, d.ocean)
+		w.basins(g, d.ocean, d.drowned, water)
 		g.restrata(was, g.heights(), d.ocean)
 		g.uplift = d.uplift
 		g.planetHeight = d.country
@@ -3132,7 +3143,7 @@ func (cr *crust) riseBy(part float64) {
 // everything else should be asked of the plate they now are; then the pieces
 // too small to be plates, which welding has just made more of; then the ones
 // too large, which welding has also just made more of.
-func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []float64) []Plate {
+func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []float64, book []record) []Plate {
 	defer phase.Start("reshape")()
 	stride := len(plates)
 	reach := spacing(g, standing(plates))
@@ -3248,7 +3259,7 @@ func (w *Land) reshape(g *Grid, plates []Plate, fl *flooding, touch, weld []floa
 		w.lean(&plates[to])
 		g.locate(plates)
 		whole := plates[r]
-		ux, uy, ok := w.split(g, fl, plates, r, to)
+		ux, uy, ok := w.split(g, fl, plates, book, r, to)
 		if !ok {
 			plates = plates[:to]
 			continue
@@ -3410,35 +3421,33 @@ func enclosedBy(plates []Plate, touch []float64, r uint8, stride int) (uint8, bo
 }
 
 // split rifts plate of in two, giving the part of it on one side to plate to,
-// and says which way that part lies from the rest. A line is drawn across the
-// plate at random, the tiles a quarter of the way along it from either end
-// are flooded from at the same rate over the plate's own ground, and whatever
-// the far flood reaches first is the new plate - so the rift is ragged, and
-// the two halves are near enough halves.
+// and says which way that part lies from the rest. The rift is grown across
+// the plate along a staircase drawn at random (see rift.go), up to
+// splitTries times, the first that leaves the smaller half splitEven of the
+// whole kept (or the most even of them).
 //
-// They were not. The floods started from the plate's furthest tiles either
-// way, which are on its edge, and a plate's edges lie along the fractures the
-// floods are slowest across (see flood): one flood would be walled in where it
-// started and the other take the plate. On the small globes the halves came
-// out anywhere from even to a few tiles against the rest - a third of the
-// world rifted into a twentieth and the rest. Started a quarter of the way
-// in, a flood starts on open ground; and a line is drawn up to splitTries
-// times, the first that leaves the smaller half splitEven of the whole kept
-// (or the most even of them).
-func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, uy float64, ok bool) {
+// It was the line two floods met on, from a quarter of the way along a
+// random line across the plate either way at one rate, and that line is the
+// one half-way between them: the seaways the rifts opened ran straight
+// across their continents with parallel sides. Before that the floods
+// started from the plate's furthest tiles either way, which are on its edge,
+// where the fractures wall a flood in: the halves came out anywhere from
+// even to a few tiles against the rest.
+func (w *Land) split(g *Grid, fl *flooding, plates []Plate, book []record, of, to uint8) (ux, uy float64, ok bool) {
 	// The new plate floods at its parent's rate and along its parent's grain,
 	// so neither half is favoured.
 	plates[to].grow, plates[to].leanX, plates[to].leanY, plates[to].stretch =
 		plates[of].grow, plates[of].leanX, plates[of].leanY, plates[of].stretch
-	best, bestA := -1.0, 0.0
+	best := -1.0
+	var bestPlan riftPlan
 	for range splitTries {
-		a := 2 * math.Pi * w.RNG.Float64()
-		even, ok := g.riftAlong(fl, plates, of, to, a)
+		plan := w.drawRift()
+		even, ok := g.riftPath(fl, plates, book, of, to, plan)
 		if !ok {
 			continue
 		}
 		if even > best {
-			best, bestA = even, a
+			best, bestPlan = even, plan
 		}
 		if even >= splitEven {
 			break
@@ -3448,9 +3457,9 @@ func (w *Land) split(g *Grid, fl *flooding, plates []Plate, of, to uint8) (ux, u
 		return 0, 0, false
 	}
 	if g.riftShare(of, to) != best {
-		g.riftAlong(fl, plates, of, to, bestA)
+		g.riftPath(fl, plates, book, of, to, bestPlan)
 	}
-	return math.Cos(bestA), math.Sin(bestA), true
+	return math.Cos(bestPlan.a), math.Sin(bestPlan.a), true
 }
 
 // riftShare is the smaller of plates of and to's shares of the two together.
@@ -3487,56 +3496,6 @@ const (
 	splitTries = 4
 	splitEven  = 0.3
 )
-
-// riftAlong rifts plates of and to, which were one plate, along a line at
-// angle a, and says what share of it the smaller half is.
-func (g *Grid) riftAlong(fl *flooding, plates []Plate, of, to uint8, a float64) (float64, bool) {
-	for i := range g.Tiles {
-		if g.Tiles[i].Plate == to {
-			g.Tiles[i].Plate = of
-		}
-	}
-	ux, uy := math.Cos(a), math.Sin(a)
-	type at struct {
-		along float64
-		i     int
-	}
-	var line []at
-	first := -1
-	var across func(i int) float64
-	if g.Wrap {
-		across = g.lineAcross(&plates[of], ux, uy)
-	}
-	for i := 0; i < len(g.Tiles); i += 3 {
-		if g.Tiles[i].Plate != of {
-			continue
-		}
-		if first < 0 {
-			first = i
-		}
-		var along float64
-		if across != nil {
-			along = across(i)
-		} else {
-			along = float64(i%g.W-first%g.W)*ux + float64(i/g.W-first/g.W)*uy
-		}
-		line = append(line, at{along, i})
-	}
-	if len(line) < 2 {
-		return 0, false
-	}
-	sort.SliceStable(line, func(p, q int) bool { return line[p].along < line[q].along })
-	lo, hi := line[len(line)/4].i, line[len(line)*3/4].i
-	if lo == hi {
-		return 0, false
-	}
-	seeds := []middle{
-		{X: float64(lo%g.W) + 0.5, Y: float64(lo/g.W) + 0.5, at: of},
-		{X: float64(hi%g.W) + 0.5, Y: float64(hi/g.W) + 0.5, at: to},
-	}
-	g.floodOver(plates, seeds, fl, int(of))
-	return g.riftShare(of, to), true
-}
 
 // lineAcross is how far along a line through plate p's middle, running ux, uy
 // across the map (x to the east, y down the rows), each tile of a map that

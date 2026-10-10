@@ -55,10 +55,13 @@ import (
 // rank, the height the earth's land has at the same rank. Nothing ranks it
 // now.
 //
-// The map's sea is not the history's. The map pours its own onto the ground
-// basins laid, and leaves more of the planet dry: 0.26 to 0.43 of its tiles
-// on those three worlds, against the 0.22 to 0.36 the history had over its
-// sea. Moved until as much of it stood over nothing as the map has dry land,
+// The map's sea was not the history's. The map poured its own onto the
+// ground basins laid, and left more of the planet dry: 0.26 to 0.43 of its
+// tiles on those three worlds, against the 0.22 to 0.36 the history had over
+// its sea. It is the history's now, near enough: basins lays the continental
+// crust the history's sea drowned with the floor (drownedCrust), and the map's
+// water, which more than fills the floor, stands at its edge. What follows is
+// how it was read before that. Moved until as much of it stood over nothing as the map has dry land,
 // the history's height put its shore 230 to 620 m down its margins, and the
 // land the map has dry over that shelf lifted all the rest: half the land
 // stood over 705 to 1,030 m. So the shore is the history's sea, and the land
@@ -137,6 +140,20 @@ func (g *Grid) countryOf() []float64 {
 		c = g.spread(c)
 	}
 	return c
+}
+
+// drownedCrust is which tiles of continental crust a globe's history left
+// under its sea, by the country they stand at: below nothing. They are the
+// earth's shelves and drowned margins - its continental crust is some four
+// tenths of its surface and its land under three - and the map lays them
+// with the floor, so that its coast is where the history's sea stood on the
+// continents' own ground and not the edge of their crust. See basins.
+func drownedCrust(country []float64, ocean []bool) []bool {
+	out := make([]bool, len(country))
+	for i, c := range country {
+		out[i] = !ocean[i] && c <= 0
+	}
+	return out
 }
 
 // layCountry gives a globe's dry land the height its country stands at. It is

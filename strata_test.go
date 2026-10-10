@@ -275,23 +275,30 @@ func TestADrawnMapIsCutIntoItsPile(t *testing.T) {
 }
 
 // The weather goes on baring new beds after the map is made.
+//
+// A valley's forty ages bare a handful of tiles, and whether one valley bares
+// any is a draw: over eight ancient valleys main bared 1 to 5 apiece, and when
+// the rifts came to grow across their plates (rift.go) 0 to 11, the second
+// valley none. So it is read over three.
 func TestTheWeatherBaresTheBedsBeneath(t *testing.T) {
-	w := madeLand(2, AncientTerms())
-	before := make([]Bedrock, len(w.Grid.Tiles))
-	for i := range w.Grid.Tiles {
-		before[i] = w.Grid.Tiles[i].Bedrock
-	}
-	for age := 0; age < 40; age++ {
-		w.Erode()
-	}
 	changed := 0
-	for i := range w.Grid.Tiles {
-		if w.Grid.Tiles[i].Bedrock != before[i] {
-			changed++
+	for seed := uint64(1); seed <= 3; seed++ {
+		w := madeLand(seed, AncientTerms())
+		before := make([]Bedrock, len(w.Grid.Tiles))
+		for i := range w.Grid.Tiles {
+			before[i] = w.Grid.Tiles[i].Bedrock
+		}
+		for age := 0; age < 40; age++ {
+			w.Erode()
+		}
+		for i := range w.Grid.Tiles {
+			if w.Grid.Tiles[i].Bedrock != before[i] {
+				changed++
+			}
 		}
 	}
 	if changed == 0 {
-		t.Errorf("forty ages of weather bared no new rock anywhere")
+		t.Errorf("forty ages of weather bared no new rock anywhere on three valleys")
 	}
 }
 

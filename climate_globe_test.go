@@ -82,10 +82,14 @@ func TestAGlobeHasASeaItsRiversReach(t *testing.T) {
 		}
 	}
 	// How much of it is sea is the plates' to say, since the globe is given
-	// water and not a share: see water.go. Over its first three seeds it is
-	// between a half and two thirds, which is where the ocean crust puts it,
-	// and the crust is held near the share asked for: see crustSlack.
-	if share := float64(sea) / float64(len(g.Tiles)); share < 0.4 || share > 0.7 {
+	// water and not a share: see water.go. It was between a half and two
+	// thirds over the first three seeds, which is where the ocean crust put
+	// it, and the crust is held near the share asked for: see crustSlack.
+	// Since the continental crust the history's sea drowned is laid with the
+	// floor (basins) it is the ocean crust and the shelves, as the earth's
+	// 0.71 is: 0.72 of the first globe's tiles, which count the polar rows'
+	// sea as much as the equator's.
+	if share := float64(sea) / float64(len(g.Tiles)); share < 0.4 || share > 0.75 {
 		t.Fatalf("the globe's water covers %.2f of it", share)
 	}
 	// Follow the water down from every watercourse: it ends in the sea, or
