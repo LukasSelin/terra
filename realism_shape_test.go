@@ -61,7 +61,7 @@ var shapeYardsticks = []realYardstick{
 	// coasts round all of them rough at every scale they have been measured at.
 	{yardstick: yardstick{
 		name: "land share of the surface, furthest of three globes", unit: "", scale: "ground", lo: 0.2, hi: 0.4, slow: true,
-		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure. A globe's land is its continental crust less what its history's sea drowned (basins), 0.83 to 0.89 of it above the sea on these three, 0.30, 0.34 and 0.37; the crust is drawn at 45% continent and put right only past crustSlack, counting tiles and not the sphere's area",
+		source: "the earth's land is 29.2% of its surface; its continental crust, shelves and all, is about four tenths of it (Taylor & McLennan 1995), so a sea that drowned none of it would leave 0.4 land; the floor is not a measured figure. A globe's land is its continental crust less what its history's sea drowned (basins), 0.83 to 0.89 of it above the sea on these three, 0.30, 0.34 and 0.37; the crust is laid at 45% continent off a field of its own (continents.go), counting tiles and not the sphere's area",
 		measure: func() float64 {
 			far := math.NaN()
 			for _, g := range threeGlobes() {
@@ -77,9 +77,13 @@ var shapeYardsticks = []realYardstick{
 		name: "remoteness of the continents, three globes", unit: "", scale: "ground", lo: 0.4, hi: 0.7, slow: true,
 		source:  "Garcia-Castellanos & Lombardo 2007: the continental poles of inaccessibility lie 2510 km from the sea in Eurasia, 1814 Africa, 1650 North America, 1504 South America, 920 Australia - 0.58-0.65 of the radius of a disc of each one's area; 0.48 and 0.45 for Afro-Eurasia and the Americas, joined at Suez and Panama as a map at this scale joins them. A disc reads 1, a square 0.89",
 		measure: func() float64 { return quantile(remoteness(threeGlobes()), 0.5) },
-	},
-		gap: "known gap: the continents are the history's plates, and every change to the weather the history reads redraws them: with M3's sea (#22) on the waves (#35) the three globes read 0.395, as #97's coupled sea read 0.398 and #35's waves 0.4 and over. A point reading on three globes; it wants reading over seeds as #80 reads the relief",
-	},
+	}},
+	// It was a known gap: the continents were the history's plates, and
+	// every change to the weather the history reads redrew them, 0.395 with
+	// M3's sea on the waves, 0.398 with #97's coupled sea. With the first
+	// continents laid off a field of their own (continents.go) it reads
+	// 0.429 over the three, 0.409, 0.516 and 0.429 globe by globe, and the
+	// marker came off.
 	{yardstick: yardstick{
 		name: "island size exponent, three globes", unit: "", scale: "ground", lo: 0.45, hi: 0.85, slow: true,
 		source:  "Korcak 1938; Mandelbrot 1982: N(A>=a) ~ a^-B over the world's islands, B 0.65 on the mean, 0.5 for Africa's to 0.75 for Indonesia's; 0.65 again over 131,063 islands from 1 to 10^5 km2 (ASTER GDEM, arXiv 2512.16659). This reading takes islands from two tiles to 3% of the land",

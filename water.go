@@ -70,9 +70,11 @@ import (
 //	sea, small globes 1-8                    sea, globes 1-3
 //	.641 .576 .623 .675 .693 .610 .538 .652  .608 .499 .658
 //
-// with that draw held within crustSlack of the asked share. Without that it
+// with that draw held within 0.15 of the asked share. Without that it
 // came to .771 on the first globe and .774 on the fourth small one, whose
-// first plates had drawn eight tenths of their ground as floor: see crustSlack.
+// first plates had drawn eight tenths of their ground as floor. The crust's
+// kind is now laid off a field at exactly the asked share (see
+// continents.go), so the sea's share no longer rides on a plate's draw.
 // floorFill is the most of a world's water the floor's own room may hold
 // where the drowned crust is laid with it: see basins.
 const floorFill = 0.8

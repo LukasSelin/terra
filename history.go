@@ -1109,11 +1109,12 @@ func (w *Land) startHistory(g *Grid, epochs int, sea, water float64) *running {
 	g.drain()
 	g.soilTexture()
 	fl := w.flood(g, spacing(g, plateTotal(g)))
-	plates := w.firstPlates(g, sea, water > 0, fl)
+	plates := w.firstPlates(g, fl)
 	cr := newCrust(g)
-	for i := range g.Tiles {
-		cr.ocean[i] = plates[g.Tiles[i].Plate].Ocean
-	}
+	// The crust's kind is the planet's and not the plates': see
+	// continents.go. The plates are told what they carry.
+	copy(cr.ocean, w.firstContinents(g, clamp01(oceanFloor+oceanPerSea*sea)))
+	cr.kinds(g, plates)
 	cr.firstFloorAges(g, epochs)
 	// The crust is as thick as it is made, and floats at that.
 	cr.layCrust(g)
@@ -1349,8 +1350,8 @@ func (w *Land) molten(g *Grid) {
 // firstPlates is the crust going rigid: it breaks, and the pieces start
 // moving. Where the breaks fall is drawn rather than derived - a world's
 // first plates are an accident of how it cooled and there is nothing to read
-// them off - but which pieces are ocean and which are continent decides the
-// shape of everything after.
+// them off. What crust each piece carries is not the piece's to say: see
+// continents.go.
 //
 // How big the pieces are is drawn the way the earth's are: the great plates
 // first, spread out over the world and holding most of it, and then the lesser
@@ -1360,9 +1361,8 @@ func (w *Land) molten(g *Grid) {
 // and each plate's rate put right until the plates hold the ground they were
 // drawn at, since where two floods meet depends on every other flood as well
 // as on those two.
-func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Plate {
+func (w *Land) firstPlates(g *Grid, fl *flooding) []Plate {
 	n := plateTotal(g)
-	ocean := clamp01(oceanFloor + oceanPerSea*sea)
 	plates := make([]Plate, n, plateCap)
 	mids := make([]middle, n, plateCap)
 	share := plateShares(w, n)
@@ -1370,11 +1370,10 @@ func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Pl
 	for i := range plates {
 		a := 2 * math.Pi * w.RNG.Float64()
 		plates[i] = Plate{
-			DX:    driftFast * math.Cos(a),
-			DY:    driftFast * math.Sin(a),
-			Ocean: w.RNG.Float64() < ocean,
-			into:  uint8(i),
-			grow:  math.Sqrt(share[i]),
+			DX:   driftFast * math.Cos(a),
+			DY:   driftFast * math.Sin(a),
+			into: uint8(i),
+			grow: math.Sqrt(share[i]),
 		}
 		w.lean(&plates[i])
 	}
@@ -1410,28 +1409,6 @@ func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Pl
 		}
 	}
 	g.partition(plates, mids, fl)
-	if poured {
-		w.balanceCrust(g, plates, ocean)
-	}
-	// A world has both kinds in it. Left to the draw, a valley - which asks
-	// for no sea and so for few ocean plates - came out on two seeds of five
-	// with nothing but continent, and a world with no floor anywhere has no
-	// arcs in it, nothing going under anything, and so no granite and no
-	// islands: three of the six rocks lose the only place they come from.
-	ocean, land := 0, 0
-	for i := range plates {
-		if plates[i].Ocean {
-			ocean++
-		} else {
-			land++
-		}
-	}
-	switch {
-	case ocean == 0:
-		plates[0].Ocean = true
-	case land == 0:
-		plates[0].Ocean = false
-	}
 	// The spins are drawn last, after everything the first plates were
 	// already drawn with, so that giving plates a spin did not hand every
 	// seed a different world: drawn in with the drift, it moved which plates
@@ -1442,81 +1419,6 @@ func (w *Land) firstPlates(g *Grid, sea float64, poured bool, fl *flooding) []Pl
 		plates[i].Spin = w.spin(g, math.Sqrt(share[i]*float64(len(g.Tiles))/math.Pi))
 	}
 	return plates
-}
-
-// crustSlack is how far the share of a world's first crust that is ocean floor
-// may come out from the share its terms ask for before the draw is put right.
-//
-// The kinds are drawn plate by plate, and the plates are not the same size: a
-// great plate is a fifth of a world, so the draw that says a half of the plates
-// are floor can say a half or four fifths of the ground is. How much of a
-// planet is continent is a fact about how much light rock it has melted out of
-// its mantle, which is a matter of its chemistry and its age and not of which
-// way one plate's coin fell (Taylor and McLennan 1995; the earth's continental
-// crust is about four tenths of it, shelves and all). The crust is set once
-// at the first plates and carried from there, so a world given its water and
-// not its sea - see water.go - came out with what that one coin said: the
-// first globe was eight tenths floor, and eight tenths sea.
-//
-// So the draw stands inside a band either side of the asked share, and is only
-// put right when it falls outside: inside it, how much continent a world has is
-// still its own luck, and the plates still decide where it goes.
-//
-// It is only done for a world given water. A world given a share of sea is
-// flooded to that share whatever its crust, so the draw does not decide how
-// much of it is drowned, and a made valley's ground is matched to the drawn
-// one's: put right there as well, the twelfth valley came out with nearly four
-// times the drawn map's water.
-const crustSlack = 0.15
-
-// balanceCrust turns plates of the kind there is too much of into the other,
-// one at a time and each the one that brings the ground nearest the share
-// wanted, until the ocean floor is within crustSlack of it. It never turns the
-// last plate of a kind, which is the rule below it in firstPlates to keep.
-func (w *Land) balanceCrust(g *Grid, plates []Plate, want float64) {
-	n := len(g.Tiles)
-	if n == 0 {
-		return
-	}
-	held := make([]float64, len(plates))
-	for i := range g.Tiles {
-		if k := int(g.Tiles[i].Plate); k < len(plates) {
-			held[k]++
-		}
-	}
-	for {
-		floor, kinds := 0.0, 0
-		for k := range plates {
-			if plates[k].Ocean {
-				floor += held[k] / float64(n)
-				kinds++
-			}
-		}
-		over := floor > want+crustSlack
-		if !over && floor >= want-crustSlack {
-			return
-		}
-		if (over && kinds <= 1) || (!over && kinds >= len(plates)-1) {
-			return
-		}
-		best, near := -1, math.Abs(floor-want)
-		for k := range plates {
-			if plates[k].Ocean != over || held[k] == 0 {
-				continue
-			}
-			to := floor + held[k]/float64(n)
-			if over {
-				to = floor - held[k]/float64(n)
-			}
-			if d := math.Abs(to - want); d < near {
-				best, near = k, d
-			}
-		}
-		if best < 0 {
-			return
-		}
-		plates[best].Ocean = !over
-	}
 }
 
 // spacing is how far apart two neighbouring middles stand on this world, in
@@ -3003,9 +2905,17 @@ func (w *Land) tectonics(g *Grid, plates []Plate, cr *crust, book []record, epoc
 				cr.stretch(i, was, epoch)
 			default:
 				// An arc thickens its crust by a share of what it raises:
-				// see arcGrowth.
+				// see arcGrowth. So does an arc of islands, which is the
+				// same melt off a slab, coming up through floor and not
+				// through continent: the Marianas and the Tonga arc have
+				// grown 20 to 35 km of crust over tens of millions of
+				// years (Calvert 2011), and stand mostly under the sea
+				// with their volcanoes out of it. Thickened by all it
+				// raised, two floors closing for an epoch or two made
+				// continent (see accrete) and stood a long straight
+				// island out of open water along the seam.
 				grow := by
-				if s.makes == arc {
+				if s.makes == arc || s.makes == melt {
 					grow *= arcGrowth
 				}
 				laid = cr.thicken(i, grow)
