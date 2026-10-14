@@ -141,9 +141,12 @@ func TestTheBookCostsWhatItSays(t *testing.T) {
 // When a rift came to grow across its plate along the old sutures (rift.go)
 // the plates parted elsewhere, and 667's rock came to be the fill laid over
 // it; its neighbour 666 is the arc's of the first epoch, by some 12 km.
+// When the first crust's kinds came to be laid off a field of the planet's
+// own and not plate by plate (see continents.go), 666 was raised by islands;
+// 1105 is the arc's of the first epoch, by some 6 km.
 func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	g := yardWorld("ancient", 1, AncientTerms())
-	p := g.PosOf(666)
+	p := g.PosOf(1105)
 	want := map[Aspect][]CauseKind{
 		OfHeight: {RaisedBy, BetweenPlate, BetweenPlate, WornSince, Stands},
 		OfRock:   {BedOf, MeltedAtDepth, BuriedLast},
@@ -162,7 +165,7 @@ func TestTheChainForOneTileOfTheAncientValley(t *testing.T) {
 	}
 	chain := g.Why(p, OfHeight)
 	if chain[0].Note != "arc" || chain[0].When != 16*epochYears || chain[0].Quantity <= 0 {
-		t.Errorf("tile 666 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
+		t.Errorf("tile 1105 was raised by %q %v years ago by %v m; want an arc, %v years ago, more than nothing",
 			chain[0].Note, chain[0].When, chain[0].Quantity, 16*epochYears)
 	}
 	if belt := g.Feature(chain[0].Feature); belt == nil || belt.Kind != UpliftBelt || belt.Meeting != Arc {
